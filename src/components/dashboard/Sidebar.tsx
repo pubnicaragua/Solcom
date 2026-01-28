@@ -3,12 +3,13 @@
 import { useState } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { Package, BarChart3, Settings, Users, HelpCircle, Bot, Menu, X, ClipboardList } from 'lucide-react';
+import { Package, BarChart3, Settings, Users, HelpCircle, Bot, Menu, X, ClipboardList, Calendar } from 'lucide-react';
 
 const menuItems = [
   { icon: Package, label: 'Inventario', href: '/inventory' },
   { icon: BarChart3, label: 'Reportes', href: '/reports' },
   { icon: Bot, label: 'Agentes IA', href: '/ai-agents' },
+  { icon: Calendar, label: 'Reuniones', href: '/reuniones' },
   { icon: Users, label: 'Roles', href: '/roles' },
   { icon: Settings, label: 'Configuración', href: '/settings' },
   { icon: ClipboardList, label: 'Siguientes Pasos', href: '/next-steps' },

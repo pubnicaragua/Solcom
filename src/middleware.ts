@@ -70,7 +70,7 @@ export async function middleware(request: NextRequest) {
   console.log(`🟡 [Middleware] Usuario: ${user ? user.email : 'No autenticado'}`);
 
   // Rutas públicas que no requieren autenticación
-  const publicRoutes = ['/login', '/signup', '/reset-password'];
+  const publicRoutes = ['/login', '/signup', '/reset-password', '/reuniones'];
   const isPublicRoute = publicRoutes.some(route => request.nextUrl.pathname.startsWith(route));
 
   console.log(`🟡 [Middleware] Es ruta pública: ${isPublicRoute}`);
