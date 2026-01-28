@@ -75,6 +75,18 @@ export async function middleware(request: NextRequest) {
 
   console.log(`🟡 [Middleware] Es ruta pública: ${isPublicRoute}`);
 
+  // Si la ruta es la raíz y hay usuario, redirigir a inventory
+  if (path === '/' && user) {
+    console.log(`🟢 [Middleware] Usuario en raíz → Redirigiendo a /inventory`);
+    return NextResponse.redirect(new URL('/inventory', request.url));
+  }
+
+  // Si la ruta es la raíz y NO hay usuario, redirigir a login
+  if (path === '/' && !user) {
+    console.log(`🔴 [Middleware] Sin usuario en raíz → Redirigiendo a /login`);
+    return NextResponse.redirect(new URL('/login', request.url));
+  }
+
   // Si no hay usuario y no es ruta pública, redirigir a login
   if (!user && !isPublicRoute) {
     console.log(`🔴 [Middleware] Sin usuario en ruta protegida → Redirigiendo a /login`);
