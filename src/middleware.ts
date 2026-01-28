@@ -93,8 +93,9 @@ export async function middleware(request: NextRequest) {
     return NextResponse.redirect(new URL('/login', request.url));
   }
 
-  // Si hay usuario y está en login, redirigir al dashboard
-  if (user && isPublicRoute) {
+  // Si hay usuario y está en login/signup/reset-password, redirigir al dashboard
+  // Pero permitir acceso a /reuniones incluso con usuario autenticado
+  if (user && isPublicRoute && !path.startsWith('/reuniones')) {
     console.log(`🟢 [Middleware] Usuario autenticado en ruta pública → Redirigiendo a /inventory`);
     return NextResponse.redirect(new URL('/inventory', request.url));
   }
