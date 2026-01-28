@@ -1,0 +1,21 @@
+{
+  "name": "Solis Comercial - Dashboard de Inventario",
+  "short_name": "Solis Comercial",
+  "description": "Sistema de gestión de inventario en tiempo real con sincronización automática",
+  "start_url": "/inventory",
+  "display": "standalone",
+  "background_color": "#0a1929",
+  "theme_color": "#FF0000",
+  "icons": [
+    {
+      "src": "https://www.soliscomercialni.com/Solis%20Comercial%20Logo.png",
+      "sizes": "192x192",
+      "type": "image/png"
+    },
+    {
+      "src": "https://www.soliscomercialni.com/Solis%20Comercial%20Logo.png",
+      "sizes": "512x512",
+      "type": "image/png"
+    }
+  ]
+}

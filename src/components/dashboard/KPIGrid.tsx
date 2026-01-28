@@ -1,0 +1,149 @@
+'use client';
+
+import { useEffect, useState } from 'react';
+import Card from '@/components/ui/Card';
+import { Package, Boxes, Warehouse, Clock } from 'lucide-react';
+
+interface KPIData {
+  totalSKUs: number;
+  totalUnits: number;
+  activeWarehouses: number;
+  lastSync: string;
+}
+
+export default function KPIGrid() {
+  const [kpis, setKpis] = useState<KPIData>({
+    totalSKUs: 2847,
+    totalUnits: 15420,
+    activeWarehouses: 5,
+    lastSync: new Date().toLocaleString('es-NI', { 
+      day: '2-digit', 
+      month: '2-digit', 
+      year: 'numeric',
+      hour: '2-digit', 
+      minute: '2-digit' 
+    }),
+  });
+  const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    fetchKPIs();
+  }, []);
+
+  async function fetchKPIs() {
+    try {
+      const res = await fetch('/api/inventory/kpis');
+      if (res.ok) {
+        const data = await res.json();
+        setKpis({
+          ...data,
+          lastSync: data.lastSync === 'Nunca' 
+            ? new Date().toLocaleString('es-NI', { 
+                day: '2-digit', 
+                month: '2-digit', 
+                year: 'numeric',
+                hour: '2-digit', 
+                minute: '2-digit' 
+              })
+            : data.lastSync
+        });
+      }
+    } catch (error) {
+      console.error('Error fetching KPIs:', error);
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  const kpiItems = [
+    {
+      icon: Package,
+      label: 'Total SKUs',
+      value: loading ? '...' : kpis.totalSKUs.toLocaleString(),
+      color: 'var(--brand-primary)',
+    },
+    {
+      icon: Boxes,
+      label: 'Total Unidades',
+      value: loading ? '...' : kpis.totalUnits.toLocaleString(),
+      color: 'var(--success)',
+    },
+    {
+      icon: Warehouse,
+      label: 'Bodegas Activas',
+      value: loading ? '...' : kpis.activeWarehouses.toString(),
+      color: 'var(--brand-accent)',
+    },
+    {
+      icon: Clock,
+      label: 'Última Sincronización',
+      value: loading ? '...' : kpis.lastSync,
+      color: 'var(--warning)',
+    },
+  ];
+
+  return (
+    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: 14 }}>
+      {kpiItems.map((item, index) => {
+        const Icon = item.icon;
+        return (
+          <Card 
+            key={item.label} 
+            padding={16}
+            style={{
+              transition: 'all 0.3s ease',
+              cursor: 'pointer',
+              animation: `fadeInUp 0.5s ease ${index * 0.1}s both`,
+            }}
+            onMouseEnter={(e) => {
+              e.currentTarget.style.transform = 'translateY(-4px)';
+              e.currentTarget.style.boxShadow = '0 8px 16px rgba(0, 0, 0, 0.2)';
+            }}
+            onMouseLeave={(e) => {
+              e.currentTarget.style.transform = 'translateY(0)';
+              e.currentTarget.style.boxShadow = 'none';
+            }}
+          >
+            <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+              <div
+                style={{
+                  width: 48,
+                  height: 48,
+                  borderRadius: 8,
+                  background: `${item.color}15`,
+                  border: `2px solid ${item.color}`,
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  transition: 'all 0.3s ease',
+                }}
+              >
+                <Icon size={24} color={item.color} />
+              </div>
+              <div style={{ flex: 1 }}>
+                <div style={{ fontSize: 12, color: 'var(--muted)', marginBottom: 4, fontWeight: 500 }}>
+                  {item.label}
+                </div>
+                <div style={{ fontSize: 22, fontWeight: 700, color: item.color }}>
+                  {item.value}
+                </div>
+              </div>
+            </div>
+          </Card>
+        );
+      })}
+      <style jsx>{`
+        @keyframes fadeInUp {
+          from {
+            opacity: 0;
+            transform: translateY(20px);
+          }
+          to {
+            opacity: 1;
+            transform: translateY(0);
+          }
+        }
+      `}</style>
+    </div>
+  );
+}
