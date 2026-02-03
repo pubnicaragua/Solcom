@@ -113,15 +113,17 @@ export default function InventoryTable({ filters, onSelectionChange }: Inventory
     {
       key: 'item_name',
       header: 'Producto',
-      width: '20%',
+      width: '18%',
       render: (row: InventoryItem) => (
         <div>
-          <div style={{ fontWeight: 500, marginBottom: 2 }}>{row.item_name}</div>
+          <div style={{ fontWeight: 600, marginBottom: 4, fontSize: 14 }}>{row.item_name}</div>
           {row.color && (
-            <div style={{ fontSize: 11, color: 'var(--muted)' }}>{row.color}</div>
+            <div style={{ fontSize: 11, color: '#6B7280', marginBottom: 2 }}>
+              🎨 {row.color}
+            </div>
           )}
           {row.barcode && (
-            <div style={{ fontSize: 10, color: 'var(--muted)', fontFamily: 'monospace' }}>
+            <div style={{ fontSize: 10, color: '#9CA3AF', fontFamily: 'monospace', background: '#F3F4F6', padding: '2px 6px', borderRadius: 4, display: 'inline-block' }}>
               {row.barcode}
             </div>
           )}
@@ -131,53 +133,106 @@ export default function InventoryTable({ filters, onSelectionChange }: Inventory
     {
       key: 'sku',
       header: 'SKU',
-      width: '10%',
+      width: '9%',
       render: (row: InventoryItem) => (
-        <span style={{ fontFamily: 'monospace', fontSize: 12 }}>{row.sku}</span>
+        <span style={{ fontFamily: 'monospace', fontSize: 13, fontWeight: 500, color: '#374151' }}>{row.sku}</span>
       ),
     },
     {
       key: 'category',
       header: 'Categoría',
-      width: '10%',
-      render: (row: InventoryItem) => (
-        <Badge variant="neutral" size="sm">
-          {row.category || 'Sin categoría'}
-        </Badge>
-      ),
+      width: '11%',
+      render: (row: InventoryItem) => {
+        const categoryColors: Record<string, string> = {
+          'Celular': '#3B82F6',
+          'Laptop': '#8B5CF6',
+          'TV': '#EC4899',
+          'Tablet': '#F59E0B',
+          'Monitor': '#10B981',
+          'Accesorio': '#6B7280'
+        };
+        const category = row.category || 'Sin categoría';
+        const bgColor = categoryColors[category] || '#6B7280';
+        
+        return (
+          <div style={{ 
+            background: `${bgColor}15`, 
+            color: bgColor,
+            padding: '4px 10px',
+            borderRadius: 6,
+            fontSize: 12,
+            fontWeight: 600,
+            display: 'inline-block',
+            border: `1px solid ${bgColor}30`
+          }}>
+            {category}
+          </div>
+        );
+      },
     },
     {
       key: 'warehouse',
       header: 'Bodega',
-      width: '12%',
+      width: '13%',
       render: (row: InventoryItem) => (
-        <div>
-          <div style={{ fontWeight: 500, fontSize: 13 }}>{row.warehouse_code}</div>
-          <div style={{ fontSize: 11, color: 'var(--muted)' }}>{row.warehouse_name}</div>
+        <div style={{ 
+          background: '#F9FAFB',
+          padding: '8px 10px',
+          borderRadius: 6,
+          border: '1px solid #E5E7EB'
+        }}>
+          <div style={{ fontWeight: 600, fontSize: 13, color: '#1F2937', marginBottom: 2 }}>
+            📦 {row.warehouse_code}
+          </div>
+          <div style={{ fontSize: 11, color: '#6B7280' }}>{row.warehouse_name}</div>
         </div>
       ),
     },
     {
       key: 'qty',
-      header: 'Stock',
-      width: '8%',
+      header: 'Stock Disponible',
+      width: '10%',
       render: (row: InventoryItem) => {
         const stockLevel = row.qty === 0 ? 'out' : 
                           row.qty <= 5 ? 'critical' : 
                           row.qty <= 20 ? 'low' : 
                           row.qty <= 50 ? 'medium' : 'high';
         
-        const color = stockLevel === 'out' ? '#ef4444' :
-                     stockLevel === 'critical' ? '#f59e0b' :
-                     stockLevel === 'low' ? '#eab308' :
-                     stockLevel === 'medium' ? '#22c55e' : '#3b82f6';
+        const color = stockLevel === 'out' ? '#DC2626' :
+                     stockLevel === 'critical' ? '#EA580C' :
+                     stockLevel === 'low' ? '#EAB308' :
+                     stockLevel === 'medium' ? '#16A34A' : '#2563EB';
+        
+        const bgColor = stockLevel === 'out' ? '#FEE2E2' :
+                       stockLevel === 'critical' ? '#FFEDD5' :
+                       stockLevel === 'low' ? '#FEF3C7' :
+                       stockLevel === 'medium' ? '#DCFCE7' : '#DBEAFE';
 
         return (
           <div>
-            <div style={{ fontWeight: 600, color, fontSize: 14 }}>{row.qty}</div>
+            <div style={{ 
+              fontWeight: 700, 
+              color, 
+              fontSize: 16,
+              background: bgColor,
+              padding: '4px 8px',
+              borderRadius: 6,
+              display: 'inline-block',
+              marginBottom: 4
+            }}>
+              {row.qty} unidades
+            </div>
             {row.min_stock && row.qty < row.min_stock && (
-              <div style={{ fontSize: 10, color: '#ef4444' }}>
-                Min: {row.min_stock}
+              <div style={{ 
+                fontSize: 10, 
+                color: '#DC2626',
+                background: '#FEE2E2',
+                padding: '2px 6px',
+                borderRadius: 4,
+                display: 'inline-block',
+                marginTop: 2
+              }}>
+                ⚠️ Bajo mínimo ({row.min_stock})
               </div>
             )}
           </div>
@@ -186,34 +241,58 @@ export default function InventoryTable({ filters, onSelectionChange }: Inventory
     },
     {
       key: 'price',
-      header: 'Precio',
+      header: 'Precio Venta',
       width: '10%',
       render: (row: InventoryItem) => (
-        <div style={{ fontWeight: 500 }}>
+        <div style={{ 
+          fontWeight: 600,
+          fontSize: 14,
+          color: '#059669'
+        }}>
           ${row.price?.toLocaleString('es-NI', { minimumFractionDigits: 2 }) || '0.00'}
         </div>
       ),
     },
     {
-      key: 'state',
-      header: 'Estado',
-      width: '8%',
-      render: (row: InventoryItem) =>
-        row.state ? (
-          <Badge variant={row.state === 'nuevo' ? 'success' : 'warning'} size="sm">
-            {row.state}
-          </Badge>
-        ) : (
-          <Badge variant="neutral" size="sm">N/A</Badge>
-        ),
+      key: 'cost',
+      header: 'Costo',
+      width: '9%',
+      render: (row: InventoryItem) => (
+        <div style={{ 
+          fontWeight: 600,
+          fontSize: 13,
+          color: '#DC2626',
+          background: '#FEF2F2',
+          padding: '4px 8px',
+          borderRadius: 6,
+          display: 'inline-block'
+        }}>
+          🔒 Restringido
+        </div>
+      ),
     },
     {
-      key: 'supplier',
-      header: 'Proveedor',
-      width: '10%',
-      render: (row: InventoryItem) => (
-        <div style={{ fontSize: 12 }}>{row.supplier || '-'}</div>
-      ),
+      key: 'state',
+      header: 'Condición',
+      width: '9%',
+      render: (row: InventoryItem) => {
+        const state = row.state?.toLowerCase() || 'n/a';
+        const isNew = state === 'nuevo';
+        return (
+          <div style={{
+            background: isNew ? '#DCFCE7' : '#FEF3C7',
+            color: isNew ? '#166534' : '#854D0E',
+            padding: '4px 10px',
+            borderRadius: 6,
+            fontSize: 12,
+            fontWeight: 600,
+            display: 'inline-block',
+            border: `1px solid ${isNew ? '#BBF7D0' : '#FDE68A'}`
+          }}>
+            {isNew ? '✨ Nuevo' : state === 'usado' ? '♻️ Usado' : 'N/A'}
+          </div>
+        );
+      },
     },
     {
       key: 'synced_at',

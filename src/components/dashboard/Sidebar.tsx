@@ -3,12 +3,13 @@
 import { useState } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { Package, BarChart3, Settings, Users, HelpCircle, Bot, Menu, X, ClipboardList, Calendar } from 'lucide-react';
+import { Package, BarChart3, Settings, Users, HelpCircle, Bot, Menu, X, ClipboardList, Calendar, FolderOpen } from 'lucide-react';
 
 const menuItems = [
   { icon: Package, label: 'Inventario', href: '/inventory' },
   { icon: BarChart3, label: 'Reportes', href: '/reports' },
   { icon: Bot, label: 'Agentes IA', href: '/ai-agents' },
+  { icon: FolderOpen, label: 'Entregables', href: '/entregables' },
   { icon: Calendar, label: 'Reuniones', href: '/reuniones' },
   { icon: Users, label: 'Roles', href: '/roles' },
   { icon: Settings, label: 'Configuración', href: '/settings' },
@@ -66,15 +67,15 @@ export default function Sidebar() {
       <aside
         className={`sidebar ${isOpen ? 'open' : ''}`}
         style={{
-          background: 'var(--panel)',
-          borderRight: '1px solid var(--border)',
+          background: '#FAF9F6',
+          borderRight: '1px solid #E5E4E0',
           display: 'flex',
           flexDirection: 'column',
           padding: 18,
           gap: 24,
         }}
       >
-      <div style={{ paddingBottom: 18, borderBottom: '1px solid var(--border)' }}>
+      <div style={{ paddingBottom: 18, borderBottom: '1px solid #E5E4E0' }}>
         <img 
           src="https://www.soliscomercialni.com/Solis%20Comercial%20Logo.png" 
           alt="Solis Comercial" 
@@ -96,14 +97,26 @@ export default function Sidebar() {
                 alignItems: 'center',
                 gap: 12,
                 padding: '10px 14px',
-                borderRadius: 6,
+                borderRadius: 8,
                 fontSize: 14,
                 fontWeight: 500,
-                color: isActive ? 'var(--brand-primary)' : 'var(--text)',
-                background: isActive ? 'rgba(255, 0, 0, 0.1)' : 'transparent',
-                border: isActive ? '1px solid var(--brand-primary)' : '1px solid transparent',
+                color: isActive ? '#DC2626' : '#374151',
+                background: isActive ? '#FEE2E2' : 'transparent',
+                border: isActive ? '1px solid #DC2626' : '1px solid transparent',
                 transition: 'all 0.2s',
                 textDecoration: 'none',
+              }}
+              onMouseEnter={(e) => {
+                if (!isActive) {
+                  e.currentTarget.style.background = '#F3F4F6';
+                  e.currentTarget.style.color = '#1F2937';
+                }
+              }}
+              onMouseLeave={(e) => {
+                if (!isActive) {
+                  e.currentTarget.style.background = 'transparent';
+                  e.currentTarget.style.color = '#374151';
+                }
               }}
             >
               <Icon size={18} />
@@ -113,9 +126,9 @@ export default function Sidebar() {
         })}
       </nav>
 
-      <div style={{ marginTop: 'auto', padding: 12, background: 'rgba(255, 0, 0, 0.05)', borderRadius: 6, border: '1px solid rgba(255, 0, 0, 0.2)' }}>
-        <div style={{ fontSize: 12, color: 'var(--muted)', marginBottom: 4 }}>Versión</div>
-        <div style={{ fontSize: 14, fontWeight: 600 }}>1.0.0</div>
+      <div style={{ marginTop: 'auto', padding: 12, background: '#F3F4F6', borderRadius: 8, border: '1px solid #E5E7EB' }}>
+        <div style={{ fontSize: 12, color: '#6B7280', marginBottom: 4 }}>Versión</div>
+        <div style={{ fontSize: 14, fontWeight: 600, color: '#1F2937' }}>1.0.0</div>
       </div>
     </aside>
 
