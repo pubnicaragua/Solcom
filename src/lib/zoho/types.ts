@@ -6,6 +6,13 @@ export interface ZohoAuthConfig {
   appLinkName: string;
 }
 
+export interface ZohoBooksConfig {
+  clientId: string;
+  clientSecret: string;
+  refreshToken: string;
+  organizationId: string;
+}
+
 export interface ZohoInventoryItem {
   ID: string;
   ItemID: string;
@@ -18,10 +25,28 @@ export interface ZohoInventoryItem {
   LastUpdated: string;
 }
 
+export interface ZohoBooksItem {
+  item_id: string;
+  name: string;
+  sku: string;
+  stock_on_hand: number;
+  unit?: string;
+  rate?: number;
+  description?: string;
+  last_modified_time: string;
+}
+
 export interface ZohoApiResponse<T> {
   code: number;
   data: T[];
   message?: string;
+}
+
+export interface ZohoBooksApiResponse<T> {
+  code: number;
+  message: string;
+  items?: T[];
+  item?: T;
 }
 
 export interface ZohoTokenResponse {
@@ -29,3 +54,4 @@ export interface ZohoTokenResponse {
   expires_in: number;
   token_type: string;
 }
+

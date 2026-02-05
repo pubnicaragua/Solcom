@@ -78,8 +78,8 @@ export default function InventoryPage() {
             <FileText size={16} />
             PDF
           </Button>
-          <Button 
-            variant="primary" 
+          <Button
+            variant="primary"
             size="sm"
             onClick={async () => {
               const input = document.createElement('input');
@@ -112,6 +112,35 @@ export default function InventoryPage() {
             <Upload size={16} />
             Importar
           </Button>
+
+          <Button
+            variant="secondary"
+            size="sm"
+            style={{ backgroundColor: '#ff4e00', color: 'white', border: 'none' }}
+            onClick={async () => {
+              if (confirm('¿Deseas sincronizar el inventario desde Zoho Books?')) {
+                try {
+                  const response = await fetch('/api/zoho/books/sync', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ force: true })
+                  });
+                  const data = await response.json();
+                  if (response.ok) {
+                    alert(`Sincronización exitosa: ${data.itemsProcessed} productos actualizados.`);
+                    window.location.reload();
+                  } else {
+                    alert(`Error: ${data.error}`);
+                  }
+                } catch (error) {
+                  alert('Error al conectar con el servidor.');
+                }
+              }
+            }}
+          >
+            <RefreshCw size={16} />
+            Sincronizar Books
+          </Button>
         </div>
       </div>
 
@@ -132,9 +161,9 @@ export default function InventoryPage() {
               )}
             </div>
             <div style={{ display: 'flex', gap: 8 }}>
-              <Button 
-                variant="ghost" 
-                size="sm" 
+              <Button
+                variant="ghost"
+                size="sm"
                 onClick={() => setShowAdvancedFilters(!showAdvancedFilters)}
               >
                 {showAdvancedFilters ? 'Ocultar' : 'Mostrar'} filtros avanzados
@@ -150,14 +179,14 @@ export default function InventoryPage() {
           {/* Fila 1: Filtros Básicos */}
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 200px 200px 200px', gap: 12, marginBottom: showAdvancedFilters ? 12 : 0 }}>
             <div style={{ position: 'relative' }}>
-              <Search 
-                size={16} 
-                style={{ 
-                  position: 'absolute', 
-                  left: 12, 
+              <Search
+                size={16}
+                style={{
+                  position: 'absolute',
+                  left: 12,
                   top: 10,
                   color: '#6B7280'
-                }} 
+                }}
               />
               <Input
                 placeholder="Buscar por nombre, SKU, código de barras..."
