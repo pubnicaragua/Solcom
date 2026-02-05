@@ -290,7 +290,7 @@ export default function SettingsPage() {
               { method: 'GET', path: '/api/inventory', desc: 'Consultar inventario con filtros' },
               { method: 'GET', path: '/api/inventory/kpis', desc: 'Obtener métricas en tiempo real' },
               { method: 'GET', path: '/api/warehouses', desc: 'Listar bodegas activas' },
-              { method: 'POST', path: '/api/zoho/sync', desc: 'Sincronizar datos desde Zoho' },
+              { method: 'POST', path: '/api/zoho/sync', desc: 'Sincronizar datos en Zoho' },
               { method: 'POST', path: '/api/ai/chat', desc: 'Consultar agentes IA' },
               { method: 'GET', path: '/api/inventory/export', desc: 'Exportar inventario a CSV' },
             ].map((endpoint, i) => (
