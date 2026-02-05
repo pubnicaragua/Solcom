@@ -34,86 +34,132 @@ export async function POST(request: Request) {
 
         const supabase = createServerClient();
         const zohoItems = await zohoClient.fetchItems();
+        console.log(`[SYNC] Total Zoho Items fetched: ${zohoItems.length}`);
+
+        const defaultWarehouseCode = 'X1';
+        let warehouseId: string | null = null;
+
+
+        const warehouseQuery: any = await supabase
+            .from('warehouses')
+            .select('id')
+            .eq('code', defaultWarehouseCode)
+            .single();
+
+        if (warehouseQuery.data) {
+            warehouseId = warehouseQuery.data.id;
+        } else {
+            const { data: newWarehouse }: any = await supabase
+                .from('warehouses')
+                .insert({
+                    code: defaultWarehouseCode,
+                    name: `Bodega ${defaultWarehouseCode}`,
+                    active: true,
+                } as any)
+                .select('id')
+                .single();
+            warehouseId = newWarehouse?.id ?? null;
+        }
+
+        if (!warehouseId) {
+            throw new Error("No se pudo obtener la bodega por defecto");
+        }
+
+
+        const BATCH_SIZE = 100;
         let itemsProcessed = 0;
 
-        for (const zohoItem of zohoItems) {
-            // En Zoho Books, los items no tienen WarehouseCode directo por defecto 
-            // como en Creator (depende de la configuración). 
-            // Por ahora usaremos una bodega por defecto 'MAIN' o la primera que encontremos.
-            const defaultWarehouseCode = 'X1';
+        for (let i = 0; i < zohoItems.length; i += BATCH_SIZE) {
+            const batch = zohoItems.slice(i, i + BATCH_SIZE);
+            const batchSkus = batch.map(item => item.sku || `NO-SKU-${item.item_id}`);
 
-            let warehouseId: string | null = null;
-
-            const warehouseQuery: any = await supabase
-                .from('warehouses')
-                .select('id')
-                .eq('code', defaultWarehouseCode)
-                .single();
-
-            if (warehouseQuery.data) {
-                warehouseId = warehouseQuery.data.id;
-            } else {
-                const { data: newWarehouse }: any = await supabase
-                    .from('warehouses')
-                    .insert({
-                        code: defaultWarehouseCode,
-                        name: `Bodega ${defaultWarehouseCode}`,
-                        active: true,
-                    } as any)
-                    .select('id')
-                    .single();
-
-                warehouseId = newWarehouse?.id ?? null;
-            }
-
-            if (!warehouseId) continue;
-
-            let itemId: string | null = null;
-
-            const itemQuery: any = await supabase
+      
+            const { data: existingItems } = await supabase
                 .from('items')
-                .select('id')
-                .eq('sku', zohoItem.sku)
-                .single();
+                .select('id, sku')
+                .in('sku', batchSkus);
 
-            if (itemQuery.data) {
-                itemId = itemQuery.data.id;
+            const existingMap = new Map((existingItems || []).map(item => [item.sku, item.id]));
 
-                // Update existing item with latest data from Zoho
-                await supabase
-                    .from('items')
-                    .update({
-                        name: zohoItem.name,
-                        category: zohoItem.category_name || null,
-                    })
-                    .eq('id', itemQuery.data.id);
-            } else {
-                const { data: newItem } = await supabase
-                    .from('items')
-                    .insert({
-                        sku: zohoItem.sku,
-                        name: zohoItem.name,
-                        zoho_item_id: zohoItem.item_id,
-                        category: zohoItem.category_name || null,
-                    })
-                    .select('id')
-                    .single();
+            const toInsert = [];
+            const toUpdate = [];
 
+            for (const zItem of batch) {
+                const sku = zItem.sku || `NO-SKU-${zItem.item_id}`;
+                const existingId = existingMap.get(sku);
 
-                itemId = newItem?.id ?? null;
+                if (existingId) {
+                    toUpdate.push({ id: existingId, name: zItem.name, category: zItem.category_name || null });
+                } else {
+                    toInsert.push({
+                        sku,
+                        name: zItem.name,
+                        zoho_item_id: zItem.item_id,
+                        category: zItem.category_name || null,
+                    });
+                }
             }
 
-            if (!itemId) continue;
+            // Insert new items
+            if (toInsert.length > 0) {
+                const { data: newItems, error: insertError } = await supabase
+                    .from('items')
+                    .insert(toInsert)
+                    .select('id, sku');
 
-            await supabase.from('stock_snapshots').insert({
-                warehouse_id: warehouseId,
-                item_id: itemId,
-                qty: zohoItem.stock_on_hand,
-                source_ts: zohoItem.last_modified_time,
-                synced_at: new Date().toISOString(),
-            });
+                if (insertError) {
+                    console.error(`[SYNC] Insert error batch ${i}:`, insertError.message);
+                } else if (newItems) {
+                    newItems.forEach(item => existingMap.set(item.sku, item.id));
+                }
+            }
 
-            itemsProcessed++;
+ 
+            const snapshotPayload = [];
+            for (const zItem of batch) {
+                const sku = zItem.sku || `NO-SKU-${zItem.item_id}`;
+                const dbId = existingMap.get(sku);
+                const qty = zItem.stock_on_hand;
+
+                // Skip items without a valid qty value
+                if (dbId && qty !== null && qty !== undefined) {
+                    snapshotPayload.push({
+                        warehouse_id: warehouseId,
+                        item_id: dbId,
+                        qty: qty,
+                        source_ts: zItem.last_modified_time || new Date().toISOString(),
+                        synced_at: new Date().toISOString(),
+                    });
+                }
+            }
+
+            if (snapshotPayload.length > 0) {
+                const itemIds = snapshotPayload.map(s => s.item_id);
+
+                // Delete old snapshots first and wait for completion
+                const { error: deleteError } = await supabase
+                    .from('stock_snapshots')
+                    .delete()
+                    .eq('warehouse_id', warehouseId)
+                    .in('item_id', itemIds);
+
+                if (deleteError) {
+                    console.error('[SYNC] Delete error:', deleteError.message);
+                }
+
+                // Now insert new snapshots
+                const { error: snapError } = await supabase
+                    .from('stock_snapshots')
+                    .insert(snapshotPayload);
+
+                if (snapError) {
+                    console.error('[SYNC] Snapshot error:', snapError.message);
+                } else {
+                    itemsProcessed += snapshotPayload.length;
+                }
+            }
+
+            console.log(`[SYNC] Batch ${i}-${i + batch.length}: ${toInsert.length} new, ${toUpdate.length} existing`);
         }
 
         return NextResponse.json({

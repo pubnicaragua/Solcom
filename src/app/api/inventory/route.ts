@@ -70,38 +70,37 @@ export async function GET(request: Request) {
     }
 
     // Sorting
-    let orderColumn = 'synced_at';
-    let ascending = false;
+  
+
+    let orderConfig: { column: string, options?: { ascending: boolean, foreignTable?: string } } = {
+      column: 'synced_at',
+      options: { ascending: false }
+    };
 
     switch (sortBy) {
       case 'name':
-        orderColumn = 'items.name';
-        ascending = true;
+        orderConfig = { column: 'synced_at', options: { ascending: true } };
         break;
       case 'name_desc':
-        orderColumn = 'items.name';
-        ascending = false;
+        orderConfig = { column: 'synced_at', options: { ascending: false } };
         break;
       case 'stock_asc':
-        orderColumn = 'qty';
-        ascending = true;
+        orderConfig = { column: 'qty', options: { ascending: true } };
         break;
       case 'stock_desc':
-        orderColumn = 'qty';
-        ascending = false;
+        orderConfig = { column: 'qty', options: { ascending: false } };
         break;
       case 'updated':
-        orderColumn = 'synced_at';
-        ascending = false;
+        orderConfig = { column: 'synced_at', options: { ascending: false } };
         break;
       default:
-        orderColumn = 'synced_at';
-        ascending = false;
+        orderConfig = { column: 'synced_at', options: { ascending: false } };
     }
 
     const { data, error, count } = await query
-      .order(orderColumn, { ascending })
+      .order(orderConfig.column, orderConfig.options)
       .range(offset, offset + limit - 1);
+
 
     if (error) throw error;
 

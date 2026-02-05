@@ -16,17 +16,19 @@ export default function KPIGrid() {
     totalSKUs: 2847,
     totalUnits: 15420,
     activeWarehouses: 5,
-    lastSync: new Date().toLocaleString('es-NI', { 
-      day: '2-digit', 
-      month: '2-digit', 
+    lastSync: new Date().toLocaleString('es-NI', {
+      day: '2-digit',
+      month: '2-digit',
       year: 'numeric',
-      hour: '2-digit', 
-      minute: '2-digit' 
+      hour: '2-digit',
+      minute: '2-digit'
     }),
   });
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const [mounted, setMounted] = useState(false);
 
   useEffect(() => {
+    setMounted(true);
     fetchKPIs();
   }, []);
 
@@ -37,14 +39,14 @@ export default function KPIGrid() {
         const data = await res.json();
         setKpis({
           ...data,
-          lastSync: data.lastSync === 'Nunca' 
-            ? new Date().toLocaleString('es-NI', { 
-                day: '2-digit', 
-                month: '2-digit', 
-                year: 'numeric',
-                hour: '2-digit', 
-                minute: '2-digit' 
-              })
+          lastSync: data.lastSync === 'Nunca'
+            ? new Date().toLocaleString('es-NI', {
+              day: '2-digit',
+              month: '2-digit',
+              year: 'numeric',
+              hour: '2-digit',
+              minute: '2-digit'
+            })
             : data.lastSync
         });
       }
@@ -59,36 +61,37 @@ export default function KPIGrid() {
     {
       icon: Package,
       label: 'Total SKUs',
-      value: loading ? '...' : kpis.totalSKUs.toLocaleString(),
+      value: !mounted || loading ? '...' : kpis.totalSKUs.toLocaleString('es-NI'),
       color: 'var(--brand-primary)',
     },
     {
       icon: Boxes,
       label: 'Total Unidades',
-      value: loading ? '...' : kpis.totalUnits.toLocaleString(),
+      value: !mounted || loading ? '...' : kpis.totalUnits.toLocaleString('es-NI'),
       color: 'var(--success)',
     },
     {
       icon: Warehouse,
       label: 'Bodegas Activas',
-      value: loading ? '...' : kpis.activeWarehouses.toString(),
+      value: !mounted || loading ? '...' : kpis.activeWarehouses.toString(),
       color: 'var(--brand-accent)',
     },
     {
       icon: Clock,
       label: 'Última Sincronización',
-      value: loading ? '...' : kpis.lastSync,
+      value: !mounted || loading ? '...' : kpis.lastSync,
       color: 'var(--warning)',
     },
   ];
+
 
   return (
     <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: 14 }}>
       {kpiItems.map((item, index) => {
         const Icon = item.icon;
         return (
-          <Card 
-            key={item.label} 
+          <Card
+            key={item.label}
             padding={16}
             style={{
               transition: 'all 0.3s ease',
