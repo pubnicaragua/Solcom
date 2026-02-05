@@ -3,9 +3,10 @@ import React from 'react';
 interface InputProps extends React.InputHTMLAttributes<HTMLInputElement> {
   label?: string;
   error?: string;
+  style?: React.CSSProperties;
 }
 
-export default function Input({ label, error, className = '', ...props }: InputProps) {
+export default function Input({ label, error, className = '', style, ...props }: InputProps) {
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
       {label && (
@@ -16,13 +17,15 @@ export default function Input({ label, error, className = '', ...props }: InputP
       <input
         className={className}
         style={{
-          background: 'var(--panel)',
-          border: `1px solid ${error ? 'var(--danger)' : 'var(--border)'}`,
-          borderRadius: 6,
+          background: '#FFFFFF',
+          border: `1px solid ${error ? '#DC2626' : '#D1D5DB'}`,
+          borderRadius: 8,
           padding: '8px 12px',
           fontSize: 14,
-          color: 'var(--text)',
+          color: '#111827',
           transition: 'border-color 0.2s',
+          ...style,
+          fontWeight: 500,
         }}
         {...props}
       />

@@ -43,6 +43,8 @@ export default function InventoryPage() {
   }
 
   function handleExport(format: 'csv' | 'excel' | 'pdf') {
+    // Preparado para integración con Zoho Books API
+    // Los datos se exportarán directamente desde Zoho Books cuando esté integrado
     const params = new URLSearchParams(filters);
     params.append('format', format);
     window.open(`/api/inventory/export?${params}`, '_blank');
@@ -76,7 +78,37 @@ export default function InventoryPage() {
             <FileText size={16} />
             PDF
           </Button>
-          <Button variant="primary" size="sm">
+          <Button 
+            variant="primary" 
+            size="sm"
+            onClick={async () => {
+              const input = document.createElement('input');
+              input.type = 'file';
+              input.accept = '.csv,.xlsx,.xls';
+              input.onchange = async (e) => {
+                const file = (e.target as HTMLInputElement).files?.[0];
+                if (file) {
+                  const formData = new FormData();
+                  formData.append('file', file);
+                  try {
+                    const response = await fetch('/api/inventory/import', {
+                      method: 'POST',
+                      body: formData,
+                    });
+                    if (response.ok) {
+                      alert('Archivo importado correctamente');
+                      window.location.reload();
+                    } else {
+                      alert('Error al importar archivo. Verifica el formato.');
+                    }
+                  } catch (error) {
+                    alert('Error de conexión. Intenta nuevamente.');
+                  }
+                }
+              };
+              input.click();
+            }}
+          >
             <Upload size={16} />
             Importar
           </Button>
@@ -123,9 +155,8 @@ export default function InventoryPage() {
                 style={{ 
                   position: 'absolute', 
                   left: 12, 
-                  top: '50%', 
-                  transform: 'translateY(-50%)',
-                  color: 'var(--muted)'
+                  top: 10,
+                  color: '#6B7280'
                 }} 
               />
               <Input

@@ -5,7 +5,7 @@ import Card from '@/components/ui/Card';
 import Table from '@/components/ui/Table';
 import Badge from '@/components/ui/Badge';
 import Button from '@/components/ui/Button';
-import { ChevronLeft, ChevronRight, Palette, Warehouse, Package } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Warehouse, Package } from 'lucide-react';
 import { format } from 'date-fns';
 import { es } from 'date-fns/locale';
 
@@ -116,15 +116,14 @@ export default function InventoryTable({ filters, onSelectionChange }: Inventory
       width: '18%',
       render: (row: InventoryItem) => (
         <div>
-          <div style={{ fontWeight: 600, marginBottom: 4, fontSize: 14, color: '#111827' }}>{row.item_name}</div>
+          <div style={{ fontWeight: 600, marginBottom: 4, fontSize: 14, color: '#F1F5F9' }}>{row.item_name}</div>
           {row.color && (
-            <div style={{ fontSize: 11, color: '#6B7280', marginBottom: 2, display: 'flex', alignItems: 'center', gap: 4 }}>
-              <Palette size={12} />
-              {row.color}
+            <div style={{ fontSize: 11, color: '#F1F5F9', marginBottom: 2 }}>
+              Color: {row.color}
             </div>
           )}
           {row.barcode && (
-            <div style={{ fontSize: 10, color: '#6B7280', fontFamily: 'monospace', marginTop: 2 }}>
+            <div style={{ fontSize: 10, color: '#CBD5E1', fontFamily: 'monospace', marginTop: 2 }}>
               {row.barcode}
             </div>
           )}
@@ -136,7 +135,7 @@ export default function InventoryTable({ filters, onSelectionChange }: Inventory
       header: 'SKU',
       width: '9%',
       render: (row: InventoryItem) => (
-        <span style={{ fontFamily: 'monospace', fontSize: 13, fontWeight: 500, color: '#374151' }}>{row.sku}</span>
+        <span style={{ fontFamily: 'monospace', fontSize: 13, fontWeight: 600, color: '#F1F5F9' }}>{row.sku}</span>
       ),
     },
     {
@@ -149,8 +148,8 @@ export default function InventoryTable({ filters, onSelectionChange }: Inventory
         return (
           <div style={{ 
             fontSize: 13,
-            fontWeight: 500,
-            color: '#374151'
+            fontWeight: 600,
+            color: '#F1F5F9'
           }}>
             {category}
           </div>
@@ -163,11 +162,11 @@ export default function InventoryTable({ filters, onSelectionChange }: Inventory
       width: '13%',
       render: (row: InventoryItem) => (
         <div>
-          <div style={{ fontWeight: 600, fontSize: 13, color: '#111827', marginBottom: 2, display: 'flex', alignItems: 'center', gap: 4 }}>
+          <div style={{ fontWeight: 600, fontSize: 13, color: '#F1F5F9', marginBottom: 2, display: 'flex', alignItems: 'center', gap: 4 }}>
             <Warehouse size={14} />
             {row.warehouse_code}
           </div>
-          <div style={{ fontSize: 11, color: '#6B7280' }}>{row.warehouse_name}</div>
+          <div style={{ fontSize: 11, color: '#CBD5E1' }}>{row.warehouse_name}</div>
         </div>
       ),
     },

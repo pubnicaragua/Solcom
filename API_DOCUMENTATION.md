@@ -9,7 +9,7 @@
 
 ---
 
-## 🔐 Autenticación
+##  Autenticación
 
 Todas las solicitudes deben incluir el header de autenticación:
 
@@ -24,7 +24,7 @@ Contacta al administrador del sistema para obtener tu API Key personalizada.
 
 ---
 
-## 📦 Endpoints de Inventario
+##  Endpoints de Inventario
 
 ### 1. Consultar Inventario
 
@@ -122,7 +122,7 @@ curl -X GET "https://tu-dominio.com/api/inventory/export?warehouse=X1" \
 
 ---
 
-## 🏢 Endpoints de Bodegas
+##  Endpoints de Bodegas
 
 ### 4. Listar Bodegas
 
@@ -160,7 +160,7 @@ curl -X GET "https://tu-dominio.com/api/warehouses" \
 
 ---
 
-## 🔄 Endpoints de Sincronización
+##  Endpoints de Sincronización
 
 ### 5. Sincronizar desde Zoho
 
@@ -211,7 +211,7 @@ curl -X POST "https://tu-dominio.com/api/zoho/sync" \
 
 ---
 
-## 🤖 Endpoints de Agentes IA
+##  Endpoints de Agentes IA
 
 ### 6. Consultar Agente IA
 
@@ -257,7 +257,7 @@ curl -X POST "https://tu-dominio.com/api/ai/chat" \
 
 ---
 
-## 🌐 Integración con Plataformas Externas
+##  Integración con Plataformas Externas
 
 ### Integración con Páginas Web
 
@@ -313,7 +313,7 @@ Configura el webhook de Facebook Messenger:
 
 ```json
 {
-  "to": "+50512345678",
+  "to": "+50588241003",
   "type": "text",
   "text": {
     "body": "Hola, tenemos 15 laptops Dell disponibles en bodega X1. ¿Te interesa?"
@@ -364,7 +364,7 @@ task.resume()
 
 ---
 
-## 📱 SDKs Oficiales
+## SDKs Oficiales
 
 ### JavaScript/TypeScript
 
@@ -424,7 +424,7 @@ response = client.ai.chat(
 
 ---
 
-## ⚠️ Códigos de Error
+## Códigos de Error
 
 | Código | Descripción |
 |--------|-------------|
@@ -438,7 +438,7 @@ response = client.ai.chat(
 
 ---
 
-## 🔒 Límites de Uso (Rate Limiting)
+##  Límites de Uso (Rate Limiting)
 
 | Plan | Solicitudes/minuto | Solicitudes/día |
 |------|-------------------|-----------------|
@@ -449,7 +449,7 @@ response = client.ai.chat(
 
 ---
 
-## 🧪 Ambiente de Pruebas (Sandbox)
+##  Ambiente de Pruebas (Sandbox)
 
 **Base URL:** `https://sandbox.tu-dominio.com/api`  
 **API Key de prueba:** `test_sk_1234567890abcdef`
@@ -458,28 +458,28 @@ El ambiente sandbox contiene datos de prueba y no afecta la base de datos de pro
 
 ---
 
-## 📞 Soporte
+##  Soporte
 
 **Email:** api@soliscomercialni.com  
-**WhatsApp:** +505 1234-5678  
+**WhatsApp:** +505 8824-1003
 **Documentación:** https://docs.soliscomercialni.com  
 **Status:** https://status.soliscomercialni.com
 
 ---
 
-## 🔄 Changelog
+##  Changelog
 
 ### v1.0.0 (27 Ene 2025)
-- ✅ Lanzamiento inicial
-- ✅ Endpoints de inventario
-- ✅ Endpoints de bodegas
-- ✅ Sincronización Zoho
-- ✅ Agentes IA
-- ✅ Exportación CSV
+- Lanzamiento inicial
+- Endpoints de inventario
+- Endpoints de bodegas
+- Sincronización Zoho
+- Agentes IA
+- Exportación CSV
 
 ---
 
-## 📝 Ejemplos Completos
+## Ejemplos Completos
 
 ### Ejemplo 1: Consultar inventario y mostrar en página web
 
@@ -578,4 +578,4 @@ promptUser();
 
 ---
 
-**© 2025 Solis Comercial - ¡A tu servicio, siempre!**
+**© 2026 Solis Comercial - ¡A tu servicio, siempre!**

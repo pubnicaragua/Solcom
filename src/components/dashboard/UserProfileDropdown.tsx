@@ -231,7 +231,7 @@ export default function UserProfileDropdown() {
             <button
               onClick={() => {
                 setIsOpen(false);
-                router.push('/help');
+                window.open('https://wa.me/50588241003', '_blank');
               }}
               style={{
                 width: '100%',

@@ -16,13 +16,14 @@ export default function Select({ label, options, className = '', ...props }: Sel
       <select
         className={className}
         style={{
-          background: 'var(--panel)',
-          border: '1px solid var(--border)',
-          borderRadius: 6,
+          background: '#FFFFFF',
+          border: '1px solid #D1D5DB',
+          borderRadius: 8,
           padding: '8px 12px',
           fontSize: 14,
-          color: 'var(--text)',
+          color: '#111827',
           cursor: 'pointer',
+          fontWeight: 500,
         }}
         {...props}
       >

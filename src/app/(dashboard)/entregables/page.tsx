@@ -270,7 +270,7 @@ export default function EntregablesPage() {
               Última Actualización
             </p>
             <p style={{ fontSize: 16, color: '#1f2937', margin: 0 }}>
-              3 de Febrero, 2026
+              5 de Febrero, 2026
             </p>
           </div>
           <div>

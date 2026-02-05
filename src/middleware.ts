@@ -119,6 +119,13 @@ export async function middleware(request: NextRequest) {
       const userRole = profile?.role || 'operator';
       const path = request.nextUrl.pathname;
 
+      console.log('[Middleware] Verificando permisos:', {
+        userId: user.id,
+        email: user.email,
+        role: userRole,
+        path: path
+      });
+
       // Definir permisos por rol
       const rolePermissions: Record<string, string[]> = {
         admin: ['/inventory', '/reports', '/ai-agents', '/roles', '/settings', '/how-it-works', '/next-steps', '/entregables'],
@@ -129,6 +136,12 @@ export async function middleware(request: NextRequest) {
 
       const allowedPaths = rolePermissions[userRole] || rolePermissions.operator;
       const hasAccess = allowedPaths.some(allowedPath => path.startsWith(allowedPath));
+
+      console.log('[Middleware] Permisos del rol:', {
+        role: userRole,
+        allowedPaths,
+        hasAccess
+      });
 
       if (!hasAccess && !isPublicRoute) {
         console.log(`🚫 Acceso denegado para ${user.email} (${userRole}) a ${path}`);

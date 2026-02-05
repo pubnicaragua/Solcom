@@ -10,7 +10,7 @@ export default function Topbar() {
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'space-between',
-        padding: '12px 0',
+        padding: '12px 24px',
         borderBottom: '1px solid var(--border)',
       }}
     >

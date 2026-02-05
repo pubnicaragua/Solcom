@@ -33,19 +33,17 @@ export default function Sidebar() {
           top: 16,
           left: 16,
           zIndex: 1001,
-          width: 40,
-          height: 40,
+          background: '#1F2937',
+          border: '1px solid #374151',
           borderRadius: 8,
-          background: 'var(--panel)',
-          border: '1px solid var(--border)',
-          display: 'none',
-          alignItems: 'center',
-          justifyContent: 'center',
+          padding: 8,
           cursor: 'pointer',
+          display: 'none',
+          color: '#F9FAFB'
         }}
         className="mobile-menu-btn"
       >
-        {isOpen ? <X size={20} /> : <Menu size={20} />}
+        {isOpen ? <X size={24} /> : <Menu size={24} />}
       </button>
 
       {/* Overlay para cerrar el menú en móvil */}
@@ -69,20 +67,20 @@ export default function Sidebar() {
       <aside
         className={`sidebar ${isOpen ? 'open' : ''}`}
         style={{
-          background: '#FAF9F6',
-          borderRight: '1px solid #E5E4E0',
+          background: '#1F2937',
+          borderRight: '1px solid #374151',
           display: 'flex',
           flexDirection: 'column',
           padding: 18,
           gap: 24,
         }}
       >
-      <div style={{ paddingBottom: 18, borderBottom: '1px solid #E5E4E0' }}>
+      <div style={{ paddingBottom: 18, borderBottom: '1px solid #374151' }}>
         <div style={{ 
           background: '#FFFFFF', 
           padding: '12px', 
           borderRadius: '8px',
-          boxShadow: '0 1px 3px rgba(0,0,0,0.05)'
+          boxShadow: '0 2px 4px rgba(0,0,0,0.1)'
         }}>
           <img 
             src="https://www.soliscomercialni.com/Solis%20Comercial%20Logo.png" 
@@ -97,8 +95,8 @@ export default function Sidebar() {
           const Icon = item.icon;
           const isActive = pathname === item.href;
           
-          // Ocultar módulos según permisos
-          if (!loading && item.module !== 'public' && !hasPermission(role, item.module)) {
+          // Mostrar módulos públicos siempre, o verificar permisos si ya cargó
+          if (item.module !== 'public' && !loading && !hasPermission(role, item.module)) {
             return null;
           }
 
@@ -114,22 +112,22 @@ export default function Sidebar() {
                 borderRadius: 8,
                 fontSize: 14,
                 fontWeight: 500,
-                color: isActive ? '#DC2626' : '#374151',
-                background: isActive ? '#FEE2E2' : 'transparent',
+                color: isActive ? '#FFFFFF' : '#D1D5DB',
+                background: isActive ? '#DC2626' : 'transparent',
                 border: isActive ? '1px solid #DC2626' : '1px solid transparent',
                 transition: 'all 0.2s',
                 textDecoration: 'none',
               }}
               onMouseEnter={(e) => {
                 if (!isActive) {
-                  e.currentTarget.style.background = '#F3F4F6';
-                  e.currentTarget.style.color = '#1F2937';
+                  e.currentTarget.style.background = '#374151';
+                  e.currentTarget.style.color = '#FFFFFF';
                 }
               }}
               onMouseLeave={(e) => {
                 if (!isActive) {
                   e.currentTarget.style.background = 'transparent';
-                  e.currentTarget.style.color = '#374151';
+                  e.currentTarget.style.color = '#D1D5DB';
                 }
               }}
             >
@@ -140,9 +138,9 @@ export default function Sidebar() {
         })}
       </nav>
 
-      <div style={{ marginTop: 'auto', padding: 12, background: '#F3F4F6', borderRadius: 8, border: '1px solid #E5E7EB' }}>
-        <div style={{ fontSize: 12, color: '#6B7280', marginBottom: 4 }}>Versión</div>
-        <div style={{ fontSize: 14, fontWeight: 600, color: '#1F2937' }}>1.0.0</div>
+      <div style={{ marginTop: 'auto', padding: 12, background: '#374151', borderRadius: 8, border: '1px solid #4B5563' }}>
+        <div style={{ fontSize: 12, color: '#9CA3AF', marginBottom: 4 }}>Versión</div>
+        <div style={{ fontSize: 14, fontWeight: 600, color: '#F9FAFB' }}>1.0.0</div>
       </div>
     </aside>
 
@@ -165,7 +163,7 @@ export default function Sidebar() {
           width: 280px;
           z-index: 1000;
           transition: left 0.3s ease;
-          background: var(--card) !important;
+          background: #1F2937 !important;
           box-shadow: 2px 0 8px rgba(0, 0, 0, 0.3);
         }
         
@@ -177,6 +175,7 @@ export default function Sidebar() {
       @media (max-width: 768px) {
         .sidebar {
           width: 260px;
+          background: #1F2937 !important;
           left: -260px;
         }
       }

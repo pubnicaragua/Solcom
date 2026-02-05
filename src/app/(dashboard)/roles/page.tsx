@@ -1,12 +1,23 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import Card from '@/components/ui/Card';
 import Button from '@/components/ui/Button';
 import Badge from '@/components/ui/Badge';
-import { Shield, Users, Edit, Trash2, Plus, Check, X } from 'lucide-react';
+import Input from '@/components/ui/Input';
+import Select from '@/components/ui/Select';
+import { Shield, Users, Edit, Trash2, Plus, Check, X, Save, XCircle } from 'lucide-react';
+import { createBrowserClient } from '@supabase/ssr';
 
-interface Role {
+interface UserProfile {
+  id: string;
+  email: string;
+  full_name: string;
+  role: 'admin' | 'manager' | 'operator' | 'auditor';
+  created_at: string;
+}
+
+interface RoleInfo {
   id: string;
   name: string;
   description: string;
@@ -15,7 +26,7 @@ interface Role {
   color: string;
 }
 
-const MOCK_ROLES: Role[] = [
+const ROLE_DEFINITIONS: RoleInfo[] = [
   {
     id: '1',
     name: 'Administrador',
@@ -60,8 +71,69 @@ const ALL_PERMISSIONS = [
 ];
 
 export default function RolesPage() {
-  const [roles] = useState<Role[]>(MOCK_ROLES);
-  const [selectedRole, setSelectedRole] = useState<Role | null>(null);
+  const [users, setUsers] = useState<UserProfile[]>([]);
+  const [selectedRole, setSelectedRole] = useState<RoleInfo | null>(null);
+  const [editingUser, setEditingUser] = useState<UserProfile | null>(null);
+  const [newUserEmail, setNewUserEmail] = useState('');
+  const [newUserName, setNewUserName] = useState('');
+  const [newUserRole, setNewUserRole] = useState<'admin' | 'manager' | 'operator' | 'auditor'>('operator');
+  const [showNewUserForm, setShowNewUserForm] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const supabase = createBrowserClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+  );
+
+  useEffect(() => {
+    loadUsers();
+  }, []);
+
+  async function loadUsers() {
+    setLoading(true);
+    const { data, error } = await supabase
+      .from('user_profiles')
+      .select('*')
+      .order('created_at', { ascending: false });
+
+    if (!error && data) {
+      setUsers(data);
+    }
+    setLoading(false);
+  }
+
+  async function handleUpdateUserRole(userId: string, newRole: 'admin' | 'manager' | 'operator' | 'auditor') {
+    const { error } = await supabase
+      .from('user_profiles')
+      .update({ role: newRole })
+      .eq('id', userId);
+
+    if (!error) {
+      await loadUsers();
+      setEditingUser(null);
+    }
+  }
+
+  async function handleDeleteUser(userId: string) {
+    if (!confirm('¿Estás seguro de eliminar este usuario?')) return;
+
+    const { error } = await supabase
+      .from('user_profiles')
+      .delete()
+      .eq('id', userId);
+
+    if (!error) {
+      await loadUsers();
+    }
+  }
+
+  function getRoleCount(role: string) {
+    return users.filter(u => u.role === role).length;
+  }
+
+  const rolesWithCounts = ROLE_DEFINITIONS.map(role => ({
+    ...role,
+    userCount: getRoleCount(role.id)
+  }));
 
   return (
     <div style={{ display: 'grid', gap: 14 }}>
@@ -81,7 +153,7 @@ export default function RolesPage() {
                 Roles del Sistema
               </div>
               <div style={{ display: 'grid', gap: 8 }}>
-                {roles.map((role) => (
+                {rolesWithCounts.map((role) => (
                   <div
                     key={role.id}
                     onClick={() => setSelectedRole(role)}
@@ -164,27 +236,106 @@ export default function RolesPage() {
                 Usuarios por Rol
               </div>
               <div style={{ display: 'grid', gap: 8 }}>
-                {roles.map((role) => (
-                  <div
-                    key={role.id}
-                    style={{
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'space-between',
-                      padding: 10,
-                      borderRadius: 4,
-                      background: 'var(--panel)',
-                    }}
-                  >
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                      <Users size={16} color={role.color} />
-                      <span style={{ fontSize: 14 }}>{role.name}</span>
+                {loading ? (
+                  <div style={{ padding: 20, textAlign: 'center', color: 'var(--muted)' }}>Cargando usuarios...</div>
+                ) : (
+                  users.map((user) => (
+                    <div
+                      key={user.id}
+                      style={{
+                        padding: 12,
+                        borderRadius: 6,
+                        background: 'var(--panel)',
+                        border: '1px solid var(--border)',
+                      }}
+                    >
+                      {editingUser?.id === user.id ? (
+                        <div style={{ display: 'grid', gap: 8 }}>
+                          <Input
+                            value={user.full_name}
+                            disabled
+                            style={{ fontSize: 13 }}
+                          />
+                          <Select
+                            value={user.role}
+                            onChange={(e) => setEditingUser({ ...editingUser, role: e.target.value as any })}
+                            options={[
+                              { value: 'admin', label: 'Administrador' },
+                              { value: 'manager', label: 'Gerente' },
+                              { value: 'operator', label: 'Operador' },
+                              { value: 'auditor', label: 'Auditor' }
+                            ]}
+                          />
+                          <div style={{ display: 'flex', gap: 6 }}>
+                            <Button
+                              variant="primary"
+                              size="sm"
+                              onClick={() => handleUpdateUserRole(user.id, editingUser.role)}
+                            >
+                              <Save size={14} style={{ marginRight: 4 }} />
+                              Guardar
+                            </Button>
+                            <Button
+                              variant="secondary"
+                              size="sm"
+                              onClick={() => setEditingUser(null)}
+                            >
+                              <XCircle size={14} style={{ marginRight: 4 }} />
+                              Cancelar
+                            </Button>
+                          </div>
+                        </div>
+                      ) : (
+                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                          <div style={{ flex: 1 }}>
+                            <div style={{ fontSize: 14, fontWeight: 600, marginBottom: 2 }}>{user.full_name || user.email}</div>
+                            <div style={{ fontSize: 12, color: 'var(--muted)', marginBottom: 4 }}>{user.email}</div>
+                            <Badge
+                              variant={user.role === 'admin' ? 'danger' : user.role === 'manager' ? 'warning' : 'neutral'}
+                              size="sm"
+                            >
+                              {user.role === 'admin' ? 'Administrador' : user.role === 'manager' ? 'Gerente' : user.role === 'operator' ? 'Operador' : 'Auditor'}
+                            </Badge>
+                          </div>
+                          <div style={{ display: 'flex', gap: 6 }}>
+                            <button
+                              onClick={() => setEditingUser(user)}
+                              style={{
+                                width: 28,
+                                height: 28,
+                                borderRadius: 4,
+                                border: '1px solid var(--border)',
+                                background: 'var(--panel)',
+                                display: 'flex',
+                                alignItems: 'center',
+                                justifyContent: 'center',
+                                cursor: 'pointer',
+                              }}
+                            >
+                              <Edit size={14} color="var(--muted)" />
+                            </button>
+                            <button
+                              onClick={() => handleDeleteUser(user.id)}
+                              style={{
+                                width: 28,
+                                height: 28,
+                                borderRadius: 4,
+                                border: '1px solid var(--border)',
+                                background: 'var(--panel)',
+                                display: 'flex',
+                                alignItems: 'center',
+                                justifyContent: 'center',
+                                cursor: 'pointer',
+                              }}
+                            >
+                              <Trash2 size={14} color="var(--danger)" />
+                            </button>
+                          </div>
+                        </div>
+                      )}
                     </div>
-                    <Badge variant="neutral" size="sm">
-                      {role.userCount}
-                    </Badge>
-                  </div>
-                ))}
+                  ))
+                )}
               </div>
             </div>
           </Card>
