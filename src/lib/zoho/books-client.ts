@@ -4,6 +4,7 @@ export class ZohoBooksClient {
     private config: ZohoBooksConfig;
     private accessToken: string | null = null;
     private tokenExpiry: number = 0;
+    private apiDomain: string = 'https://www.zohoapis.com'; // Default, will be updated after auth
 
     constructor(config: ZohoBooksConfig) {
         this.config = config;
@@ -14,7 +15,10 @@ export class ZohoBooksClient {
             return this.accessToken;
         }
 
-        const response = await fetch('https://accounts.zoho.com/oauth/v2/token', {
+        // Detect region from environment or default to .com
+        const authDomain = process.env.ZOHO_AUTH_DOMAIN || 'https://accounts.zoho.com';
+
+        const response = await fetch(`${authDomain}/oauth/v2/token`, {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/x-www-form-urlencoded',
@@ -28,12 +32,18 @@ export class ZohoBooksClient {
         });
 
         if (!response.ok) {
-            throw new Error(`Zoho Books auth failed: ${response.status}`);
+            const errorText = await response.text();
+            throw new Error(`Zoho Books auth failed: ${response.status} - ${errorText}`);
         }
 
         const data = await response.json();
         this.accessToken = data.access_token || null;
         this.tokenExpiry = Date.now() + (data.expires_in * 1000) - 60000;
+
+        // Use the api_domain returned by Zoho (this is region-specific)
+        if (data.api_domain) {
+            this.apiDomain = data.api_domain;
+        }
 
         return this.accessToken;
     }
@@ -42,7 +52,8 @@ export class ZohoBooksClient {
         const token = await this.getAccessToken();
         const { organizationId } = this.config;
 
-        const response = await fetch(`https://www.zohobooks.com/api/v3/items?organization_id=${organizationId}`, {
+        // Use the regional API domain
+        const response = await fetch(`${this.apiDomain}/books/v3/items?organization_id=${organizationId}`, {
             headers: {
                 'Authorization': `Zoho-oauthtoken ${token}`,
             },
@@ -50,12 +61,14 @@ export class ZohoBooksClient {
         });
 
         if (!response.ok) {
-            throw new Error(`Zoho Books API error: ${response.status}`);
+            const errorText = await response.text();
+            throw new Error(`Zoho Books API error: ${response.status} - ${errorText.substring(0, 200)}`);
         }
 
         const result: ZohoBooksApiResponse<ZohoBooksItem> = await response.json();
         return result.items || [];
     }
+
 
     async getItemDetails(itemId: string): Promise<ZohoBooksItem | null> {
         const token = await this.getAccessToken();
