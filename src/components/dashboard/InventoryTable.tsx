@@ -5,7 +5,7 @@ import Card from '@/components/ui/Card';
 import Table from '@/components/ui/Table';
 import Badge from '@/components/ui/Badge';
 import Button from '@/components/ui/Button';
-import { ChevronLeft, ChevronRight } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Palette, Warehouse, Package } from 'lucide-react';
 import { format } from 'date-fns';
 import { es } from 'date-fns/locale';
 
@@ -116,14 +116,15 @@ export default function InventoryTable({ filters, onSelectionChange }: Inventory
       width: '18%',
       render: (row: InventoryItem) => (
         <div>
-          <div style={{ fontWeight: 600, marginBottom: 4, fontSize: 14 }}>{row.item_name}</div>
+          <div style={{ fontWeight: 600, marginBottom: 4, fontSize: 14, color: '#111827' }}>{row.item_name}</div>
           {row.color && (
-            <div style={{ fontSize: 11, color: '#6B7280', marginBottom: 2 }}>
-              🎨 {row.color}
+            <div style={{ fontSize: 11, color: '#6B7280', marginBottom: 2, display: 'flex', alignItems: 'center', gap: 4 }}>
+              <Palette size={12} />
+              {row.color}
             </div>
           )}
           {row.barcode && (
-            <div style={{ fontSize: 10, color: '#9CA3AF', fontFamily: 'monospace', background: '#F3F4F6', padding: '2px 6px', borderRadius: 4, display: 'inline-block' }}>
+            <div style={{ fontSize: 10, color: '#6B7280', fontFamily: 'monospace', marginTop: 2 }}>
               {row.barcode}
             </div>
           )}
@@ -143,27 +144,13 @@ export default function InventoryTable({ filters, onSelectionChange }: Inventory
       header: 'Categoría',
       width: '11%',
       render: (row: InventoryItem) => {
-        const categoryColors: Record<string, string> = {
-          'Celular': '#3B82F6',
-          'Laptop': '#8B5CF6',
-          'TV': '#EC4899',
-          'Tablet': '#F59E0B',
-          'Monitor': '#10B981',
-          'Accesorio': '#6B7280'
-        };
         const category = row.category || 'Sin categoría';
-        const bgColor = categoryColors[category] || '#6B7280';
         
         return (
           <div style={{ 
-            background: `${bgColor}15`, 
-            color: bgColor,
-            padding: '4px 10px',
-            borderRadius: 6,
-            fontSize: 12,
-            fontWeight: 600,
-            display: 'inline-block',
-            border: `1px solid ${bgColor}30`
+            fontSize: 13,
+            fontWeight: 500,
+            color: '#374151'
           }}>
             {category}
           </div>
@@ -175,14 +162,10 @@ export default function InventoryTable({ filters, onSelectionChange }: Inventory
       header: 'Bodega',
       width: '13%',
       render: (row: InventoryItem) => (
-        <div style={{ 
-          background: '#F9FAFB',
-          padding: '8px 10px',
-          borderRadius: 6,
-          border: '1px solid #E5E7EB'
-        }}>
-          <div style={{ fontWeight: 600, fontSize: 13, color: '#1F2937', marginBottom: 2 }}>
-            📦 {row.warehouse_code}
+        <div>
+          <div style={{ fontWeight: 600, fontSize: 13, color: '#111827', marginBottom: 2, display: 'flex', alignItems: 'center', gap: 4 }}>
+            <Warehouse size={14} />
+            {row.warehouse_code}
           </div>
           <div style={{ fontSize: 11, color: '#6B7280' }}>{row.warehouse_name}</div>
         </div>
@@ -200,39 +183,29 @@ export default function InventoryTable({ filters, onSelectionChange }: Inventory
         
         const color = stockLevel === 'out' ? '#DC2626' :
                      stockLevel === 'critical' ? '#EA580C' :
-                     stockLevel === 'low' ? '#EAB308' :
-                     stockLevel === 'medium' ? '#16A34A' : '#2563EB';
-        
-        const bgColor = stockLevel === 'out' ? '#FEE2E2' :
-                       stockLevel === 'critical' ? '#FFEDD5' :
-                       stockLevel === 'low' ? '#FEF3C7' :
-                       stockLevel === 'medium' ? '#DCFCE7' : '#DBEAFE';
+                     stockLevel === 'low' ? '#D97706' :
+                     stockLevel === 'medium' ? '#059669' : '#2563EB';
 
         return (
           <div>
             <div style={{ 
-              fontWeight: 700, 
+              fontWeight: 600, 
               color, 
-              fontSize: 16,
-              background: bgColor,
-              padding: '4px 8px',
-              borderRadius: 6,
-              display: 'inline-block',
-              marginBottom: 4
+              fontSize: 15,
+              display: 'flex',
+              alignItems: 'center',
+              gap: 4
             }}>
-              {row.qty} unidades
+              <Package size={14} />
+              {row.qty}
             </div>
             {row.min_stock && row.qty < row.min_stock && (
               <div style={{ 
                 fontSize: 10, 
                 color: '#DC2626',
-                background: '#FEE2E2',
-                padding: '2px 6px',
-                borderRadius: 4,
-                display: 'inline-block',
                 marginTop: 2
               }}>
-                ⚠️ Bajo mínimo ({row.min_stock})
+                Bajo mínimo: {row.min_stock}
               </div>
             )}
           </div>
@@ -259,15 +232,11 @@ export default function InventoryTable({ filters, onSelectionChange }: Inventory
       width: '9%',
       render: (row: InventoryItem) => (
         <div style={{ 
-          fontWeight: 600,
-          fontSize: 13,
-          color: '#DC2626',
-          background: '#FEF2F2',
-          padding: '4px 8px',
-          borderRadius: 6,
-          display: 'inline-block'
+          fontWeight: 500,
+          fontSize: 12,
+          color: '#9CA3AF'
         }}>
-          🔒 Restringido
+          Restringido
         </div>
       ),
     },
@@ -280,16 +249,11 @@ export default function InventoryTable({ filters, onSelectionChange }: Inventory
         const isNew = state === 'nuevo';
         return (
           <div style={{
-            background: isNew ? '#DCFCE7' : '#FEF3C7',
-            color: isNew ? '#166534' : '#854D0E',
-            padding: '4px 10px',
-            borderRadius: 6,
-            fontSize: 12,
-            fontWeight: 600,
-            display: 'inline-block',
-            border: `1px solid ${isNew ? '#BBF7D0' : '#FDE68A'}`
+            fontSize: 13,
+            fontWeight: 500,
+            color: isNew ? '#059669' : '#D97706'
           }}>
-            {isNew ? '✨ Nuevo' : state === 'usado' ? '♻️ Usado' : 'N/A'}
+            {isNew ? 'Nuevo' : state === 'usado' ? 'Usado' : 'N/A'}
           </div>
         );
       },

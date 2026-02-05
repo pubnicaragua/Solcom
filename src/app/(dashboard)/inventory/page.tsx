@@ -168,11 +168,11 @@ export default function InventoryPage() {
             <Select
               options={[
                 { value: '', label: 'Nivel de stock' },
-                { value: 'out', label: '🔴 Sin stock (0)' },
-                { value: 'critical', label: '🟠 Crítico (1-5)' },
-                { value: 'low', label: '🟡 Bajo (6-20)' },
-                { value: 'medium', label: '🟢 Medio (21-50)' },
-                { value: 'high', label: '🔵 Alto (50+)' },
+                { value: 'out', label: 'Sin stock (0)' },
+                { value: 'critical', label: 'Crítico (1-5)' },
+                { value: 'low', label: 'Bajo (6-20)' },
+                { value: 'medium', label: 'Medio (21-50)' },
+                { value: 'high', label: 'Alto (50+)' },
               ]}
               value={filters.stockLevel}
               onChange={(e) => handleFilterChange('stockLevel', e.target.value)}
