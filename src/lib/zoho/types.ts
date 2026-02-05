@@ -36,6 +36,11 @@ export interface ZohoBooksItem {
   category_name?: string;
   category_id?: string;
   last_modified_time: string;
+  brand?: string;
+  // Custom fields
+  cf_estado?: string;
+  cf_color?: string;
+  cf_marca?: string;
 }
 
 export interface ZohoApiResponse<T> {

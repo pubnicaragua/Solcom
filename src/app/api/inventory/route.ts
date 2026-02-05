@@ -29,8 +29,11 @@ export async function GET(request: Request) {
 
 
     // Search filter (name or SKU)
+    // For joined tables with !inner, we can filter directly using the table.column syntax
     if (search) {
-      query = query.or(`items.name.ilike.%${search}%,items.sku.ilike.%${search}%`);
+      // Note: OR on foreign tables is tricky. We'll filter on items table columns.
+      // Using textSearch pattern
+      query = query.or(`name.ilike.%${search}%,sku.ilike.%${search}%`, { referencedTable: 'items' });
     }
 
     // Warehouse filter
@@ -38,14 +41,14 @@ export async function GET(request: Request) {
       query = query.eq('warehouses.code', warehouse);
     }
 
-    // State filter (nuevo, usado)
+    // State filter (nuevo, usado) - filter on items table
     if (state) {
       query = query.eq('items.state', state);
     }
 
-    // Category filter
+    // Category filter - use ilike for partial/case-insensitive matching
     if (category) {
-      query = query.eq('items.category', category);
+      query = query.ilike('items.category', `%${category}%`);
     }
 
     // Stock level filter
@@ -70,7 +73,7 @@ export async function GET(request: Request) {
     }
 
     // Sorting
-  
+
 
     let orderConfig: { column: string, options?: { ascending: boolean, foreignTable?: string } } = {
       column: 'synced_at',

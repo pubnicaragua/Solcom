@@ -36,6 +36,9 @@ export async function POST(request: Request) {
         const zohoItems = await zohoClient.fetchItems();
         console.log(`[SYNC] Total Zoho Items fetched: ${zohoItems.length}`);
 
+
+       
+
         const defaultWarehouseCode = 'X1';
         let warehouseId: string | null = null;
 
@@ -73,7 +76,7 @@ export async function POST(request: Request) {
             const batch = zohoItems.slice(i, i + BATCH_SIZE);
             const batchSkus = batch.map(item => item.sku || `NO-SKU-${item.item_id}`);
 
-      
+
             const { data: existingItems } = await supabase
                 .from('items')
                 .select('id, sku')
@@ -81,21 +84,26 @@ export async function POST(request: Request) {
 
             const existingMap = new Map((existingItems || []).map(item => [item.sku, item.id]));
 
-            const toInsert = [];
-            const toUpdate = [];
+            const toInsert: any[] = [];
+            const toUpdate: { id: string; name: string; category: string | null; color: string | null; state: string | null }[] = [];
 
             for (const zItem of batch) {
                 const sku = zItem.sku || `NO-SKU-${zItem.item_id}`;
                 const existingId = existingMap.get(sku);
+                const itemData = {
+                    name: zItem.name,
+                    category: zItem.category_name || null,
+                    color: (zItem as any).cf_color || null,
+                    state: (zItem as any).cf_estado || null,
+                };
 
                 if (existingId) {
-                    toUpdate.push({ id: existingId, name: zItem.name, category: zItem.category_name || null });
+                    toUpdate.push({ id: existingId, ...itemData });
                 } else {
                     toInsert.push({
                         sku,
-                        name: zItem.name,
                         zoho_item_id: zItem.item_id,
-                        category: zItem.category_name || null,
+                        ...itemData,
                     });
                 }
             }
@@ -114,7 +122,19 @@ export async function POST(request: Request) {
                 }
             }
 
- 
+            // Update existing items with color and state
+            for (const item of toUpdate) {
+                const { error: updateError } = await supabase
+                    .from('items')
+                    .update({ name: item.name, category: item.category, color: item.color, state: item.state })
+                    .eq('id', item.id);
+
+                if (updateError) {
+                    console.error(`[SYNC] Update error for ${item.id}:`, updateError.message);
+                }
+            }
+
+
             const snapshotPayload = [];
             for (const zItem of batch) {
                 const sku = zItem.sku || `NO-SKU-${zItem.item_id}`;
