@@ -19,11 +19,18 @@ export async function POST(request: Request) {
 
         const zohoClient = createZohoBooksClient();
         if (!zohoClient) {
+            const missing = [];
+            if (!process.env.ZOHO_BOOKS_CLIENT_ID) missing.push('ZOHO_BOOKS_CLIENT_ID');
+            if (!process.env.ZOHO_BOOKS_CLIENT_SECRET) missing.push('ZOHO_BOOKS_CLIENT_SECRET');
+            if (!process.env.ZOHO_BOOKS_REFRESH_TOKEN) missing.push('ZOHO_BOOKS_REFRESH_TOKEN');
+            if (!process.env.ZOHO_BOOKS_ORGANIZATION_ID) missing.push('ZOHO_BOOKS_ORGANIZATION_ID');
+
             return NextResponse.json(
-                { error: 'Configuración de Zoho Books incompleta' },
+                { error: 'Configuración de Zoho Books incompleta', missing },
                 { status: 500 }
             );
         }
+
 
         const supabase = createServerClient();
         const zohoItems = await zohoClient.fetchItems();
