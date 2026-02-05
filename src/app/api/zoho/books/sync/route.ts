@@ -78,16 +78,27 @@ export async function POST(request: Request) {
 
             if (itemQuery.data) {
                 itemId = itemQuery.data.id;
+
+                // Update existing item with latest data from Zoho
+                await supabase
+                    .from('items')
+                    .update({
+                        name: zohoItem.name,
+                        category: zohoItem.category_name || null,
+                    })
+                    .eq('id', itemQuery.data.id);
             } else {
-                const { data: newItem }: any = await supabase
+                const { data: newItem } = await supabase
                     .from('items')
                     .insert({
                         sku: zohoItem.sku,
                         name: zohoItem.name,
                         zoho_item_id: zohoItem.item_id,
-                    } as any)
+                        category: zohoItem.category_name || null,
+                    })
                     .select('id')
                     .single();
+
 
                 itemId = newItem?.id ?? null;
             }
@@ -100,7 +111,7 @@ export async function POST(request: Request) {
                 qty: zohoItem.stock_on_hand,
                 source_ts: zohoItem.last_modified_time,
                 synced_at: new Date().toISOString(),
-            } as any);
+            });
 
             itemsProcessed++;
         }

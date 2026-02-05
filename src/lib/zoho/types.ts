@@ -33,6 +33,8 @@ export interface ZohoBooksItem {
   unit?: string;
   rate?: number;
   description?: string;
+  category_name?: string;
+  category_id?: string;
   last_modified_time: string;
 }
 
@@ -47,6 +49,13 @@ export interface ZohoBooksApiResponse<T> {
   message: string;
   items?: T[];
   item?: T;
+  page_context?: {
+    page: number;
+    per_page: number;
+    has_more_page: boolean;
+    total: number;
+    total_pages: number;
+  };
 }
 
 export interface ZohoTokenResponse {

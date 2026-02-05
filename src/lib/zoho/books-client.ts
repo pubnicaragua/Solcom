@@ -52,22 +52,41 @@ export class ZohoBooksClient {
         const token = await this.getAccessToken();
         const { organizationId } = this.config;
 
-        // Use the regional API domain
-        const response = await fetch(`${this.apiDomain}/books/v3/items?organization_id=${organizationId}`, {
-            headers: {
-                'Authorization': `Zoho-oauthtoken ${token}`,
-            },
-            cache: 'no-store',
-        });
+        let allItems: ZohoBooksItem[] = [];
+        let page = 1;
+        let hasMorePages = true;
 
-        if (!response.ok) {
-            const errorText = await response.text();
-            throw new Error(`Zoho Books API error: ${response.status} - ${errorText.substring(0, 200)}`);
+        while (hasMorePages) {
+            const response = await fetch(
+                `${this.apiDomain}/books/v3/items?organization_id=${organizationId}&page=${page}&per_page=200`,
+                {
+                    headers: {
+                        'Authorization': `Zoho-oauthtoken ${token}`,
+                    },
+                    cache: 'no-store',
+                }
+            );
+
+            if (!response.ok) {
+                const errorText = await response.text();
+                throw new Error(`Zoho Books API error: ${response.status} - ${errorText.substring(0, 200)}`);
+            }
+
+            const result: ZohoBooksApiResponse<ZohoBooksItem> = await response.json();
+            const items = result.items || [];
+            allItems = allItems.concat(items);
+
+            // Check if there are more pages
+            if (result.page_context?.has_more_page) {
+                page++;
+            } else {
+                hasMorePages = false;
+            }
         }
 
-        const result: ZohoBooksApiResponse<ZohoBooksItem> = await response.json();
-        return result.items || [];
+        return allItems;
     }
+
 
 
     async getItemDetails(itemId: string): Promise<ZohoBooksItem | null> {

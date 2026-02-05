@@ -34,12 +34,14 @@ export interface Database {
           created_at?: string
           updated_at?: string
         }
+        Relationships: []
       }
       items: {
         Row: {
           id: string
           sku: string
           name: string
+          category: string | null
           color: string | null
           state: string | null
           zoho_item_id: string | null
@@ -50,6 +52,7 @@ export interface Database {
           id?: string
           sku: string
           name: string
+          category?: string | null
           color?: string | null
           state?: string | null
           zoho_item_id?: string | null
@@ -60,12 +63,14 @@ export interface Database {
           id?: string
           sku?: string
           name?: string
+          category?: string | null
           color?: string | null
           state?: string | null
           zoho_item_id?: string | null
           created_at?: string
           updated_at?: string
         }
+        Relationships: []
       }
       stock_snapshots: {
         Row: {
@@ -95,6 +100,22 @@ export interface Database {
           synced_at?: string
           created_at?: string
         }
+        Relationships: [
+          {
+            foreignKeyName: "stock_snapshots_warehouse_id_fkey"
+            columns: ["warehouse_id"]
+            isOneToOne: false
+            referencedRelation: "warehouses"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "stock_snapshots_item_id_fkey"
+            columns: ["item_id"]
+            isOneToOne: false
+            referencedRelation: "items"
+            referencedColumns: ["id"]
+          }
+        ]
       }
       stock_movements: {
         Row: {
@@ -127,6 +148,22 @@ export interface Database {
           notes?: string | null
           created_at?: string
         }
+        Relationships: [
+          {
+            foreignKeyName: "stock_movements_warehouse_id_fkey"
+            columns: ["warehouse_id"]
+            isOneToOne: false
+            referencedRelation: "warehouses"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "stock_movements_item_id_fkey"
+            columns: ["item_id"]
+            isOneToOne: false
+            referencedRelation: "items"
+            referencedColumns: ["id"]
+          }
+        ]
       }
     }
     Views: {
@@ -136,6 +173,9 @@ export interface Database {
       [_ in never]: never
     }
     Enums: {
+      [_ in never]: never
+    }
+    CompositeTypes: {
       [_ in never]: never
     }
   }

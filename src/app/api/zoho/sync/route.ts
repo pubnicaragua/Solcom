@@ -1,17 +1,9 @@
 import { NextResponse } from 'next/server';
 import { createServerClient } from '@/lib/supabase/server';
+import { createZohoBooksClient } from '@/lib/zoho/books-client';
 import { syncRequestSchema } from '@/lib/validators/inventory';
 
-const MOCK_DATA = [
-  { ItemID: 'ITEM001', SKU: 'SKU-001', Name: 'Laptop Dell Inspiron 15', Color: 'Negro', State: 'nuevo', WarehouseCode: 'X1', Quantity: 15, LastUpdated: new Date().toISOString() },
-  { ItemID: 'ITEM002', SKU: 'SKU-002', Name: 'Monitor LG 24"', Color: 'Gris', State: 'nuevo', WarehouseCode: 'X1', Quantity: 8, LastUpdated: new Date().toISOString() },
-  { ItemID: 'ITEM003', SKU: 'SKU-003', Name: 'Teclado Logitech', Color: 'Negro', State: 'nuevo', WarehouseCode: 'X4', Quantity: 25, LastUpdated: new Date().toISOString() },
-  { ItemID: 'ITEM004', SKU: 'SKU-004', Name: 'Mouse Inalámbrico', Color: 'Blanco', State: 'nuevo', WarehouseCode: 'X4', Quantity: 30, LastUpdated: new Date().toISOString() },
-  { ItemID: 'ITEM005', SKU: 'SKU-005', Name: 'Impresora HP LaserJet', Color: null, State: 'usado', WarehouseCode: 'X5', Quantity: 3, LastUpdated: new Date().toISOString() },
-  { ItemID: 'ITEM006', SKU: 'SKU-006', Name: 'Router TP-Link', Color: 'Negro', State: 'nuevo', WarehouseCode: 'X5', Quantity: 12, LastUpdated: new Date().toISOString() },
-  { ItemID: 'ITEM007', SKU: 'SKU-007', Name: 'Webcam Logitech C920', Color: 'Negro', State: 'nuevo', WarehouseCode: 'X1', Quantity: 6, LastUpdated: new Date().toISOString() },
-  { ItemID: 'ITEM008', SKU: 'SKU-008', Name: 'Auriculares Sony', Color: 'Azul', State: 'nuevo', WarehouseCode: 'X4', Quantity: 18, LastUpdated: new Date().toISOString() },
-];
+export const dynamic = 'force-dynamic';
 
 export async function POST(request: Request) {
   try {
@@ -25,61 +17,88 @@ export async function POST(request: Request) {
       );
     }
 
+    const zohoClient = createZohoBooksClient();
+    if (!zohoClient) {
+      const missing = [];
+      if (!process.env.ZOHO_BOOKS_CLIENT_ID) missing.push('ZOHO_BOOKS_CLIENT_ID');
+      if (!process.env.ZOHO_BOOKS_CLIENT_SECRET) missing.push('ZOHO_BOOKS_CLIENT_SECRET');
+      if (!process.env.ZOHO_BOOKS_REFRESH_TOKEN) missing.push('ZOHO_BOOKS_REFRESH_TOKEN');
+      if (!process.env.ZOHO_BOOKS_ORGANIZATION_ID) missing.push('ZOHO_BOOKS_ORGANIZATION_ID');
+
+      return NextResponse.json(
+        { error: 'Configuración de Zoho Books incompleta', missing },
+        { status: 500 }
+      );
+    }
+
+
     const supabase = createServerClient();
+    const zohoItems = await zohoClient.fetchItems();
     let itemsProcessed = 0;
 
-    for (const zohoItem of MOCK_DATA) {
-      let warehouse: any = await supabase
+    for (const zohoItem of zohoItems) {
+      // En Zoho Books, los items no tienen WarehouseCode directo por defecto 
+      // como en Creator (depende de la configuración). 
+      // Por ahora usaremos una bodega por defecto 'MAIN' o la primera que encontremos.
+      const defaultWarehouseCode = 'X1';
+
+      let warehouseId: string | null = null;
+
+      const warehouseQuery: any = await supabase
         .from('warehouses')
         .select('id')
-        .eq('code', zohoItem.WarehouseCode)
+        .eq('code', defaultWarehouseCode)
         .single();
 
-      if (!warehouse.data) {
-        const { data: newWarehouse } = await supabase
+      if (warehouseQuery.data) {
+        warehouseId = warehouseQuery.data.id;
+      } else {
+        const { data: newWarehouse }: any = await supabase
           .from('warehouses')
           .insert({
-            code: zohoItem.WarehouseCode,
-            name: `Bodega ${zohoItem.WarehouseCode}`,
+            code: defaultWarehouseCode,
+            name: `Bodega ${defaultWarehouseCode}`,
             active: true,
           } as any)
-          .select()
+          .select('id')
           .single();
 
-        warehouse = { data: newWarehouse, error: null } as any;
+        warehouseId = newWarehouse?.id ?? null;
       }
 
-      if (!warehouse.data) continue;
+      if (!warehouseId) continue;
 
-      let item: any = await supabase
+      let itemId: string | null = null;
+
+      const itemQuery: any = await supabase
         .from('items')
         .select('id')
-        .eq('sku', zohoItem.SKU)
+        .eq('sku', zohoItem.sku)
         .single();
 
-      if (!item.data) {
-        const { data: newItem } = await supabase
+      if (itemQuery.data) {
+        itemId = itemQuery.data.id;
+      } else {
+        const { data: newItem }: any = await supabase
           .from('items')
           .insert({
-            sku: zohoItem.SKU,
-            name: zohoItem.Name,
-            color: zohoItem.Color,
-            state: zohoItem.State,
-            zoho_item_id: zohoItem.ItemID,
+            sku: zohoItem.sku,
+            name: zohoItem.name,
+            zoho_item_id: zohoItem.item_id,
           } as any)
-          .select()
+          .select('id')
           .single();
 
-        item = { data: newItem, error: null } as any;
+        itemId = newItem?.id ?? null;
       }
 
-      if (!item.data) continue;
+      if (!itemId) continue;
 
       await supabase.from('stock_snapshots').insert({
-        warehouse_id: warehouse.data.id,
-        item_id: item.data.id,
-        qty: zohoItem.Quantity,
-        source_ts: zohoItem.LastUpdated,
+        warehouse_id: warehouseId,
+        item_id: itemId,
+        qty: zohoItem.stock_on_hand,
+        source_ts: zohoItem.last_modified_time,
         synced_at: new Date().toISOString(),
       } as any);
 
@@ -89,12 +108,12 @@ export async function POST(request: Request) {
     return NextResponse.json({
       success: true,
       itemsProcessed,
-      message: `Sincronización completada: ${itemsProcessed} items procesados`,
+      message: `Sincronización de Zoho Books completada: ${itemsProcessed} items procesados`,
     });
   } catch (error) {
-    console.error('Sync error:', error);
+    console.error('Zoho Books sync error:', error);
     return NextResponse.json(
-      { error: 'Error en sincronización', details: error instanceof Error ? error.message : 'Unknown error' },
+      { error: 'Error en sincronización de Zoho Books', details: error instanceof Error ? error.message : 'Unknown error' },
       { status: 500 }
     );
   }
