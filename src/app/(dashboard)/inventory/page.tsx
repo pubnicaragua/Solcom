@@ -116,7 +116,7 @@ export default function InventoryPage() {
           <Button
             variant="secondary"
             size="sm"
-            style={{ backgroundColor: '#ff4e00', color: 'white', border: 'none' }}
+            style={{ backgroundColor: '#dc2626', color: 'white', border: 'none' }}
             onClick={async () => {
               if (confirm('¿Deseas sincronizar el inventario desde Zoho Books?')) {
                 try {
@@ -138,7 +138,7 @@ export default function InventoryPage() {
               }
             }}
           >
-            <RefreshCw size={16} />
+            <RefreshCw size={14} />
             Sincronizar Books
           </Button>
         </div>
