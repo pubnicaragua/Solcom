@@ -4,22 +4,24 @@ import { useState } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { Package, BarChart3, Settings, Users, HelpCircle, Bot, Menu, X, ClipboardList, Calendar, FolderOpen } from 'lucide-react';
+import { useUserRole, hasPermission } from '@/hooks/useUserRole';
 
 const menuItems = [
-  { icon: Package, label: 'Inventario', href: '/inventory' },
-  { icon: BarChart3, label: 'Reportes', href: '/reports' },
-  { icon: Bot, label: 'Agentes IA', href: '/ai-agents' },
-  { icon: FolderOpen, label: 'Entregables', href: '/entregables' },
-  { icon: Calendar, label: 'Reuniones', href: '/reuniones' },
-  { icon: Users, label: 'Roles', href: '/roles' },
-  { icon: Settings, label: 'Configuración', href: '/settings' },
-  { icon: ClipboardList, label: 'Siguientes Pasos', href: '/next-steps' },
-  { icon: HelpCircle, label: 'Cómo Funciona', href: '/how-it-works' },
+  { icon: Package, label: 'Inventario', href: '/inventory', module: 'inventory' },
+  { icon: BarChart3, label: 'Reportes', href: '/reports', module: 'reports' },
+  { icon: Bot, label: 'Agentes IA', href: '/ai-agents', module: 'ai-agents' },
+  { icon: FolderOpen, label: 'Entregables', href: '/entregables', module: 'entregables' },
+  { icon: Calendar, label: 'Reuniones', href: '/reuniones', module: 'public' },
+  { icon: Users, label: 'Roles', href: '/roles', module: 'roles' },
+  { icon: Settings, label: 'Configuración', href: '/settings', module: 'settings' },
+  { icon: ClipboardList, label: 'Siguientes Pasos', href: '/next-steps', module: 'next-steps' },
+  { icon: HelpCircle, label: 'Cómo Funciona', href: '/how-it-works', module: 'public' },
 ];
 
 export default function Sidebar() {
   const pathname = usePathname();
   const [isOpen, setIsOpen] = useState(false);
+  const { role, loading } = useUserRole();
 
   return (
     <>
@@ -76,17 +78,29 @@ export default function Sidebar() {
         }}
       >
       <div style={{ paddingBottom: 18, borderBottom: '1px solid #E5E4E0' }}>
-        <img 
-          src="https://www.soliscomercialni.com/Solis%20Comercial%20Logo.png" 
-          alt="Solis Comercial" 
-          style={{ width: '100%', maxWidth: 220, height: 'auto' }}
-        />
+        <div style={{ 
+          background: '#FFFFFF', 
+          padding: '12px', 
+          borderRadius: '8px',
+          boxShadow: '0 1px 3px rgba(0,0,0,0.05)'
+        }}>
+          <img 
+            src="https://www.soliscomercialni.com/Solis%20Comercial%20Logo.png" 
+            alt="Solis Comercial" 
+            style={{ width: '100%', maxWidth: 220, height: 'auto', display: 'block' }}
+          />
+        </div>
       </div>
 
       <nav style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
         {menuItems.map((item) => {
           const Icon = item.icon;
           const isActive = pathname === item.href;
+          
+          // Ocultar módulos según permisos
+          if (!loading && item.module !== 'public' && !hasPermission(role, item.module)) {
+            return null;
+          }
 
           return (
             <Link
