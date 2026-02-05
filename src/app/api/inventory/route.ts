@@ -26,6 +26,8 @@ export async function GET(request: Request) {
         items!inner(sku, name, color, state, category)
       `, { count: 'exact' });
 
+
+
     // Search filter (name or SKU)
     if (search) {
       query = query.or(`items.name.ilike.%${search}%,items.sku.ilike.%${search}%`);
@@ -109,12 +111,13 @@ export async function GET(request: Request) {
       color: row.items.color,
       state: row.items.state,
       sku: row.items.sku,
-      category: row.items.category,
+      category: row.items.category || null,
       warehouse_code: row.warehouses.code,
       warehouse_name: row.warehouses.name,
       qty: row.qty,
       synced_at: row.synced_at,
     }));
+
 
     return NextResponse.json({
       data: formattedData,
