@@ -10,6 +10,7 @@ export async function GET(request: Request) {
     const warehouse = searchParams.get('warehouse') || '';
     const state = searchParams.get('state') || '';
     const category = searchParams.get('category') || '';
+    const brand = searchParams.get('brand') || '';
     const stockLevel = searchParams.get('stockLevel') || '';
     const sortBy = searchParams.get('sortBy') || 'name';
 
@@ -23,16 +24,14 @@ export async function GET(request: Request) {
         qty,
         synced_at,
         warehouses!inner(code, name),
-        items!inner(sku, name, color, state, category)
+        items!inner(sku, name, color, state, category, marca)
       `, { count: 'exact' });
 
 
 
-    // Search filter (name or SKU)
-    // For joined tables with !inner, we can filter directly using the table.column syntax
+    
     if (search) {
-      // Note: OR on foreign tables is tricky. We'll filter on items table columns.
-      // Using textSearch pattern
+      
       query = query.or(`name.ilike.%${search}%,sku.ilike.%${search}%`, { referencedTable: 'items' });
     }
 
@@ -41,17 +40,22 @@ export async function GET(request: Request) {
       query = query.eq('warehouses.code', warehouse);
     }
 
-    // State filter (nuevo, usado) - filter on items table
+  
+    if (brand) {
+      query = query.eq('items.marca', brand);
+    }
+
+    
     if (state) {
       query = query.eq('items.state', state);
     }
 
-    // Category filter - use ilike for partial/case-insensitive matching
+    
     if (category) {
       query = query.ilike('items.category', `%${category}%`);
     }
 
-    // Stock level filter
+    
     if (stockLevel) {
       switch (stockLevel) {
         case 'out':
@@ -114,6 +118,7 @@ export async function GET(request: Request) {
       state: row.items.state,
       sku: row.items.sku,
       category: row.items.category || null,
+      brand: row.items.marca || null,
       warehouse_code: row.warehouses.code,
       warehouse_name: row.warehouses.name,
       qty: row.qty,

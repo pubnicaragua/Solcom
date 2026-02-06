@@ -16,8 +16,13 @@ export default function InventoryFilters({ onFilterChange, onExport }: FiltersPr
   const [warehouses, setWarehouses] = useState<Array<{ value: string; label: string }>>([
     { value: '', label: 'Todas las bodegas' },
   ]);
+  const [brands, setBrands] = useState<Array<{ value: string; label: string }>>([
+    { value: '', label: 'Todas las marcas' },
+  ]);
+
   const [search, setSearch] = useState('');
   const [warehouse, setWarehouse] = useState('');
+  const [brand, setBrand] = useState('');
   const [state, setState] = useState('');
   const [category, setCategory] = useState('');
   const [stockLevel, setStockLevel] = useState('');
@@ -25,13 +30,14 @@ export default function InventoryFilters({ onFilterChange, onExport }: FiltersPr
 
   useEffect(() => {
     fetchWarehouses();
+    fetchBrands();
   }, []);
 
   useEffect(() => {
     if (onFilterChange) {
-      onFilterChange({ search, warehouse, state, category, stockLevel, sortBy });
+      onFilterChange({ search, warehouse, brand, state, category, stockLevel, sortBy });
     }
-  }, [search, warehouse, state, category, stockLevel, sortBy, onFilterChange]);
+  }, [search, warehouse, brand, state, category, stockLevel, sortBy, onFilterChange]);
 
   async function fetchWarehouses() {
     try {
@@ -49,10 +55,26 @@ export default function InventoryFilters({ onFilterChange, onExport }: FiltersPr
     }
   }
 
+  async function fetchBrands() {
+    try {
+      const res = await fetch('/api/inventory/brands');
+      if (res.ok) {
+        const data = await res.json();
+        const options = [
+          { value: '', label: 'Todas las marcas' },
+          ...data.map((b: string) => ({ value: b, label: b })),
+        ];
+        setBrands(options);
+      }
+    } catch (error) {
+      console.error('Error fetching brands:', error);
+    }
+  }
+
   return (
     <Card>
       <div style={{ display: 'grid', gap: 12 }}>
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 220px 200px 200px', gap: 12, alignItems: 'end' }}>
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 200px 200px 200px 200px', gap: 12, alignItems: 'end' }}>
           <Input
             placeholder="Buscar por nombre, SKU o código..."
             value={search}
@@ -63,6 +85,12 @@ export default function InventoryFilters({ onFilterChange, onExport }: FiltersPr
             options={warehouses}
             value={warehouse}
             onChange={(e) => setWarehouse(e.target.value)}
+          />
+
+          <Select
+            options={brands}
+            value={brand}
+            onChange={(e) => setBrand(e.target.value)}
           />
 
           <Select
@@ -79,10 +107,6 @@ export default function InventoryFilters({ onFilterChange, onExport }: FiltersPr
               { value: 'audifonos', label: 'Audifonos' },
               { value: 'equipo celular', label: 'Equipo celular' },
               { value: 'linea blanca', label: 'Linea blanca' },
-          
-
-
-
             ]}
             value={category}
             onChange={(e) => setCategory(e.target.value)}
@@ -125,12 +149,13 @@ export default function InventoryFilters({ onFilterChange, onExport }: FiltersPr
           />
 
           <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
-            <Button 
-              variant="ghost" 
-              size="sm" 
+            <Button
+              variant="ghost"
+              size="sm"
               onClick={() => {
                 setSearch('');
                 setWarehouse('');
+                setBrand('');
                 setState('');
                 setCategory('');
                 setStockLevel('');

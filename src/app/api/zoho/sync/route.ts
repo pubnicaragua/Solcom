@@ -37,9 +37,7 @@ export async function POST(request: Request) {
     let itemsProcessed = 0;
 
     for (const zohoItem of zohoItems) {
-      // En Zoho Books, los items no tienen WarehouseCode directo por defecto 
-      // como en Creator (depende de la configuración). 
-      // Por ahora usaremos una bodega por defecto 'MAIN' o la primera que encontremos.
+      
       const defaultWarehouseCode = 'X1';
 
       let warehouseId: string | null = null;

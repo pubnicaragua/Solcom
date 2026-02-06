@@ -18,55 +18,19 @@ const menuItems = [
   { icon: HelpCircle, label: 'Cómo Funciona', href: '/how-it-works', module: 'public' },
 ];
 
+import { useSidebar } from '@/contexts/SidebarContext';
+
 export default function Sidebar() {
   const pathname = usePathname();
-  const [isOpen, setIsOpen] = useState(false);
+  const { isOpen, close } = useSidebar();
   const { role, loading } = useUserRole();
 
   return (
     <>
-      {/* Botón hamburguesa para móvil */}
-      <button
-        onClick={() => setIsOpen(!isOpen)}
-        style={{
-          position: 'fixed',
-          top: 12,
-          left: 16,
-          zIndex: 1001,
-          background: 'transparent',
-          border: 'none',
-          padding: 0,
-          cursor: 'pointer',
-          display: 'none', // Hidden on desktop via CSS
-          alignItems: 'center',
-          gap: 8
-        }}
-        className="mobile-menu-btn"
-      >
-        {/* Solo mostramos el logo si el menú está CERRADO. Si está abierto, el Sidebar ya muestra el logo dentro. */}
-        {!isOpen && (
-          <div style={{
-            background: '#FFFFFF',
-            padding: '6px 10px',
-            borderRadius: '6px',
-            boxShadow: '0 2px 4px rgba(0,0,0,0.1)',
-            display: 'flex',
-            alignItems: 'center'
-          }}>
-            <img
-              src="https://www.soliscomercialni.com/Solis%20Comercial%20Logo.png"
-              alt="Solis Comercial"
-              style={{ height: 32, width: 'auto' }}
-            />
-          </div>
-        )}
-        {isOpen && <X size={24} color="#F9FAFB" style={{ background: '#1F2937', padding: 4, borderRadius: 4 }} />}
-      </button>
-
       {/* Overlay para cerrar el menú en móvil */}
       {isOpen && (
         <div
-          onClick={() => setIsOpen(false)}
+          onClick={close}
           style={{
             position: 'fixed',
             top: 0,
