@@ -30,20 +30,37 @@ export default function Sidebar() {
         onClick={() => setIsOpen(!isOpen)}
         style={{
           position: 'fixed',
-          top: 16,
+          top: 12,
           left: 16,
           zIndex: 1001,
-          background: '#1F2937',
-          border: '1px solid #374151',
-          borderRadius: 8,
-          padding: 8,
+          background: 'transparent',
+          border: 'none',
+          padding: 0,
           cursor: 'pointer',
-          display: 'none',
-          color: '#F9FAFB'
+          display: 'none', // Hidden on desktop via CSS
+          alignItems: 'center',
+          gap: 8
         }}
         className="mobile-menu-btn"
       >
-        {isOpen ? <X size={24} /> : <Menu size={24} />}
+        {/* Solo mostramos el logo si el menú está CERRADO. Si está abierto, el Sidebar ya muestra el logo dentro. */}
+        {!isOpen && (
+          <div style={{
+            background: '#FFFFFF',
+            padding: '6px 10px',
+            borderRadius: '6px',
+            boxShadow: '0 2px 4px rgba(0,0,0,0.1)',
+            display: 'flex',
+            alignItems: 'center'
+          }}>
+            <img
+              src="https://www.soliscomercialni.com/Solis%20Comercial%20Logo.png"
+              alt="Solis Comercial"
+              style={{ height: 32, width: 'auto' }}
+            />
+          </div>
+        )}
+        {isOpen && <X size={24} color="#F9FAFB" style={{ background: '#1F2937', padding: 4, borderRadius: 4 }} />}
       </button>
 
       {/* Overlay para cerrar el menú en móvil */}
@@ -75,76 +92,76 @@ export default function Sidebar() {
           gap: 24,
         }}
       >
-      <div style={{ paddingBottom: 18, borderBottom: '1px solid #374151' }}>
-        <div style={{ 
-          background: '#FFFFFF', 
-          padding: '12px', 
-          borderRadius: '8px',
-          boxShadow: '0 2px 4px rgba(0,0,0,0.1)'
-        }}>
-          <img 
-            src="https://www.soliscomercialni.com/Solis%20Comercial%20Logo.png" 
-            alt="Solis Comercial" 
-            style={{ width: '100%', maxWidth: 220, height: 'auto', display: 'block' }}
-          />
+        <div style={{ paddingBottom: 18, borderBottom: '1px solid #374151' }}>
+          <div style={{
+            background: '#FFFFFF',
+            padding: '12px',
+            borderRadius: '8px',
+            boxShadow: '0 2px 4px rgba(0,0,0,0.1)'
+          }}>
+            <img
+              src="https://www.soliscomercialni.com/Solis%20Comercial%20Logo.png"
+              alt="Solis Comercial"
+              style={{ width: '100', maxWidth: 180, height: 'auto', display: 'block' }}
+            />
+          </div>
         </div>
-      </div>
 
-      <nav style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-        {menuItems.map((item) => {
-          const Icon = item.icon;
-          const isActive = pathname === item.href;
-          
-          // Mostrar módulos públicos siempre, o verificar permisos si ya cargó
-          if (item.module !== 'public' && !loading && !hasPermission(role, item.module)) {
-            return null;
-          }
+        <nav style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+          {menuItems.map((item) => {
+            const Icon = item.icon;
+            const isActive = pathname === item.href;
 
-          return (
-            <Link
-              key={item.href}
-              href={item.href}
-              style={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: 12,
-                padding: '10px 14px',
-                borderRadius: 8,
-                fontSize: 14,
-                fontWeight: 500,
-                color: isActive ? '#FFFFFF' : '#D1D5DB',
-                background: isActive ? '#DC2626' : 'transparent',
-                border: isActive ? '1px solid #DC2626' : '1px solid transparent',
-                transition: 'all 0.2s',
-                textDecoration: 'none',
-              }}
-              onMouseEnter={(e) => {
-                if (!isActive) {
-                  e.currentTarget.style.background = '#374151';
-                  e.currentTarget.style.color = '#FFFFFF';
-                }
-              }}
-              onMouseLeave={(e) => {
-                if (!isActive) {
-                  e.currentTarget.style.background = 'transparent';
-                  e.currentTarget.style.color = '#D1D5DB';
-                }
-              }}
-            >
-              <Icon size={18} />
-              {item.label}
-            </Link>
-          );
-        })}
-      </nav>
+            // Mostrar módulos públicos siempre, o verificar permisos si ya cargó
+            if (item.module !== 'public' && !loading && !hasPermission(role, item.module)) {
+              return null;
+            }
 
-      <div style={{ marginTop: 'auto', padding: 12, background: '#374151', borderRadius: 8, border: '1px solid #4B5563' }}>
-        <div style={{ fontSize: 12, color: '#9CA3AF', marginBottom: 4 }}>Versión</div>
-        <div style={{ fontSize: 14, fontWeight: 600, color: '#F9FAFB' }}>1.0.0</div>
-      </div>
-    </aside>
+            return (
+              <Link
+                key={item.href}
+                href={item.href}
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 12,
+                  padding: '10px 14px',
+                  borderRadius: 8,
+                  fontSize: 14,
+                  fontWeight: 500,
+                  color: isActive ? '#FFFFFF' : '#D1D5DB',
+                  background: isActive ? '#DC2626' : 'transparent',
+                  border: isActive ? '1px solid #DC2626' : '1px solid transparent',
+                  transition: 'all 0.2s',
+                  textDecoration: 'none',
+                }}
+                onMouseEnter={(e) => {
+                  if (!isActive) {
+                    e.currentTarget.style.background = '#374151';
+                    e.currentTarget.style.color = '#FFFFFF';
+                  }
+                }}
+                onMouseLeave={(e) => {
+                  if (!isActive) {
+                    e.currentTarget.style.background = 'transparent';
+                    e.currentTarget.style.color = '#D1D5DB';
+                  }
+                }}
+              >
+                <Icon size={18} />
+                {item.label}
+              </Link>
+            );
+          })}
+        </nav>
 
-    <style jsx global>{`
+        <div style={{ marginTop: 'auto', padding: 12, background: '#374151', borderRadius: 8, border: '1px solid #4B5563' }}>
+          <div style={{ fontSize: 12, color: '#9CA3AF', marginBottom: 4 }}>Versión</div>
+          <div style={{ fontSize: 14, fontWeight: 600, color: '#F9FAFB' }}>1.0.0</div>
+        </div>
+      </aside>
+
+      <style jsx global>{`
       /* Responsive Styles */
       @media (max-width: 1024px) {
         .mobile-menu-btn {

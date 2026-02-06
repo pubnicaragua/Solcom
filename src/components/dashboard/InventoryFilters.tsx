@@ -79,7 +79,7 @@ export default function InventoryFilters({ onFilterChange, onExport }: FiltersPr
               { value: 'audifonos', label: 'Audifonos' },
               { value: 'equipo celular', label: 'Equipo celular' },
               { value: 'linea blanca', label: 'Linea blanca' },
-              
+          
 
 
 

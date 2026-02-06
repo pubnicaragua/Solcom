@@ -14,7 +14,7 @@ export default function Topbar() {
         borderBottom: '1px solid var(--border)',
       }}
     >
-      <div>
+      <div className="topbar-date">
         <div style={{ fontSize: 12, color: 'var(--muted)' }}>
           {new Date().toLocaleDateString('es-NI', {
             weekday: 'long',
@@ -29,6 +29,22 @@ export default function Topbar() {
         <NotificationsDropdown />
         <UserProfileDropdown />
       </div>
+
+      <style jsx>{`
+        header {
+          transition: padding-left 0.3s;
+        }
+        @media (max-width: 1024px) {
+          header {
+            padding-left: 90px !important; /* Increased space for the logo menu button */
+          }
+        }
+        @media (max-width: 480px) {
+          .topbar-date {
+            font-size: 12px;
+          }
+        }
+      `}</style>
     </header>
   );
 }
