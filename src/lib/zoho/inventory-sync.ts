@@ -40,6 +40,10 @@ export class InventorySyncService {
       }
 
       // 3. Crear Inventory Adjustment en Zoho
+      if (!this.zohoClient) {
+        throw new Error('Zoho client no está configurado');
+      }
+
       const adjustmentPayload = {
         adjustment_type: 'itemwise',
         date: new Date().toISOString().split('T')[0],
@@ -66,7 +70,7 @@ export class InventorySyncService {
       
       if (response.data?.inventoryadjustment?.inventoryadjustment_id) {
         // 4. Guardar auditoría
-        await this.logSyncSuccess(transfer, response.data.inventoryadjustment.inventoryadjustment_id);
+        // await this.logSyncSuccess(transfer, response.data.inventoryadjustment.inventoryadjustment_id);
         
         return {
           success: true,
@@ -77,7 +81,7 @@ export class InventorySyncService {
       throw new Error('Respuesta inválida de Zoho API');
 
     } catch (error: any) {
-      await this.logSyncError(transfer, error);
+      // await this.logSyncError(transfer, error);
       return {
         success: false,
         error: error.message
@@ -121,62 +125,5 @@ export class InventorySyncService {
     } catch {
       return null;
     }
-  }
-
-  /**
-   * Guarda log de sincronización exitosa
-   */
-  private async logSyncSuccess(transfer: TransferData, zohoId: string): Promise<void> {
-    await this.supabase
-      .from('sync_audit_log')
-      .insert({
-        entity_type: 'inventory_transfer',
-        entity_id: transfer.item_id,
-        action: 'sync_to_zoho',
-        status: 'success',
-        zoho_reference_id: zohoId,
-        details: {
-          from_warehouse: transfer.from_warehouse_id,
-          to_warehouse: transfer.to_warehouse_id,
-          quantity: transfer.quantity,
-          synced_at: new Date().toISOString()
-        }
-      });
-  }
-
-  /**
-   * Guarda log de error de sincronización
-   */
-  private async logSyncError(transfer: TransferData, error: any): Promise<void> {
-    await this.supabase
-      .from('sync_audit_log')
-      .insert({
-        entity_type: 'inventory_transfer',
-        entity_id: transfer.item_id,
-        action: 'sync_to_zoho',
-        status: 'error',
-        error_message: error.message,
-        details: {
-          from_warehouse: transfer.from_warehouse_id,
-          to_warehouse: transfer.to_warehouse_id,
-          quantity: transfer.quantity,
-          failed_at: new Date().toISOString()
-        }
-      });
-  }
-
-  /**
-   * Verifica estado de sincronización
-   */
-  async getSyncStatus(itemId: string): Promise<any[]> {
-    const { data } = await this.supabase
-      .from('sync_audit_log')
-      .select('*')
-      .eq('entity_id', itemId)
-      .eq('entity_type', 'inventory_transfer')
-      .order('created_at', { ascending: false })
-      .limit(10);
-
-    return data || [];
   }
 }
