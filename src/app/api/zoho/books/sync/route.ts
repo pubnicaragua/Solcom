@@ -34,10 +34,6 @@ export async function POST(request: Request) {
 
         const supabase = createServerClient();
         const zohoItems = await zohoClient.fetchItems();
-        console.log(`[SYNC] Total Zoho Items fetched: ${zohoItems.length}`);
-
-
-       
 
         const defaultWarehouseCode = 'X1';
         let warehouseId: string | null = null;
@@ -110,28 +106,21 @@ export async function POST(request: Request) {
 
             // Insert new items
             if (toInsert.length > 0) {
-                const { data: newItems, error: insertError } = await supabase
+                const { data: newItems } = await supabase
                     .from('items')
                     .insert(toInsert)
                     .select('id, sku');
 
-                if (insertError) {
-                    console.error(`[SYNC] Insert error batch ${i}:`, insertError.message);
-                } else if (newItems) {
+                if (newItems) {
                     newItems.forEach(item => existingMap.set(item.sku, item.id));
                 }
             }
 
-            // Update existing items with color and state
             for (const item of toUpdate) {
-                const { error: updateError } = await supabase
+                await supabase
                     .from('items')
                     .update({ name: item.name, category: item.category, color: item.color, state: item.state })
                     .eq('id', item.id);
-
-                if (updateError) {
-                    console.error(`[SYNC] Update error for ${item.id}:`, updateError.message);
-                }
             }
 
 
@@ -156,25 +145,17 @@ export async function POST(request: Request) {
             if (snapshotPayload.length > 0) {
                 const itemIds = snapshotPayload.map(s => s.item_id);
 
-                // Delete old snapshots first and wait for completion
-                const { error: deleteError } = await supabase
+                await supabase
                     .from('stock_snapshots')
                     .delete()
                     .eq('warehouse_id', warehouseId)
                     .in('item_id', itemIds);
 
-                if (deleteError) {
-                    console.error('[SYNC] Delete error:', deleteError.message);
-                }
-
-                // Now insert new snapshots
                 const { error: snapError } = await supabase
                     .from('stock_snapshots')
                     .insert(snapshotPayload);
 
-                if (snapError) {
-                    console.error('[SYNC] Snapshot error:', snapError.message);
-                } else {
+                if (!snapError) {
                     itemsProcessed += snapshotPayload.length;
                 }
             }

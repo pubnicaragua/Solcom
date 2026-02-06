@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import Card from '@/components/ui/Card';
 import Button from '@/components/ui/Button';
 import Input from '@/components/ui/Input';
@@ -8,7 +8,8 @@ import Select from '@/components/ui/Select';
 import Badge from '@/components/ui/Badge';
 import KPIGrid from '@/components/dashboard/KPIGrid';
 import InventoryTable from '@/components/dashboard/InventoryTable';
-import SyncStatus from '@/components/dashboard/SyncStatus';
+import EditProductModal from '@/components/modals/EditProductModal';
+import UpdateStockModal from '@/components/modals/UpdateStockModal';
 import { Search, Filter, Download, Upload, Trash2, Edit, RefreshCw, FileSpreadsheet, FileText, BarChart3 } from 'lucide-react';
 
 export default function InventoryPage() {
@@ -24,6 +25,64 @@ export default function InventoryPage() {
   });
   const [selectedItems, setSelectedItems] = useState<string[]>([]);
   const [showAdvancedFilters, setShowAdvancedFilters] = useState(false);
+  const [editModalOpen, setEditModalOpen] = useState(false);
+  const [stockModalOpen, setStockModalOpen] = useState(false);
+  const [selectedProduct, setSelectedProduct] = useState<any>(null);
+  const [warehouses, setWarehouses] = useState<any[]>([]);
+
+  useEffect(() => {
+    fetchWarehouses();
+  }, []);
+
+  async function fetchWarehouses() {
+    try {
+      const response = await fetch('/api/warehouses');
+      if (response.ok) {
+        const data = await response.json();
+        setWarehouses(data);
+      }
+    } catch (error) {
+      // Error silencioso
+    }
+  }
+
+  async function handleEditProduct(productId: string, updates: any) {
+    try {
+      const response = await fetch('/api/inventory/update-product', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ productId, updates }),
+      });
+
+      if (response.ok) {
+        alert('Producto actualizado correctamente');
+        window.location.reload();
+      } else {
+        throw new Error('Error al actualizar producto');
+      }
+    } catch (error: any) {
+      throw new Error(error.message || 'Error al actualizar producto');
+    }
+  }
+
+  async function handleUpdateStock(productId: string, warehouseId: string, newQty: number) {
+    try {
+      const response = await fetch('/api/inventory/update-stock', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ productId, warehouseId, quantity: newQty }),
+      });
+
+      if (response.ok) {
+        alert('Stock actualizado correctamente');
+        window.location.reload();
+      } else {
+        throw new Error('Error al actualizar stock');
+      }
+    } catch (error: any) {
+      throw new Error(error.message || 'Error al actualizar stock');
+    }
+  }
 
   function handleFilterChange(key: string, value: string) {
     setFilters(prev => ({ ...prev, [key]: value }));
@@ -114,9 +173,24 @@ export default function InventoryPage() {
           </Button>
 
           <Button
-            variant="secondary"
+            variant="primary"
             size="sm"
-            style={{ backgroundColor: '#dc2626', color: 'white', border: 'none' }}
+            style={{
+              background: 'linear-gradient(135deg, #dc2626 0%, #991b1b 100%)',
+              color: 'white',
+              border: 'none',
+              fontWeight: 600,
+              boxShadow: '0 2px 8px rgba(220, 38, 38, 0.3)',
+              transition: 'all 0.3s ease'
+            }}
+            onMouseEnter={(e) => {
+              e.currentTarget.style.transform = 'translateY(-2px)';
+              e.currentTarget.style.boxShadow = '0 4px 12px rgba(220, 38, 38, 0.4)';
+            }}
+            onMouseLeave={(e) => {
+              e.currentTarget.style.transform = 'translateY(0)';
+              e.currentTarget.style.boxShadow = '0 2px 8px rgba(220, 38, 38, 0.3)';
+            }}
             onClick={async () => {
               if (confirm('¿Deseas sincronizar el inventario desde Zoho Books?')) {
                 try {
@@ -138,13 +212,12 @@ export default function InventoryPage() {
               }
             }}
           >
-            <RefreshCw size={14} />
+            <RefreshCw size={16} style={{ marginRight: 6 }} />
             Sincronizar Books
           </Button>
         </div>
       </div>
 
-      <SyncStatus />
       <KPIGrid />
 
       {/* Filtros Principales */}
@@ -342,6 +415,21 @@ export default function InventoryPage() {
       )}
 
       <InventoryTable filters={filters} onSelectionChange={setSelectedItems} />
+
+      <EditProductModal
+        isOpen={editModalOpen}
+        onClose={() => setEditModalOpen(false)}
+        product={selectedProduct}
+        onSave={handleEditProduct}
+      />
+
+      <UpdateStockModal
+        isOpen={stockModalOpen}
+        onClose={() => setStockModalOpen(false)}
+        product={selectedProduct}
+        warehouses={warehouses}
+        onUpdate={handleUpdateStock}
+      />
     </div>
   );
 }

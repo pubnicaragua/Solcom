@@ -11,10 +11,12 @@ import DonutChart from '@/components/reports/DonutChart';
 import { TrendingUp, TrendingDown, Package, Warehouse, Download, Calendar, AlertTriangle, DollarSign } from 'lucide-react';
 
 interface ReportStats {
-  totalValue: number;
+  totalProducts: number;
+  totalStock: number;
   lowStockItems: number;
-  topWarehouse: string;
-  monthlyGrowth: number;
+  outOfStockItems: number;
+  categoryBreakdown: Record<string, number>;
+  warehouseData: Array<{id: string; code: string; name: string; totalStock: number; totalItems: number}>;
 }
 
 export default function ReportsPage() {
@@ -29,15 +31,13 @@ export default function ReportsPage() {
   async function fetchReportStats() {
     setLoading(true);
     try {
-      await new Promise(resolve => setTimeout(resolve, 800));
-      setStats({
-        totalValue: 125430.50,
-        lowStockItems: 12,
-        topWarehouse: 'X1',
-        monthlyGrowth: 8.5,
-      });
+      const response = await fetch('/api/reports/summary');
+      if (response.ok) {
+        const data = await response.json();
+        setStats(data);
+      }
     } catch (error) {
-      console.error('Error fetching stats:', error);
+      // Error silencioso
     } finally {
       setLoading(false);
     }
@@ -94,17 +94,17 @@ export default function ReportsPage() {
               }}>
                 <TrendingUp size={20} color="var(--success)" />
               </div>
-              <div style={{ fontSize: 13, color: 'var(--muted)' }}>Valor Total Inventario</div>
+              <div style={{ fontSize: 13, color: 'var(--muted)' }}>Total Productos</div>
             </div>
             {loading ? (
               <div style={{ height: 32, background: 'var(--panel)', borderRadius: 4, animation: 'pulse 1.5s infinite' }} />
             ) : (
               <>
                 <div style={{ fontSize: 24, fontWeight: 600 }}>
-                  ${stats?.totalValue.toLocaleString('es-NI', { minimumFractionDigits: 2 })}
+                  {stats?.totalProducts.toLocaleString('es-NI')}
                 </div>
-                <div style={{ fontSize: 12, color: 'var(--success)', marginTop: 4 }}>
-                  +{stats?.monthlyGrowth}% vs mes anterior
+                <div style={{ fontSize: 12, color: 'var(--muted)', marginTop: 4 }}>
+                  Productos en inventario
                 </div>
               </>
             )}
@@ -131,9 +131,9 @@ export default function ReportsPage() {
               <div style={{ height: 32, background: 'var(--panel)', borderRadius: 4, animation: 'pulse 1.5s infinite' }} />
             ) : (
               <>
-                <div style={{ fontSize: 28, fontWeight: 600 }}>{stats?.lowStockItems}</div>
+                <div style={{ fontSize: 28, fontWeight: 600 }}>{stats?.lowStockItems || 0}</div>
                 <div style={{ fontSize: 12, color: 'var(--warning)', marginTop: 4 }}>
-                  Requieren reabastecimiento
+                  Stock bajo (menos de 10)
                 </div>
               </>
             )}
@@ -160,9 +160,11 @@ export default function ReportsPage() {
               <div style={{ height: 32, background: 'var(--panel)', borderRadius: 4, animation: 'pulse 1.5s infinite' }} />
             ) : (
               <>
-                <div style={{ fontSize: 28, fontWeight: 600 }}>Bodega {stats?.topWarehouse}</div>
+                <div style={{ fontSize: 28, fontWeight: 600 }}>
+                  {stats?.warehouseData?.[0]?.code || 'N/A'}
+                </div>
                 <div style={{ fontSize: 12, color: 'var(--muted)', marginTop: 4 }}>
-                  Mayor rotación de inventario
+                  {stats?.warehouseData?.[0]?.totalStock || 0} unidades
                 </div>
               </>
             )}
@@ -189,9 +191,9 @@ export default function ReportsPage() {
               <div style={{ height: 32, background: 'var(--panel)', borderRadius: 4, animation: 'pulse 1.5s infinite' }} />
             ) : (
               <>
-                <div style={{ fontSize: 24, fontWeight: 600 }}>1,247</div>
+                <div style={{ fontSize: 24, fontWeight: 600 }}>{stats?.totalStock.toLocaleString('es-NI') || 0}</div>
                 <div style={{ fontSize: 12, color: 'var(--muted)', marginTop: 4 }}>
-                  Entradas y salidas registradas
+                  Total unidades en stock
                 </div>
               </>
             )}
@@ -212,15 +214,15 @@ export default function ReportsPage() {
               }}>
                 <Package size={20} color="#8B5CF6" />
               </div>
-              <div style={{ fontSize: 13, color: 'var(--muted)' }}>Productos Totales</div>
+              <div style={{ fontSize: 13, color: 'var(--muted)' }}>Productos Sin Stock</div>
             </div>
             {loading ? (
               <div style={{ height: 32, background: 'var(--panel)', borderRadius: 4, animation: 'pulse 1.5s infinite' }} />
             ) : (
               <>
-                <div style={{ fontSize: 24, fontWeight: 600 }}>2,847</div>
-                <div style={{ fontSize: 12, color: 'var(--muted)', marginTop: 4 }}>
-                  En todas las bodegas
+                <div style={{ fontSize: 24, fontWeight: 600 }}>{stats?.outOfStockItems || 0}</div>
+                <div style={{ fontSize: 12, color: 'var(--danger)', marginTop: 4 }}>
+                  Sin stock
                 </div>
               </>
             )}
