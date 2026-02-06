@@ -94,6 +94,9 @@ export class InventorySyncService {
    */
   private async getItemPrice(itemId: string): Promise<number | null> {
     try {
+      if (!this.zohoClient) {
+        throw new Error('Zoho client no está configurado');
+      }
       const response = await this.zohoClient.request('GET', `/books/v3/items/${itemId}`);
       return response.data?.item?.rate || null;
     } catch {
@@ -116,6 +119,9 @@ export class InventorySyncService {
       if (!localWarehouse) return null;
 
       // Buscar en Zoho por nombre/código
+      if (!this.zohoClient) {
+        throw new Error('Zoho client no está configurado');
+      }
       const response = await this.zohoClient.request('GET', '/books/v3/warehouses');
       const zohoWarehouse = response.data?.warehouses?.find(
         (w: any) => w.warehouse_name === localWarehouse.code || w.warehouse_name === `Bodega ${localWarehouse.code}`
