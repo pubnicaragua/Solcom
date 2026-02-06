@@ -52,6 +52,7 @@ export async function POST(request: Request) {
           item_id: productId,
           warehouse_id: warehouseId,
           qty: quantity,
+          source_ts: new Date().toISOString(),
           synced_at: new Date().toISOString(),
         });
 
