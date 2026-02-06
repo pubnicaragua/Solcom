@@ -3,7 +3,6 @@ import { NextResponse, type NextRequest } from 'next/server';
 
 export async function middleware(request: NextRequest) {
   const path = request.nextUrl.pathname;
-  console.log(`🟡 [Middleware] Procesando: ${path}`);
 
   let response = NextResponse.next({
     request: {
@@ -57,46 +56,27 @@ export async function middleware(request: NextRequest) {
     }
   );
 
-  // Debug: Ver todas las cookies
-  const allCookies = request.cookies.getAll();
-  console.log(`🟡 [Middleware] Cookies totales: ${allCookies.length}`);
-  const supabaseCookies = allCookies.filter(c => c.name.includes('sb-'));
-  console.log(`🟡 [Middleware] Cookies de Supabase: ${supabaseCookies.length}`, supabaseCookies.map(c => c.name));
 
   const {
     data: { user },
   } = await supabase.auth.getUser();
 
-  console.log(`🟡 [Middleware] Usuario: ${user ? user.email : 'No autenticado'}`);
-
-  // Rutas públicas que no requieren autenticación
   const publicRoutes = ['/login', '/signup', '/reset-password', '/reuniones'];
   const isPublicRoute = publicRoutes.some(route => request.nextUrl.pathname.startsWith(route));
 
-  console.log(`🟡 [Middleware] Es ruta pública: ${isPublicRoute}`);
-
-  // Si la ruta es la raíz y hay usuario, redirigir a inventory
   if (path === '/' && user) {
-    console.log(`🟢 [Middleware] Usuario en raíz → Redirigiendo a /inventory`);
     return NextResponse.redirect(new URL('/inventory', request.url));
   }
 
-  // Si la ruta es la raíz y NO hay usuario, redirigir a login
   if (path === '/' && !user) {
-    console.log(`🔴 [Middleware] Sin usuario en raíz → Redirigiendo a /login`);
     return NextResponse.redirect(new URL('/login', request.url));
   }
 
-  // Si no hay usuario y no es ruta pública, redirigir a login
   if (!user && !isPublicRoute) {
-    console.log(`🔴 [Middleware] Sin usuario en ruta protegida → Redirigiendo a /login`);
     return NextResponse.redirect(new URL('/login', request.url));
   }
 
-  // Si hay usuario y está en login/signup/reset-password, redirigir al dashboard
-  // Pero permitir acceso a /reuniones incluso con usuario autenticado
   if (user && isPublicRoute && !path.startsWith('/reuniones')) {
-    console.log(`🟢 [Middleware] Usuario autenticado en ruta pública → Redirigiendo a /inventory`);
     return NextResponse.redirect(new URL('/inventory', request.url));
   }
 
@@ -110,21 +90,11 @@ export async function middleware(request: NextRequest) {
         .single();
 
       if (error) {
-        console.error('⚠️ Error al obtener perfil de usuario:', error);
-        // Si hay error, permitir acceso temporal y loggear
-        console.log('🔄 Permitiendo acceso temporal para:', user.email);
         return response;
       }
 
       const userRole = profile?.role || 'operator';
       const path = request.nextUrl.pathname;
-
-      console.log('[Middleware] Verificando permisos:', {
-        userId: user.id,
-        email: user.email,
-        role: userRole,
-        path: path
-      });
 
       // Definir permisos por rol
       const rolePermissions: Record<string, string[]> = {
@@ -137,26 +107,14 @@ export async function middleware(request: NextRequest) {
       const allowedPaths = rolePermissions[userRole] || rolePermissions.operator;
       const hasAccess = allowedPaths.some(allowedPath => path.startsWith(allowedPath));
 
-      console.log('[Middleware] Permisos del rol:', {
-        role: userRole,
-        allowedPaths,
-        hasAccess
-      });
-
       if (!hasAccess && !isPublicRoute) {
-        console.log(`🚫 Acceso denegado para ${user.email} (${userRole}) a ${path}`);
         return NextResponse.redirect(new URL('/inventory', request.url));
       }
-
-      console.log(`✅ [Middleware] Acceso permitido para ${user.email} (${userRole}) a ${path}`);
     } catch (error) {
-      console.error('❌ [Middleware] Error:', error);
-      // En caso de error, permitir acceso para no bloquear la app
       return response;
     }
   }
 
-  console.log(`🟢 [Middleware] Permitiendo acceso a ${path}`);
   return response;
 }
 

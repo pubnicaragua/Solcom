@@ -10,17 +10,19 @@
     "type-check": "tsc --noEmit"
   },
   "dependencies": {
+    "@supabase/auth-helpers-nextjs": "^0.8.7",
+    "@supabase/ssr": "^0.0.10",
+    "@supabase/supabase-js": "^2.38.0",
+    "date-fns": "^2.30.0",
+    "groq-sdk": "^0.3.0",
+    "jspdf": "^4.1.0",
+    "jspdf-autotable": "^5.0.7",
+    "lucide-react": "^0.294.0",
     "next": "14.2.35",
+    "openai": "^4.28.0",
     "react": "^18.2.0",
     "react-dom": "^18.2.0",
-    "@supabase/supabase-js": "^2.38.0",
-    "@supabase/ssr": "^0.0.10",
-    "@supabase/auth-helpers-nextjs": "^0.8.7",
-    "zod": "^3.22.4",
-    "date-fns": "^2.30.0",
-    "lucide-react": "^0.294.0",
-    "groq-sdk": "^0.3.0",
-    "openai": "^4.28.0"
+    "zod": "^3.22.4"
   },
   "devDependencies": {
     "@types/node": "^20.11.0",

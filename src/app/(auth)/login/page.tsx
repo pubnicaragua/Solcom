@@ -23,56 +23,23 @@ export default function LoginPage() {
 
   async function handleLogin(e: React.FormEvent) {
     e.preventDefault();
-    console.log('🔵 Iniciando proceso de login...');
     setLoading(true);
     setError('');
 
     try {
-      console.log('🔵 Llamando a supabase.auth.signInWithPassword...');
       const { data, error } = await supabase.auth.signInWithPassword({
         email,
         password,
       });
 
-      console.log('🔵 Respuesta de Supabase:', { data, error });
-
       if (error) {
-        // Log técnico en consola para desarrollo
-        console.error('🔴 Error de autenticación:', {
-          code: error.status,
-          message: error.message,
-          name: error.name,
-        });
-        throw error;
+        setError('Correo o contraseña incorrectos');
+        setLoading(false);
+        return;
       }
 
-      // Login exitoso
-      console.log('✅ Login exitoso:', {
-        email: data.user?.email,
-        id: data.user?.id,
-        session: data.session ? 'Sesión creada' : 'Sin sesión',
-        accessToken: data.session?.access_token ? 'Token presente' : 'Sin token'
-      });
-
-      console.log('🔵 Verificando sesión en Supabase...');
-      const { data: sessionData } = await supabase.auth.getSession();
-      console.log('🔵 Sesión actual:', {
-        session: sessionData.session ? 'Existe' : 'No existe',
-        user: sessionData.session?.user?.email
-      });
-      
-      console.log('🔵 Esperando a que las cookies se guarden...');
-      
-      // Esperar más tiempo para asegurar que las cookies se guarden
+      await supabase.auth.getSession();
       await new Promise(resolve => setTimeout(resolve, 1000));
-      
-      console.log('🔵 Verificando cookies...');
-      const cookies = document.cookie;
-      console.log('🔵 Cookies presentes:', cookies.includes('sb-') ? 'Sí (Supabase)' : 'No');
-      
-      console.log('🔵 Ejecutando redirección completa del navegador...');
-      // Usar window.location.replace para forzar una recarga completa
-      // Esto asegura que el middleware lea las cookies correctamente
       window.location.replace('/inventory');
     } catch (error: any) {
       // Mensajes amigables según el tipo de error
@@ -84,7 +51,6 @@ export default function LoginPage() {
         userMessage = 'Por favor, confirma tu correo electrónico antes de iniciar sesión.';
       } else if (error.message?.includes('Database error') || error.status === 500) {
         userMessage = 'El sistema está configurándose. Por favor, contacta al administrador.';
-        console.error('⚠️ Error de configuración: La base de datos no está lista. Ejecuta los schemas SQL en Supabase.');
       } else if (error.message?.includes('network') || error.message?.includes('fetch')) {
         userMessage = 'Sin conexión a internet. Verifica tu conexión.';
       }
@@ -107,24 +73,12 @@ export default function LoginPage() {
       });
 
       if (error) {
-        console.error('🔴 Error al restablecer contraseña:', error);
         throw error;
       }
 
-      console.log('✅ Correo de recuperación enviado a:', email);
       setResetSuccess(true);
     } catch (error: any) {
-      let userMessage = 'No pudimos enviar el correo. Intenta de nuevo.';
-
-      if (error.message?.includes('User not found')) {
-        userMessage = 'No encontramos una cuenta con ese correo.';
-      } else if (error.message?.includes('rate limit')) {
-        userMessage = 'Demasiados intentos. Espera unos minutos.';
-      } else if (error.status === 500) {
-        userMessage = 'Error del servidor. Contacta al administrador.';
-      }
-
-      setError(userMessage);
+      setError('Error de conexión. Intenta de nuevo.');
     } finally {
       setLoading(false);
     }

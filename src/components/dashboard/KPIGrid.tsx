@@ -6,16 +6,18 @@ import { Package, Boxes, Warehouse, Clock } from 'lucide-react';
 
 interface KPIData {
   totalSKUs: number;
-  totalUnits: number;
+  totalProducts: number;
+  totalStock: number;
   activeWarehouses: number;
   lastSync: string;
 }
 
 export default function KPIGrid() {
   const [kpis, setKpis] = useState<KPIData>({
-    totalSKUs: 2847,
-    totalUnits: 15420,
-    activeWarehouses: 5,
+    totalSKUs: 0,
+    totalProducts: 0,
+    totalStock: 0,
+    activeWarehouses: 0,
     lastSync: new Date().toLocaleString('es-NI', {
       day: '2-digit',
       month: '2-digit',
@@ -51,7 +53,7 @@ export default function KPIGrid() {
         });
       }
     } catch (error) {
-      console.error('Error fetching KPIs:', error);
+      // Error silencioso en producción
     } finally {
       setLoading(false);
     }
@@ -65,10 +67,16 @@ export default function KPIGrid() {
       color: 'var(--brand-primary)',
     },
     {
-      icon: Boxes,
-      label: 'Total Unidades',
-      value: !mounted || loading ? '...' : kpis.totalUnits.toLocaleString('es-NI'),
+      icon: Package,
+      label: 'Total Productos',
+      value: !mounted || loading ? '...' : kpis.totalProducts.toLocaleString('es-NI'),
       color: 'var(--success)',
+    },
+    {
+      icon: Boxes,
+      label: 'Total Stock',
+      value: !mounted || loading ? '...' : kpis.totalStock.toLocaleString('es-NI'),
+      color: '#3B82F6',
     },
     {
       icon: Warehouse,
