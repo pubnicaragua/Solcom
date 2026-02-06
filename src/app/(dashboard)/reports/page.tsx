@@ -8,10 +8,27 @@ import ChartCard from '@/components/reports/ChartCard';
 import BarChart from '@/components/reports/BarChart';
 import LineChart from '@/components/reports/LineChart';
 import DonutChart from '@/components/reports/DonutChart';
-import { Download, Package, TrendingUp, TrendingDown, Calendar, Warehouse, AlertTriangle, DollarSign, FileText } from 'lucide-react';
+import HorizontalBarChart from '@/components/charts/HorizontalBarChart';
+import PieChart from '@/components/charts/PieChart';
+import ReportPlaceholder from '@/components/reports/ReportPlaceholder';
+import { Download, Package, TrendingUp, TrendingDown, Calendar, Warehouse, AlertTriangle, DollarSign, FileText, Filter } from 'lucide-react';
 import { supabase } from '@/lib/supabase/client';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
+import {
+  groupByCategoryUnits,
+  groupByCategoryCost,
+  groupByBrandUnits,
+  groupByBrandCost,
+  groupByWarehouseUnits,
+  groupByWarehouseCost,
+  topN,
+  getTotalUnits,
+  getTotalCost,
+  generateColors,
+  applyFilters,
+  getUniqueFilterOptions
+} from '@/lib/reports/data-transformers';
 
 interface Item {
   id: string;
@@ -64,6 +81,18 @@ export default function ReportsPage() {
   const [stats, setStats] = useState<ReportStats | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  
+  // Filtros globales
+  const [globalFilters, setGlobalFilters] = useState({
+    year: '',
+    month: '',
+    category: '',
+    marca: '',
+    warehouse: '',
+    state: ''
+  });
+  const [filterOptions, setFilterOptions] = useState<any>(null);
+  const [filteredSnapshots, setFilteredSnapshots] = useState<StockSnapshot[]>([]);
 
   useEffect(() => {
     fetchAllData();
@@ -100,8 +129,16 @@ export default function ReportsPage() {
       setItems(itemsData);
       setStockSnapshots(snapshotsData);
       setWarehouses(warehousesData);
+      
+      // Obtener opciones de filtros
+      const options = getUniqueFilterOptions(snapshotsData);
+      setFilterOptions(options);
+      
+      // Aplicar filtros iniciales
+      const filtered = applyFilters(snapshotsData, globalFilters);
+      setFilteredSnapshots(filtered);
 
-      calculateStats(itemsData, snapshotsData, warehousesData);
+      calculateStats(itemsData, filtered, warehousesData);
     } catch (err: any) {
       setError(err.message || 'Error al cargar datos');
       console.error('Error fetching data:', err);
@@ -430,36 +467,205 @@ export default function ReportsPage() {
         </Card>
       </div>
 
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 }}>
-        <ChartCard title="Tendencia de Stock (Últimos 7 días)">
-          {loading ? (
-            <div style={{ height: 200, background: 'var(--panel)', borderRadius: 4, animation: 'pulse 1.5s infinite' }} />
-          ) : (
-            <LineChart
-              data={stats?.stockHistory.map((h, i) => ({
-                label: ['Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb', 'Dom'][i] || h.date.slice(-2),
-                value: h.stock
-              })) || []}
-              color="var(--brand-primary)"
+      {/* FILTROS GLOBALES */}
+      <Card>
+        <div style={{ padding: 16 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12 }}>
+            <Filter size={18} color="var(--brand-primary)" />
+            <h3 style={{ fontSize: 15, fontWeight: 600, margin: 0 }}>Filtros Globales</h3>
+          </div>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: 12 }}>
+            <Select
+              value={globalFilters.category}
+              onChange={(e) => setGlobalFilters({...globalFilters, category: e.target.value})}
+              options={[
+                { value: '', label: 'Todas las categorías' },
+                ...(filterOptions?.categories || []).map((c: string) => ({ value: c, label: c }))
+              ]}
             />
-          )}
+            <Select
+              value={globalFilters.marca}
+              onChange={(e) => setGlobalFilters({...globalFilters, marca: e.target.value})}
+              options={[
+                { value: '', label: 'Todas las marcas' },
+                ...(filterOptions?.marcas || []).map((m: string) => ({ value: m, label: m }))
+              ]}
+            />
+            <Select
+              value={globalFilters.warehouse}
+              onChange={(e) => setGlobalFilters({...globalFilters, warehouse: e.target.value})}
+              options={[
+                { value: '', label: 'Todos los almacenes' },
+                ...(filterOptions?.warehouses || []).map((w: string) => ({ value: w, label: w }))
+              ]}
+            />
+            <Select
+              value={globalFilters.state}
+              onChange={(e) => setGlobalFilters({...globalFilters, state: e.target.value})}
+              options={[
+                { value: '', label: 'Todos los estados' },
+                ...(filterOptions?.states || []).map((s: string) => ({ value: s, label: s }))
+              ]}
+            />
+          </div>
+        </div>
+      </Card>
+
+      {/* SECCIÓN 1: INVENTARIO REMANENTE ≥90 DÍAS */}
+      <div style={{ background: 'linear-gradient(135deg, #dc2626 0%, #991b1b 100%)', padding: '12px 20px', borderRadius: 8, marginTop: 8 }}>
+        <h2 style={{ color: 'white', fontSize: 18, fontWeight: 700, margin: 0 }}>Inventario Remanente ≥ 90 Días</h2>
+      </div>
+
+      <ReportPlaceholder 
+        title="Inventario Remanente ≥90 días" 
+        reason="Falta campo de fecha de último movimiento para calcular antigüedad"
+        height={250}
+      />
+
+      {/* SECCIÓN 2: EXISTENCIAS GENERALES */}
+      <div style={{ background: 'linear-gradient(135deg, #dc2626 0%, #991b1b 100%)', padding: '12px 20px', borderRadius: 8, marginTop: 20 }}>
+        <h2 style={{ color: 'white', fontSize: 18, fontWeight: 700, margin: 0 }}>EXISTENCIAS GENERALES</h2>
+      </div>
+
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 }}>
+        <ChartCard title="Inventario por Categorías (Unids)">
+          {loading ? (
+            <div style={{ height: 300, background: 'var(--panel)', borderRadius: 4, animation: 'pulse 1.5s infinite' }} />
+          ) : (() => {
+            const data = groupByCategoryUnits(filteredSnapshots);
+            return data ? (
+              <HorizontalBarChart data={data.map((d, i) => ({ ...d, color: generateColors(data.length)[i] }))} height={300} />
+            ) : (
+              <ReportPlaceholder title="Sin datos" height={300} />
+            );
+          })()}
         </ChartCard>
 
-        <ChartCard title="Distribución por Categoría">
+        <ChartCard title="Top Inventario por Marca (Unids)">
           {loading ? (
-            <div style={{ height: 200, background: 'var(--panel)', borderRadius: 4, animation: 'pulse 1.5s infinite' }} />
-          ) : (
-            <DonutChart
-              data={Object.entries(stats?.categoryBreakdown || {}).map(([label, value], idx) => ({
-                label,
-                value,
-                color: ['#3B82F6', '#8B5CF6', '#10B981', '#F59E0B', '#EF4444', '#EC4899', '#14B8A6'][idx % 7]
-              }))}
-              size={180}
-            />
-          )}
+            <div style={{ height: 300, background: 'var(--panel)', borderRadius: 4, animation: 'pulse 1.5s infinite' }} />
+          ) : (() => {
+            const data = topN(groupByBrandUnits(filteredSnapshots), 10);
+            return data ? (
+              <HorizontalBarChart data={data.map((d, i) => ({ ...d, color: generateColors(data.length)[i] }))} height={300} />
+            ) : (
+              <ReportPlaceholder title="Sin datos" height={300} />
+            );
+          })()}
         </ChartCard>
       </div>
+
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 }}>
+        <ChartCard title="Inventario por Categorías (Costo $)">
+          {loading ? (
+            <div style={{ height: 300, background: 'var(--panel)', borderRadius: 4, animation: 'pulse 1.5s infinite' }} />
+          ) : (() => {
+            const data = groupByCategoryCost(filteredSnapshots);
+            return data ? (
+              <BarChart data={data} height={300} showValues={true} />
+            ) : (
+              <ReportPlaceholder title="Inventario por Categorías (Costo $)" reason="Falta información de precios en items" height={300} />
+            );
+          })()}
+        </ChartCard>
+
+        <ChartCard title="Participación de Inventario - Unids por Categoría">
+          {loading ? (
+            <div style={{ height: 300, background: 'var(--panel)', borderRadius: 4, animation: 'pulse 1.5s infinite' }} />
+          ) : (() => {
+            const data = groupByCategoryUnits(filteredSnapshots);
+            return data ? (
+              <PieChart data={data.map((d, i) => ({ ...d, color: generateColors(data.length)[i] }))} size={250} />
+            ) : (
+              <ReportPlaceholder title="Sin datos" height={300} />
+            );
+          })()}
+        </ChartCard>
+      </div>
+
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 }}>
+        <ChartCard title="Top Inventario por Marca (Costo $)">
+          {loading ? (
+            <div style={{ height: 300, background: 'var(--panel)', borderRadius: 4, animation: 'pulse 1.5s infinite' }} />
+          ) : (() => {
+            const data = topN(groupByBrandCost(filteredSnapshots), 10);
+            return data ? (
+              <BarChart data={data} height={300} showValues={true} />
+            ) : (
+              <ReportPlaceholder title="Top Inventario por Marca (Costo $)" reason="Falta información de precios en items" height={300} />
+            );
+          })()}
+        </ChartCard>
+
+        <ChartCard title="Participación de Inventario - Unids por Marca">
+          {loading ? (
+            <div style={{ height: 300, background: 'var(--panel)', borderRadius: 4, animation: 'pulse 1.5s infinite' }} />
+          ) : (() => {
+            const data = topN(groupByBrandUnits(filteredSnapshots), 10);
+            return data ? (
+              <PieChart data={data.map((d, i) => ({ ...d, color: generateColors(data.length)[i] }))} size={250} />
+            ) : (
+              <ReportPlaceholder title="Sin datos" height={300} />
+            );
+          })()}
+        </ChartCard>
+      </div>
+
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 }}>
+        <ChartCard title="Inventario por Almacén (Unidades y Costo)">
+          {loading ? (
+            <div style={{ height: 300, background: 'var(--panel)', borderRadius: 4, animation: 'pulse 1.5s infinite' }} />
+          ) : (() => {
+            const data = groupByWarehouseUnits(filteredSnapshots);
+            return data ? (
+              <BarChart data={data} height={300} showValues={true} />
+            ) : (
+              <ReportPlaceholder title="Sin datos" height={300} />
+            );
+          })()}
+        </ChartCard>
+
+        <ChartCard title="Participación de Inventario - Unids por Almacén">
+          {loading ? (
+            <div style={{ height: 300, background: 'var(--panel)', borderRadius: 4, animation: 'pulse 1.5s infinite' }} />
+          ) : (() => {
+            const data = groupByWarehouseUnits(filteredSnapshots);
+            return data ? (
+              <PieChart data={data.map((d, i) => ({ ...d, color: generateColors(data.length)[i] }))} size={250} />
+            ) : (
+              <ReportPlaceholder title="Sin datos" height={300} />
+            );
+          })()}
+        </ChartCard>
+      </div>
+
+      <ReportPlaceholder 
+        title="Inventario en Riesgo por Marca x Almacén" 
+        reason="Requiere matriz heatmap y definición de criterios de riesgo"
+        height={350}
+      />
+
+      {/* SECCIÓN 3: ANÁLISIS DE VENTAS */}
+      <div style={{ background: 'linear-gradient(135deg, #dc2626 0%, #991b1b 100%)', padding: '12px 20px', borderRadius: 8, marginTop: 20 }}>
+        <h2 style={{ color: 'white', fontSize: 18, fontWeight: 700, margin: 0 }}>Análisis de Ventas por Almacén Consignación</h2>
+      </div>
+
+      <ReportPlaceholder 
+        title="Análisis de Ventas" 
+        reason="Requiere datos de ventas desde Zoho Inventory"
+        height={400}
+      />
+
+      {/* SECCIÓN 4: INDICADORES MENSUALES */}
+      <div style={{ background: 'linear-gradient(135deg, #dc2626 0%, #991b1b 100%)', padding: '12px 20px', borderRadius: 8, marginTop: 20 }}>
+        <h2 style={{ color: 'white', fontSize: 18, fontWeight: 700, margin: 0 }}>Indicadores Mensuales por Almacén</h2>
+      </div>
+
+      <ReportPlaceholder 
+        title="Indicadores Mensuales" 
+        reason="Requiere datos mensuales de ventas desde Zoho Inventory"
+        height={400}
+      />
 
       <ChartCard title="Comparativa de Stock por Bodega">
         {loading ? (

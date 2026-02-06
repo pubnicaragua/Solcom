@@ -20,7 +20,7 @@ export default function InventoryPage() {
     state: '',
     stockLevel: '',
     priceRange: '',
-    supplier: '',
+    marca: '',
     sortBy: 'name',
   });
   const [selectedItems, setSelectedItems] = useState<string[]>([]);
@@ -96,7 +96,7 @@ export default function InventoryPage() {
       state: '',
       stockLevel: '',
       priceRange: '',
-      supplier: '',
+      marca: '',
       sortBy: 'name',
     });
   }
@@ -136,7 +136,7 @@ export default function InventoryPage() {
             <FileSpreadsheet size={16} />
             Excel
           </Button>
-          <Button variant="secondary" size="sm" onClick={() => alert('La exportación a PDF requiere una librería adicional. Usa Excel/CSV por ahora.')}>
+          <Button variant="secondary" size="sm" onClick={() => handleExport('pdf')}>
             <FileText size={16} />
             PDF
           </Button>
@@ -326,10 +326,9 @@ export default function InventoryPage() {
             <div style={{ display: 'grid', gridTemplateColumns: '200px 200px 200px 200px 1fr', gap: 12, paddingTop: 12, borderTop: '1px solid var(--border)' }}>
               <Select
                 options={[
-                  { value: '', label: 'Todos los estados' },
-                  { value: 'nuevo', label: 'Nuevo' },
-                  { value: 'usado', label: 'Usado' },
-                  { value: 'reacondicionado', label: 'Reacondicionado' },
+                  { value: '', label: 'Estado Físico' },
+                  { value: 'NUEVO', label: 'Nuevo' },
+                  { value: 'USADO', label: 'Usado' },
                 ]}
                 value={filters.state}
                 onChange={(e) => handleFilterChange('state', e.target.value)}
@@ -350,16 +349,18 @@ export default function InventoryPage() {
 
               <Select
                 options={[
-                  { value: '', label: 'Proveedor' },
-                  { value: 'dell', label: 'Dell' },
-                  { value: 'hp', label: 'HP' },
-                  { value: 'lenovo', label: 'Lenovo' },
-                  { value: 'logitech', label: 'Logitech' },
-                  { value: 'samsung', label: 'Samsung' },
-                  { value: 'lg', label: 'LG' },
+                  { value: '', label: 'Marca' },
+                  { value: 'APPLE', label: 'Apple' },
+                  { value: 'SAMSUNG', label: 'Samsung' },
+                  { value: 'XIAOMI', label: 'Xiaomi' },
+                  { value: 'HONOR', label: 'Honor' },
+                  { value: 'REALME', label: 'Realme' },
+                  { value: 'MOTOROLA', label: 'Motorola' },
+                  { value: 'TECNO', label: 'Tecno' },
+                  { value: 'INFINIX', label: 'Infinix' },
                 ]}
-                value={filters.supplier}
-                onChange={(e) => handleFilterChange('supplier', e.target.value)}
+                value={filters.marca}
+                onChange={(e) => handleFilterChange('marca', e.target.value)}
               />
 
               <Select
@@ -377,10 +378,6 @@ export default function InventoryPage() {
               />
 
               <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
-                <Button variant="secondary" size="sm">
-                  <BarChart3 size={16} />
-                  Análisis
-                </Button>
               </div>
             </div>
           )}

@@ -87,8 +87,6 @@ export class ZohoBooksClient {
         return allItems;
     }
 
-
-
     async getItemDetails(itemId: string): Promise<ZohoBooksItem | null> {
         const token = await this.getAccessToken();
         const { organizationId } = this.config;
@@ -107,6 +105,38 @@ export class ZohoBooksClient {
 
         const result: ZohoBooksApiResponse<ZohoBooksItem> = await response.json();
         return result.item || null;
+    }
+
+    async request(method: string, endpoint: string, data?: any): Promise<any> {
+        const token = await this.getAccessToken();
+        const { organizationId } = this.config;
+
+        const url = `${this.apiDomain}${endpoint}?organization_id=${organizationId}`;
+        
+        const response = await fetch(url, {
+            method,
+            headers: {
+                'Authorization': `Zoho-oauthtoken ${token}`,
+                'Content-Type': 'application/json',
+            },
+            body: data ? JSON.stringify(data) : undefined,
+            cache: 'no-store',
+        });
+
+        if (!response.ok) {
+            const errorText = await response.text();
+            throw new Error(`Zoho Books API error: ${response.status} - ${errorText}`);
+        }
+
+        return response.json();
+    }
+
+    async createInventoryAdjustment(adjustmentData: any): Promise<any> {
+        return this.request('POST', '/books/v3/inventoryadjustments', adjustmentData);
+    }
+
+    async getWarehouses(): Promise<any> {
+        return this.request('GET', '/books/v3/warehouses');
     }
 }
 
