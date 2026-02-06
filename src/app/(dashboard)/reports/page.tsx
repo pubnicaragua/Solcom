@@ -15,96 +15,24 @@ import { Download, Package, TrendingUp, TrendingDown, Calendar, Warehouse, Alert
 import { supabase } from '@/lib/supabase/client';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
-import {
-  groupByCategoryUnits,
-  groupByCategoryCost,
-  groupByBrandUnits,
-  groupByBrandCost,
-  groupByWarehouseUnits,
-  groupByWarehouseCost,
-  topN,
-  getTotalUnits,
-  getTotalCost,
-  generateColors,
-  applyFilters,
-  getUniqueFilterOptions
-} from '@/lib/reports/data-transformers';
-
-interface Item {
-  id: string;
-  sku: string;
-  name: string;
-  color: string | null;
-  state: string | null;
-  zoho_item_id: string | null;
-  created_at: string;
-  updated_at: string;
-  category: string | null;
-  stock_total?: number | null;
-  price?: number | null;
-}
-
-interface StockSnapshot {
-  id: string;
-  item_id: string;
-  warehouse_id: string;
-  qty: number;
-  synced_at: string;
-  items?: {
-    id: string;
-    sku: string;
-    name: string;
-    color: string | null;
-    state: string | null;
-    zoho_item_id: string | null;
-    created_at: string;
-    updated_at: string;
-    category: string | null;
-    stock_total?: number | null;
-    price?: number | null;
-  };
-  warehouses?: Warehouse;
-}
-
-interface Warehouse {
-  id: string;
-  code: string;
-  name: string;
-  active: boolean;
-}
-
-interface ReportStats {
-  totalProducts: number;
-  totalStock: number;
-  totalValue: number;
-  lowStockItems: number;
-  outOfStockItems: number;
-  activeWarehouses: number;
-  categoryBreakdown: Record<string, number>;
-  warehouseBreakdown: Record<string, { stock: number; items: number }>;
-  stockHistory: Array<{ date: string; stock: number }>;
-}
 
 export default function ReportsPage() {
   const [period, setPeriod] = useState('30');
-  const [items, setItems] = useState<Item[]>([]);
-  const [stockSnapshots, setStockSnapshots] = useState<StockSnapshot[]>([]);
-  const [warehouses, setWarehouses] = useState<Warehouse[]>([]);
-  const [stats, setStats] = useState<ReportStats | null>(null);
+  const [items, setItems] = useState<any[]>([]);
+  const [stockSnapshots, setStockSnapshots] = useState<any[]>([]);
+  const [warehouses, setWarehouses] = useState<any[]>([]);
+  const [stats, setStats] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  
-  // Filtros globales
   const [globalFilters, setGlobalFilters] = useState({
-    year: '',
-    month: '',
     category: '',
     marca: '',
     warehouse: '',
-    state: ''
+    state: '',
+    color: ''
   });
   const [filterOptions, setFilterOptions] = useState<any>(null);
-  const [filteredSnapshots, setFilteredSnapshots] = useState<StockSnapshot[]>([]);
+  const [filteredSnapshots, setFilteredSnapshots] = useState<any[]>([]);
 
   useEffect(() => {
     fetchAllData();
@@ -120,11 +48,7 @@ export default function ReportsPage() {
 
       const [itemsResult, snapshotsResult, warehousesResult] = await Promise.all([
         supabase.from('items').select('*').order('created_at', { ascending: false }),
-        supabase.from('stock_snapshots').select(`
-          *,
-          items(*),
-          warehouses(*)
-        `)
+        supabase.from('stock_snapshots').select('*, items(*), warehouses(*)')
           .gte('synced_at', dateFilter.toISOString())
           .range(0, 9999),
         supabase.from('warehouses').select('*').eq('active', true)
@@ -141,15 +65,39 @@ export default function ReportsPage() {
       setItems(itemsData);
       setStockSnapshots(snapshotsData);
       setWarehouses(warehousesData);
-      
-      // Obtener opciones de filtros
-      const options = getUniqueFilterOptions(snapshotsData as any);
-      setFilterOptions(options);
-      
-      // Aplicar filtros iniciales
-      const filtered = applyFilters(snapshotsData as StockSnapshot[], globalFilters);
-      setFilteredSnapshots(filtered);
 
+      // Obtener opciones de filtros
+      const categories = new Set<string>();
+      const marcas = new Set<string>();
+      const warehouseCodes = new Set<string>();
+      const states = new Set<string>();
+      const colors = new Set<string>();
+      
+      snapshotsData.forEach((s: any) => {
+        if (s.items?.category) categories.add(s.items.category);
+        if (s.items?.marca) marcas.add(s.items.marca);
+        if (s.warehouses?.code) warehouseCodes.add(s.warehouses.code);
+        if (s.items?.state) states.add(s.items.state);
+        if (s.items?.color) colors.add(s.items.color);
+      });
+
+      setFilterOptions({
+        categories: Array.from(categories).sort(),
+        marcas: Array.from(marcas).sort(),
+        warehouses: Array.from(warehouseCodes).sort(),
+        states: Array.from(states).sort(),
+        colors: Array.from(colors).sort()
+      });
+
+      // Aplicar filtros
+      let filtered = snapshotsData;
+      if (globalFilters.category) filtered = filtered.filter((s: any) => s.items?.category === globalFilters.category);
+      if (globalFilters.marca) filtered = filtered.filter((s: any) => s.items?.marca === globalFilters.marca);
+      if (globalFilters.warehouse) filtered = filtered.filter((s: any) => s.warehouses?.code === globalFilters.warehouse);
+      if (globalFilters.state) filtered = filtered.filter((s: any) => s.items?.state === globalFilters.state);
+      if (globalFilters.color) filtered = filtered.filter((s: any) => s.items?.color === globalFilters.color);
+
+      setFilteredSnapshots(filtered);
       calculateStats(itemsData, filtered, warehousesData);
     } catch (err: any) {
       setError(err.message || 'Error al cargar datos');
@@ -159,15 +107,12 @@ export default function ReportsPage() {
     }
   }
 
-  function calculateStats(items: Item[], snapshots: StockSnapshot[], warehouses: Warehouse[]) {
-    // Use items table for global stats (faster and accurate)
+  function calculateStats(items: any[], snapshots: any[], warehouses: any[]) {
     const totalStock = items.reduce((sum, item) => sum + (item.stock_total || 0), 0);
     const totalValue = items.reduce((sum, item) => sum + ((item.stock_total || 0) * (item.price || 0)), 0);
-
     const lowStockItems = items.filter(i => (i.stock_total || 0) > 0 && (i.stock_total || 0) < 10).length;
     const outOfStockItems = items.filter(i => (i.stock_total || 0) === 0).length;
 
-    // Use snapshots for breakdown (metrics by warehouse/history need detail)
     const categoryBreakdown: Record<string, number> = {};
     snapshots.forEach(s => {
       if (s.items) {
@@ -188,7 +133,6 @@ export default function ReportsPage() {
       }
     });
 
-    // History needs snapshots
     const stockHistory: Array<{ date: string; stock: number }> = [];
     const last7Days = Array.from({ length: 7 }, (_, i) => {
       const date = new Date();
@@ -218,7 +162,6 @@ export default function ReportsPage() {
   async function exportToPDF() {
     try {
       const doc = new jsPDF();
-
       doc.setFontSize(18);
       doc.text('Reporte de Inventario', 14, 20);
       doc.setFontSize(11);
@@ -256,7 +199,6 @@ export default function ReportsPage() {
       doc.save(`reporte_inventario_${new Date().toISOString().split('T')[0]}.pdf`);
     } catch (err: any) {
       alert(`Error al exportar PDF: ${err.message}`);
-      console.error('PDF export error:', err);
     }
   }
 
@@ -291,37 +233,64 @@ export default function ReportsPage() {
       document.body.removeChild(a);
     } catch (err: any) {
       alert(`Error al exportar Excel: ${err.message}`);
-      console.error('Excel export error:', err);
     }
   }
 
-  const totalItems = items.length;
-  const itemsByCategory = items.reduce((acc, item) => {
-    const cat = item.category || 'Sin categoría';
-    acc[cat] = (acc[cat] || 0) + 1;
-    return acc;
-  }, {} as Record<string, number>);
-
-  const itemsByState = items.reduce((acc, item) => {
-    const state = item.state || 'Sin estado';
-    acc[state] = (acc[state] || 0) + 1;
-    return acc;
-  }, {} as Record<string, number>);
-
-  const recentItems = items.slice(0, 10);
-
   const topProducts = stockSnapshots
-    .reduce((acc, s) => {
-      const existing = acc.find(p => p.item_id === s.item_id);
+    .reduce((acc: any, s: any) => {
+      const existing = acc.find((p: any) => p.item_id === s.item_id);
       if (existing) {
         existing.totalQty += s.qty;
       } else {
         acc.push({ item_id: s.item_id, item: s.items, totalQty: s.qty });
       }
       return acc;
-    }, [] as Array<{ item_id: string; item?: Item; totalQty: number }>)
-    .sort((a, b) => b.totalQty - a.totalQty)
+    }, [])
+    .sort((a: any, b: any) => b.totalQty - a.totalQty)
     .slice(0, 10);
+
+  // Funciones de transformación
+  const groupByCategoryUnits = (snapshots: any[]) => {
+    if (!snapshots || snapshots.length === 0) return null;
+    const groups: Record<string, number> = {};
+    snapshots.forEach((s: any) => {
+      const cat = s.items?.category || 'Sin categoría';
+      groups[cat] = (groups[cat] || 0) + s.qty;
+    });
+    return Object.entries(groups).map(([label, value]) => ({ label, value })).sort((a: any, b: any) => b.value - a.value);
+  };
+
+  const groupByBrandUnits = (snapshots: any[]) => {
+    if (!snapshots || snapshots.length === 0) return null;
+    const groups: Record<string, number> = {};
+    snapshots.forEach((s: any) => {
+      const marca = s.items?.marca || 'Sin marca';
+      groups[marca] = (groups[marca] || 0) + s.qty;
+    });
+    return Object.entries(groups).map(([label, value]) => ({ label, value })).sort((a: any, b: any) => b.value - a.value);
+  };
+
+  const groupByWarehouseUnits = (snapshots: any[]) => {
+    if (!snapshots || snapshots.length === 0) return null;
+    const groups: Record<string, number> = {};
+    snapshots.forEach((s: any) => {
+      const warehouse = s.warehouses?.name || s.warehouses?.code || 'Sin almacén';
+      groups[warehouse] = (groups[warehouse] || 0) + s.qty;
+    });
+    return Object.entries(groups).map(([label, value]) => ({ label, value })).sort((a: any, b: any) => b.value - a.value);
+  };
+
+  const topN = (data: any, n: number) => {
+    if (!data || data.length === 0) return null;
+    return data.slice(0, n);
+  };
+
+  const generateColors = (count: number) => {
+    const baseColors = ['#3B82F6', '#8B5CF6', '#10B981', '#F59E0B', '#EF4444', '#EC4899', '#14B8A6', '#F97316', '#6366F1', '#84CC16'];
+    const colors: string[] = [];
+    for (let i = 0; i < count; i++) colors.push(baseColors[i % baseColors.length]);
+    return colors;
+  };
 
   return (
     <div style={{ display: 'grid', gap: 14 }}>
@@ -489,7 +458,7 @@ export default function ReportsPage() {
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: 12 }}>
             <Select
               value={globalFilters.category}
-              onChange={(e) => setGlobalFilters({...globalFilters, category: e.target.value})}
+              onChange={(e) => { setGlobalFilters({...globalFilters, category: e.target.value}); }}
               options={[
                 { value: '', label: 'Todas las categorías' },
                 ...(filterOptions?.categories || []).map((c: string) => ({ value: c, label: c }))
@@ -497,7 +466,7 @@ export default function ReportsPage() {
             />
             <Select
               value={globalFilters.marca}
-              onChange={(e) => setGlobalFilters({...globalFilters, marca: e.target.value})}
+              onChange={(e) => { setGlobalFilters({...globalFilters, marca: e.target.value}); }}
               options={[
                 { value: '', label: 'Todas las marcas' },
                 ...(filterOptions?.marcas || []).map((m: string) => ({ value: m, label: m }))
@@ -505,7 +474,7 @@ export default function ReportsPage() {
             />
             <Select
               value={globalFilters.warehouse}
-              onChange={(e) => setGlobalFilters({...globalFilters, warehouse: e.target.value})}
+              onChange={(e) => { setGlobalFilters({...globalFilters, warehouse: e.target.value}); }}
               options={[
                 { value: '', label: 'Todos los almacenes' },
                 ...(filterOptions?.warehouses || []).map((w: string) => ({ value: w, label: w }))
@@ -513,29 +482,32 @@ export default function ReportsPage() {
             />
             <Select
               value={globalFilters.state}
-              onChange={(e) => setGlobalFilters({...globalFilters, state: e.target.value})}
+              onChange={(e) => { setGlobalFilters({...globalFilters, state: e.target.value}); }}
               options={[
                 { value: '', label: 'Todos los estados' },
                 ...(filterOptions?.states || []).map((s: string) => ({ value: s, label: s }))
+              ]}
+            />
+            <Select
+              value={globalFilters.color}
+              onChange={(e) => { setGlobalFilters({...globalFilters, color: e.target.value}); }}
+              options={[
+                { value: '', label: 'Todos los colores' },
+                ...(filterOptions?.colors || []).map((c: string) => ({ value: c, label: c }))
               ]}
             />
           </div>
         </div>
       </Card>
 
-      {/* SECCIÓN 1: INVENTARIO REMANENTE ≥90 DÍAS */}
-      <div style={{ background: 'linear-gradient(135deg, #dc2626 0%, #991b1b 100%)', padding: '12px 20px', borderRadius: 8, marginTop: 8 }}>
+      {/* SECCIÓN 1: INVENTARIO REMANENTE */}
+      <div style={{ background: 'linear-gradient(135deg, #dc2626 0%, #991b1b 100%)', padding: '12px 20px', borderRadius: 8 }}>
         <h2 style={{ color: 'white', fontSize: 18, fontWeight: 700, margin: 0 }}>Inventario Remanente ≥ 90 Días</h2>
       </div>
-
-      <ReportPlaceholder 
-        title="Inventario Remanente ≥90 días" 
-        reason="Falta campo de fecha de último movimiento para calcular antigüedad"
-        height={250}
-      />
+      <ReportPlaceholder title="Inventario Remanente ≥90 días" reason="Falta campo de fecha de último movimiento" height={250} />
 
       {/* SECCIÓN 2: EXISTENCIAS GENERALES */}
-      <div style={{ background: 'linear-gradient(135deg, #dc2626 0%, #991b1b 100%)', padding: '12px 20px', borderRadius: 8, marginTop: 20 }}>
+      <div style={{ background: 'linear-gradient(135deg, #dc2626 0%, #991b1b 100%)', padding: '12px 20px', borderRadius: 8 }}>
         <h2 style={{ color: 'white', fontSize: 18, fontWeight: 700, margin: 0 }}>EXISTENCIAS GENERALES</h2>
       </div>
 
@@ -546,7 +518,7 @@ export default function ReportsPage() {
           ) : (() => {
             const data = groupByCategoryUnits(filteredSnapshots);
             return data ? (
-              <HorizontalBarChart data={data.map((d, i) => ({ ...d, color: generateColors(data.length)[i] }))} height={300} />
+              <HorizontalBarChart data={data.map((d: any, i: number) => ({ ...d, color: generateColors(data.length)[i] }))} height={300} />
             ) : (
               <ReportPlaceholder title="Sin datos" height={300} />
             );
@@ -559,7 +531,7 @@ export default function ReportsPage() {
           ) : (() => {
             const data = topN(groupByBrandUnits(filteredSnapshots), 10);
             return data ? (
-              <HorizontalBarChart data={data.map((d, i) => ({ ...d, color: generateColors(data.length)[i] }))} height={300} />
+              <HorizontalBarChart data={data.map((d: any, i: number) => ({ ...d, color: generateColors(data.length)[i] }))} height={300} />
             ) : (
               <ReportPlaceholder title="Sin datos" height={300} />
             );
@@ -568,43 +540,15 @@ export default function ReportsPage() {
       </div>
 
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 }}>
-        <ChartCard title="Inventario por Categorías (Costo $)">
-          {loading ? (
-            <div style={{ height: 300, background: 'var(--panel)', borderRadius: 4, animation: 'pulse 1.5s infinite' }} />
-          ) : (() => {
-            const data = groupByCategoryCost(filteredSnapshots);
-            return data ? (
-              <BarChart data={data} height={300} showValues={true} />
-            ) : (
-              <ReportPlaceholder title="Inventario por Categorías (Costo $)" reason="Falta información de precios en items" height={300} />
-            );
-          })()}
-        </ChartCard>
-
         <ChartCard title="Participación de Inventario - Unids por Categoría">
           {loading ? (
             <div style={{ height: 300, background: 'var(--panel)', borderRadius: 4, animation: 'pulse 1.5s infinite' }} />
           ) : (() => {
             const data = groupByCategoryUnits(filteredSnapshots);
             return data ? (
-              <PieChart data={data.map((d, i) => ({ ...d, color: generateColors(data.length)[i] }))} size={250} />
+              <PieChart data={data.map((d: any, i: number) => ({ ...d, color: generateColors(data.length)[i] }))} size={250} />
             ) : (
               <ReportPlaceholder title="Sin datos" height={300} />
-            );
-          })()}
-        </ChartCard>
-      </div>
-
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 }}>
-        <ChartCard title="Top Inventario por Marca (Costo $)">
-          {loading ? (
-            <div style={{ height: 300, background: 'var(--panel)', borderRadius: 4, animation: 'pulse 1.5s infinite' }} />
-          ) : (() => {
-            const data = topN(groupByBrandCost(filteredSnapshots), 10);
-            return data ? (
-              <BarChart data={data} height={300} showValues={true} />
-            ) : (
-              <ReportPlaceholder title="Top Inventario por Marca (Costo $)" reason="Falta información de precios en items" height={300} />
             );
           })()}
         </ChartCard>
@@ -615,7 +559,7 @@ export default function ReportsPage() {
           ) : (() => {
             const data = topN(groupByBrandUnits(filteredSnapshots), 10);
             return data ? (
-              <PieChart data={data.map((d, i) => ({ ...d, color: generateColors(data.length)[i] }))} size={250} />
+              <PieChart data={data.map((d: any, i: number) => ({ ...d, color: generateColors(data.length)[i] }))} size={250} />
             ) : (
               <ReportPlaceholder title="Sin datos" height={300} />
             );
@@ -624,7 +568,7 @@ export default function ReportsPage() {
       </div>
 
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 }}>
-        <ChartCard title="Inventario por Almacén (Unidades y Costo)">
+        <ChartCard title="Inventario por Almacén (Unidades)">
           {loading ? (
             <div style={{ height: 300, background: 'var(--panel)', borderRadius: 4, animation: 'pulse 1.5s infinite' }} />
           ) : (() => {
@@ -643,7 +587,7 @@ export default function ReportsPage() {
           ) : (() => {
             const data = groupByWarehouseUnits(filteredSnapshots);
             return data ? (
-              <PieChart data={data.map((d, i) => ({ ...d, color: generateColors(data.length)[i] }))} size={250} />
+              <PieChart data={data.map((d: any, i: number) => ({ ...d, color: generateColors(data.length)[i] }))} size={250} />
             ) : (
               <ReportPlaceholder title="Sin datos" height={300} />
             );
@@ -651,100 +595,17 @@ export default function ReportsPage() {
         </ChartCard>
       </div>
 
-      <ReportPlaceholder 
-        title="Inventario en Riesgo por Marca x Almacén" 
-        reason="Requiere matriz heatmap y definición de criterios de riesgo"
-        height={350}
-      />
-
       {/* SECCIÓN 3: ANÁLISIS DE VENTAS */}
-      <div style={{ background: 'linear-gradient(135deg, #dc2626 0%, #991b1b 100%)', padding: '12px 20px', borderRadius: 8, marginTop: 20 }}>
+      <div style={{ background: 'linear-gradient(135deg, #dc2626 0%, #991b1b 100%)', padding: '12px 20px', borderRadius: 8 }}>
         <h2 style={{ color: 'white', fontSize: 18, fontWeight: 700, margin: 0 }}>Análisis de Ventas por Almacén Consignación</h2>
       </div>
-
-      <ReportPlaceholder 
-        title="Análisis de Ventas" 
-        reason="Requiere datos de ventas desde Zoho Inventory"
-        height={400}
-      />
+      <ReportPlaceholder title="Análisis de Ventas" reason="Requiere datos de ventas desde Zoho Inventory" height={400} />
 
       {/* SECCIÓN 4: INDICADORES MENSUALES */}
-      <div style={{ background: 'linear-gradient(135deg, #dc2626 0%, #991b1b 100%)', padding: '12px 20px', borderRadius: 8, marginTop: 20 }}>
+      <div style={{ background: 'linear-gradient(135deg, #dc2626 0%, #991b1b 100%)', padding: '12px 20px', borderRadius: 8 }}>
         <h2 style={{ color: 'white', fontSize: 18, fontWeight: 700, margin: 0 }}>Indicadores Mensuales por Almacén</h2>
       </div>
-
-      <ReportPlaceholder 
-        title="Indicadores Mensuales" 
-        reason="Requiere datos mensuales de ventas desde Zoho Inventory"
-        height={400}
-      />
-
-      <ChartCard title="Comparativa de Stock por Bodega">
-        {loading ? (
-          <div style={{ height: 280, background: 'var(--panel)', borderRadius: 4, animation: 'pulse 1.5s infinite' }} />
-        ) : (
-          <BarChart
-            data={Object.entries(stats?.warehouseBreakdown || {}).map(([label, data]) => ({
-              label,
-              value: data.stock
-            }))}
-            height={280}
-            showValues={true}
-          />
-        )}
-      </ChartCard>
-
-      <Card>
-        <div style={{ padding: 16 }}>
-          <div className="h-subtitle" style={{ marginBottom: 16 }}>
-            Top 10 Productos con Mayor Stock
-          </div>
-          <div style={{ overflowX: 'auto' }}>
-            <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-              <thead>
-                <tr style={{ borderBottom: '1px solid var(--border)' }}>
-                  <th style={{ padding: '12px 8px', textAlign: 'left', fontSize: 12, fontWeight: 600, color: 'var(--muted)' }}>#</th>
-                  <th style={{ padding: '12px 8px', textAlign: 'left', fontSize: 12, fontWeight: 600, color: 'var(--muted)' }}>SKU</th>
-                  <th style={{ padding: '12px 8px', textAlign: 'left', fontSize: 12, fontWeight: 600, color: 'var(--muted)' }}>Producto</th>
-                  <th style={{ padding: '12px 8px', textAlign: 'left', fontSize: 12, fontWeight: 600, color: 'var(--muted)' }}>Categoría</th>
-                  <th style={{ padding: '12px 8px', textAlign: 'right', fontSize: 12, fontWeight: 600, color: 'var(--muted)' }}>Stock Total</th>
-                </tr>
-              </thead>
-              <tbody>
-                {loading ? (
-                  <tr>
-                    <td colSpan={5} style={{ padding: 20, textAlign: 'center' }}>
-                      <div style={{ height: 100, background: 'var(--panel)', borderRadius: 4, animation: 'pulse 1.5s infinite' }} />
-                    </td>
-                  </tr>
-                ) : topProducts.length === 0 ? (
-                  <tr>
-                    <td colSpan={5} style={{ padding: 20, textAlign: 'center', color: 'var(--muted)' }}>
-                      No hay datos disponibles
-                    </td>
-                  </tr>
-                ) : (
-                  topProducts.map((product, index) => (
-                    <tr key={product.item_id} style={{ borderBottom: '1px solid var(--border)' }}>
-                      <td style={{ padding: '12px 8px', fontSize: 13, fontWeight: 600 }}>{index + 1}</td>
-                      <td style={{ padding: '12px 8px', fontSize: 13, fontFamily: 'monospace' }}>{product.item?.sku || 'N/A'}</td>
-                      <td style={{ padding: '12px 8px', fontSize: 13, fontWeight: 500 }}>{product.item?.name || 'N/A'}</td>
-                      <td style={{ padding: '12px 8px', fontSize: 13 }}>
-                        <span style={{ padding: '2px 8px', borderRadius: 4, background: 'var(--panel)', fontSize: 11 }}>
-                          {product.item?.category || 'Sin categoría'}
-                        </span>
-                      </td>
-                      <td style={{ padding: '12px 8px', fontSize: 14, textAlign: 'right', fontWeight: 600, color: 'var(--brand-primary)' }}>
-                        {product.totalQty.toLocaleString('es-NI')}
-                      </td>
-                    </tr>
-                  ))
-                )}
-              </tbody>
-            </table>
-          </div>
-        </div>
-      </Card>
+      <ReportPlaceholder title="Indicadores Mensuales" reason="Requiere datos mensuales de ventas desde Zoho Inventory" height={400} />
     </div>
   );
 }

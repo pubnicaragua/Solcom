@@ -21,6 +21,7 @@ export default function InventoryPage() {
     stockLevel: '',
     priceRange: '',
     marca: '',
+    color: '',
     sortBy: 'name',
   });
   const [selectedItems, setSelectedItems] = useState<string[]>([]);
@@ -97,6 +98,7 @@ export default function InventoryPage() {
       stockLevel: '',
       priceRange: '',
       marca: '',
+      color: '',
       sortBy: 'name',
     });
   }
@@ -361,6 +363,20 @@ export default function InventoryPage() {
                 ]}
                 value={filters.marca}
                 onChange={(e) => handleFilterChange('marca', e.target.value)}
+              />
+
+              <Select
+                options={[
+                  { value: '', label: 'Color' },
+                  { value: 'negro', label: 'Negro' },
+                  { value: 'blanco', label: 'Blanco' },
+                  { value: 'gris', label: 'Gris' },
+                  { value: 'azul', label: 'Azul' },
+                  { value: 'rojo', label: 'Rojo' },
+                  { value: 'verde', label: 'Verde' },
+                ]}
+                value={filters.color}
+                onChange={(e) => handleFilterChange('color', e.target.value)}
               />
 
               <Select
