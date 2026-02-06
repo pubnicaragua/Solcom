@@ -15,12 +15,16 @@ export async function GET() {
       supabase.from('stock_snapshots').select('qty, synced_at').order('synced_at', { ascending: false }).limit(1),
     ]);
 
-    const { data: allSnapshots } = await supabase
-      .from('stock_snapshots')
-      .select('qty, item_id');
+    // Supabase returns max 1000 rows by default. Fetch all items to sum stock_total.
+    // Ideally we would use an RPC function or the new Aggregate functions if available.
+    const { data: allItems } = await supabase
+      .from('items')
+      .select('stock_total')
+      .range(0, 99999);
 
-    const totalStock = (allSnapshots || []).reduce((sum: number, row: any) => sum + (row.qty || 0), 0);
-    const totalProducts = new Set((allSnapshots || []).map((s: any) => s.item_id)).size;
+    const totalStock = (allItems || []).reduce((sum: number, row: any) => sum + (row.stock_total || 0), 0);
+
+    const totalProducts = itemsResult.count || 0;
 
     const lastSync = (snapshotsResult.data as any)?.[0]?.synced_at
       ? format(new Date((snapshotsResult.data as any)[0].synced_at), "dd MMM yyyy, HH:mm", { locale: es })

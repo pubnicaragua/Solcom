@@ -23,6 +23,8 @@ interface Item {
   created_at: string;
   updated_at: string;
   category: string | null;
+  stock_total?: number | null;
+  price?: number | null;
 }
 
 interface StockSnapshot {
@@ -81,7 +83,9 @@ export default function ReportsPage() {
           *,
           items(*),
           warehouses(*)
-        `).gte('synced_at', dateFilter.toISOString()),
+        `)
+          .gte('synced_at', dateFilter.toISOString())
+          .range(0, 9999),
         supabase.from('warehouses').select('*').eq('active', true)
       ]);
 
@@ -107,11 +111,14 @@ export default function ReportsPage() {
   }
 
   function calculateStats(items: Item[], snapshots: StockSnapshot[], warehouses: Warehouse[]) {
-    const totalStock = snapshots.reduce((sum, s) => sum + (s.qty || 0), 0);
-    const uniqueItems = new Set(snapshots.map(s => s.item_id));
-    const lowStockItems = snapshots.filter(s => s.qty > 0 && s.qty < 10).length;
-    const outOfStockItems = snapshots.filter(s => s.qty === 0).length;
+    // Use items table for global stats (faster and accurate)
+    const totalStock = items.reduce((sum, item) => sum + (item.stock_total || 0), 0);
+    const totalValue = items.reduce((sum, item) => sum + ((item.stock_total || 0) * (item.price || 0)), 0);
 
+    const lowStockItems = items.filter(i => (i.stock_total || 0) > 0 && (i.stock_total || 0) < 10).length;
+    const outOfStockItems = items.filter(i => (i.stock_total || 0) === 0).length;
+
+    // Use snapshots for breakdown (metrics by warehouse/history need detail)
     const categoryBreakdown: Record<string, number> = {};
     snapshots.forEach(s => {
       if (s.items) {
@@ -132,6 +139,7 @@ export default function ReportsPage() {
       }
     });
 
+    // History needs snapshots
     const stockHistory: Array<{ date: string; stock: number }> = [];
     const last7Days = Array.from({ length: 7 }, (_, i) => {
       const date = new Date();
@@ -146,9 +154,9 @@ export default function ReportsPage() {
     });
 
     setStats({
-      totalProducts: uniqueItems.size,
+      totalProducts: items.length,
       totalStock,
-      totalValue: totalStock * 150,
+      totalValue,
       lowStockItems,
       outOfStockItems,
       activeWarehouses: warehouses.length,
@@ -161,7 +169,7 @@ export default function ReportsPage() {
   async function exportToPDF() {
     try {
       const doc = new jsPDF();
-      
+
       doc.setFontSize(18);
       doc.text('Reporte de Inventario', 14, 20);
       doc.setFontSize(11);

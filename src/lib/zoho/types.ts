@@ -32,6 +32,7 @@ export interface ZohoBooksItem {
   stock_on_hand: number;
   unit?: string;
   rate?: number;
+  purchase_rate?: number;
   description?: string;
   category_name?: string;
   category_id?: string;

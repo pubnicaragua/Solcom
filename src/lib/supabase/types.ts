@@ -45,6 +45,8 @@ export interface Database {
           color: string | null
           state: string | null
           zoho_item_id: string | null
+          stock_total: number | null
+          price: number | null
           created_at: string
           updated_at: string
         }
@@ -56,6 +58,8 @@ export interface Database {
           color?: string | null
           state?: string | null
           zoho_item_id?: string | null
+          stock_total?: number | null
+          price?: number | null
           created_at?: string
           updated_at?: string
         }
@@ -67,6 +71,8 @@ export interface Database {
           color?: string | null
           state?: string | null
           zoho_item_id?: string | null
+          stock_total?: number | null
+          price?: number | null
           created_at?: string
           updated_at?: string
         }

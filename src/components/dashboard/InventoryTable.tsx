@@ -18,6 +18,7 @@ interface InventoryItem {
   warehouse_code: string;
   warehouse_name: string;
   qty: number;
+  stock_total?: number;
   price?: number;
   category?: string;
   supplier?: string;
@@ -55,11 +56,11 @@ export default function InventoryTable({ filters, onSelectionChange }: Inventory
       const newSelection = prev.includes(id)
         ? prev.filter(i => i !== id)
         : [...prev, id];
-      
+
       if (onSelectionChange) {
         onSelectionChange(newSelection);
       }
-      
+
       return newSelection;
     });
   }
@@ -144,9 +145,9 @@ export default function InventoryTable({ filters, onSelectionChange }: Inventory
       width: '11%',
       render: (row: InventoryItem) => {
         const category = row.category || 'Sin categoría';
-        
+
         return (
-          <div style={{ 
+          <div style={{
             fontSize: 13,
             fontWeight: 600,
             color: '#F1F5F9'
@@ -159,7 +160,7 @@ export default function InventoryTable({ filters, onSelectionChange }: Inventory
     {
       key: 'warehouse',
       header: 'Bodega',
-      width: '13%',
+      width: '10%',
       render: (row: InventoryItem) => (
         <div>
           <div style={{ fontWeight: 600, fontSize: 13, color: '#F1F5F9', marginBottom: 2, display: 'flex', alignItems: 'center', gap: 4 }}>
@@ -172,24 +173,24 @@ export default function InventoryTable({ filters, onSelectionChange }: Inventory
     },
     {
       key: 'qty',
-      header: 'Stock Disponible',
+      header: 'Stock (Bodega)',
       width: '10%',
       render: (row: InventoryItem) => {
-        const stockLevel = row.qty === 0 ? 'out' : 
-                          row.qty <= 5 ? 'critical' : 
-                          row.qty <= 20 ? 'low' : 
-                          row.qty <= 50 ? 'medium' : 'high';
-        
+        const stockLevel = row.qty === 0 ? 'out' :
+          row.qty <= 5 ? 'critical' :
+            row.qty <= 20 ? 'low' :
+              row.qty <= 50 ? 'medium' : 'high';
+
         const color = stockLevel === 'out' ? '#DC2626' :
-                     stockLevel === 'critical' ? '#EA580C' :
-                     stockLevel === 'low' ? '#D97706' :
-                     stockLevel === 'medium' ? '#059669' : '#2563EB';
+          stockLevel === 'critical' ? '#EA580C' :
+            stockLevel === 'low' ? '#D97706' :
+              stockLevel === 'medium' ? '#059669' : '#2563EB';
 
         return (
           <div>
-            <div style={{ 
-              fontWeight: 600, 
-              color, 
+            <div style={{
+              fontWeight: 600,
+              color,
               fontSize: 15,
               display: 'flex',
               alignItems: 'center',
@@ -198,44 +199,35 @@ export default function InventoryTable({ filters, onSelectionChange }: Inventory
               <Package size={14} />
               {row.qty}
             </div>
-            {row.min_stock && row.qty < row.min_stock && (
-              <div style={{ 
-                fontSize: 10, 
-                color: '#DC2626',
-                marginTop: 2
-              }}>
-                Bajo mínimo: {row.min_stock}
-              </div>
-            )}
           </div>
         );
       },
     },
     {
-      key: 'price',
-      header: 'Precio Venta',
+      key: 'stock_total',
+      header: 'Stock Total',
       width: '10%',
       render: (row: InventoryItem) => (
-        <div style={{ 
+        <div style={{
+          fontWeight: 600,
+          color: (row.stock_total || 0) > 0 ? '#F1F5F9' : '#DC2626',
+          fontSize: 14
+        }}>
+          {row.stock_total || 0}
+        </div>
+      ),
+    },
+    {
+      key: 'price',
+      header: 'Precio Ref',
+      width: '10%',
+      render: (row: InventoryItem) => (
+        <div style={{
           fontWeight: 600,
           fontSize: 14,
           color: '#059669'
         }}>
           ${row.price?.toLocaleString('es-NI', { minimumFractionDigits: 2 }) || '0.00'}
-        </div>
-      ),
-    },
-    {
-      key: 'cost',
-      header: 'Costo',
-      width: '9%',
-      render: (row: InventoryItem) => (
-        <div style={{ 
-          fontWeight: 500,
-          fontSize: 12,
-          color: '#9CA3AF'
-        }}>
-          Restringido
         </div>
       ),
     },

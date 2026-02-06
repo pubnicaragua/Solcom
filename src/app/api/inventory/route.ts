@@ -24,14 +24,14 @@ export async function GET(request: Request) {
         qty,
         synced_at,
         warehouses!inner(code, name),
-        items!inner(sku, name, color, state, category, marca)
+        items!inner(sku, name, color, state, category, marca, stock_total, price)
       `, { count: 'exact' });
 
 
 
-    
+
     if (search) {
-      
+
       query = query.or(`name.ilike.%${search}%,sku.ilike.%${search}%`, { referencedTable: 'items' });
     }
 
@@ -40,22 +40,22 @@ export async function GET(request: Request) {
       query = query.eq('warehouses.code', warehouse);
     }
 
-  
+
     if (brand) {
       query = query.eq('items.marca', brand);
     }
 
-    
+
     if (state) {
       query = query.eq('items.state', state);
     }
 
-    
+
     if (category) {
       query = query.ilike('items.category', `%${category}%`);
     }
 
-    
+
     if (stockLevel) {
       switch (stockLevel) {
         case 'out':
@@ -122,6 +122,8 @@ export async function GET(request: Request) {
       warehouse_code: row.warehouses.code,
       warehouse_name: row.warehouses.name,
       qty: row.qty,
+      stock_total: row.items.stock_total || 0,
+      price: row.items.price || 0,
       synced_at: row.synced_at,
     }));
 

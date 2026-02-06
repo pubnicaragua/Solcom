@@ -82,7 +82,7 @@ export async function POST(request: Request) {
             const existingMap = new Map((existingItems || []).map(item => [item.sku, item.id]));
 
             const toInsert: any[] = [];
-            const toUpdate: { id: string; name: string; category: string | null; color: string | null; state: string | null; marca: string | null }[] = [];
+            const toUpdate: { id: string; name: string; category: string | null; color: string | null; state: string | null; marca: string | null; stock_total: number | null; price: number | null }[] = [];
 
             for (const zItem of batch) {
                 const sku = zItem.sku || `NO-SKU-${zItem.item_id}`;
@@ -97,6 +97,8 @@ export async function POST(request: Request) {
                     color: (zItem as any).cf_color || null,
                     state: (zItem as any).cf_estado || null,
                     marca: brandValue,
+                    stock_total: zItem.stock_on_hand || 0,
+                    price: zItem.purchase_rate || 0,
                 };
 
                 if (existingId) {
@@ -122,7 +124,7 @@ export async function POST(request: Request) {
                 }
             }
 
-            // Update existing items with color, state, and brand
+            // Update existing items with color, state, brand, stock and price
             for (const item of toUpdate) {
                 await supabase
                     .from('items')
@@ -131,7 +133,9 @@ export async function POST(request: Request) {
                         category: item.category,
                         color: item.color,
                         state: item.state,
-                        marca: item.marca
+                        marca: item.marca,
+                        stock_total: item.stock_total,
+                        price: item.price
                     })
                     .eq('id', item.id);
             }
@@ -175,6 +179,15 @@ export async function POST(request: Request) {
 
             console.log(`[SYNC] Batch ${i}-${i + batch.length}: ${toInsert.length} new, ${toUpdate.length} existing`);
         }
+
+        // Cleanup: Delete items that are no longer in Zoho Books.
+        // These items will still have stock_total as NULL because they weren't updated in this run.
+        const { count: deletedCount } = await supabase
+            .from('items')
+            .delete({ count: 'exact' })
+            .is('stock_total', null);
+
+        console.log(`[SYNC] Cleanup: Deleted ${deletedCount} orphaned items`);
 
         return NextResponse.json({
             success: true,
