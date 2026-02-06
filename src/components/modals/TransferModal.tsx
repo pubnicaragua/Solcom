@@ -271,7 +271,6 @@ export default function TransferModal({
                   variant="primary"
                   onClick={handleTransfer}
                   disabled={loading || !selectedWarehouse || quantity <= 0}
-                  loading={loading}
                   style={{ flex: 1 }}
                 >
                   Transferir
