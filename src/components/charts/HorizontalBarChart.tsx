@@ -8,13 +8,13 @@ export default function HorizontalBarChart({ data, height = 300, showValues = tr
   const maxValue = Math.max(...data.map(d => d.value), 1);
   
   return (
-    <div style={{ height, display: 'flex', flexDirection: 'column', gap: 12, padding: '16px 0' }}>
+    <div style={{ height, display: 'flex', flexDirection: 'column', gap: 12, padding: '16px 0', overflow: 'auto' }}>
       {data.map((item, idx) => {
         const percentage = (item.value / maxValue) * 100;
         const color = item.color || `hsl(${(idx * 360) / data.length}, 70%, 60%)`;
         
         return (
-          <div key={idx} style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+          <div key={idx} style={{ display: 'flex', alignItems: 'center', gap: 12, width: '100%' }}>
             <div style={{ 
               minWidth: 120, 
               fontSize: 13, 

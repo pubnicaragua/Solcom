@@ -50,7 +50,19 @@ interface StockSnapshot {
   warehouse_id: string;
   qty: number;
   synced_at: string;
-  items?: Item;
+  items?: {
+    id: string;
+    sku: string;
+    name: string;
+    color: string | null;
+    state: string | null;
+    zoho_item_id: string | null;
+    created_at: string;
+    updated_at: string;
+    category: string | null;
+    stock_total?: number | null;
+    price?: number | null;
+  };
   warehouses?: Warehouse;
 }
 
@@ -131,11 +143,11 @@ export default function ReportsPage() {
       setWarehouses(warehousesData);
       
       // Obtener opciones de filtros
-      const options = getUniqueFilterOptions(snapshotsData);
+      const options = getUniqueFilterOptions(snapshotsData as any);
       setFilterOptions(options);
       
       // Aplicar filtros iniciales
-      const filtered = applyFilters(snapshotsData, globalFilters);
+      const filtered = applyFilters(snapshotsData as StockSnapshot[], globalFilters);
       setFilteredSnapshots(filtered);
 
       calculateStats(itemsData, filtered, warehousesData);
