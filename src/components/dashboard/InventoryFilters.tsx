@@ -68,11 +68,21 @@ export default function InventoryFilters({ onFilterChange, onExport }: FiltersPr
           <Select
             options={[
               { value: '', label: 'Todas las categorías' },
-              { value: 'laptops', label: 'Laptops' },
-              { value: 'monitores', label: 'Monitores' },
-              { value: 'teclados', label: 'Teclados' },
-              { value: 'mouse', label: 'Mouse' },
+              { value: 'computadora', label: 'Computadora' },
+              { value: 'tablet', label: 'Tablet' },
+              { value: 'control', label: 'Control' },
+              { value: 'radio', label: 'Radio' },
+              { value: 'consola', label: 'Consola' },
+              { value: 'bocina', label: 'Bocina' },
               { value: 'accesorios', label: 'Accesorios' },
+              { value: 'reloj inteligente', label: 'Reloj inteligente' },
+              { value: 'audifonos', label: 'Audifonos' },
+              { value: 'equipo celular', label: 'Equipo celular' },
+              { value: 'linea blanca', label: 'Linea blanca' },
+              
+
+
+
             ]}
             value={category}
             onChange={(e) => setCategory(e.target.value)}

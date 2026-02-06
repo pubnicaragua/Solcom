@@ -212,14 +212,17 @@ export default function InventoryPage() {
             <Select
               options={[
                 { value: '', label: 'Todas las categorías' },
-                { value: 'laptops', label: 'Laptops' },
-                { value: 'monitores', label: 'Monitores' },
-                { value: 'teclados', label: 'Teclados' },
-                { value: 'mouse', label: 'Mouse' },
-                { value: 'impresoras', label: 'Impresoras' },
-                { value: 'accesorios', label: 'Accesorios' },
-                { value: 'cables', label: 'Cables y Adaptadores' },
-                { value: 'almacenamiento', label: 'Almacenamiento' },
+                { value: 'computadora', label: 'Computadora' },
+                { value: 'linea blanca', label: 'Linea Blanca' },
+                { value: 'equipo celular', label: 'Equipo celular' },
+                { value: 'audifonos', label: 'Audifonos' },
+                { value: 'Reloj inteligente', label: 'Reloj inteligente' },
+                { value: 'tablet', label: 'Tablet' },
+                { value: 'control', label: 'Control' },
+                { value: 'radio', label: 'Radio' },
+                { value:'consola', label:'Consola' },
+                { value:'bocina', label:'Bocina' },
+                { value:'accesorios', label:'Accesorios' },
               ]}
               value={filters.category}
               onChange={(e) => handleFilterChange('category', e.target.value)}
