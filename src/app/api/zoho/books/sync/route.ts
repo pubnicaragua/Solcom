@@ -37,7 +37,7 @@ export async function POST(request: Request) {
         console.log(`[SYNC] Total Zoho Items fetched: ${zohoItems.length}`);
 
 
-       
+
 
         const defaultWarehouseCode = 'X1';
         let warehouseId: string | null = null;
@@ -85,16 +85,21 @@ export async function POST(request: Request) {
             const existingMap = new Map((existingItems || []).map(item => [item.sku, item.id]));
 
             const toInsert: any[] = [];
-            const toUpdate: { id: string; name: string; category: string | null; color: string | null; state: string | null }[] = [];
+            const toUpdate: { id: string; name: string; category: string | null; color: string | null; state: string | null; marca: string | null }[] = [];
 
             for (const zItem of batch) {
                 const sku = zItem.sku || `NO-SKU-${zItem.item_id}`;
                 const existingId = existingMap.get(sku);
+
+
+                const brandValue = zItem.brand || (zItem as any).cf_marca || (zItem as any).cf_Marca || null;
+
                 const itemData = {
                     name: zItem.name,
                     category: zItem.category_name || null,
                     color: (zItem as any).cf_color || null,
                     state: (zItem as any).cf_estado || null,
+                    marca: brandValue,
                 };
 
                 if (existingId) {
@@ -122,11 +127,17 @@ export async function POST(request: Request) {
                 }
             }
 
-            // Update existing items with color and state
+            // Update existing items with color, state, and brand
             for (const item of toUpdate) {
                 const { error: updateError } = await supabase
                     .from('items')
-                    .update({ name: item.name, category: item.category, color: item.color, state: item.state })
+                    .update({
+                        name: item.name,
+                        category: item.category,
+                        color: item.color,
+                        state: item.state,
+                        marca: item.marca
+                    })
                     .eq('id', item.id);
 
                 if (updateError) {
