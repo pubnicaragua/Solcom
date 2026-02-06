@@ -8,56 +8,275 @@ import ChartCard from '@/components/reports/ChartCard';
 import BarChart from '@/components/reports/BarChart';
 import LineChart from '@/components/reports/LineChart';
 import DonutChart from '@/components/reports/DonutChart';
-import { TrendingUp, TrendingDown, Package, Warehouse, Download, Calendar, AlertTriangle, DollarSign } from 'lucide-react';
+import { Download, Package, TrendingUp, TrendingDown, Calendar, Warehouse, AlertTriangle, DollarSign, FileText } from 'lucide-react';
+import { supabase } from '@/lib/supabase/client';
+import jsPDF from 'jspdf';
+import autoTable from 'jspdf-autotable';
+
+interface Item {
+  id: string;
+  sku: string;
+  name: string;
+  color: string | null;
+  state: string | null;
+  zoho_item_id: string | null;
+  created_at: string;
+  updated_at: string;
+  category: string | null;
+}
+
+interface StockSnapshot {
+  id: string;
+  item_id: string;
+  warehouse_id: string;
+  qty: number;
+  synced_at: string;
+  items?: Item;
+  warehouses?: Warehouse;
+}
+
+interface Warehouse {
+  id: string;
+  code: string;
+  name: string;
+  active: boolean;
+}
 
 interface ReportStats {
   totalProducts: number;
   totalStock: number;
+  totalValue: number;
   lowStockItems: number;
   outOfStockItems: number;
+  activeWarehouses: number;
   categoryBreakdown: Record<string, number>;
-  warehouseData: Array<{id: string; code: string; name: string; totalStock: number; totalItems: number}>;
+  warehouseBreakdown: Record<string, { stock: number; items: number }>;
+  stockHistory: Array<{ date: string; stock: number }>;
 }
 
 export default function ReportsPage() {
   const [period, setPeriod] = useState('30');
+  const [items, setItems] = useState<Item[]>([]);
+  const [stockSnapshots, setStockSnapshots] = useState<StockSnapshot[]>([]);
+  const [warehouses, setWarehouses] = useState<Warehouse[]>([]);
   const [stats, setStats] = useState<ReportStats | null>(null);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    fetchReportStats();
+    fetchAllData();
   }, [period]);
 
-  async function fetchReportStats() {
+  async function fetchAllData() {
     setLoading(true);
+    setError(null);
     try {
-      const response = await fetch('/api/reports/summary');
-      if (response.ok) {
-        const data = await response.json();
-        setStats(data);
-      }
-    } catch (error) {
-      // Error silencioso
+      const daysAgo = parseInt(period);
+      const dateFilter = new Date();
+      dateFilter.setDate(dateFilter.getDate() - daysAgo);
+
+      const [itemsResult, snapshotsResult, warehousesResult] = await Promise.all([
+        supabase.from('items').select('*').order('created_at', { ascending: false }),
+        supabase.from('stock_snapshots').select(`
+          *,
+          items(*),
+          warehouses(*)
+        `).gte('synced_at', dateFilter.toISOString()),
+        supabase.from('warehouses').select('*').eq('active', true)
+      ]);
+
+      if (itemsResult.error) throw new Error(`Error items: ${itemsResult.error.message}`);
+      if (snapshotsResult.error) throw new Error(`Error snapshots: ${snapshotsResult.error.message}`);
+      if (warehousesResult.error) throw new Error(`Error warehouses: ${warehousesResult.error.message}`);
+
+      const itemsData = itemsResult.data || [];
+      const snapshotsData = snapshotsResult.data || [];
+      const warehousesData = warehousesResult.data || [];
+
+      setItems(itemsData);
+      setStockSnapshots(snapshotsData);
+      setWarehouses(warehousesData);
+
+      calculateStats(itemsData, snapshotsData, warehousesData);
+    } catch (err: any) {
+      setError(err.message || 'Error al cargar datos');
+      console.error('Error fetching data:', err);
     } finally {
       setLoading(false);
     }
   }
 
-  function exportReport(format: 'pdf' | 'excel') {
-    alert(`Exportando reporte en formato ${format.toUpperCase()}...`);
+  function calculateStats(items: Item[], snapshots: StockSnapshot[], warehouses: Warehouse[]) {
+    const totalStock = snapshots.reduce((sum, s) => sum + (s.qty || 0), 0);
+    const uniqueItems = new Set(snapshots.map(s => s.item_id));
+    const lowStockItems = snapshots.filter(s => s.qty > 0 && s.qty < 10).length;
+    const outOfStockItems = snapshots.filter(s => s.qty === 0).length;
+
+    const categoryBreakdown: Record<string, number> = {};
+    snapshots.forEach(s => {
+      if (s.items) {
+        const cat = s.items.category || 'Sin categoría';
+        categoryBreakdown[cat] = (categoryBreakdown[cat] || 0) + s.qty;
+      }
+    });
+
+    const warehouseBreakdown: Record<string, { stock: number; items: number }> = {};
+    snapshots.forEach(s => {
+      if (s.warehouses) {
+        const code = s.warehouses.code;
+        if (!warehouseBreakdown[code]) {
+          warehouseBreakdown[code] = { stock: 0, items: 0 };
+        }
+        warehouseBreakdown[code].stock += s.qty;
+        warehouseBreakdown[code].items += 1;
+      }
+    });
+
+    const stockHistory: Array<{ date: string; stock: number }> = [];
+    const last7Days = Array.from({ length: 7 }, (_, i) => {
+      const date = new Date();
+      date.setDate(date.getDate() - (6 - i));
+      return date.toISOString().split('T')[0];
+    });
+
+    last7Days.forEach(date => {
+      const daySnapshots = snapshots.filter(s => s.synced_at.startsWith(date));
+      const dayStock = daySnapshots.reduce((sum, s) => sum + s.qty, 0);
+      stockHistory.push({ date, stock: dayStock || totalStock / 7 });
+    });
+
+    setStats({
+      totalProducts: uniqueItems.size,
+      totalStock,
+      totalValue: totalStock * 150,
+      lowStockItems,
+      outOfStockItems,
+      activeWarehouses: warehouses.length,
+      categoryBreakdown,
+      warehouseBreakdown,
+      stockHistory
+    });
   }
+
+  async function exportToPDF() {
+    try {
+      const doc = new jsPDF();
+      
+      doc.setFontSize(18);
+      doc.text('Reporte de Inventario', 14, 20);
+      doc.setFontSize(11);
+      doc.text(`Período: Últimos ${period} días`, 14, 28);
+      doc.text(`Generado: ${new Date().toLocaleDateString('es-NI')}`, 14, 34);
+
+      doc.setFontSize(14);
+      doc.text('Resumen Ejecutivo', 14, 45);
+      doc.setFontSize(10);
+      doc.text(`Total Productos: ${stats?.totalProducts || 0}`, 14, 52);
+      doc.text(`Total Stock: ${stats?.totalStock.toLocaleString('es-NI') || 0} unidades`, 14, 58);
+      doc.text(`Valor Estimado: $${stats?.totalValue.toLocaleString('es-NI') || 0}`, 14, 64);
+      doc.text(`Items Stock Bajo: ${stats?.lowStockItems || 0}`, 14, 70);
+      doc.text(`Items Sin Stock: ${stats?.outOfStockItems || 0}`, 14, 76);
+      doc.text(`Bodegas Activas: ${stats?.activeWarehouses || 0}`, 14, 82);
+
+      const tableData = stockSnapshots.slice(0, 50).map(s => [
+        s.items?.sku || 'N/A',
+        s.items?.name || 'N/A',
+        s.items?.category || 'Sin categoría',
+        s.warehouses?.code || 'N/A',
+        s.qty.toString(),
+        new Date(s.synced_at).toLocaleDateString('es-NI')
+      ]);
+
+      autoTable(doc, {
+        startY: 90,
+        head: [['SKU', 'Producto', 'Categoría', 'Bodega', 'Stock', 'Actualizado']],
+        body: tableData,
+        theme: 'grid',
+        styles: { fontSize: 8 },
+        headStyles: { fillColor: [59, 130, 246] }
+      });
+
+      doc.save(`reporte_inventario_${new Date().toISOString().split('T')[0]}.pdf`);
+    } catch (err: any) {
+      alert(`Error al exportar PDF: ${err.message}`);
+      console.error('PDF export error:', err);
+    }
+  }
+
+  async function exportToExcel() {
+    try {
+      const csvRows = [
+        ['SKU', 'Producto', 'Categoría', 'Color', 'Estado', 'Bodega', 'Stock', 'Actualizado'].join(','),
+      ];
+
+      stockSnapshots.forEach((snapshot) => {
+        csvRows.push([
+          snapshot.items?.sku || '',
+          `"${snapshot.items?.name || ''}"`,
+          `"${snapshot.items?.category || 'Sin categoría'}"`,
+          `"${snapshot.items?.color || 'N/A'}"`,
+          `"${snapshot.items?.state || 'N/A'}"`,
+          `"${snapshot.warehouses?.code || 'N/A'}"`,
+          snapshot.qty.toString(),
+          new Date(snapshot.synced_at).toLocaleDateString('es-NI'),
+        ].join(','));
+      });
+
+      const csv = csvRows.join('\n');
+      const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `reporte_inventario_${new Date().toISOString().split('T')[0]}.csv`;
+      document.body.appendChild(a);
+      a.click();
+      window.URL.revokeObjectURL(url);
+      document.body.removeChild(a);
+    } catch (err: any) {
+      alert(`Error al exportar Excel: ${err.message}`);
+      console.error('Excel export error:', err);
+    }
+  }
+
+  const totalItems = items.length;
+  const itemsByCategory = items.reduce((acc, item) => {
+    const cat = item.category || 'Sin categoría';
+    acc[cat] = (acc[cat] || 0) + 1;
+    return acc;
+  }, {} as Record<string, number>);
+
+  const itemsByState = items.reduce((acc, item) => {
+    const state = item.state || 'Sin estado';
+    acc[state] = (acc[state] || 0) + 1;
+    return acc;
+  }, {} as Record<string, number>);
+
+  const recentItems = items.slice(0, 10);
+
+  const topProducts = stockSnapshots
+    .reduce((acc, s) => {
+      const existing = acc.find(p => p.item_id === s.item_id);
+      if (existing) {
+        existing.totalQty += s.qty;
+      } else {
+        acc.push({ item_id: s.item_id, item: s.items, totalQty: s.qty });
+      }
+      return acc;
+    }, [] as Array<{ item_id: string; item?: Item; totalQty: number }>)
+    .sort((a, b) => b.totalQty - a.totalQty)
+    .slice(0, 10);
 
   return (
     <div style={{ display: 'grid', gap: 14 }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
         <div className="h-title">Reportes de Inventario</div>
         <div style={{ display: 'flex', gap: 8 }}>
-          <Button variant="secondary" size="sm" onClick={() => exportReport('excel')}>
+          <Button variant="secondary" size="sm" onClick={exportToExcel}>
             <Download size={16} style={{ marginRight: 6 }} />
             Excel
           </Button>
-          <Button variant="secondary" size="sm" onClick={() => exportReport('pdf')}>
-            <Download size={16} style={{ marginRight: 6 }} />
+          <Button variant="secondary" size="sm" onClick={exportToPDF}>
+            <FileText size={16} style={{ marginRight: 6 }} />
             PDF
           </Button>
         </div>
@@ -79,19 +298,19 @@ export default function ReportsPage() {
         </div>
       </Card>
 
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 14 }}>
+      {error && (
+        <Card>
+          <div style={{ padding: 16, color: 'var(--danger)' }}>
+            <strong>Error:</strong> {error}
+          </div>
+        </Card>
+      )}
+
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: 14 }}>
         <Card>
           <div style={{ padding: 16 }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 12 }}>
-              <div style={{ 
-                width: 40, 
-                height: 40, 
-                borderRadius: 8, 
-                background: 'var(--success)15', 
-                display: 'flex', 
-                alignItems: 'center', 
-                justifyContent: 'center' 
-              }}>
+              <div style={{ width: 40, height: 40, borderRadius: 8, background: 'var(--success)15', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                 <TrendingUp size={20} color="var(--success)" />
               </div>
               <div style={{ fontSize: 13, color: 'var(--muted)' }}>Total Productos</div>
@@ -100,12 +319,8 @@ export default function ReportsPage() {
               <div style={{ height: 32, background: 'var(--panel)', borderRadius: 4, animation: 'pulse 1.5s infinite' }} />
             ) : (
               <>
-                <div style={{ fontSize: 24, fontWeight: 600 }}>
-                  {stats?.totalProducts.toLocaleString('es-NI')}
-                </div>
-                <div style={{ fontSize: 12, color: 'var(--muted)', marginTop: 4 }}>
-                  Productos en inventario
-                </div>
+                <div style={{ fontSize: 28, fontWeight: 600 }}>{stats?.totalProducts.toLocaleString('es-NI') || 0}</div>
+                <div style={{ fontSize: 12, color: 'var(--muted)', marginTop: 4 }}>Productos en inventario</div>
               </>
             )}
           </div>
@@ -114,27 +329,55 @@ export default function ReportsPage() {
         <Card>
           <div style={{ padding: 16 }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 12 }}>
-              <div style={{ 
-                width: 40, 
-                height: 40, 
-                borderRadius: 8, 
-                background: 'var(--warning)15', 
-                display: 'flex', 
-                alignItems: 'center', 
-                justifyContent: 'center' 
-              }}>
+              <div style={{ width: 40, height: 40, borderRadius: 8, background: '#3B82F615', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                <Package size={20} color="#3B82F6" />
+              </div>
+              <div style={{ fontSize: 13, color: 'var(--muted)' }}>Total Stock</div>
+            </div>
+            {loading ? (
+              <div style={{ height: 32, background: 'var(--panel)', borderRadius: 4, animation: 'pulse 1.5s infinite' }} />
+            ) : (
+              <>
+                <div style={{ fontSize: 28, fontWeight: 600 }}>{stats?.totalStock.toLocaleString('es-NI') || 0}</div>
+                <div style={{ fontSize: 12, color: 'var(--muted)', marginTop: 4 }}>Unidades totales</div>
+              </>
+            )}
+          </div>
+        </Card>
+
+        <Card>
+          <div style={{ padding: 16 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 12 }}>
+              <div style={{ width: 40, height: 40, borderRadius: 8, background: 'var(--success)15', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                <DollarSign size={20} color="var(--success)" />
+              </div>
+              <div style={{ fontSize: 13, color: 'var(--muted)' }}>Valor Estimado</div>
+            </div>
+            {loading ? (
+              <div style={{ height: 32, background: 'var(--panel)', borderRadius: 4, animation: 'pulse 1.5s infinite' }} />
+            ) : (
+              <>
+                <div style={{ fontSize: 24, fontWeight: 600 }}>${stats?.totalValue.toLocaleString('es-NI') || 0}</div>
+                <div style={{ fontSize: 12, color: 'var(--muted)', marginTop: 4 }}>Inventario total</div>
+              </>
+            )}
+          </div>
+        </Card>
+
+        <Card>
+          <div style={{ padding: 16 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 12 }}>
+              <div style={{ width: 40, height: 40, borderRadius: 8, background: 'var(--warning)15', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                 <TrendingDown size={20} color="var(--warning)" />
               </div>
-              <div style={{ fontSize: 14, color: 'var(--muted)' }}>Items con Stock Bajo</div>
+              <div style={{ fontSize: 13, color: 'var(--muted)' }}>Stock Bajo</div>
             </div>
             {loading ? (
               <div style={{ height: 32, background: 'var(--panel)', borderRadius: 4, animation: 'pulse 1.5s infinite' }} />
             ) : (
               <>
                 <div style={{ fontSize: 28, fontWeight: 600 }}>{stats?.lowStockItems || 0}</div>
-                <div style={{ fontSize: 12, color: 'var(--warning)', marginTop: 4 }}>
-                  Stock bajo (menos de 10)
-                </div>
+                <div style={{ fontSize: 12, color: 'var(--warning)', marginTop: 4 }}>Menos de 10 unidades</div>
               </>
             )}
           </div>
@@ -143,484 +386,134 @@ export default function ReportsPage() {
         <Card>
           <div style={{ padding: 16 }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 12 }}>
-              <div style={{ 
-                width: 40, 
-                height: 40, 
-                borderRadius: 8, 
-                background: 'var(--brand-primary)15', 
-                display: 'flex', 
-                alignItems: 'center', 
-                justifyContent: 'center' 
-              }}>
+              <div style={{ width: 40, height: 40, borderRadius: 8, background: 'var(--danger)15', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                <AlertTriangle size={20} color="var(--danger)" />
+              </div>
+              <div style={{ fontSize: 13, color: 'var(--muted)' }}>Sin Stock</div>
+            </div>
+            {loading ? (
+              <div style={{ height: 32, background: 'var(--panel)', borderRadius: 4, animation: 'pulse 1.5s infinite' }} />
+            ) : (
+              <>
+                <div style={{ fontSize: 28, fontWeight: 600 }}>{stats?.outOfStockItems || 0}</div>
+                <div style={{ fontSize: 12, color: 'var(--danger)', marginTop: 4 }}>Productos agotados</div>
+              </>
+            )}
+          </div>
+        </Card>
+
+        <Card>
+          <div style={{ padding: 16 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 12 }}>
+              <div style={{ width: 40, height: 40, borderRadius: 8, background: 'var(--brand-primary)15', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                 <Warehouse size={20} color="var(--brand-primary)" />
               </div>
-              <div style={{ fontSize: 14, color: 'var(--muted)' }}>Bodega Más Activa</div>
+              <div style={{ fontSize: 13, color: 'var(--muted)' }}>Bodegas Activas</div>
             </div>
             {loading ? (
               <div style={{ height: 32, background: 'var(--panel)', borderRadius: 4, animation: 'pulse 1.5s infinite' }} />
             ) : (
               <>
-                <div style={{ fontSize: 28, fontWeight: 600 }}>
-                  {stats?.warehouseData?.[0]?.code || 'N/A'}
-                </div>
-                <div style={{ fontSize: 12, color: 'var(--muted)', marginTop: 4 }}>
-                  {stats?.warehouseData?.[0]?.totalStock || 0} unidades
-                </div>
-              </>
-            )}
-          </div>
-        </Card>
-
-        <Card>
-          <div style={{ padding: 16 }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 12 }}>
-              <div style={{ 
-                width: 40, 
-                height: 40, 
-                borderRadius: 8, 
-                background: '#3B82F615', 
-                display: 'flex', 
-                alignItems: 'center', 
-                justifyContent: 'center' 
-              }}>
-                <Package size={20} color="#3B82F6" />
-              </div>
-              <div style={{ fontSize: 13, color: 'var(--muted)' }}>Movimientos del Período</div>
-            </div>
-            {loading ? (
-              <div style={{ height: 32, background: 'var(--panel)', borderRadius: 4, animation: 'pulse 1.5s infinite' }} />
-            ) : (
-              <>
-                <div style={{ fontSize: 24, fontWeight: 600 }}>{stats?.totalStock.toLocaleString('es-NI') || 0}</div>
-                <div style={{ fontSize: 12, color: 'var(--muted)', marginTop: 4 }}>
-                  Total unidades en stock
-                </div>
-              </>
-            )}
-          </div>
-        </Card>
-
-        <Card>
-          <div style={{ padding: 16 }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 12 }}>
-              <div style={{ 
-                width: 40, 
-                height: 40, 
-                borderRadius: 8, 
-                background: '#8B5CF615', 
-                display: 'flex', 
-                alignItems: 'center', 
-                justifyContent: 'center' 
-              }}>
-                <Package size={20} color="#8B5CF6" />
-              </div>
-              <div style={{ fontSize: 13, color: 'var(--muted)' }}>Productos Sin Stock</div>
-            </div>
-            {loading ? (
-              <div style={{ height: 32, background: 'var(--panel)', borderRadius: 4, animation: 'pulse 1.5s infinite' }} />
-            ) : (
-              <>
-                <div style={{ fontSize: 24, fontWeight: 600 }}>{stats?.outOfStockItems || 0}</div>
-                <div style={{ fontSize: 12, color: 'var(--danger)', marginTop: 4 }}>
-                  Sin stock
-                </div>
-              </>
-            )}
-          </div>
-        </Card>
-
-        <Card>
-          <div style={{ padding: 16 }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 12 }}>
-              <div style={{ 
-                width: 40, 
-                height: 40, 
-                borderRadius: 8, 
-                background: '#10b98115', 
-                display: 'flex', 
-                alignItems: 'center', 
-                justifyContent: 'center' 
-              }}>
-                <TrendingUp size={20} color="#10b981" />
-              </div>
-              <div style={{ fontSize: 13, color: 'var(--muted)' }}>Rotación de Inventario</div>
-            </div>
-            {loading ? (
-              <div style={{ height: 32, background: 'var(--panel)', borderRadius: 4, animation: 'pulse 1.5s infinite' }} />
-            ) : (
-              <>
-                <div style={{ fontSize: 24, fontWeight: 600 }}>4.2x</div>
-                <div style={{ fontSize: 12, color: '#10b981', marginTop: 4 }}>
-                  Promedio mensual
-                </div>
+                <div style={{ fontSize: 28, fontWeight: 600 }}>{stats?.activeWarehouses || 0}</div>
+                <div style={{ fontSize: 12, color: 'var(--muted)', marginTop: 4 }}>Ubicaciones operativas</div>
               </>
             )}
           </div>
         </Card>
       </div>
 
-      {/* Gráficos Visuales */}
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 }}>
-        <ChartCard title="Tendencia de Inventario (Últimos 7 días)">
-          <LineChart
-            data={[
-              { label: 'Lun', value: 2650 },
-              { label: 'Mar', value: 2720 },
-              { label: 'Mié', value: 2680 },
-              { label: 'Jue', value: 2790 },
-              { label: 'Vie', value: 2847 },
-              { label: 'Sáb', value: 2820 },
-              { label: 'Dom', value: 2847 },
-            ]}
-            color="var(--brand-primary)"
-          />
+        <ChartCard title="Tendencia de Stock (Últimos 7 días)">
+          {loading ? (
+            <div style={{ height: 200, background: 'var(--panel)', borderRadius: 4, animation: 'pulse 1.5s infinite' }} />
+          ) : (
+            <LineChart
+              data={stats?.stockHistory.map((h, i) => ({
+                label: ['Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb', 'Dom'][i] || h.date.slice(-2),
+                value: h.stock
+              })) || []}
+              color="var(--brand-primary)"
+            />
+          )}
         </ChartCard>
 
         <ChartCard title="Distribución por Categoría">
-          <DonutChart
-            data={[
-              { label: 'Electrónica', value: 847, color: '#3b82f6' },
-              { label: 'Accesorios', value: 623, color: '#22c55e' },
-              { label: 'Periféricos', value: 512, color: '#eab308' },
-              { label: 'Redes', value: 445, color: '#8b5cf6' },
-              { label: 'Otros', value: 420, color: '#94a3b8' },
-            ]}
-            size={180}
-          />
+          {loading ? (
+            <div style={{ height: 200, background: 'var(--panel)', borderRadius: 4, animation: 'pulse 1.5s infinite' }} />
+          ) : (
+            <DonutChart
+              data={Object.entries(stats?.categoryBreakdown || {}).map(([label, value], idx) => ({
+                label,
+                value,
+                color: ['#3B82F6', '#8B5CF6', '#10B981', '#F59E0B', '#EF4444', '#EC4899', '#14B8A6'][idx % 7]
+              }))}
+              size={180}
+            />
+          )}
         </ChartCard>
       </div>
 
-      <ChartCard title="Comparativa de Ventas por Bodega">
-        <BarChart
-          data={[
-            { label: 'X1', value: 847, color: '#3b82f6' },
-            { label: 'X4', value: 623, color: '#22c55e' },
-            { label: 'X5', value: 512, color: '#eab308' },
-            { label: 'X7', value: 445, color: '#f59e0b' },
-            { label: 'X9', value: 420, color: '#8b5cf6' },
-          ]}
-          height={280}
-          showValues={true}
-        />
+      <ChartCard title="Comparativa de Stock por Bodega">
+        {loading ? (
+          <div style={{ height: 280, background: 'var(--panel)', borderRadius: 4, animation: 'pulse 1.5s infinite' }} />
+        ) : (
+          <BarChart
+            data={Object.entries(stats?.warehouseBreakdown || {}).map(([label, data]) => ({
+              label,
+              value: data.stock
+            }))}
+            height={280}
+            showValues={true}
+          />
+        )}
       </ChartCard>
 
       <Card>
         <div style={{ padding: 16 }}>
           <div className="h-subtitle" style={{ marginBottom: 16 }}>
-            Análisis por Categoría
-          </div>
-          <div style={{ display: 'grid', gap: 12 }}>
-            {[
-              { category: 'Electrónica', items: 45, value: 45230.50, percentage: 36 },
-              { category: 'Accesorios', items: 89, value: 32150.25, percentage: 26 },
-              { category: 'Periféricos', items: 67, value: 28340.75, percentage: 23 },
-              { category: 'Redes', items: 34, value: 19709.00, percentage: 15 },
-            ].map((cat) => (
-              <div key={cat.category} style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-                <div style={{ flex: 1 }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 6 }}>
-                    <span style={{ fontSize: 14, fontWeight: 500 }}>{cat.category}</span>
-                    <span style={{ fontSize: 14, color: 'var(--muted)' }}>
-                      {cat.items} items • ${cat.value.toLocaleString('es-NI', { minimumFractionDigits: 2 })}
-                    </span>
-                  </div>
-                  <div style={{ 
-                    height: 8, 
-                    background: 'var(--panel)', 
-                    borderRadius: 4, 
-                    overflow: 'hidden' 
-                  }}>
-                    <div style={{ 
-                      height: '100%', 
-                      width: `${cat.percentage}%`, 
-                      background: 'var(--brand-primary)',
-                      transition: 'width 0.3s ease'
-                    }} />
-                  </div>
-                </div>
-                <div style={{ fontSize: 16, fontWeight: 600, minWidth: 50, textAlign: 'right' }}>
-                  {cat.percentage}%
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
-      </Card>
-
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 }}>
-        <Card>
-          <div style={{ padding: 16 }}>
-            <div className="h-subtitle" style={{ marginBottom: 16 }}>
-              Comparativa de Bodegas
-            </div>
-            <div style={{ display: 'grid', gap: 12 }}>
-              {[
-                { warehouse: 'X1', items: 847, value: 42150.50, percentage: 34 },
-                { warehouse: 'X4', items: 623, value: 31240.25, percentage: 25 },
-                { warehouse: 'X5', items: 512, value: 25630.75, percentage: 20 },
-                { warehouse: 'X7', items: 445, value: 18409.00, percentage: 15 },
-                { warehouse: 'X9', items: 420, value: 8000.00, percentage: 6 },
-              ].map((wh) => (
-                <div key={wh.warehouse} style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-                  <div style={{ 
-                    minWidth: 40, 
-                    height: 40, 
-                    borderRadius: 8, 
-                    background: 'var(--brand-primary)15',
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    fontWeight: 600,
-                    fontSize: 14
-                  }}>
-                    {wh.warehouse}
-                  </div>
-                  <div style={{ flex: 1 }}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 6 }}>
-                      <span style={{ fontSize: 13, fontWeight: 500 }}>{wh.items} productos</span>
-                      <span style={{ fontSize: 13, color: 'var(--muted)' }}>
-                        ${wh.value.toLocaleString('es-NI', { minimumFractionDigits: 2 })}
-                      </span>
-                    </div>
-                    <div style={{ 
-                      height: 6, 
-                      background: 'var(--panel)', 
-                      borderRadius: 3, 
-                      overflow: 'hidden' 
-                    }}>
-                      <div style={{ 
-                        height: '100%', 
-                        width: `${wh.percentage}%`, 
-                        background: 'var(--brand-primary)',
-                        transition: 'width 0.3s ease'
-                      }} />
-                    </div>
-                  </div>
-                  <div style={{ fontSize: 14, fontWeight: 600, minWidth: 45, textAlign: 'right' }}>
-                    {wh.percentage}%
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
-        </Card>
-
-        <Card>
-          <div style={{ padding: 16 }}>
-            <div className="h-subtitle" style={{ marginBottom: 16 }}>
-              Alertas de Stock
-            </div>
-            <div style={{ display: 'grid', gap: 10 }}>
-              {[
-                { product: 'Laptop Dell Inspiron', stock: 3, status: 'critical', warehouse: 'X1' },
-                { product: 'Monitor LG 24"', stock: 7, status: 'warning', warehouse: 'X4' },
-                { product: 'Teclado Logitech', stock: 0, status: 'out', warehouse: 'X5' },
-                { product: 'Mouse Inalámbrico', stock: 5, status: 'warning', warehouse: 'X1' },
-                { product: 'Webcam HD', stock: 2, status: 'critical', warehouse: 'X7' },
-              ].map((alert, idx) => (
-                <div 
-                  key={idx} 
-                  style={{ 
-                    padding: 10, 
-                    background: 'var(--panel)', 
-                    borderRadius: 6,
-                    borderLeft: `3px solid ${
-                      alert.status === 'out' ? '#ef4444' : 
-                      alert.status === 'critical' ? '#f59e0b' : 
-                      '#eab308'
-                    }`
-                  }}
-                >
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'start', marginBottom: 4 }}>
-                    <div style={{ fontSize: 13, fontWeight: 500 }}>{alert.product}</div>
-                    <div style={{ 
-                      fontSize: 11, 
-                      fontWeight: 600,
-                      padding: '2px 6px',
-                      borderRadius: 4,
-                      background: alert.status === 'out' ? '#ef444420' : '#f59e0b20',
-                      color: alert.status === 'out' ? '#ef4444' : '#f59e0b'
-                    }}>
-                      {alert.status === 'out' ? 'SIN STOCK' : `${alert.stock} unidades`}
-                    </div>
-                  </div>
-                  <div style={{ fontSize: 11, color: 'var(--muted)' }}>
-                    Bodega {alert.warehouse}
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
-        </Card>
-      </div>
-
-      {/* Análisis Predictivo */}
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 }}>
-        <Card>
-          <div style={{ padding: 16 }}>
-            <div className="h-subtitle" style={{ marginBottom: 16 }}>
-              Proyección de Reabastecimiento
-            </div>
-            <div style={{ display: 'grid', gap: 12 }}>
-              {[
-                { product: 'Laptop Dell Inspiron', days: 3, urgency: 'high', units: 15 },
-                { product: 'Monitor LG 24"', days: 7, urgency: 'medium', units: 20 },
-                { product: 'Teclado Logitech', days: 14, urgency: 'low', units: 30 },
-                { product: 'Mouse Inalámbrico', days: 5, urgency: 'high', units: 25 },
-              ].map((item, idx) => (
-                <div
-                  key={idx}
-                  style={{
-                    padding: 12,
-                    background: 'var(--panel)',
-                    borderRadius: 6,
-                    display: 'flex',
-                    justifyContent: 'space-between',
-                    alignItems: 'center',
-                  }}
-                >
-                  <div style={{ flex: 1 }}>
-                    <div style={{ fontSize: 13, fontWeight: 500, marginBottom: 4 }}>
-                      {item.product}
-                    </div>
-                    <div style={{ fontSize: 11, color: 'var(--muted)' }}>
-                      Reabastecer en {item.days} días • {item.units} unidades
-                    </div>
-                  </div>
-                  <div
-                    style={{
-                      padding: '4px 10px',
-                      borderRadius: 4,
-                      fontSize: 11,
-                      fontWeight: 600,
-                      background:
-                        item.urgency === 'high'
-                          ? '#ef444420'
-                          : item.urgency === 'medium'
-                          ? '#eab30820'
-                          : '#22c55e20',
-                      color:
-                        item.urgency === 'high'
-                          ? '#ef4444'
-                          : item.urgency === 'medium'
-                          ? '#eab308'
-                          : '#22c55e',
-                    }}
-                  >
-                    {item.urgency === 'high' ? 'URGENTE' : item.urgency === 'medium' ? 'PRONTO' : 'NORMAL'}
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
-        </Card>
-
-        <Card>
-          <div style={{ padding: 16 }}>
-            <div className="h-subtitle" style={{ marginBottom: 16 }}>
-              Análisis de Rentabilidad
-            </div>
-            <div style={{ display: 'grid', gap: 12 }}>
-              <div
-                style={{
-                  padding: 16,
-                  background: 'var(--success)10',
-                  borderRadius: 8,
-                  border: '1px solid var(--success)',
-                }}
-              >
-                <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 8 }}>
-                  <DollarSign size={20} color="var(--success)" />
-                  <div style={{ fontSize: 13, fontWeight: 600 }}>Margen de Ganancia Promedio</div>
-                </div>
-                <div style={{ fontSize: 28, fontWeight: 600, color: 'var(--success)' }}>32.5%</div>
-                <div style={{ fontSize: 12, color: 'var(--muted)', marginTop: 4 }}>
-                  +2.3% vs mes anterior
-                </div>
-              </div>
-
-              <div
-                style={{
-                  padding: 16,
-                  background: 'var(--brand-primary)10',
-                  borderRadius: 8,
-                  border: '1px solid var(--brand-primary)',
-                }}
-              >
-                <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 8 }}>
-                  <TrendingUp size={20} color="var(--brand-primary)" />
-                  <div style={{ fontSize: 13, fontWeight: 600 }}>Proyección de Ventas (30 días)</div>
-                </div>
-                <div style={{ fontSize: 28, fontWeight: 600, color: 'var(--brand-primary)' }}>
-                  $156,430
-                </div>
-                <div style={{ fontSize: 12, color: 'var(--muted)', marginTop: 4 }}>
-                  Basado en tendencia actual
-                </div>
-              </div>
-
-              <div
-                style={{
-                  padding: 16,
-                  background: 'var(--warning)10',
-                  borderRadius: 8,
-                  border: '1px solid var(--warning)',
-                }}
-              >
-                <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 8 }}>
-                  <AlertTriangle size={20} color="var(--warning)" />
-                  <div style={{ fontSize: 13, fontWeight: 600 }}>Productos de Baja Rotación</div>
-                </div>
-                <div style={{ fontSize: 28, fontWeight: 600, color: 'var(--warning)' }}>18</div>
-                <div style={{ fontSize: 12, color: 'var(--muted)', marginTop: 4 }}>
-                  Sin movimiento en 60+ días
-                </div>
-              </div>
-            </div>
-          </div>
-        </Card>
-      </div>
-
-      <Card>
-        <div style={{ padding: 16 }}>
-          <div className="h-subtitle" style={{ marginBottom: 16 }}>
-            Top 10 Productos Más Vendidos
+            Top 10 Productos con Mayor Stock
           </div>
           <div style={{ overflowX: 'auto' }}>
             <table style={{ width: '100%', borderCollapse: 'collapse' }}>
               <thead>
                 <tr style={{ borderBottom: '1px solid var(--border)' }}>
                   <th style={{ padding: '12px 8px', textAlign: 'left', fontSize: 12, fontWeight: 600, color: 'var(--muted)' }}>#</th>
+                  <th style={{ padding: '12px 8px', textAlign: 'left', fontSize: 12, fontWeight: 600, color: 'var(--muted)' }}>SKU</th>
                   <th style={{ padding: '12px 8px', textAlign: 'left', fontSize: 12, fontWeight: 600, color: 'var(--muted)' }}>Producto</th>
-                  <th style={{ padding: '12px 8px', textAlign: 'right', fontSize: 12, fontWeight: 600, color: 'var(--muted)' }}>Unidades</th>
-                  <th style={{ padding: '12px 8px', textAlign: 'right', fontSize: 12, fontWeight: 600, color: 'var(--muted)' }}>Valor Total</th>
-                  <th style={{ padding: '12px 8px', textAlign: 'right', fontSize: 12, fontWeight: 600, color: 'var(--muted)' }}>Tendencia</th>
+                  <th style={{ padding: '12px 8px', textAlign: 'left', fontSize: 12, fontWeight: 600, color: 'var(--muted)' }}>Categoría</th>
+                  <th style={{ padding: '12px 8px', textAlign: 'right', fontSize: 12, fontWeight: 600, color: 'var(--muted)' }}>Stock Total</th>
                 </tr>
               </thead>
               <tbody>
-                {[
-                  { rank: 1, name: 'Laptop Dell Inspiron 15', units: 45, value: 22500, trend: 'up' },
-                  { rank: 2, name: 'Monitor LG 24"', units: 38, value: 11400, trend: 'up' },
-                  { rank: 3, name: 'Teclado Logitech', units: 67, value: 6700, trend: 'down' },
-                  { rank: 4, name: 'Mouse Inalámbrico', units: 89, value: 4450, trend: 'up' },
-                  { rank: 5, name: 'Impresora HP LaserJet', units: 12, value: 6000, trend: 'up' },
-                ].map((product) => (
-                  <tr key={product.rank} style={{ borderBottom: '1px solid var(--border)' }}>
-                    <td style={{ padding: '12px 8px', fontSize: 14 }}>{product.rank}</td>
-                    <td style={{ padding: '12px 8px', fontSize: 14 }}>{product.name}</td>
-                    <td style={{ padding: '12px 8px', fontSize: 14, textAlign: 'right' }}>{product.units}</td>
-                    <td style={{ padding: '12px 8px', fontSize: 14, textAlign: 'right' }}>
-                      ${product.value.toLocaleString('es-NI')}
-                    </td>
-                    <td style={{ padding: '12px 8px', textAlign: 'right' }}>
-                      {product.trend === 'up' ? (
-                        <TrendingUp size={16} color="var(--success)" />
-                      ) : (
-                        <TrendingDown size={16} color="var(--danger)" />
-                      )}
+                {loading ? (
+                  <tr>
+                    <td colSpan={5} style={{ padding: 20, textAlign: 'center' }}>
+                      <div style={{ height: 100, background: 'var(--panel)', borderRadius: 4, animation: 'pulse 1.5s infinite' }} />
                     </td>
                   </tr>
-                ))}
+                ) : topProducts.length === 0 ? (
+                  <tr>
+                    <td colSpan={5} style={{ padding: 20, textAlign: 'center', color: 'var(--muted)' }}>
+                      No hay datos disponibles
+                    </td>
+                  </tr>
+                ) : (
+                  topProducts.map((product, index) => (
+                    <tr key={product.item_id} style={{ borderBottom: '1px solid var(--border)' }}>
+                      <td style={{ padding: '12px 8px', fontSize: 13, fontWeight: 600 }}>{index + 1}</td>
+                      <td style={{ padding: '12px 8px', fontSize: 13, fontFamily: 'monospace' }}>{product.item?.sku || 'N/A'}</td>
+                      <td style={{ padding: '12px 8px', fontSize: 13, fontWeight: 500 }}>{product.item?.name || 'N/A'}</td>
+                      <td style={{ padding: '12px 8px', fontSize: 13 }}>
+                        <span style={{ padding: '2px 8px', borderRadius: 4, background: 'var(--panel)', fontSize: 11 }}>
+                          {product.item?.category || 'Sin categoría'}
+                        </span>
+                      </td>
+                      <td style={{ padding: '12px 8px', fontSize: 14, textAlign: 'right', fontWeight: 600, color: 'var(--brand-primary)' }}>
+                        {product.totalQty.toLocaleString('es-NI')}
+                      </td>
+                    </tr>
+                  ))
+                )}
               </tbody>
             </table>
           </div>

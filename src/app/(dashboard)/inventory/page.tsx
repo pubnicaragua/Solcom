@@ -102,8 +102,11 @@ export default function InventoryPage() {
   }
 
   function handleExport(format: 'csv' | 'excel' | 'pdf') {
-    // Preparado para integración con Zoho Books API
-    // Los datos se exportarán directamente desde Zoho Books cuando esté integrado
+    if (format === 'pdf') {
+      alert('La exportación a PDF requiere una librería adicional. Por favor usa Excel/CSV por ahora.');
+      return;
+    }
+    
     const params = new URLSearchParams(filters);
     params.append('format', format);
     window.open(`/api/inventory/export?${params}`, '_blank');
@@ -133,7 +136,7 @@ export default function InventoryPage() {
             <FileSpreadsheet size={16} />
             Excel
           </Button>
-          <Button variant="secondary" size="sm" onClick={() => handleExport('pdf')}>
+          <Button variant="secondary" size="sm" onClick={() => alert('La exportación a PDF requiere una librería adicional. Usa Excel/CSV por ahora.')}>
             <FileText size={16} />
             PDF
           </Button>
@@ -179,9 +182,12 @@ export default function InventoryPage() {
               background: 'linear-gradient(135deg, #dc2626 0%, #991b1b 100%)',
               color: 'white',
               border: 'none',
+              borderRadius: '8px',
               fontWeight: 600,
               boxShadow: '0 2px 8px rgba(220, 38, 38, 0.3)',
-              transition: 'all 0.3s ease'
+              transition: 'all 0.3s ease',
+              position: 'relative',
+              overflow: 'hidden'
             }}
             onMouseEnter={(e) => {
               e.currentTarget.style.transform = 'translateY(-2px)';

@@ -15,9 +15,12 @@ export async function GET() {
       supabase.from('stock_snapshots').select('qty, synced_at').order('synced_at', { ascending: false }).limit(1),
     ]);
 
-    const totalStock = (snapshotsResult.data || []).reduce((sum: number, row: any) => sum + (row.qty || 0), 0);
+    const { data: allSnapshots } = await supabase
+      .from('stock_snapshots')
+      .select('qty, item_id');
 
-    const totalProducts = new Set((uniqueProductsResult.data || []).map((s: any) => s.item_id)).size;
+    const totalStock = (allSnapshots || []).reduce((sum: number, row: any) => sum + (row.qty || 0), 0);
+    const totalProducts = new Set((allSnapshots || []).map((s: any) => s.item_id)).size;
 
     const lastSync = (snapshotsResult.data as any)?.[0]?.synced_at
       ? format(new Date((snapshotsResult.data as any)[0].synced_at), "dd MMM yyyy, HH:mm", { locale: es })
