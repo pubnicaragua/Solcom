@@ -162,6 +162,8 @@ export async function POST(request: Request) {
             if (snapshotPayload.length > 0) {
                 const itemIds = snapshotPayload.map(s => s.item_id);
 
+                console.log(`[SYNC] Creating ${snapshotPayload.length} stock snapshots for warehouse ${warehouseId}`);
+
                 await supabase
                     .from('stock_snapshots')
                     .delete()
@@ -172,12 +174,17 @@ export async function POST(request: Request) {
                     .from('stock_snapshots')
                     .insert(snapshotPayload);
 
-                if (!snapError) {
+                if (snapError) {
+                    console.error(`[SYNC] Error creating snapshots:`, snapError);
+                } else {
                     itemsProcessed += snapshotPayload.length;
+                    console.log(`[SYNC] Successfully created ${snapshotPayload.length} snapshots`);
                 }
+            } else {
+                console.log(`[SYNC] No snapshots to create for this batch`);
             }
 
-            console.log(`[SYNC] Batch ${i}-${i + batch.length}: ${toInsert.length} new, ${toUpdate.length} existing`);
+            console.log(`[SYNC] Batch ${i}-${i + batch.length}: ${toInsert.length} new, ${toUpdate.length} existing, ${snapshotPayload.length} snapshots`);
         }
 
         // Cleanup: Delete items that are no longer in Zoho Books.

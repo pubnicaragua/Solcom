@@ -108,8 +108,17 @@ export async function GET(request: Request) {
       .order(orderConfig.column, orderConfig.options)
       .range(offset, offset + limit - 1);
 
+    console.log('Inventory query result:', { 
+      dataLength: data?.length, 
+      count, 
+      error,
+      filters: { search, warehouse, state, category, brand, stockLevel }
+    });
 
-    if (error) throw error;
+    if (error) {
+      console.error('Inventory query error:', error);
+      throw error;
+    }
 
     const formattedData = (data || []).map((row: any) => ({
       id: row.id,

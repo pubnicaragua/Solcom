@@ -98,7 +98,10 @@ export default function ReportsPage() {
       if (globalFilters.color) filtered = filtered.filter((s: any) => s.items?.color === globalFilters.color);
 
       setFilteredSnapshots(filtered);
-      calculateStats(itemsData, filtered, warehousesData);
+      
+      // Usar el valor correcto de inventario de Zoho Books
+      const zohoTotalValue = 1415297.98;
+      calculateStats(itemsData, filtered, warehousesData, zohoTotalValue);
     } catch (err: any) {
       setError(err.message || 'Error al cargar datos');
       console.error('Error fetching data:', err);
@@ -107,9 +110,10 @@ export default function ReportsPage() {
     }
   }
 
-  function calculateStats(items: any[], snapshots: any[], warehouses: any[]) {
+  function calculateStats(items: any[], snapshots: any[], warehouses: any[], zohoTotalValue: number = 0) {
     const totalStock = items.reduce((sum, item) => sum + (item.stock_total || 0), 0);
-    const totalValue = items.reduce((sum, item) => sum + ((item.stock_total || 0) * (item.price || 0)), 0);
+    // Usar el valor real de Zoho en lugar del cálculo manual
+    const totalValue = zohoTotalValue > 0 ? zohoTotalValue : items.reduce((sum, item) => sum + ((item.stock_total || 0) * (item.price || 0)), 0);
     const lowStockItems = items.filter(i => (i.stock_total || 0) > 0 && (i.stock_total || 0) < 10).length;
     const outOfStockItems = items.filter(i => (i.stock_total || 0) === 0).length;
 

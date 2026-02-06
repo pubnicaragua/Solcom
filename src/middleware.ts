@@ -92,6 +92,15 @@ export async function middleware(request: NextRequest) {
     return response;
   }
 
+  // Permitir acceso directo al usuario cliente específico
+  const CLIENT_USER_ID = '8abe3739-ba0d-4b5b-9e67-a1d9b5e6c588';
+  if (user && user.id === CLIENT_USER_ID) {
+    // Usuario cliente tiene acceso completo a /cliente
+    if (isClientRoute) {
+      return response;
+    }
+  }
+
   // Verificar permisos por rol si el usuario está autenticado
   if (user) {
     try {
@@ -101,8 +110,12 @@ export async function middleware(request: NextRequest) {
         .eq('id', user.id)
         .single();
 
+      // Si el usuario no tiene perfil (como el cliente), permitir acceso solo a rutas de cliente
       if (error) {
-        return response;
+        if (isClientRoute) {
+          return response;
+        }
+        return NextResponse.redirect(new URL('/login-clientes', request.url));
       }
 
       const userRole = profile?.role || 'operator';

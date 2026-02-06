@@ -37,7 +37,8 @@ export default function LoginClientesPage() {
         console.log('Login exitoso, redirigiendo...');
         // Esperar un poco para asegurar que la sesión se guarde
         await new Promise(resolve => setTimeout(resolve, 500));
-        router.push('/cliente/dashboard');
+        // Usar window.location para forzar recarga completa
+        window.location.href = '/cliente/dashboard';
       }
     } catch (err: any) {
       console.error('Error en handleLogin:', err);
