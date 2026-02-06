@@ -50,6 +50,10 @@ export default function EditProductModal({ isOpen, onClose, product, onSave }: E
     setError('');
 
     try {
+      if (!product) {
+        setError('Producto no encontrado');
+        return;
+      }
       await onSave(product.id, formData);
       onClose();
     } catch (err: any) {
