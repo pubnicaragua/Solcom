@@ -254,7 +254,7 @@ export default function ResetPasswordPage() {
           fontSize: 13, 
           color: 'rgba(255, 255, 255, 0.5)' 
         }}>
-          © 2025 Solis Comercial - ¡A tu servicio, siempre!
+          © 2026 Solis Comercial - ¡A tu servicio, siempre!
         </div>
       </div>
     </div>

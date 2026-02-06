@@ -10,7 +10,6 @@ const menuItems = [
   { icon: Package, label: 'Inventario', href: '/inventory', module: 'inventory' },
   { icon: BarChart3, label: 'Reportes', href: '/reports', module: 'reports' },
   { icon: Bot, label: 'Agentes IA', href: '/ai-agents', module: 'ai-agents' },
-  { icon: FolderOpen, label: 'Entregables', href: '/entregables', module: 'entregables' },
   { icon: Calendar, label: 'Reuniones', href: '/reuniones', module: 'public' },
   { icon: Users, label: 'Roles', href: '/roles', module: 'roles' },
   { icon: Settings, label: 'Configuración', href: '/settings', module: 'settings' },

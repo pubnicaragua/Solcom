@@ -61,8 +61,10 @@ export async function middleware(request: NextRequest) {
     data: { user },
   } = await supabase.auth.getUser();
 
-  const publicRoutes = ['/login', '/signup', '/reset-password', '/reuniones'];
+  const publicRoutes = ['/login', '/signup', '/reset-password', '/reuniones', '/login-clientes'];
+  const clientRoutes = ['/cliente'];
   const isPublicRoute = publicRoutes.some(route => request.nextUrl.pathname.startsWith(route));
+  const isClientRoute = clientRoutes.some(route => request.nextUrl.pathname.startsWith(route));
 
   if (path === '/' && user) {
     return NextResponse.redirect(new URL('/inventory', request.url));
@@ -72,12 +74,22 @@ export async function middleware(request: NextRequest) {
     return NextResponse.redirect(new URL('/login', request.url));
   }
 
-  if (!user && !isPublicRoute) {
+  if (!user && !isPublicRoute && !isClientRoute) {
     return NextResponse.redirect(new URL('/login', request.url));
   }
 
-  if (user && isPublicRoute && !path.startsWith('/reuniones')) {
+  if (user && isPublicRoute && !path.startsWith('/reuniones') && !path.startsWith('/login-clientes')) {
     return NextResponse.redirect(new URL('/inventory', request.url));
+  }
+
+  // Permitir acceso a rutas de cliente si está autenticado
+  if (isClientRoute && !user) {
+    return NextResponse.redirect(new URL('/login-clientes', request.url));
+  }
+
+  // Si es ruta de cliente y está autenticado, permitir acceso sin verificar rol
+  if (isClientRoute && user) {
+    return response;
   }
 
   // Verificar permisos por rol si el usuario está autenticado
@@ -98,16 +110,17 @@ export async function middleware(request: NextRequest) {
 
       // Definir permisos por rol
       const rolePermissions: Record<string, string[]> = {
-        admin: ['/inventory', '/reports', '/ai-agents', '/roles', '/settings', '/how-it-works', '/next-steps', '/entregables'],
-        manager: ['/inventory', '/reports', '/ai-agents', '/how-it-works', '/entregables'],
-        operator: ['/inventory', '/reports', '/how-it-works'],
-        auditor: ['/reports', '/how-it-works'],
+        admin: ['/inventory', '/reports', '/ai-agents', '/roles', '/settings', '/how-it-works', '/next-steps', '/entregables', '/cliente'],
+        manager: ['/inventory', '/reports', '/ai-agents', '/how-it-works', '/entregables', '/cliente'],
+        operator: ['/inventory', '/reports', '/how-it-works', '/cliente'],
+        auditor: ['/reports', '/how-it-works', '/cliente'],
       };
 
       const allowedPaths = rolePermissions[userRole] || rolePermissions.operator;
       const hasAccess = allowedPaths.some(allowedPath => path.startsWith(allowedPath));
 
-      if (!hasAccess && !isPublicRoute) {
+      // Permitir acceso a /entregables y /cliente para todos los usuarios autenticados
+      if (!hasAccess && !isPublicRoute && !isClientRoute && !path.startsWith('/entregables')) {
         return NextResponse.redirect(new URL('/inventory', request.url));
       }
     } catch (error) {
