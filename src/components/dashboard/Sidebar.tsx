@@ -102,7 +102,7 @@ export default function Sidebar() {
             <img
               src="https://www.soliscomercialni.com/Solis%20Comercial%20Logo.png"
               alt="Solis Comercial"
-              style={{ width: '100%', maxWidth: 220, height: 'auto', display: 'block' }}
+              style={{ width: '100', maxWidth: 180, height: 'auto', display: 'block' }}
             />
           </div>
         </div>

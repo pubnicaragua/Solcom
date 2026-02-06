@@ -36,12 +36,12 @@ export default function Topbar() {
         }
         @media (max-width: 1024px) {
           header {
-            padding-left: 60px !important; /* Space for the menu button */
+            padding-left: 90px !important; /* Increased space for the logo menu button */
           }
         }
         @media (max-width: 480px) {
           .topbar-date {
-            font-size: 10px;
+            font-size: 12px;
           }
         }
       `}</style>
