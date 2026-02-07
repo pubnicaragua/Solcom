@@ -167,6 +167,7 @@ export default function ResetPasswordPage() {
                     placeholder="••••••••"
                     required
                     minLength={6}
+                    autoComplete="new-password"
                     style={{
                       width: '100%',
                       padding: '12px 14px 12px 44px',
@@ -207,6 +208,7 @@ export default function ResetPasswordPage() {
                     placeholder="••••••••"
                     required
                     minLength={6}
+                    autoComplete="new-password"
                     style={{
                       width: '100%',
                       padding: '12px 14px 12px 44px',

@@ -37,8 +37,8 @@ export default function LoginClientesPage() {
         console.log('✅ Login exitoso, usuario:', data.user.id);
         console.log('📝 Sesión creada en Supabase');
         
-        // Esperar para asegurar que las cookies se guarden
-        await new Promise(resolve => setTimeout(resolve, 500));
+        // Esperar mínimo para asegurar que las cookies se guarden
+        await new Promise(resolve => setTimeout(resolve, 100));
         
         console.log('🚀 Redirigiendo a dashboard...');
         
