@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import Card from '@/components/ui/Card';
 import Button from '@/components/ui/Button';
 import Select from '@/components/ui/Select';
@@ -310,6 +310,23 @@ export default function ReportsPage() {
     return Object.entries(groups).map(([label, value]) => ({ label, value })).sort((a: any, b: any) => b.value - a.value);
   };
 
+  // Conteo por marca desde items (stock_total): evita duplicados por snapshot/bodega y límite 10k filas.
+  // Normaliza marca (trim + mayúsculas) para unificar "Samsung" y "SAMSUNG".
+  const groupByBrandUnitsFromItems = (itemsList: any[]) => {
+    if (!itemsList || itemsList.length === 0) return null;
+    const groups: Record<string, { value: number; label: string }> = {};
+    itemsList.forEach((item: any) => {
+      const raw = (item.marca || '').trim() || 'Sin marca';
+      const key = raw.toUpperCase();
+      const qty = Number(item.stock_total) || 0;
+      if (!groups[key]) groups[key] = { value: 0, label: raw };
+      groups[key].value += qty;
+    });
+    return Object.values(groups)
+      .map(({ label, value }) => ({ label, value }))
+      .sort((a: any, b: any) => b.value - a.value);
+  };
+
   const groupByWarehouseUnits = (snapshots: any[]) => {
     if (!snapshots || snapshots.length === 0) return null;
     const groups: Record<string, number> = {};
@@ -324,6 +341,20 @@ export default function ReportsPage() {
     if (!data || data.length === 0) return null;
     return data.slice(0, n);
   };
+
+  // Ítems filtrados por los mismos criterios globales (para gráficos por marca desde items)
+  const itemsForBrandCharts = useMemo(() => {
+    let list = items;
+    if (globalFilters.category) list = list.filter((i: any) => i.category === globalFilters.category);
+    if (globalFilters.marca) list = list.filter((i: any) => (i.marca || '').trim() === globalFilters.marca);
+    if (globalFilters.state) list = list.filter((i: any) => i.state === globalFilters.state);
+    if (globalFilters.color) list = list.filter((i: any) => i.color === globalFilters.color);
+    if (globalFilters.warehouse) {
+      const ids = new Set(filteredSnapshots.map((s: any) => s.item_id));
+      list = list.filter((i: any) => ids.has(i.id));
+    }
+    return list;
+  }, [items, globalFilters, filteredSnapshots]);
 
   const generateColors = (count: number) => {
     const baseColors = ['#3B82F6', '#8B5CF6', '#10B981', '#F59E0B', '#EF4444', '#EC4899', '#14B8A6', '#F97316', '#6366F1', '#84CC16'];
@@ -569,7 +600,7 @@ export default function ReportsPage() {
           {loading ? (
             <div style={{ height: 300, background: 'var(--panel)', borderRadius: 4, animation: 'pulse 1.5s infinite' }} />
           ) : (() => {
-            const data = topN(groupByBrandUnits(filteredSnapshots), 10);
+            const data = topN(groupByBrandUnitsFromItems(itemsForBrandCharts), 10);
             return data ? (
               <HorizontalBarChart data={data.map((d: any, i: number) => ({ ...d, color: generateColors(data.length)[i] }))} height={300} />
             ) : (
@@ -597,7 +628,7 @@ export default function ReportsPage() {
           {loading ? (
             <div style={{ height: 300, background: 'var(--panel)', borderRadius: 4, animation: 'pulse 1.5s infinite' }} />
           ) : (() => {
-            const data = topN(groupByBrandUnits(filteredSnapshots), 10);
+            const data = topN(groupByBrandUnitsFromItems(itemsForBrandCharts), 10);
             return data ? (
               <PieChart data={data.map((d: any, i: number) => ({ ...d, color: generateColors(data.length)[i] }))} size={250} />
             ) : (
