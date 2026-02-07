@@ -363,6 +363,47 @@ export default function ReportsPage() {
     return colors;
   };
 
+  // Productos sin marca asignada (para exportar lista)
+  const itemsSinMarca = useMemo(
+    () => items.filter((i: any) => !(i.marca || '').trim()),
+    [items]
+  );
+
+  function exportSinMarca() {
+    if (itemsSinMarca.length === 0) {
+      alert('No hay productos sin marca para exportar.');
+      return;
+    }
+    try {
+      const csvRows = [
+        ['SKU', 'Nombre', 'Categoría', 'Stock total', 'Precio', 'Estado', 'Color'].join(','),
+      ];
+      itemsSinMarca.forEach((item: any) => {
+        csvRows.push([
+          item.sku || '',
+          `"${(item.name || '').replace(/"/g, '""')}"`,
+          `"${(item.category || '').replace(/"/g, '""')}"`,
+          String(item.stock_total ?? 0),
+          String(item.price ?? ''),
+          `"${(item.state || '').replace(/"/g, '""')}"`,
+          `"${(item.color || '').replace(/"/g, '""')}"`,
+        ].join(','));
+      });
+      const csv = '\uFEFF' + csvRows.join('\n');
+      const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `productos_sin_marca_${new Date().toISOString().split('T')[0]}.csv`;
+      document.body.appendChild(a);
+      a.click();
+      window.URL.revokeObjectURL(url);
+      document.body.removeChild(a);
+    } catch (err: any) {
+      alert(`Error al exportar: ${err?.message || err}`);
+    }
+  }
+
   return (
     <div style={{ display: 'grid', gap: 14 }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
@@ -394,6 +435,26 @@ export default function ReportsPage() {
           />
         </div>
       </Card>
+
+      {itemsSinMarca.length > 0 && (
+        <Card>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 12, padding: 12 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+              <AlertTriangle size={20} color="var(--warning)" />
+              <div>
+                <div style={{ fontWeight: 600 }}>Productos sin marca</div>
+                <div style={{ fontSize: 13, color: 'var(--muted)' }}>
+                  {itemsSinMarca.length.toLocaleString('es-NI')} productos sin marca asignada
+                </div>
+              </div>
+            </div>
+            <Button variant="secondary" size="sm" onClick={exportSinMarca}>
+              <Download size={16} style={{ marginRight: 6 }} />
+              Exportar lista (CSV)
+            </Button>
+          </div>
+        </Card>
+      )}
 
       {error && (
         <Card>

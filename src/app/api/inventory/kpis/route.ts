@@ -9,16 +9,16 @@ export async function GET() {
   try {
     const supabase = createServerClient();
 
-    const [itemsResult, warehousesResult, snapshotsResult] = await Promise.all([
-      supabase.from('items').select('id', { count: 'exact', head: true }),
+    const [warehousesResult, snapshotsResult] = await Promise.all([
       supabase.from('warehouses').select('id', { count: 'exact', head: true }).eq('active', true),
       supabase.from('stock_snapshots').select('qty, synced_at').order('synced_at', { ascending: false }).limit(1),
     ]);
 
-    // Sum stock_total with pagination to avoid row limits.
+    // Contar ítems y sumar stock en el mismo bucle paginado (evita count inexacto en Vercel/edge)
     const pageSize = 1000;
     let from = 0;
     let totalStock = 0;
+    let totalProducts = 0;
     let hasMore = true;
 
     while (hasMore) {
@@ -32,6 +32,7 @@ export async function GET() {
       }
 
       const batch = data || [];
+      totalProducts += batch.length;
       totalStock += batch.reduce((sum: number, row: any) => sum + (row.stock_total || 0), 0);
 
       if (batch.length < pageSize) {
@@ -41,19 +42,25 @@ export async function GET() {
       }
     }
 
-    const totalProducts = itemsResult.count || 0;
-
     const lastSync = (snapshotsResult.data as any)?.[0]?.synced_at
       ? format(new Date((snapshotsResult.data as any)[0].synced_at), "dd MMM yyyy, HH:mm", { locale: es })
       : 'Nunca';
 
-    return NextResponse.json({
-      totalSKUs: itemsResult.count || 0,
-      totalProducts,
-      totalStock,
-      activeWarehouses: warehousesResult.count || 0,
-      lastSync,
-    });
+    return NextResponse.json(
+      {
+        totalSKUs: totalProducts,
+        totalProducts,
+        totalStock,
+        activeWarehouses: warehousesResult.count || 0,
+        lastSync,
+      },
+      {
+        headers: {
+          'Cache-Control': 'no-store, no-cache, must-revalidate, max-age=0',
+          Pragma: 'no-cache',
+        },
+      }
+    );
   } catch (error) {
     return NextResponse.json(
       { error: 'Error al obtener KPIs' },

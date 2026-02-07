@@ -98,6 +98,10 @@ async function fetchItemLocations(
 
   if (!response.ok) {
     const errorText = await response.text();
+    // 404 = artículo eliminado o no existe en Zoho; tratamos como sin ubicaciones
+    if (response.status === 404) {
+      return [];
+    }
     throw new Error(`Zoho Inventory item error: ${response.status} - ${errorText}`);
   }
 
@@ -159,14 +163,15 @@ export async function POST(request: Request) {
       .select('id, zoho_item_id')
       .not('zoho_item_id', 'is', null);
 
+    // Claves en string para que el lookup coincida con location_id (Zoho puede devolver number o string)
     const warehouseMap = new Map(
-      (warehouses || []).map((w: any) => [w.zoho_warehouse_id, w.id])
+      (warehouses || []).map((w: any) => [String(w.zoho_warehouse_id ?? ''), w.id])
     );
     const preferredWarehouse = (warehouses || []).find((w: any) => w.code === 'X1');
     const defaultWarehouseId =
       preferredWarehouse?.id || (warehouses && warehouses.length > 0 ? warehouses[0].id : null);
     const itemMap = new Map(
-      (items || []).map((i: any) => [i.zoho_item_id, i.id])
+      (items || []).map((i: any) => [String(i.zoho_item_id ?? ''), i.id])
     );
 
     let snapshotsCreated = 0;
@@ -177,10 +182,10 @@ export async function POST(request: Request) {
     const sampleZohoWarehouseIds = new Set<string>();
 
     const snapshots: any[] = [];
-    const perWarehouseItemIds = new Map<string, Set<string>>();
+    const itemIdsToReplace = new Set<string>();
 
     for (const zohoItem of zohoItems) {
-      const itemId = itemMap.get(zohoItem.item_id);
+      const itemId = itemMap.get(String(zohoItem.item_id ?? ''));
       if (!itemId) {
         itemsSkipped += 1;
         continue;
@@ -203,6 +208,7 @@ export async function POST(request: Request) {
 
         if (defaultWarehouseId) {
           const qty = zohoItem.stock_on_hand ?? 0;
+          itemIdsToReplace.add(itemId);
           snapshots.push({
             warehouse_id: defaultWarehouseId,
             item_id: itemId,
@@ -210,10 +216,6 @@ export async function POST(request: Request) {
             source_ts: new Date().toISOString(),
             synced_at: new Date().toISOString(),
           });
-          if (!perWarehouseItemIds.has(defaultWarehouseId)) {
-            perWarehouseItemIds.set(defaultWarehouseId, new Set());
-          }
-          perWarehouseItemIds.get(defaultWarehouseId)!.add(itemId);
         }
         continue;
       }
@@ -221,10 +223,9 @@ export async function POST(request: Request) {
       itemsWithWarehouses += 1;
 
       for (const loc of locationsList) {
-        if (loc?.location_id) {
-          sampleZohoWarehouseIds.add(loc.location_id);
-        }
-        const localWarehouseId = warehouseMap.get(loc.location_id);
+        const locId = loc?.location_id != null ? String(loc.location_id) : '';
+        if (locId) sampleZohoWarehouseIds.add(locId);
+        const localWarehouseId = warehouseMap.get(locId);
         if (!localWarehouseId) {
           missingWarehouseMappings += 1;
           continue;
@@ -235,6 +236,7 @@ export async function POST(request: Request) {
           loc.location_available_stock ??
           0;
 
+        itemIdsToReplace.add(itemId);
         snapshots.push({
           warehouse_id: localWarehouseId,
           item_id: itemId,
@@ -242,21 +244,17 @@ export async function POST(request: Request) {
           source_ts: new Date().toISOString(),
           synced_at: new Date().toISOString(),
         });
-
-        if (!perWarehouseItemIds.has(localWarehouseId)) {
-          perWarehouseItemIds.set(localWarehouseId, new Set());
-        }
-        perWarehouseItemIds.get(localWarehouseId)!.add(itemId);
       }
     }
 
-    for (const [warehouseId, itemIdsSet] of perWarehouseItemIds.entries()) {
-      const itemIds = Array.from(itemIdsSet);
-      await supabase
-        .from('stock_snapshots')
-        .delete()
-        .eq('warehouse_id', warehouseId)
-        .in('item_id', itemIds);
+    // Borrar todos los snapshots de los ítems que vamos a reescribir (evita dejar todo en X1)
+    const itemIdsArray = Array.from(itemIdsToReplace);
+    if (itemIdsArray.length > 0) {
+      const batchSize = 500;
+      for (let i = 0; i < itemIdsArray.length; i += batchSize) {
+        const batch = itemIdsArray.slice(i, i + batchSize);
+        await supabase.from('stock_snapshots').delete().in('item_id', batch);
+      }
     }
 
     if (snapshots.length > 0) {
