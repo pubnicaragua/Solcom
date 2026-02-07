@@ -20,17 +20,81 @@ export async function GET(request: Request) {
     const supabase = createServerClient();
     const offset = (page - 1) * limit;
 
-    let query = supabase
-      .from('stock_snapshots')
-      .select(`
-        id,
-        warehouse_id,
-        item_id,
-        qty,
-        synced_at,
-        warehouses!inner(code, name),
-        items!inner(sku, name, color, state, category, marca, stock_total, price)
-      `, { count: 'exact' });
+    const buildBaseQuery = () => {
+      let base = supabase
+        .from('stock_snapshots')
+        .select(`
+          id,
+          warehouse_id,
+          item_id,
+          qty,
+          synced_at,
+          warehouses!inner(code, name),
+          items!inner(sku, name, color, state, category, marca, stock_total, price)
+        `);
+
+      if (warehouse) {
+        base = base.eq('warehouses.code', warehouse);
+      }
+
+      if (brand || marca) {
+        const value = brand || marca;
+        base = base.eq('items.marca', value);
+      }
+
+      if (color) {
+        base = base.ilike('items.color', `%${color}%`);
+      }
+
+      if (state) {
+        base = base.eq('items.state', state);
+      }
+
+      if (category) {
+        base = base.ilike('items.category', `%${category}%`);
+      }
+
+      if (priceRange) {
+        if (priceRange.endsWith('+')) {
+          const min = parseFloat(priceRange.replace('+', ''));
+          if (!Number.isNaN(min)) {
+            base = base.gte('items.price', min);
+          }
+        } else if (priceRange.includes('-')) {
+          const [minRaw, maxRaw] = priceRange.split('-');
+          const min = parseFloat(minRaw);
+          const max = parseFloat(maxRaw);
+          if (!Number.isNaN(min)) {
+            base = base.gte('items.price', min);
+          }
+          if (!Number.isNaN(max)) {
+            base = base.lte('items.price', max);
+          }
+        }
+      }
+
+      if (stockLevel) {
+        switch (stockLevel) {
+          case 'out':
+            base = base.eq('qty', 0);
+            break;
+          case 'critical':
+            base = base.gte('qty', 1).lte('qty', 5);
+            break;
+          case 'low':
+            base = base.gte('qty', 6).lte('qty', 20);
+            break;
+          case 'medium':
+            base = base.gte('qty', 21).lte('qty', 50);
+            break;
+          case 'high':
+            base = base.gt('qty', 50);
+            break;
+        }
+      }
+
+      return base;
+    };
 
 
 
@@ -40,74 +104,68 @@ export async function GET(request: Request) {
       if (trimmed) {
         const startsWith = `name.ilike.${trimmed}%,sku.ilike.${trimmed}%`;
         const contains = `name.ilike.%${trimmed}%,sku.ilike.%${trimmed}%`;
-        query = query.or(`${startsWith},${contains}`, { referencedTable: 'items' });
+
+        const { data: startsData, error: startsError } = await buildBaseQuery()
+          .or(startsWith, { referencedTable: 'items' })
+          .order('name', { ascending: true, foreignTable: 'items' });
+
+        if (startsError) throw startsError;
+
+        const { data: containsData, error: containsError } = await buildBaseQuery()
+          .or(contains, { referencedTable: 'items' })
+          .order('name', { ascending: true, foreignTable: 'items' });
+
+        if (containsError) throw containsError;
+
+        const seen = new Set<string>();
+        const combined = [];
+
+        for (const row of startsData || []) {
+          if (!seen.has(row.id)) {
+            seen.add(row.id);
+            combined.push(row);
+          }
+        }
+
+        for (const row of containsData || []) {
+          if (!seen.has(row.id)) {
+            seen.add(row.id);
+            combined.push(row);
+          }
+        }
+
+        const total = combined.length;
+        const paged = combined.slice(offset, offset + limit);
+
+        const formattedData = paged.map((row: any) => ({
+          id: row.id,
+          warehouse_id: row.warehouse_id,
+          item_id: row.item_id,
+          item_name: row.items.name,
+          color: row.items.color,
+          state: row.items.state,
+          sku: row.items.sku,
+          category: row.items.category || null,
+          brand: row.items.marca || null,
+          warehouse_code: row.warehouses.code,
+          warehouse_name: row.warehouses.name,
+          qty: row.qty,
+          stock_total: row.items.stock_total || 0,
+          price: row.items.price || 0,
+          synced_at: row.synced_at,
+        }));
+
+        return NextResponse.json({
+          data: formattedData,
+          page,
+          limit,
+          total,
+          totalPages: Math.ceil(total / limit),
+        });
       }
     }
 
-    // Warehouse filter
-    if (warehouse) {
-      query = query.eq('warehouses.code', warehouse);
-    }
-
-
-    if (brand || marca) {
-      const value = brand || marca;
-      query = query.eq('items.marca', value);
-    }
-
-    if (color) {
-      query = query.ilike('items.color', `%${color}%`);
-    }
-
-
-    if (state) {
-      query = query.eq('items.state', state);
-    }
-
-
-    if (category) {
-      query = query.ilike('items.category', `%${category}%`);
-    }
-
-    if (priceRange) {
-      if (priceRange.endsWith('+')) {
-        const min = parseFloat(priceRange.replace('+', ''));
-        if (!Number.isNaN(min)) {
-          query = query.gte('items.price', min);
-        }
-      } else if (priceRange.includes('-')) {
-        const [minRaw, maxRaw] = priceRange.split('-');
-        const min = parseFloat(minRaw);
-        const max = parseFloat(maxRaw);
-        if (!Number.isNaN(min)) {
-          query = query.gte('items.price', min);
-        }
-        if (!Number.isNaN(max)) {
-          query = query.lte('items.price', max);
-        }
-      }
-    }
-
-
-    if (stockLevel) {
-      switch (stockLevel) {
-        case 'out':
-          query = query.eq('qty', 0);
-          break;
-        case 'critical':
-          query = query.gte('qty', 1).lte('qty', 5);
-          break;
-        case 'low':
-          query = query.gte('qty', 6).lte('qty', 20);
-          break;
-        case 'medium':
-          query = query.gte('qty', 21).lte('qty', 50);
-          break;
-        case 'high':
-          query = query.gt('qty', 50);
-          break;
-      }
-    }
+    let query = buildBaseQuery();
 
     let orderConfig: { column: string, options?: { ascending: boolean, foreignTable?: string } } = {
       column: 'synced_at',
