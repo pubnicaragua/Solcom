@@ -38,6 +38,34 @@ export default function ReportsPage() {
     fetchAllData();
   }, [period]);
 
+  async function fetchAllItems() {
+    const allItems: any[] = [];
+    const pageSize = 1000;
+    let from = 0;
+    let hasMore = true;
+
+    while (hasMore) {
+      const { data, error } = await supabase
+        .from('items')
+        .select('*')
+        .order('created_at', { ascending: false })
+        .range(from, from + pageSize - 1);
+
+      if (error) throw new Error(`Error items: ${error.message}`);
+
+      const batch = data || [];
+      allItems.push(...batch);
+
+      if (batch.length < pageSize) {
+        hasMore = false;
+      } else {
+        from += pageSize;
+      }
+    }
+
+    return allItems;
+  }
+
   async function fetchAllData() {
     setLoading(true);
     setError(null);
@@ -46,21 +74,21 @@ export default function ReportsPage() {
       const dateFilter = new Date();
       dateFilter.setDate(dateFilter.getDate() - daysAgo);
 
-      const [itemsResult, snapshotsResult, warehousesResult] = await Promise.all([
-        supabase.from('items').select('*').order('created_at', { ascending: false }),
+      const [itemsData, snapshotsResult, warehousesResult, kpisResponse] = await Promise.all([
+        fetchAllItems(),
         supabase.from('stock_snapshots').select('*, items(*), warehouses(*)')
           .gte('synced_at', dateFilter.toISOString())
           .range(0, 9999),
-        supabase.from('warehouses').select('*').eq('active', true)
+        supabase.from('warehouses').select('*').eq('active', true),
+        fetch('/api/inventory/kpis')
       ]);
 
-      if (itemsResult.error) throw new Error(`Error items: ${itemsResult.error.message}`);
       if (snapshotsResult.error) throw new Error(`Error snapshots: ${snapshotsResult.error.message}`);
       if (warehousesResult.error) throw new Error(`Error warehouses: ${warehousesResult.error.message}`);
 
-      const itemsData = itemsResult.data || [];
       const snapshotsData = snapshotsResult.data || [];
       const warehousesData = warehousesResult.data || [];
+      const kpis = kpisResponse.ok ? await kpisResponse.json() : null;
 
       setItems(itemsData);
       setStockSnapshots(snapshotsData);
@@ -101,7 +129,7 @@ export default function ReportsPage() {
       
       // Usar el valor correcto de inventario de Zoho Books
       const zohoTotalValue = 1415297.98;
-      calculateStats(itemsData, filtered, warehousesData, zohoTotalValue);
+      calculateStats(itemsData, filtered, warehousesData, zohoTotalValue, kpis);
     } catch (err: any) {
       setError(err.message || 'Error al cargar datos');
       console.error('Error fetching data:', err);
@@ -110,8 +138,14 @@ export default function ReportsPage() {
     }
   }
 
-  function calculateStats(items: any[], snapshots: any[], warehouses: any[], zohoTotalValue: number = 0) {
-    const totalStock = items.reduce((sum, item) => sum + (item.stock_total || 0), 0);
+  function calculateStats(
+    items: any[],
+    snapshots: any[],
+    warehouses: any[],
+    zohoTotalValue: number = 0,
+    kpis?: { totalProducts?: number; totalStock?: number; activeWarehouses?: number }
+  ) {
+    const totalStock = kpis?.totalStock ?? items.reduce((sum, item) => sum + (item.stock_total || 0), 0);
     // Usar el valor real de Zoho en lugar del cálculo manual
     const totalValue = zohoTotalValue > 0 ? zohoTotalValue : items.reduce((sum, item) => sum + ((item.stock_total || 0) * (item.price || 0)), 0);
     const lowStockItems = items.filter(i => (i.stock_total || 0) > 0 && (i.stock_total || 0) < 10).length;
@@ -151,12 +185,12 @@ export default function ReportsPage() {
     });
 
     setStats({
-      totalProducts: items.length,
+      totalProducts: kpis?.totalProducts ?? items.length,
       totalStock,
       totalValue,
       lowStockItems,
       outOfStockItems,
-      activeWarehouses: warehouses.length,
+      activeWarehouses: kpis?.activeWarehouses ?? warehouses.length,
       categoryBreakdown,
       warehouseBreakdown,
       stockHistory

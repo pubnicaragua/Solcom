@@ -41,15 +41,10 @@ export default function TransferModal({
 
   async function fetchWarehouses() {
     try {
-      const response = await fetch('/api/inventory/warehouses');
+      const response = await fetch('/api/warehouses');
       const data = await response.json();
-      
-      // Filtrar bodegas disponibles (excepto la actual)
-      const availableWarehouses = data.filter((w: Warehouse) => 
-        w.id !== currentWarehouse
-      );
-      
-      setWarehouses(availableWarehouses);
+
+      setWarehouses(data || []);
     } catch (err: any) {
       setError('Error al cargar bodegas');
     }
@@ -97,6 +92,9 @@ export default function TransferModal({
   }
 
   if (!isOpen) return null;
+
+  const availableWarehouses = warehouses.filter((w) => w.id !== currentWarehouse);
+  const originWarehouse = warehouses.find((w) => w.id === currentWarehouse);
 
   return (
     <div style={{
@@ -160,7 +158,7 @@ export default function TransferModal({
                   fontSize: 14,
                   color: 'var(--muted)'
                 }}>
-                  {warehouses.find(w => w.id === currentWarehouse)?.name || 'Bodega actual'}
+                  {originWarehouse?.name || 'Bodega actual'}
                 </div>
               </div>
 
@@ -188,7 +186,7 @@ export default function TransferModal({
                   }}
                 >
                   <option value="">Seleccionar bodega...</option>
-                  {warehouses.map(warehouse => (
+                  {availableWarehouses.map(warehouse => (
                     <option key={warehouse.id} value={warehouse.id}>
                       {warehouse.name} {warehouse.stock ? `(Stock: ${warehouse.stock})` : ''}
                     </option>

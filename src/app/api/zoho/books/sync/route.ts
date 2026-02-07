@@ -1,211 +1,296 @@
 import { NextResponse } from 'next/server';
 import { createServerClient } from '@/lib/supabase/server';
-import { createZohoBooksClient } from '@/lib/zoho/books-client';
 import { syncRequestSchema } from '@/lib/validators/inventory';
 
 export const dynamic = 'force-dynamic';
 
-export async function POST(request: Request) {
-    try {
-        const body = await request.json();
-        const validation = syncRequestSchema.safeParse(body);
+async function getZohoAccessToken() {
+  const clientId = process.env.ZOHO_BOOKS_CLIENT_ID;
+  const clientSecret = process.env.ZOHO_BOOKS_CLIENT_SECRET;
+  const refreshToken = process.env.ZOHO_BOOKS_REFRESH_TOKEN;
 
-        if (!validation.success) {
-            return NextResponse.json(
-                { error: 'Datos inválidos', details: validation.error.errors },
-                { status: 400 }
-            );
-        }
+  if (!clientId || !clientSecret || !refreshToken) {
+    return { error: 'Configuración de Zoho Books incompleta' };
+  }
 
-        const zohoClient = createZohoBooksClient();
-        if (!zohoClient) {
-            const missing = [];
-            if (!process.env.ZOHO_BOOKS_CLIENT_ID) missing.push('ZOHO_BOOKS_CLIENT_ID');
-            if (!process.env.ZOHO_BOOKS_CLIENT_SECRET) missing.push('ZOHO_BOOKS_CLIENT_SECRET');
-            if (!process.env.ZOHO_BOOKS_REFRESH_TOKEN) missing.push('ZOHO_BOOKS_REFRESH_TOKEN');
-            if (!process.env.ZOHO_BOOKS_ORGANIZATION_ID) missing.push('ZOHO_BOOKS_ORGANIZATION_ID');
+  const authDomain = process.env.ZOHO_AUTH_DOMAIN || 'https://accounts.zoho.com';
+  const response = await fetch(`${authDomain}/oauth/v2/token`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/x-www-form-urlencoded',
+    },
+    body: new URLSearchParams({
+      refresh_token: refreshToken,
+      client_id: clientId,
+      client_secret: clientSecret,
+      grant_type: 'refresh_token',
+    }),
+  });
 
-            return NextResponse.json(
-                { error: 'Configuración de Zoho Books incompleta', missing },
-                { status: 500 }
-            );
-        }
+  if (!response.ok) {
+    const errorText = await response.text();
+    return { error: `Zoho auth failed: ${response.status} - ${errorText}` };
+  }
 
+  const data = await response.json();
+  return {
+    accessToken: data.access_token as string,
+    apiDomain: (data.api_domain as string) || 'https://www.zohoapis.com',
+  };
+}
 
-        const supabase = createServerClient();
-        const zohoItems = await zohoClient.fetchItems();
-        console.log(`[SYNC] Total Zoho Items fetched: ${zohoItems.length}`);
+async function fetchZohoItems(accessToken: string, apiDomain: string, organizationId: string) {
+  const items: any[] = [];
+  let page = 1;
+  let hasMore = true;
 
-        const defaultWarehouseCode = 'X1';
-        let warehouseId: string | null = null;
+  while (hasMore) {
+    const url = `${apiDomain}/inventory/v1/items?organization_id=${organizationId}&page=${page}&per_page=200`;
+    const response = await fetch(url, {
+      headers: {
+        Authorization: `Zoho-oauthtoken ${accessToken}`,
+      },
+      cache: 'no-store',
+    });
 
-
-        const warehouseQuery: any = await supabase
-            .from('warehouses')
-            .select('id')
-            .eq('code', defaultWarehouseCode)
-            .single();
-
-        if (warehouseQuery.data) {
-            warehouseId = warehouseQuery.data.id;
-        } else {
-            const { data: newWarehouse }: any = await supabase
-                .from('warehouses')
-                .insert({
-                    code: defaultWarehouseCode,
-                    name: `Bodega ${defaultWarehouseCode}`,
-                    active: true,
-                } as any)
-                .select('id')
-                .single();
-            warehouseId = newWarehouse?.id ?? null;
-        }
-
-        if (!warehouseId) {
-            throw new Error("No se pudo obtener la bodega por defecto");
-        }
-
-
-        const BATCH_SIZE = 100;
-        let itemsProcessed = 0;
-
-        for (let i = 0; i < zohoItems.length; i += BATCH_SIZE) {
-            const batch = zohoItems.slice(i, i + BATCH_SIZE);
-            const batchSkus = batch.map(item => item.sku || `NO-SKU-${item.item_id}`);
-
-
-            const { data: existingItems } = await supabase
-                .from('items')
-                .select('id, sku')
-                .in('sku', batchSkus);
-
-            const existingMap = new Map((existingItems || []).map(item => [item.sku, item.id]));
-
-            const toInsert: any[] = [];
-            const toUpdate: { id: string; name: string; category: string | null; color: string | null; state: string | null; marca: string | null; stock_total: number | null; price: number | null }[] = [];
-
-            for (const zItem of batch) {
-                const sku = zItem.sku || `NO-SKU-${zItem.item_id}`;
-                const existingId = existingMap.get(sku);
-
-
-                const brandValue = zItem.brand || (zItem as any).cf_marca || (zItem as any).cf_Marca || null;
-
-                const itemData = {
-                    name: zItem.name,
-                    category: zItem.category_name || null,
-                    color: (zItem as any).cf_color || null,
-                    state: (zItem as any).cf_estado || null,
-                    marca: brandValue,
-                    stock_total: zItem.stock_on_hand || 0,
-                    price: zItem.purchase_rate || 0,
-                };
-
-                if (existingId) {
-                    toUpdate.push({ id: existingId, ...itemData });
-                } else {
-                    toInsert.push({
-                        sku,
-                        zoho_item_id: zItem.item_id,
-                        ...itemData,
-                    });
-                }
-            }
-
-            // Insert new items
-            if (toInsert.length > 0) {
-                const { data: newItems } = await supabase
-                    .from('items')
-                    .insert(toInsert)
-                    .select('id, sku');
-
-                if (newItems) {
-                    newItems.forEach(item => existingMap.set(item.sku, item.id));
-                }
-            }
-
-            // Update existing items with color, state, brand, stock and price
-            for (const item of toUpdate) {
-                await supabase
-                    .from('items')
-                    .update({
-                        name: item.name,
-                        category: item.category,
-                        color: item.color,
-                        state: item.state,
-                        marca: item.marca,
-                        stock_total: item.stock_total,
-                        price: item.price
-                    })
-                    .eq('id', item.id);
-            }
-
-
-            const snapshotPayload = [];
-            for (const zItem of batch) {
-                const sku = zItem.sku || `NO-SKU-${zItem.item_id}`;
-                const dbId = existingMap.get(sku);
-                const qty = zItem.stock_on_hand;
-
-                // Skip items without a valid qty value
-                if (dbId && qty !== null && qty !== undefined) {
-                    snapshotPayload.push({
-                        warehouse_id: warehouseId,
-                        item_id: dbId,
-                        qty: qty,
-                        source_ts: zItem.last_modified_time || new Date().toISOString(),
-                        synced_at: new Date().toISOString(),
-                    });
-                }
-            }
-
-            if (snapshotPayload.length > 0) {
-                const itemIds = snapshotPayload.map(s => s.item_id);
-
-                console.log(`[SYNC] Creating ${snapshotPayload.length} stock snapshots for warehouse ${warehouseId}`);
-
-                await supabase
-                    .from('stock_snapshots')
-                    .delete()
-                    .eq('warehouse_id', warehouseId)
-                    .in('item_id', itemIds);
-
-                const { error: snapError } = await supabase
-                    .from('stock_snapshots')
-                    .insert(snapshotPayload);
-
-                if (snapError) {
-                    console.error(`[SYNC] Error creating snapshots:`, snapError);
-                } else {
-                    itemsProcessed += snapshotPayload.length;
-                    console.log(`[SYNC] Successfully created ${snapshotPayload.length} snapshots`);
-                }
-            } else {
-                console.log(`[SYNC] No snapshots to create for this batch`);
-            }
-
-            console.log(`[SYNC] Batch ${i}-${i + batch.length}: ${toInsert.length} new, ${toUpdate.length} existing, ${snapshotPayload.length} snapshots`);
-        }
-
-        // Cleanup: Delete items that are no longer in Zoho Books.
-        // These items will still have stock_total as NULL because they weren't updated in this run.
-        const { count: deletedCount } = await supabase
-            .from('items')
-            .delete({ count: 'exact' })
-            .is('stock_total', null);
-
-        console.log(`[SYNC] Cleanup: Deleted ${deletedCount} orphaned items`);
-
-        return NextResponse.json({
-            success: true,
-            itemsProcessed,
-            message: `Sincronización de Zoho Books completada: ${itemsProcessed} items procesados`,
-        });
-    } catch (error) {
-        console.error('Zoho Books sync error:', error);
-        return NextResponse.json(
-            { error: 'Error en sincronización de Zoho Books', details: error instanceof Error ? error.message : 'Unknown error' },
-            { status: 500 }
-        );
+    if (!response.ok) {
+      const errorText = await response.text();
+      throw new Error(`Zoho Inventory error: ${response.status} - ${errorText}`);
     }
+
+    const rawText = await response.text();
+    if (!rawText) {
+      throw new Error(`Zoho Inventory error: empty response (status ${response.status})`);
+    }
+
+    let result: any;
+    try {
+      result = JSON.parse(rawText);
+    } catch {
+      throw new Error(`Zoho Inventory error: invalid JSON response: ${rawText.substring(0, 200)}`);
+    }
+    const pageItems = result.items || [];
+    items.push(...pageItems);
+
+    if (result.page_context?.has_more_page) {
+      page += 1;
+    } else {
+      hasMore = false;
+    }
+  }
+
+  return items;
+}
+
+async function fetchItemWarehouses(
+  accessToken: string,
+  apiDomain: string,
+  organizationId: string,
+  itemId: string
+) {
+  const url = `${apiDomain}/inventory/v1/items/${itemId}?organization_id=${organizationId}`;
+  const response = await fetch(url, {
+    headers: {
+      Authorization: `Zoho-oauthtoken ${accessToken}`,
+    },
+    cache: 'no-store',
+  });
+
+  if (!response.ok) {
+    const errorText = await response.text();
+    throw new Error(`Zoho Inventory item error: ${response.status} - ${errorText}`);
+  }
+
+  const rawText = await response.text();
+  if (!rawText) {
+    return [];
+  }
+
+  let result: any;
+  try {
+    result = JSON.parse(rawText);
+  } catch {
+    throw new Error(`Zoho Inventory item error: invalid JSON response: ${rawText.substring(0, 200)}`);
+  }
+
+  return result.item?.warehouses || [];
+}
+
+export async function POST(request: Request) {
+  try {
+    const rawBody = await request.text();
+    const body = rawBody ? JSON.parse(rawBody) : {};
+    const validation = syncRequestSchema.safeParse(body);
+
+    if (!validation.success) {
+      return NextResponse.json(
+        { error: 'Datos inválidos', details: validation.error.errors },
+        { status: 400 }
+      );
+    }
+
+    const organizationId = process.env.ZOHO_BOOKS_ORGANIZATION_ID;
+    if (!organizationId) {
+      return NextResponse.json(
+        { error: 'ZOHO_BOOKS_ORGANIZATION_ID no configurado' },
+        { status: 500 }
+      );
+    }
+
+    const auth = await getZohoAccessToken();
+    if ('error' in auth) {
+      return NextResponse.json(
+        { error: auth.error },
+        { status: 500 }
+      );
+    }
+
+    const { accessToken, apiDomain } = auth;
+    const zohoItems = await fetchZohoItems(accessToken, apiDomain, organizationId);
+
+    const supabase = createServerClient();
+    const { data: warehouses } = await supabase
+      .from('warehouses')
+      .select('id, code, zoho_warehouse_id')
+      .not('zoho_warehouse_id', 'is', null);
+
+    const { data: items } = await supabase
+      .from('items')
+      .select('id, zoho_item_id')
+      .not('zoho_item_id', 'is', null);
+
+    const warehouseMap = new Map(
+      (warehouses || []).map((w: any) => [w.zoho_warehouse_id, w.id])
+    );
+    const preferredWarehouse = (warehouses || []).find((w: any) => w.code === 'X1');
+    const defaultWarehouseId =
+      preferredWarehouse?.id || (warehouses && warehouses.length > 0 ? warehouses[0].id : null);
+    const itemMap = new Map(
+      (items || []).map((i: any) => [i.zoho_item_id, i.id])
+    );
+
+    let snapshotsCreated = 0;
+    let itemsSkipped = 0;
+    let itemsWithWarehouses = 0;
+    let itemsWithoutWarehouses = 0;
+    let missingWarehouseMappings = 0;
+    const sampleZohoWarehouseIds = new Set<string>();
+
+    const snapshots: any[] = [];
+    const perWarehouseItemIds = new Map<string, Set<string>>();
+
+    for (const zohoItem of zohoItems) {
+      const itemId = itemMap.get(zohoItem.item_id);
+      if (!itemId) {
+        itemsSkipped += 1;
+        continue;
+      }
+
+      let warehousesList = zohoItem.warehouses || [];
+      if (!Array.isArray(warehousesList) || warehousesList.length === 0) {
+        try {
+          warehousesList = await fetchItemWarehouses(
+            accessToken,
+            apiDomain,
+            organizationId,
+            zohoItem.item_id
+          );
+        } catch (error) {
+          console.error('Error fetching item warehouses:', zohoItem.item_id, error);
+        }
+      }
+
+      if (!Array.isArray(warehousesList) || warehousesList.length === 0) {
+        itemsWithoutWarehouses += 1;
+
+        if (defaultWarehouseId) {
+          const qty = zohoItem.stock_on_hand ?? 0;
+          snapshots.push({
+            warehouse_id: defaultWarehouseId,
+            item_id: itemId,
+            qty,
+            source_ts: new Date().toISOString(),
+            synced_at: new Date().toISOString(),
+          });
+          if (!perWarehouseItemIds.has(defaultWarehouseId)) {
+            perWarehouseItemIds.set(defaultWarehouseId, new Set());
+          }
+          perWarehouseItemIds.get(defaultWarehouseId)!.add(itemId);
+        }
+        continue;
+      }
+
+      itemsWithWarehouses += 1;
+
+      for (const wh of warehousesList) {
+        if (wh?.warehouse_id) {
+          sampleZohoWarehouseIds.add(wh.warehouse_id);
+        }
+        const localWarehouseId = warehouseMap.get(wh.warehouse_id);
+        if (!localWarehouseId) {
+          missingWarehouseMappings += 1;
+          continue;
+        }
+
+        const qty =
+          wh.warehouse_stock_on_hand ??
+          wh.stock_on_hand ??
+          wh.quantity_available ??
+          0;
+
+        snapshots.push({
+          warehouse_id: localWarehouseId,
+          item_id: itemId,
+          qty,
+          source_ts: new Date().toISOString(),
+          synced_at: new Date().toISOString(),
+        });
+
+        if (!perWarehouseItemIds.has(localWarehouseId)) {
+          perWarehouseItemIds.set(localWarehouseId, new Set());
+        }
+        perWarehouseItemIds.get(localWarehouseId)!.add(itemId);
+      }
+    }
+
+    for (const [warehouseId, itemIdsSet] of perWarehouseItemIds.entries()) {
+      const itemIds = Array.from(itemIdsSet);
+      await supabase
+        .from('stock_snapshots')
+        .delete()
+        .eq('warehouse_id', warehouseId)
+        .in('item_id', itemIds);
+    }
+
+    if (snapshots.length > 0) {
+      const { error: snapError } = await supabase
+        .from('stock_snapshots')
+        .insert(snapshots);
+
+      if (snapError) {
+        throw snapError;
+      }
+      snapshotsCreated = snapshots.length;
+    }
+
+    return NextResponse.json({
+      success: true,
+      snapshotsCreated,
+      itemsSkipped,
+      itemsWithWarehouses,
+      itemsWithoutWarehouses,
+      missingWarehouseMappings,
+      zohoItemsTotal: zohoItems.length,
+      warehousesMapped: warehouseMap.size,
+      itemsMapped: itemMap.size,
+      sampleZohoWarehouseIds: Array.from(sampleZohoWarehouseIds).slice(0, 10),
+      message: `Sincronización de inventario completada: ${snapshotsCreated} snapshots`,
+    });
+  } catch (error) {
+    console.error('Zoho Books sync error:', error);
+    return NextResponse.json(
+      { error: 'Error en sincronización de Zoho Books', details: error instanceof Error ? error.message : 'Unknown error' },
+      { status: 500 }
+    );
+  }
 }

@@ -69,6 +69,8 @@ export default function PieChart({ data, size = 200, showLegend = true }: PieCha
   const centerY = size / 2;
   const radius = size / 2 - 10;
 
+  const formatValue = (value: number) => value.toLocaleString('es-NI');
+
   return (
     <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 16, width: '100%' }}>
       <svg
@@ -95,25 +97,34 @@ export default function PieChart({ data, size = 200, showLegend = true }: PieCha
                 filter: hoveredIndex === slice.index ? 'brightness(1.15)' : 'brightness(1)'
               }}
             />
-            {hoveredIndex === slice.index && (
-              <text
-                x={centerX}
-                y={centerY}
-                textAnchor="middle"
-                dominantBaseline="middle"
-                style={{
-                  fontSize: 14,
-                  fontWeight: 600,
-                  fill: 'var(--text)',
-                  pointerEvents: 'none'
-                }}
-              >
-                {slice.percentage.toFixed(1)}%
-              </text>
-            )}
           </g>
         ))}
       </svg>
+
+      <div
+        style={{
+          padding: '8px 12px',
+          borderRadius: 8,
+          background: 'var(--panel)',
+          border: '1px solid var(--border)',
+          width: '100%',
+          maxWidth: size,
+          textAlign: 'center',
+          minHeight:50,
+          display: 'flex',
+          flexDirection: 'column',
+          justifyContent: 'center',
+          opacity: hoveredIndex !== null && slices[hoveredIndex] ? 1 : 0,
+          transition: 'opacity 0.2s ease',
+        }}
+        aria-hidden={hoveredIndex === null}
+      >
+        {hoveredIndex !== null && slices[hoveredIndex] && (
+          <div style={{ fontSize: 10, fontWeight: 600, whiteSpace: 'nowrap' }}>
+            {slices[hoveredIndex].label} · {formatValue(slices[hoveredIndex].value)} unids ({slices[hoveredIndex].percentage.toFixed(1)}%)
+          </div>
+        )}
+      </div>
 
       {showLegend && slices.length > 0 && (
         <div
@@ -167,7 +178,7 @@ export default function PieChart({ data, size = 200, showLegend = true }: PieCha
                   {slice.label}
                 </div>
                 <div style={{ color: 'var(--muted)', fontSize: 10 }}>
-                  {slice.percentage.toFixed(1)}%
+                  {formatValue(slice.value)} unids
                 </div>
               </div>
             </div>

@@ -11,7 +11,10 @@ export async function GET(request: Request) {
     const state = searchParams.get('state') || '';
     const category = searchParams.get('category') || '';
     const brand = searchParams.get('brand') || '';
+    const marca = searchParams.get('marca') || '';
+    const color = searchParams.get('color') || '';
     const stockLevel = searchParams.get('stockLevel') || '';
+    const priceRange = searchParams.get('priceRange') || '';
     const sortBy = searchParams.get('sortBy') || 'name';
 
     const supabase = createServerClient();
@@ -21,6 +24,8 @@ export async function GET(request: Request) {
       .from('stock_snapshots')
       .select(`
         id,
+        warehouse_id,
+        item_id,
         qty,
         synced_at,
         warehouses!inner(code, name),
@@ -31,8 +36,12 @@ export async function GET(request: Request) {
 
 
     if (search) {
-
-      query = query.or(`name.ilike.%${search}%,sku.ilike.%${search}%`, { referencedTable: 'items' });
+      const trimmed = search.trim();
+      if (trimmed) {
+        const startsWith = `name.ilike.${trimmed}%,sku.ilike.${trimmed}%`;
+        const contains = `name.ilike.%${trimmed}%,sku.ilike.%${trimmed}%`;
+        query = query.or(`${startsWith},${contains}`, { referencedTable: 'items' });
+      }
     }
 
     // Warehouse filter
@@ -41,8 +50,13 @@ export async function GET(request: Request) {
     }
 
 
-    if (brand) {
-      query = query.eq('items.marca', brand);
+    if (brand || marca) {
+      const value = brand || marca;
+      query = query.eq('items.marca', value);
+    }
+
+    if (color) {
+      query = query.ilike('items.color', `%${color}%`);
     }
 
 
@@ -53,6 +67,25 @@ export async function GET(request: Request) {
 
     if (category) {
       query = query.ilike('items.category', `%${category}%`);
+    }
+
+    if (priceRange) {
+      if (priceRange.endsWith('+')) {
+        const min = parseFloat(priceRange.replace('+', ''));
+        if (!Number.isNaN(min)) {
+          query = query.gte('items.price', min);
+        }
+      } else if (priceRange.includes('-')) {
+        const [minRaw, maxRaw] = priceRange.split('-');
+        const min = parseFloat(minRaw);
+        const max = parseFloat(maxRaw);
+        if (!Number.isNaN(min)) {
+          query = query.gte('items.price', min);
+        }
+        if (!Number.isNaN(max)) {
+          query = query.lte('items.price', max);
+        }
+      }
     }
 
 
@@ -76,9 +109,6 @@ export async function GET(request: Request) {
       }
     }
 
-    // Sorting
-
-
     let orderConfig: { column: string, options?: { ascending: boolean, foreignTable?: string } } = {
       column: 'synced_at',
       options: { ascending: false }
@@ -86,10 +116,10 @@ export async function GET(request: Request) {
 
     switch (sortBy) {
       case 'name':
-        orderConfig = { column: 'synced_at', options: { ascending: true } };
+        orderConfig = { column: 'name', options: { ascending: true, foreignTable: 'items' } };
         break;
       case 'name_desc':
-        orderConfig = { column: 'synced_at', options: { ascending: false } };
+        orderConfig = { column: 'name', options: { ascending: false, foreignTable: 'items' } };
         break;
       case 'stock_asc':
         orderConfig = { column: 'qty', options: { ascending: true } };
@@ -101,7 +131,11 @@ export async function GET(request: Request) {
         orderConfig = { column: 'synced_at', options: { ascending: false } };
         break;
       default:
-        orderConfig = { column: 'synced_at', options: { ascending: false } };
+        if (search) {
+          orderConfig = { column: 'name', options: { ascending: true, foreignTable: 'items' } };
+        } else {
+          orderConfig = { column: 'synced_at', options: { ascending: false } };
+        }
     }
 
     const { data, error, count } = await query
@@ -122,6 +156,8 @@ export async function GET(request: Request) {
 
     const formattedData = (data || []).map((row: any) => ({
       id: row.id,
+      warehouse_id: row.warehouse_id,
+      item_id: row.item_id,
       item_name: row.items.name,
       color: row.items.color,
       state: row.items.state,

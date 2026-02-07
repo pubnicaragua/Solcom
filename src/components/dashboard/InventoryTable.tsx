@@ -5,12 +5,13 @@ import Card from '@/components/ui/Card';
 import Table from '@/components/ui/Table';
 import Badge from '@/components/ui/Badge';
 import Button from '@/components/ui/Button';
-import { ChevronLeft, ChevronRight, Warehouse, Package } from 'lucide-react';
-import { format } from 'date-fns';
-import { es } from 'date-fns/locale';
+import { ChevronLeft, ChevronRight, Warehouse, Package, ArrowLeftRight, Info } from 'lucide-react';
+ 
 
 interface InventoryItem {
   id: string;
+  warehouse_id: string;
+  item_id: string;
   item_name: string;
   color: string | null;
   state: string | null;
@@ -18,6 +19,7 @@ interface InventoryItem {
   warehouse_code: string;
   warehouse_name: string;
   qty: number;
+  brand?: string;
   stock_total?: number;
   price?: number;
   category?: string;
@@ -31,9 +33,11 @@ interface InventoryItem {
 interface InventoryTableProps {
   filters?: any;
   onSelectionChange?: (selectedIds: string[]) => void;
+  onTransfer?: (row: InventoryItem) => void;
+  onViewDetails?: (row: InventoryItem) => void;
 }
 
-export default function InventoryTable({ filters, onSelectionChange }: InventoryTableProps) {
+export default function InventoryTable({ filters, onSelectionChange, onTransfer, onViewDetails }: InventoryTableProps) {
   const [data, setData] = useState<InventoryItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [page, setPage] = useState(1);
@@ -116,8 +120,14 @@ export default function InventoryTable({ filters, onSelectionChange }: Inventory
       header: 'Producto',
       width: '18%',
       render: (row: InventoryItem) => (
-        <div>
-          <div style={{ fontWeight: 600, marginBottom: 4, fontSize: 14, color: '#F1F5F9' }}>{row.item_name}</div>
+        <div
+          style={{ cursor: onViewDetails ? 'pointer' : 'default' }}
+          onClick={() => onViewDetails?.(row)}
+        >
+          <div style={{ fontWeight: 600, marginBottom: 4, fontSize: 14, color: '#F1F5F9', display: 'flex', alignItems: 'center', gap: 6 }}>
+            {row.item_name}
+            {onViewDetails && <Info size={14} color="#94A3B8" />}
+          </div>
           {row.color && (
             <div style={{ fontSize: 11, color: '#F1F5F9', marginBottom: 2 }}>
               Color: {row.color}
@@ -156,6 +166,16 @@ export default function InventoryTable({ filters, onSelectionChange }: Inventory
           </div>
         );
       },
+    },
+    {
+      key: 'brand',
+      header: 'Marca',
+      width: '10%',
+      render: (row: InventoryItem) => (
+        <div style={{ fontSize: 13, fontWeight: 600, color: '#F1F5F9' }}>
+          {row.brand || '—'}
+        </div>
+      ),
     },
     {
       key: 'warehouse',
@@ -250,25 +270,20 @@ export default function InventoryTable({ filters, onSelectionChange }: Inventory
       },
     },
     {
-      key: 'synced_at',
-      header: 'Última Actualización',
-      width: '12%',
-      render: (row: InventoryItem) => {
-        try {
-          return (
-            <div>
-              <div style={{ fontSize: 12 }}>
-                {format(new Date(row.synced_at), 'dd/MM/yyyy', { locale: es })}
-              </div>
-              <div style={{ fontSize: 11, color: 'var(--muted)' }}>
-                {format(new Date(row.synced_at), 'HH:mm', { locale: es })}
-              </div>
-            </div>
-          );
-        } catch {
-          return <div style={{ fontSize: 12 }}>{row.synced_at}</div>;
-        }
-      },
+      key: 'actions',
+      header: 'Acciones',
+      width: '10%',
+      render: (row: InventoryItem) => (
+        <Button
+          variant="secondary"
+          size="sm"
+          onClick={() => onTransfer?.(row)}
+          disabled={!onTransfer}
+        >
+          <ArrowLeftRight size={14} />
+          Transferir
+        </Button>
+      ),
     },
   ];
 

@@ -4,6 +4,7 @@ export const warehouseSchema = z.object({
   id: z.string().uuid(),
   code: z.string().min(1),
   name: z.string().min(1),
+  zoho_warehouse_id: z.string().nullable().optional(),
   active: z.boolean(),
   created_at: z.string(),
   updated_at: z.string(),

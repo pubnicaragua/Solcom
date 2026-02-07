@@ -14,6 +14,7 @@ export interface Database {
           id: string
           code: string
           name: string
+          zoho_warehouse_id: string | null
           active: boolean
           created_at: string
           updated_at: string
@@ -22,6 +23,7 @@ export interface Database {
           id?: string
           code: string
           name: string
+          zoho_warehouse_id?: string | null
           active?: boolean
           created_at?: string
           updated_at?: string
@@ -30,6 +32,7 @@ export interface Database {
           id?: string
           code?: string
           name?: string
+          zoho_warehouse_id?: string | null
           active?: boolean
           created_at?: string
           updated_at?: string
@@ -126,42 +129,62 @@ export interface Database {
       stock_movements: {
         Row: {
           id: string
-          warehouse_id: string
           item_id: string
-          qty_change: number
+          from_warehouse_id: string | null
+          to_warehouse_id: string | null
+          quantity: number | null
           movement_type: string
+          status: string | null
+          reason: string | null
           document_id: string | null
+          zoho_adjustment_id: string | null
           notes: string | null
           created_at: string
         }
         Insert: {
           id?: string
-          warehouse_id: string
           item_id: string
-          qty_change: number
+          from_warehouse_id?: string | null
+          to_warehouse_id?: string | null
+          quantity?: number | null
           movement_type: string
+          status?: string | null
+          reason?: string | null
           document_id?: string | null
+          zoho_adjustment_id?: string | null
           notes?: string | null
           created_at?: string
         }
         Update: {
           id?: string
-          warehouse_id?: string
           item_id?: string
-          qty_change?: number
+          from_warehouse_id?: string | null
+          to_warehouse_id?: string | null
+          quantity?: number | null
           movement_type?: string
+          status?: string | null
+          reason?: string | null
           document_id?: string | null
+          zoho_adjustment_id?: string | null
           notes?: string | null
           created_at?: string
         }
         Relationships: [
           {
-            foreignKeyName: "stock_movements_warehouse_id_fkey"
-            columns: ["warehouse_id"]
+            foreignKeyName: "stock_movements_from_warehouse_id_fkey"
+            columns: ["from_warehouse_id"]
             isOneToOne: false
             referencedRelation: "warehouses"
             referencedColumns: ["id"]
           },
+          {
+            foreignKeyName: "stock_movements_to_warehouse_id_fkey"
+            columns: ["to_warehouse_id"]
+            isOneToOne: false
+            referencedRelation: "warehouses"
+            referencedColumns: ["id"]
+          }
+          ,
           {
             foreignKeyName: "stock_movements_item_id_fkey"
             columns: ["item_id"]

@@ -23,8 +23,13 @@ export class InventorySyncService {
    */
   async syncTransferToZoho(transfer: TransferData): Promise<{ success: boolean; zoho_adjustment_id?: string; error?: string }> {
     try {
+      const zohoItemId = await this.getZohoItemId(transfer.item_id);
+      if (!zohoItemId) {
+        throw new Error('El producto no tiene zoho_item_id');
+      }
+
       // 1. Obtener precios reales del producto
-      const itemPrice = await this.getItemPrice(transfer.item_id);
+      const itemPrice = await this.getItemPrice(zohoItemId);
       if (!itemPrice) {
         throw new Error('No se pudo obtener el precio del producto');
       }
@@ -50,14 +55,14 @@ export class InventorySyncService {
         reason: transfer.reason || 'Transferencia entre bodegas',
         line_items: [
           {
-            item_id: transfer.item_id,
+            item_id: zohoItemId,
             warehouse_id: fromZohoWarehouse.warehouse_id,
             quantity_adjusted: -transfer.quantity,
             rate: itemPrice,
             item_total: -(transfer.quantity * itemPrice)
           },
           {
-            item_id: transfer.item_id,
+            item_id: zohoItemId,
             warehouse_id: toZohoWarehouse.warehouse_id,
             quantity_adjusted: transfer.quantity,
             rate: itemPrice,
@@ -92,16 +97,29 @@ export class InventorySyncService {
   /**
    * Obtiene precio real del producto desde Zoho
    */
-  private async getItemPrice(itemId: string): Promise<number | null> {
+  private async getItemPrice(zohoItemId: string): Promise<number | null> {
     try {
       if (!this.zohoClient) {
         throw new Error('Zoho client no está configurado');
       }
-      const response = await this.zohoClient.request('GET', `/books/v3/items/${itemId}`);
+      const response = await this.zohoClient.request('GET', `/books/v3/items/${zohoItemId}`);
       return response.data?.item?.rate || null;
     } catch {
       return null;
     }
+  }
+
+  /**
+   * Obtiene zoho_item_id desde el item local
+   */
+  private async getZohoItemId(localItemId: string): Promise<string | null> {
+    const { data: item } = await this.supabase
+      .from('items')
+      .select('zoho_item_id')
+      .eq('id', localItemId)
+      .single();
+
+    return item?.zoho_item_id || null;
   }
 
   /**
@@ -112,7 +130,7 @@ export class InventorySyncService {
       // Obtener warehouse local
       const { data: localWarehouse } = await this.supabase
         .from('warehouses')
-        .select('code')
+        .select('code, zoho_warehouse_id')
         .eq('id', localWarehouseId)
         .single();
 
@@ -121,6 +139,12 @@ export class InventorySyncService {
       // Buscar en Zoho por nombre/código
       if (!this.zohoClient) {
         throw new Error('Zoho client no está configurado');
+      }
+      if (localWarehouse.zoho_warehouse_id) {
+        return {
+          warehouse_id: localWarehouse.zoho_warehouse_id,
+          warehouse_name: localWarehouse.code
+        };
       }
       const response = await this.zohoClient.request('GET', '/books/v3/warehouses');
       const zohoWarehouse = response.data?.warehouses?.find(

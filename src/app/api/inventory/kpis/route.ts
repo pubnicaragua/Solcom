@@ -15,14 +15,31 @@ export async function GET() {
       supabase.from('stock_snapshots').select('qty, synced_at').order('synced_at', { ascending: false }).limit(1),
     ]);
 
-    // Supabase returns max 1000 rows by default. Fetch all items to sum stock_total.
-    // Ideally we would use an RPC function or the new Aggregate functions if available.
-    const { data: allItems } = await supabase
-      .from('items')
-      .select('stock_total')
-      .range(0, 99999);
+    // Sum stock_total with pagination to avoid row limits.
+    const pageSize = 1000;
+    let from = 0;
+    let totalStock = 0;
+    let hasMore = true;
 
-    const totalStock = (allItems || []).reduce((sum: number, row: any) => sum + (row.stock_total || 0), 0);
+    while (hasMore) {
+      const { data, error } = await supabase
+        .from('items')
+        .select('stock_total')
+        .range(from, from + pageSize - 1);
+
+      if (error) {
+        throw error;
+      }
+
+      const batch = data || [];
+      totalStock += batch.reduce((sum: number, row: any) => sum + (row.stock_total || 0), 0);
+
+      if (batch.length < pageSize) {
+        hasMore = false;
+      } else {
+        from += pageSize;
+      }
+    }
 
     const totalProducts = itemsResult.count || 0;
 

@@ -8,8 +8,11 @@ import Select from '@/components/ui/Select';
 import Badge from '@/components/ui/Badge';
 import KPIGrid from '@/components/dashboard/KPIGrid';
 import InventoryTable from '@/components/dashboard/InventoryTable';
+import TransferHistory from '@/components/dashboard/TransferHistory';
 import EditProductModal from '@/components/modals/EditProductModal';
 import UpdateStockModal from '@/components/modals/UpdateStockModal';
+import TransferModal from '@/components/modals/TransferModal';
+import ProductDetailsModal from '@/components/modals/ProductDetailsModal';
 import { Search, Filter, Download, Upload, Trash2, Edit, RefreshCw, FileSpreadsheet, FileText, BarChart3 } from 'lucide-react';
 
 export default function InventoryPage() {
@@ -28,7 +31,11 @@ export default function InventoryPage() {
   const [showAdvancedFilters, setShowAdvancedFilters] = useState(false);
   const [editModalOpen, setEditModalOpen] = useState(false);
   const [stockModalOpen, setStockModalOpen] = useState(false);
+  const [transferModalOpen, setTransferModalOpen] = useState(false);
+  const [detailsModalOpen, setDetailsModalOpen] = useState(false);
   const [selectedProduct, setSelectedProduct] = useState<any>(null);
+  const [transferProduct, setTransferProduct] = useState<any>(null);
+  const [detailsProduct, setDetailsProduct] = useState<any>(null);
   const [warehouses, setWarehouses] = useState<any[]>([]);
 
   useEffect(() => {
@@ -123,6 +130,13 @@ export default function InventoryPage() {
   }
 
   const activeFiltersCount = Object.values(filters).filter(v => v !== '' && v !== 'name').length;
+  const warehouseOptions = [
+    { value: '', label: 'Todas las bodegas' },
+    ...warehouses.map((w) => ({
+      value: w.code,
+      label: `${w.code} - ${w.name}`,
+    })),
+  ];
 
   return (
     <div style={{ display: 'grid', gap: 14 }}>
@@ -200,7 +214,7 @@ export default function InventoryPage() {
               e.currentTarget.style.boxShadow = '0 2px 8px rgba(220, 38, 38, 0.3)';
             }}
             onClick={async () => {
-              if (confirm('¿Deseas sincronizar el inventario desde Zoho Books?')) {
+              if (confirm('¿Deseas sincronizar el inventario desde Zoho Inventory?')) {
                 try {
                   const response = await fetch('/api/zoho/books/sync', {
                     method: 'POST',
@@ -209,7 +223,7 @@ export default function InventoryPage() {
                   });
                   const data = await response.json();
                   if (response.ok) {
-                    alert(`Sincronización exitosa: ${data.itemsProcessed} productos actualizados.`);
+                    alert(`Sincronización exitosa: ${data.snapshotsCreated || 0} snapshots creados.`);
                     window.location.reload();
                   } else {
                     alert(`Error: ${data.error}`);
@@ -221,7 +235,7 @@ export default function InventoryPage() {
             }}
           >
             <RefreshCw size={16} style={{ marginRight: 6 }} />
-            Sincronizar Books
+            Sincronizar Inventario
           </Button>
         </div>
       </div>
@@ -278,14 +292,7 @@ export default function InventoryPage() {
             </div>
 
             <Select
-              options={[
-                { value: '', label: 'Todas las bodegas' },
-                { value: 'X1', label: 'X1 - Principal' },
-                { value: 'X4', label: 'X4 - Secundaria' },
-                { value: 'X5', label: 'X5 - Norte' },
-                { value: 'X7', label: 'X7 - Sur' },
-                { value: 'X9', label: 'X9 - Temporal' },
-              ]}
+              options={warehouseOptions}
               value={filters.warehouse}
               onChange={(e) => handleFilterChange('warehouse', e.target.value)}
             />
@@ -433,7 +440,35 @@ export default function InventoryPage() {
         </Card>
       )}
 
-      <InventoryTable filters={filters} onSelectionChange={setSelectedItems} />
+      <InventoryTable
+        filters={filters}
+        onSelectionChange={setSelectedItems}
+        onTransfer={(row) => {
+          setTransferProduct({
+            itemId: row.item_id,
+            itemName: row.item_name,
+            currentWarehouse: row.warehouse_id,
+          });
+          setTransferModalOpen(true);
+        }}
+        onViewDetails={(row) => {
+          setDetailsProduct(row);
+          setDetailsModalOpen(true);
+        }}
+      />
+
+      <Card>
+        <div style={{ padding: 16, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <div>
+            <div className="h-title">Historial de Transferencias</div>
+            <div style={{ fontSize: 13, color: 'var(--muted)', marginTop: 4 }}>
+              Movimientos recientes entre bodegas
+            </div>
+          </div>
+          <BarChart3 size={18} color="var(--brand-primary)" />
+        </div>
+        <TransferHistory />
+      </Card>
 
       <EditProductModal
         isOpen={editModalOpen}
@@ -448,6 +483,20 @@ export default function InventoryPage() {
         product={selectedProduct}
         warehouses={warehouses}
         onUpdate={handleUpdateStock}
+      />
+
+      <TransferModal
+        isOpen={transferModalOpen}
+        onClose={() => setTransferModalOpen(false)}
+        itemId={transferProduct?.itemId}
+        itemName={transferProduct?.itemName}
+        currentWarehouse={transferProduct?.currentWarehouse}
+      />
+
+      <ProductDetailsModal
+        isOpen={detailsModalOpen}
+        onClose={() => setDetailsModalOpen(false)}
+        product={detailsProduct}
       />
     </div>
   );
