@@ -81,33 +81,40 @@ export default function ClienteDashboardPage() {
     .sort((a, b) => (b.qty || 0) - (a.qty || 0));
 
   return (
-    <div style={{ minHeight: '100vh', background: 'var(--background)' }}>
+    <div style={{ minHeight: '100vh', background: '#0f172a' }}>
       {/* Header */}
       <div style={{
-        background: 'var(--panel)',
-        borderBottom: '1px solid var(--border)',
+        background: '#1e293b',
+        borderBottom: '1px solid #334155',
         padding: '16px 24px',
         display: 'flex',
         justifyContent: 'space-between',
-        alignItems: 'center'
+        alignItems: 'center',
+        flexWrap: 'wrap',
+        gap: 16
       }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 16, flex: '1 1 auto' }}>
           <img
             src="https://www.soliscomercialni.com/Solis%20Comercial%20Logo.png"
             alt="Solis Comercial"
-            style={{ height: 40 }}
+            style={{ 
+              height: 40,
+              background: 'white',
+              padding: 8,
+              borderRadius: 8
+            }}
           />
           <div>
-            <h1 style={{ fontSize: 20, fontWeight: 700, margin: 0, color: 'var(--text-primary)' }}>
+            <h1 style={{ fontSize: 20, fontWeight: 700, margin: 0, color: '#f1f5f9' }}>
               Portal de Inventario
             </h1>
-            <p style={{ fontSize: 13, color: 'var(--muted)', margin: 0 }}>
+            <p style={{ fontSize: 13, color: '#94a3b8', margin: 0 }}>
               {user?.email}
             </p>
           </div>
         </div>
-        <div style={{ display: 'flex', gap: 12 }}>
-          <Button variant="ghost" size="sm" onClick={fetchData}>
+        <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
+          <Button variant="ghost" size="sm" onClick={fetchData} disabled={loading}>
             <RefreshCw size={16} />
             Actualizar
           </Button>
@@ -129,9 +136,9 @@ export default function ClienteDashboardPage() {
         )}
 
         {/* Filtros */}
-        <Card style={{ marginBottom: 24 }}>
+        <Card style={{ marginBottom: 24, background: '#1e293b', border: '1px solid #334155' }}>
           <div style={{ padding: 20 }}>
-            <h2 style={{ fontSize: 16, fontWeight: 600, margin: '0 0 16px 0', color: 'var(--text-primary)' }}>
+            <h2 style={{ fontSize: 16, fontWeight: 600, margin: '0 0 16px 0', color: '#f1f5f9' }}>
               Filtros de Búsqueda
             </h2>
             <div style={{ 
@@ -146,14 +153,19 @@ export default function ClienteDashboardPage() {
                     position: 'absolute',
                     left: 12,
                     top: 12,
-                    color: 'var(--muted)'
+                    color: '#64748b'
                   }}
                 />
                 <Input
                   placeholder="Buscar por nombre o SKU..."
                   value={searchTerm}
                   onChange={(e) => setSearchTerm(e.target.value)}
-                  style={{ paddingLeft: 40 }}
+                  style={{ 
+                    paddingLeft: 40,
+                    background: '#0f172a',
+                    border: '1px solid #334155',
+                    color: '#f1f5f9'
+                  }}
                 />
               </div>
               <select
@@ -161,11 +173,11 @@ export default function ClienteDashboardPage() {
                 onChange={(e) => setSelectedWarehouse(e.target.value)}
                 style={{
                   padding: '10px 12px',
-                  border: '1px solid var(--border)',
+                  border: '1px solid #334155',
                   borderRadius: '8px',
                   fontSize: 14,
-                  background: 'var(--panel)',
-                  color: 'var(--text-primary)',
+                  background: '#0f172a',
+                  color: '#f1f5f9',
                   cursor: 'pointer'
                 }}
               >
@@ -181,71 +193,85 @@ export default function ClienteDashboardPage() {
         </Card>
 
         {/* Resumen de Bodegas */}
-        <div style={{
-          display: 'grid',
-          gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))',
-          gap: 16,
-          marginBottom: 24
-        }}>
-          {warehouses.map(warehouse => {
-            const warehouseItems = items.filter(i => i.warehouse_id === warehouse.id);
-            const totalStock = warehouseItems.reduce((sum, i) => sum + (i.qty || 0), 0);
-            
-            return (
-              <Card key={warehouse.id}>
-                <div style={{ padding: 16 }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 12 }}>
+        {warehouses.length > 0 && (
+          <div style={{
+            display: 'grid',
+            gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))',
+            gap: 16,
+            marginBottom: 24
+          }}>
+            {warehouses.map(warehouse => {
+              const warehouseItems = items.filter(i => i.warehouse_id === warehouse.id);
+              const totalStock = warehouseItems.reduce((sum, i) => sum + (i.qty || 0), 0);
+              
+              return (
+                <Card key={warehouse.id} style={{ background: '#1e293b', border: '1px solid #334155' }}>
+                  <div style={{ padding: 16 }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 12 }}>
+                      <div style={{
+                        width: 40,
+                        height: 40,
+                        borderRadius: 8,
+                        background: '#3b82f620',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center'
+                      }}>
+                        <Warehouse size={20} color="#3b82f6" />
+                      </div>
+                      <div>
+                        <div style={{ fontSize: 13, color: '#94a3b8' }}>
+                          {warehouse.code}
+                        </div>
+                        <div style={{ fontSize: 14, fontWeight: 600, color: '#f1f5f9' }}>
+                          {warehouse.name}
+                        </div>
+                      </div>
+                    </div>
                     <div style={{
-                      width: 40,
-                      height: 40,
-                      borderRadius: 8,
-                      background: 'var(--brand-primary)15',
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'center'
+                      fontSize: 24,
+                      fontWeight: 700,
+                      color: '#3b82f6',
+                      marginBottom: 4
                     }}>
-                      <Warehouse size={20} color="var(--brand-primary)" />
+                      {totalStock.toLocaleString('es-NI')}
                     </div>
-                    <div>
-                      <div style={{ fontSize: 13, color: 'var(--muted)' }}>
-                        {warehouse.code}
-                      </div>
-                      <div style={{ fontSize: 14, fontWeight: 600, color: 'var(--text-primary)' }}>
-                        {warehouse.name}
-                      </div>
+                    <div style={{ fontSize: 12, color: '#94a3b8' }}>
+                      {warehouseItems.length} productos
                     </div>
                   </div>
-                  <div style={{
-                    fontSize: 24,
-                    fontWeight: 700,
-                    color: 'var(--brand-primary)',
-                    marginBottom: 4
-                  }}>
-                    {totalStock.toLocaleString('es-NI')}
-                  </div>
-                  <div style={{ fontSize: 12, color: 'var(--muted)' }}>
-                    {warehouseItems.length} productos
-                  </div>
-                </div>
-              </Card>
-            );
-          })}
-        </div>
+                </Card>
+              );
+            })}
+          </div>
+        )}
 
         {/* Tabla de Inventario */}
-        <Card>
+        <Card style={{ background: '#1e293b', border: '1px solid #334155' }}>
           <div style={{ padding: 20 }}>
-            <h2 style={{ fontSize: 16, fontWeight: 600, margin: '0 0 16px 0', color: 'var(--text-primary)' }}>
+            <h2 style={{ fontSize: 16, fontWeight: 600, margin: '0 0 16px 0', color: '#f1f5f9' }}>
               Inventario Disponible ({filteredItems.length} productos)
             </h2>
             
             {loading ? (
-              <div style={{ textAlign: 'center', padding: '40px 20px', color: 'var(--muted)' }}>
-                Cargando inventario...
+              <div style={{ textAlign: 'center', padding: '40px 20px', color: '#94a3b8' }}>
+                <RefreshCw size={32} style={{ animation: 'spin 1s linear infinite', marginBottom: 12 }} />
+                <div>Cargando inventario...</div>
+              </div>
+            ) : items.length === 0 ? (
+              <div style={{ textAlign: 'center', padding: '40px 20px' }}>
+                <Package size={48} color="#64748b" style={{ marginBottom: 16 }} />
+                <div style={{ color: '#94a3b8', fontSize: 16, marginBottom: 8 }}>
+                  No hay datos de inventario disponibles
+                </div>
+                <div style={{ color: '#64748b', fontSize: 14 }}>
+                  Por favor, contacte al administrador para sincronizar el inventario
+                </div>
               </div>
             ) : filteredItems.length === 0 ? (
-              <div style={{ textAlign: 'center', padding: '40px 20px', color: 'var(--muted)' }}>
-                No hay productos disponibles con los filtros seleccionados
+              <div style={{ textAlign: 'center', padding: '40px 20px', color: '#94a3b8' }}>
+                <Search size={48} color="#64748b" style={{ marginBottom: 16 }} />
+                <div>No hay productos que coincidan con los filtros seleccionados</div>
               </div>
             ) : (
               <div style={{ overflowX: 'auto' }}>
@@ -255,23 +281,23 @@ export default function ClienteDashboardPage() {
                   fontSize: 14
                 }}>
                   <thead>
-                    <tr style={{ borderBottom: '2px solid var(--border)', background: 'var(--background)' }}>
-                      <th style={{ padding: '12px 16px', textAlign: 'left', fontWeight: 600, color: 'var(--text-primary)' }}>
+                    <tr style={{ borderBottom: '2px solid #334155', background: '#0f172a' }}>
+                      <th style={{ padding: '12px 16px', textAlign: 'left', fontWeight: 600, color: '#f1f5f9' }}>
                         SKU
                       </th>
-                      <th style={{ padding: '12px 16px', textAlign: 'left', fontWeight: 600, color: 'var(--text-primary)' }}>
+                      <th style={{ padding: '12px 16px', textAlign: 'left', fontWeight: 600, color: '#f1f5f9' }}>
                         Producto
                       </th>
-                      <th style={{ padding: '12px 16px', textAlign: 'left', fontWeight: 600, color: 'var(--text-primary)' }}>
+                      <th style={{ padding: '12px 16px', textAlign: 'left', fontWeight: 600, color: '#f1f5f9' }}>
                         Categoría
                       </th>
-                      <th style={{ padding: '12px 16px', textAlign: 'left', fontWeight: 600, color: 'var(--text-primary)' }}>
+                      <th style={{ padding: '12px 16px', textAlign: 'left', fontWeight: 600, color: '#f1f5f9' }}>
                         Bodega
                       </th>
-                      <th style={{ padding: '12px 16px', textAlign: 'right', fontWeight: 600, color: 'var(--text-primary)' }}>
+                      <th style={{ padding: '12px 16px', textAlign: 'right', fontWeight: 600, color: '#f1f5f9' }}>
                         Stock
                       </th>
-                      <th style={{ padding: '12px 16px', textAlign: 'center', fontWeight: 600, color: 'var(--text-primary)' }}>
+                      <th style={{ padding: '12px 16px', textAlign: 'center', fontWeight: 600, color: '#f1f5f9' }}>
                         Estado
                       </th>
                     </tr>
@@ -281,27 +307,30 @@ export default function ClienteDashboardPage() {
                       <tr
                         key={idx}
                         style={{
-                          borderBottom: '1px solid var(--border)',
-                          background: idx % 2 === 0 ? 'var(--panel)' : 'var(--background)'
+                          borderBottom: '1px solid #334155',
+                          background: idx % 2 === 0 ? '#1e293b' : '#0f172a',
+                          transition: 'background 0.2s'
                         }}
+                        onMouseEnter={(e) => e.currentTarget.style.background = '#334155'}
+                        onMouseLeave={(e) => e.currentTarget.style.background = idx % 2 === 0 ? '#1e293b' : '#0f172a'}
                       >
-                        <td style={{ padding: '12px 16px', color: 'var(--brand-primary)', fontWeight: 600 }}>
+                        <td style={{ padding: '12px 16px', color: '#3b82f6', fontWeight: 600, fontSize: 13 }}>
                           {item.items?.sku || 'N/A'}
                         </td>
-                        <td style={{ padding: '12px 16px', color: 'var(--text-primary)' }}>
+                        <td style={{ padding: '12px 16px', color: '#f1f5f9' }}>
                           {item.items?.name || 'Sin nombre'}
                         </td>
-                        <td style={{ padding: '12px 16px', color: 'var(--muted)' }}>
+                        <td style={{ padding: '12px 16px', color: '#94a3b8', fontSize: 13 }}>
                           {item.items?.category || 'Sin categoría'}
                         </td>
-                        <td style={{ padding: '12px 16px', color: 'var(--muted)' }}>
+                        <td style={{ padding: '12px 16px', color: '#94a3b8', fontSize: 13 }}>
                           {item.warehouses?.code || 'N/A'}
                         </td>
                         <td style={{
                           padding: '12px 16px',
                           textAlign: 'right',
                           fontWeight: 600,
-                          color: item.qty > 0 ? 'var(--success)' : 'var(--danger)'
+                          color: item.qty > 0 ? '#10b981' : '#ef4444'
                         }}>
                           {item.qty.toLocaleString('es-NI')}
                         </td>

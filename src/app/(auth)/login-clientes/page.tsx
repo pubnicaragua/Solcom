@@ -34,16 +34,23 @@ export default function LoginClientesPage() {
       }
 
       if (data.user) {
-        console.log('Login exitoso, redirigiendo...');
-        // Esperar un poco para asegurar que la sesión se guarde
+        console.log('✅ Login exitoso, usuario:', data.user.id);
+        console.log('📝 Sesión creada en Supabase');
+        
+        // Esperar para asegurar que las cookies se guarden
         await new Promise(resolve => setTimeout(resolve, 500));
-        // Usar window.location para forzar recarga completa
-        window.location.href = '/cliente/dashboard';
+        
+        console.log('🚀 Redirigiendo a dashboard...');
+        
+        // Usar router.push que maneja mejor las cookies de Next.js
+        router.push('/cliente/dashboard');
+        
+        // Mantener loading activo durante la redirección
+        return;
       }
     } catch (err: any) {
       console.error('Error en handleLogin:', err);
       setError(err.message || 'Error al iniciar sesión');
-    } finally {
       setLoading(false);
     }
   }

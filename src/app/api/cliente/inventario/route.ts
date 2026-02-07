@@ -76,7 +76,7 @@ export async function GET(request: NextRequest) {
 
     if (warehousesError) throw warehousesError;
 
-    // Obtener stock snapshots más recientes con items y warehouses
+    // Obtener TODOS los stock snapshots más recientes con items y warehouses
     const { data: stockSnapshots, error: snapshotsError } = await supabase
       .from('stock_snapshots')
       .select(`
@@ -103,8 +103,7 @@ export async function GET(request: NextRequest) {
           active
         )
       `)
-      .order('synced_at', { ascending: false })
-      .limit(10000);
+      .order('synced_at', { ascending: false });
 
     if (snapshotsError) throw snapshotsError;
 
