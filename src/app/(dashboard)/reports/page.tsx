@@ -127,9 +127,11 @@ export default function ReportsPage() {
 
       setFilteredSnapshots(filtered);
       
-      // Usar el valor correcto de inventario de Zoho Books
-      const zohoTotalValue = 1415297.98;
-      calculateStats(itemsData, filtered, warehousesData, zohoTotalValue, kpis);
+      const calculatedTotalValue = itemsData.reduce(
+        (sum, item) => sum + ((item.stock_total || 0) * (item.price || 0)),
+        0
+      );
+      calculateStats(itemsData, filtered, warehousesData, calculatedTotalValue, kpis);
     } catch (err: any) {
       setError(err.message || 'Error al cargar datos');
       console.error('Error fetching data:', err);

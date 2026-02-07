@@ -82,13 +82,13 @@ async function fetchZohoItems(accessToken: string, apiDomain: string, organizati
   return items;
 }
 
-async function fetchItemWarehouses(
+async function fetchItemLocations(
   accessToken: string,
   apiDomain: string,
   organizationId: string,
   itemId: string
 ) {
-  const url = `${apiDomain}/inventory/v1/items/${itemId}?organization_id=${organizationId}`;
+  const url = `${apiDomain}/inventory/v1/items/${itemId}/locationdetails?organization_id=${organizationId}`;
   const response = await fetch(url, {
     headers: {
       Authorization: `Zoho-oauthtoken ${accessToken}`,
@@ -113,7 +113,7 @@ async function fetchItemWarehouses(
     throw new Error(`Zoho Inventory item error: invalid JSON response: ${rawText.substring(0, 200)}`);
   }
 
-  return result.item?.warehouses || [];
+  return result.item_location_details?.locations || [];
 }
 
 export async function POST(request: Request) {
@@ -186,21 +186,19 @@ export async function POST(request: Request) {
         continue;
       }
 
-      let warehousesList = zohoItem.warehouses || [];
-      if (!Array.isArray(warehousesList) || warehousesList.length === 0) {
-        try {
-          warehousesList = await fetchItemWarehouses(
-            accessToken,
-            apiDomain,
-            organizationId,
-            zohoItem.item_id
-          );
-        } catch (error) {
-          console.error('Error fetching item warehouses:', zohoItem.item_id, error);
-        }
+      let locationsList: any[] = [];
+      try {
+        locationsList = await fetchItemLocations(
+          accessToken,
+          apiDomain,
+          organizationId,
+          zohoItem.item_id
+        );
+      } catch (error) {
+        console.error('Error fetching item locations:', zohoItem.item_id, error);
       }
 
-      if (!Array.isArray(warehousesList) || warehousesList.length === 0) {
+      if (!Array.isArray(locationsList) || locationsList.length === 0) {
         itemsWithoutWarehouses += 1;
 
         if (defaultWarehouseId) {
@@ -222,20 +220,19 @@ export async function POST(request: Request) {
 
       itemsWithWarehouses += 1;
 
-      for (const wh of warehousesList) {
-        if (wh?.warehouse_id) {
-          sampleZohoWarehouseIds.add(wh.warehouse_id);
+      for (const loc of locationsList) {
+        if (loc?.location_id) {
+          sampleZohoWarehouseIds.add(loc.location_id);
         }
-        const localWarehouseId = warehouseMap.get(wh.warehouse_id);
+        const localWarehouseId = warehouseMap.get(loc.location_id);
         if (!localWarehouseId) {
           missingWarehouseMappings += 1;
           continue;
         }
 
         const qty =
-          wh.warehouse_stock_on_hand ??
-          wh.stock_on_hand ??
-          wh.quantity_available ??
+          loc.location_stock_on_hand ??
+          loc.location_available_stock ??
           0;
 
         snapshots.push({
