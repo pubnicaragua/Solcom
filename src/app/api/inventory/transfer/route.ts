@@ -27,7 +27,7 @@ export async function POST(request: Request) {
     const syncService = new InventorySyncService();
 
     // 1. Transferir stock en Supabase (funcion SQL transaccional)
-    const { data: transferId, error: transferError } = await supabase.rpc('transfer_stock', {
+    const { data: transferId, error: transferError } = await (supabase.rpc as any)('transfer_stock', {
       p_item_id: item_id,
       p_from_warehouse_id: from_warehouse_id,
       p_to_warehouse_id: to_warehouse_id,
