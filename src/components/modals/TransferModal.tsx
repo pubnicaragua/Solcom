@@ -9,6 +9,8 @@ interface TransferModalProps {
   itemId?: string;
   itemName?: string;
   currentWarehouse?: string;
+  /** Nombre o código de la bodega de origen (para mostrar aunque la lista aún no cargue) */
+  currentWarehouseLabel?: string;
 }
 
 interface Warehouse {
@@ -23,7 +25,8 @@ export default function TransferModal({
   onClose, 
   itemId, 
   itemName, 
-  currentWarehouse 
+  currentWarehouse,
+  currentWarehouseLabel 
 }: TransferModalProps) {
   const [warehouses, setWarehouses] = useState<Warehouse[]>([]);
   const [selectedWarehouse, setSelectedWarehouse] = useState('');
@@ -156,9 +159,9 @@ export default function TransferModal({
                   background: 'var(--panel)',
                   borderRadius: 6,
                   fontSize: 14,
-                  color: 'var(--muted)'
+                  color: 'var(--text)'
                 }}>
-                  {originWarehouse?.name || 'Bodega actual'}
+                  {currentWarehouseLabel || originWarehouse?.name || originWarehouse?.code || 'Bodega actual'}
                 </div>
               </div>
 
