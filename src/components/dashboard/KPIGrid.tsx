@@ -34,6 +34,39 @@ export default function KPIGrid() {
     fetchKPIs();
   }, []);
 
+  // Suscripción a cambios en tiempo real de Supabase para actualizar KPIs
+  useEffect(() => {
+    const setupRealtime = async () => {
+      try {
+        const { createClientComponentClient } = await import('@supabase/auth-helpers-nextjs');
+        const supabase = createClientComponentClient();
+
+        const channel = supabase
+          .channel('kpi-items-changes')
+          .on(
+            'postgres_changes',
+            { event: '*', schema: 'public', table: 'items' },
+            () => {
+              // Refrescar KPIs cuando hay cambios
+              fetchKPIs();
+            }
+          )
+          .subscribe();
+
+        return () => {
+          supabase.removeChannel(channel);
+        };
+      } catch (error) {
+        console.error('Error setting up realtime for KPIs:', error);
+      }
+    };
+
+    const cleanup = setupRealtime();
+    return () => {
+      cleanup.then((unsubscribe) => unsubscribe?.());
+    };
+  }, []);
+
   async function fetchKPIs() {
     try {
       const res = await fetch('/api/inventory/kpis');
