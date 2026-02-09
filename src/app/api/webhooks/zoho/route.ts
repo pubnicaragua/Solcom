@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createServerClient } from '@/lib/supabase/server';
+import { getZohoAccessToken, fetchItemLocations } from '@/lib/zoho/inventory-utils';
 
 export const dynamic = 'force-dynamic';
 
@@ -58,6 +59,54 @@ export async function POST(request: NextRequest) {
         const cfColor = customFields.cf_color || itemData.cf_color || null;
         const cfEstado = customFields.cf_estado || itemData.cf_estado || null;
 
+        // Calcular stock real excluyendo bodegas inactivas
+        let stockTotal = itemData.actual_available_stock ?? itemData.stock_on_hand ?? 0;
+
+        try {
+            // Intentar obtener detalle de bodegas para limpiar el stock total
+            const organizationId = process.env.ZOHO_BOOKS_ORGANIZATION_ID;
+            if (organizationId) {
+                const auth = await getZohoAccessToken();
+                if (!('error' in auth)) {
+                    const locations = await fetchItemLocations(
+                        auth.accessToken,
+                        auth.apiDomain,
+                        organizationId,
+                        zohoItemId
+                    );
+
+                    // Mapear bodegas de Supabase para saber cuáles son activas
+                    const { data: warehouses } = await supabase
+                        .from('warehouses')
+                        .select('id, zoho_warehouse_id, active')
+                        .not('zoho_warehouse_id', 'is', null);
+
+                    if (warehouses) {
+                        const warehouseMap = new Map(
+                            warehouses.map((w: any) => [String(w.zoho_warehouse_id), w.active])
+                        );
+
+                        // Sumar solo stock de bodegas activas
+                        let cleanStock = 0;
+                        for (const loc of locations) {
+                            const locId = String(loc.location_id);
+                            // Si la bodega existe en nuestro mapa y está ACTIVA, sumamos
+                            // Si no existe, asumimos inactiva por seguridad o lo sumamos?
+                            // Mejor: solo sumar si sabemos que es activa.
+                            if (warehouseMap.get(locId) === true) {
+                                cleanStock += (loc.location_stock_on_hand ?? 0);
+                            }
+                        }
+                        console.log(`Recalculated stock for ${zohoItemId}: Raw=${stockTotal}, Clean=${cleanStock}`);
+                        stockTotal = cleanStock;
+                    }
+                }
+            }
+        } catch (err) {
+            console.error('Error recalculating stock in webhook:', err);
+            // Fallback al stock original si falla el cálculo
+        }
+
         // Preparar payload para Supabase
         const itemPayload = {
             sku: itemData.sku || `NO-SKU-${zohoItemId}`,
@@ -66,7 +115,7 @@ export async function POST(request: NextRequest) {
             color: cfColor,
             state: cfEstado,
             zoho_item_id: zohoItemId,
-            stock_total: itemData.actual_available_stock ?? itemData.stock_on_hand ?? 0,
+            stock_total: stockTotal,
             price: itemData.purchase_rate ?? null,
         };
 
