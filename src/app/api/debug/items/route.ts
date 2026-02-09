@@ -24,10 +24,10 @@ export async function GET() {
 
         if (itemsError) throw itemsError;
 
-        const skuMap = new Map();
-        const zohoIdMap = new Map();
-        const duplicates = [];
-        const itemsWithoutZohoId = [];
+        const skuMap = new Map<string, any>();
+        const zohoIdMap = new Map<string, any>();
+        const duplicates: any[] = [];
+        const itemsWithoutZohoId: any[] = [];
 
         // Analizar duplicados
         (allItems || []).forEach(item => {

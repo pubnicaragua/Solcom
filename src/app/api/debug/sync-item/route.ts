@@ -59,6 +59,10 @@ export async function GET(request: NextRequest) {
 
         const start = Date.now();
         log(`Fetching locations for item ID ${item.zoho_item_id} from Zoho...`);
+        if (!item.zoho_item_id) {
+            log('Item has no zoho_item_id, aborting fetch');
+            return NextResponse.json({ logs, error: 'Item has no zoho_item_id' });
+        }
         let locations = [];
         try {
             locations = await fetchItemLocations(

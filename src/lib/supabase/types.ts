@@ -199,7 +199,10 @@ export interface Database {
       [_ in never]: never
     }
     Functions: {
-      [_ in never]: never
+      detect_duplicate_skus: {
+        Args: Record<string, never>
+        Returns: Json[]
+      }
     }
     Enums: {
       [_ in never]: never
