@@ -257,15 +257,47 @@ export async function POST(request: Request) {
       }
     }
 
-    if (snapshots.length > 0) {
-      const { error: snapError } = await supabase
-        .from('stock_snapshots')
-        .insert(snapshots);
+    // Recalcular stock_total para excluir bodegas inactivas
+    // Esto asegura que el total en la UI coincida con la suma de bodegas visibles
+    if (itemIdsToReplace.size > 0) {
+      const allItemIds = Array.from(itemIdsToReplace);
+      // Procesar en lotes para no saturar
+      const batchSize = 100;
 
-      if (snapError) {
-        throw snapError;
+      for (let i = 0; i < allItemIds.length; i += batchSize) {
+        const batch = allItemIds.slice(i, i + batchSize);
+
+        // Calcular suma de stock solo de bodegas ACTIVAS para estos items
+        const { data: stockSums, error: sumError } = await supabase
+          .from('stock_snapshots')
+          .select('item_id, qty, warehouses!inner(active)')
+          .in('item_id', batch)
+          .eq('warehouses.active', true);
+
+        if (!sumError && stockSums) {
+          const sumsByItem = new Map<string, number>();
+          stockSums.forEach((row: any) => {
+            const current = sumsByItem.get(row.item_id) ?? 0;
+            sumsByItem.set(row.item_id, current + (row.qty ?? 0));
+          });
+
+          // Actualizar items con el nuevo total calculado
+          const updates = batch.map(itemId => ({
+            id: itemId,
+            stock_total: sumsByItem.get(itemId) ?? 0,
+            // Mantener otros campos requeridos si es necesario, o usar update selectivo
+          }));
+
+          // Supabase upsert/update masivo no es directo para columnas parciales con diferentes valores
+          // Hacemos updates individuales o agrupados por valor (complejo), 
+          // mejor iteramos paralelamente con limitación de concurrencia
+          await Promise.all(
+            updates.map(update =>
+              supabase.from('items').update({ stock_total: update.stock_total }).eq('id', update.id)
+            )
+          );
+        }
       }
-      snapshotsCreated = snapshots.length;
     }
 
     return NextResponse.json({
