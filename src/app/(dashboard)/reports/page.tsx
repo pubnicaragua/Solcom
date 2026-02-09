@@ -327,6 +327,38 @@ export default function ReportsPage() {
       .sort((a: any, b: any) => b.value - a.value);
   };
 
+  // Agrupar por categoría usando `items.stock_total` (evita depender solo de `stock_snapshots`).
+  const groupByCategoryUnitsFromItems = (itemsList: any[]) => {
+    if (!itemsList || itemsList.length === 0) return null;
+    const groups: Record<string, { value: number; label: string }> = {};
+    itemsList.forEach((item: any) => {
+      const catRaw = (item.category || '').toString().trim() || 'Sin categoría';
+      const key = catRaw.toUpperCase();
+      const qty = Number(item.stock_total) || 0;
+      if (!groups[key]) groups[key] = { value: 0, label: catRaw };
+      groups[key].value += qty;
+    });
+    return Object.values(groups)
+      .map(({ label, value }) => ({ label, value }))
+      .sort((a: any, b: any) => b.value - a.value);
+  };
+
+  // Resolve quantity per item preferring snapshots (filteredSnapshots) when present,
+  // otherwise fall back to `item.stock_total`. Returns items augmented with `resolved_qty`.
+  const resolveItemQuantities = (itemsList: any[], snapshotsList: any[]) => {
+    const snapshotMap: Record<string, number> = {};
+    (snapshotsList || []).forEach((s: any) => {
+      if (!s.item_id) return;
+      snapshotMap[s.item_id] = (snapshotMap[s.item_id] || 0) + (Number(s.qty) || 0);
+    });
+
+    return (itemsList || []).map((it: any) => {
+      const qtyFromSnapshots = snapshotMap[it.id];
+      const resolved = typeof qtyFromSnapshots === 'number' ? qtyFromSnapshots : (Number(it.stock_total) || 0);
+      return { ...it, resolved_qty: resolved };
+    });
+  };
+
   const groupByWarehouseUnits = (snapshots: any[]) => {
     if (!snapshots || snapshots.length === 0) return null;
     const groups: Record<string, number> = {};
@@ -356,12 +388,29 @@ export default function ReportsPage() {
     return list;
   }, [items, globalFilters, filteredSnapshots]);
 
+  // Ítems filtrados para gráficos por categoría (mismas reglas que `itemsForBrandCharts`)
+  const itemsForCategoryCharts = useMemo(() => {
+    let list = items;
+    if (globalFilters.category) list = list.filter((i: any) => i.category === globalFilters.category);
+    if (globalFilters.marca) list = list.filter((i: any) => (i.marca || '').trim() === globalFilters.marca);
+    if (globalFilters.state) list = list.filter((i: any) => i.state === globalFilters.state);
+    if (globalFilters.color) list = list.filter((i: any) => i.color === globalFilters.color);
+    if (globalFilters.warehouse) {
+      const ids = new Set(filteredSnapshots.map((s: any) => s.item_id));
+      list = list.filter((i: any) => ids.has(i.id));
+    }
+    return list;
+  }, [items, globalFilters, filteredSnapshots]);
+
   const generateColors = (count: number) => {
     const baseColors = ['#3B82F6', '#8B5CF6', '#10B981', '#F59E0B', '#EF4444', '#EC4899', '#14B8A6', '#F97316', '#6366F1', '#84CC16'];
     const colors: string[] = [];
     for (let i = 0; i < count; i++) colors.push(baseColors[i % baseColors.length]);
     return colors;
   };
+
+  const [showDebugCategory, setShowDebugCategory] = useState(false);
+
 
   // Productos sin marca asignada (para exportar lista)
   const itemsSinMarca = useMemo(
@@ -648,13 +697,29 @@ export default function ReportsPage() {
           {loading ? (
             <div style={{ height: 300, background: 'var(--panel)', borderRadius: 4, animation: 'pulse 1.5s infinite' }} />
           ) : (() => {
-            const data = groupByCategoryUnits(filteredSnapshots);
+            const resolved = resolveItemQuantities(itemsForCategoryCharts, filteredSnapshots);
+            const data = groupByCategoryUnitsFromItems(resolved.map((i: any) => ({ ...i, stock_total: i.resolved_qty })));
             return data ? (
               <HorizontalBarChart data={data.map((d: any, i: number) => ({ ...d, color: generateColors(data.length)[i] }))} height={300} />
             ) : (
               <ReportPlaceholder title="Sin datos" height={300} />
             );
           })()}
+
+          <div style={{ padding: '8px 12px', borderTop: '1px solid rgba(255,255,255,0.02)', display: 'flex', justifyContent: 'flex-end' }}>
+            <button onClick={() => setShowDebugCategory(v => !v)} style={{ background: 'transparent', color: 'var(--muted)', border: 'none', cursor: 'pointer' }}>
+              {showDebugCategory ? 'Ocultar debug' : 'Mostrar debug'}
+            </button>
+          </div>
+          {showDebugCategory && (
+            <div style={{ padding: 12, color: '#CBD5E1', fontSize: 13 }}>
+              <div style={{ marginBottom: 8 }}><strong>Desglose desde `items.stock_total`:</strong></div>
+              <pre style={{ maxHeight: 160, overflow: 'auto', background: 'rgba(0,0,0,0.25)', padding: 8, borderRadius: 6 }}>{JSON.stringify(groupByCategoryUnitsFromItems(itemsForCategoryCharts), null, 2)}</pre>
+
+              <div style={{ margin: '12px 0 8px 0' }}><strong>Desglose desde `stock_snapshots` (filteredSnapshots):</strong></div>
+              <pre style={{ maxHeight: 160, overflow: 'auto', background: 'rgba(0,0,0,0.25)', padding: 8, borderRadius: 6 }}>{JSON.stringify(groupByCategoryUnits(filteredSnapshots), null, 2)}</pre>
+            </div>
+          )}
         </ChartCard>
 
         <ChartCard title="Top Inventario por Marca (Unids)">
@@ -676,7 +741,8 @@ export default function ReportsPage() {
           {loading ? (
             <div style={{ height: 300, background: 'var(--panel)', borderRadius: 4, animation: 'pulse 1.5s infinite' }} />
           ) : (() => {
-            const data = groupByCategoryUnits(filteredSnapshots);
+            const resolved = resolveItemQuantities(itemsForCategoryCharts, filteredSnapshots);
+            const data = groupByCategoryUnitsFromItems(resolved.map((i: any) => ({ ...i, stock_total: i.resolved_qty })));
             return data ? (
               <PieChart data={data.map((d: any, i: number) => ({ ...d, color: generateColors(data.length)[i] }))} size={250} />
             ) : (
