@@ -6,6 +6,7 @@ export async function GET(request: Request) {
     const { searchParams } = new URL(request.url);
     const page = parseInt(searchParams.get('page') || '1');
     const limit = parseInt(searchParams.get('limit') || '50');
+    const groupBy = searchParams.get('group_by') || '';
     const search = searchParams.get('search') || '';
     const warehouse = searchParams.get('warehouse') || '';
     const state = searchParams.get('state') || '';
@@ -29,9 +30,10 @@ export async function GET(request: Request) {
           item_id,
           qty,
           synced_at,
-          warehouses!inner(code, name),
+          warehouses!inner(code, name, active),
           items!inner(sku, name, color, state, category, marca, stock_total, price)
-        `);
+        `)
+        .eq('warehouses.active', true);
 
       if (warehouse) {
         base = base.eq('warehouses.code', warehouse);
@@ -96,8 +98,141 @@ export async function GET(request: Request) {
       return base;
     };
 
+    // Vista agrupada: una fila por producto (sin repetir por bodega)
+    if (groupBy === 'item') {
+      let itemIdsInWarehouse: string[] | null = null;
+      if (warehouse && warehouse.trim()) {
+        const codeOrId = warehouse.trim();
+        let whId: string | null = null;
+        const { data: byCode } = await supabase
+          .from('warehouses')
+          .select('id')
+          .eq('active', true)
+          .eq('code', codeOrId)
+          .limit(1);
+        if (byCode?.[0]?.id) {
+          whId = byCode[0].id;
+        } else {
+          const { data: byId } = await supabase
+            .from('warehouses')
+            .select('id')
+            .eq('active', true)
+            .eq('id', codeOrId)
+            .limit(1);
+          whId = byId?.[0]?.id ?? null;
+        }
+        if (whId) {
+          const { data: snapRows } = await supabase
+            .from('stock_snapshots')
+            .select('item_id, qty')
+            .eq('warehouse_id', String(whId))
+            .gt('qty', 0);
+          const ids = [...new Set((snapRows || []).map((r: any) => r.item_id))];
+          itemIdsInWarehouse = ids.length > 0 ? ids : null;
+          // Si no hay ítems con stock en esta bodega, mostramos todos (no dejar tabla vacía)
+        } else {
+          itemIdsInWarehouse = null;
+        }
+      }
 
+      let itemsQuery = supabase
+        .from('items')
+        .select('id, sku, name, color, state, category, marca, stock_total, price', { count: 'exact' })
+        .is('zoho_removed_at', null);
 
+      if (itemIdsInWarehouse !== null && itemIdsInWarehouse.length > 0) {
+        itemsQuery = itemsQuery.in('id', itemIdsInWarehouse);
+      }
+
+      if (search?.trim()) {
+        const t = search.trim();
+        itemsQuery = itemsQuery.or(`name.ilike.%${t}%,sku.ilike.%${t}%`);
+      }
+      if (brand || marca) itemsQuery = itemsQuery.eq('marca', brand || marca);
+      if (color) itemsQuery = itemsQuery.ilike('color', `%${color}%`);
+      if (state) itemsQuery = itemsQuery.eq('state', state);
+      if (category) itemsQuery = itemsQuery.ilike('category', `%${category}%`);
+      if (priceRange) {
+        if (priceRange.endsWith('+')) {
+          const min = parseFloat(priceRange.replace('+', ''));
+          if (!Number.isNaN(min)) itemsQuery = itemsQuery.gte('price', min);
+        } else if (priceRange.includes('-')) {
+          const [minRaw, maxRaw] = priceRange.split('-');
+          const min = parseFloat(minRaw);
+          const max = parseFloat(maxRaw);
+          if (!Number.isNaN(min)) itemsQuery = itemsQuery.gte('price', min);
+          if (!Number.isNaN(max)) itemsQuery = itemsQuery.lte('price', max);
+        }
+      }
+      if (stockLevel) {
+        switch (stockLevel) {
+          case 'out': itemsQuery = itemsQuery.eq('stock_total', 0); break;
+          case 'critical': itemsQuery = itemsQuery.gte('stock_total', 1).lte('stock_total', 5); break;
+          case 'low': itemsQuery = itemsQuery.gte('stock_total', 6).lte('stock_total', 20); break;
+          case 'medium': itemsQuery = itemsQuery.gte('stock_total', 21).lte('stock_total', 50); break;
+          case 'high': itemsQuery = itemsQuery.gt('stock_total', 50); break;
+        }
+      }
+
+      const orderCol = sortBy === 'name_desc' ? 'name' : sortBy === 'name' ? 'name' : sortBy === 'stock_asc' ? 'stock_total' : sortBy === 'stock_desc' ? 'stock_total' : 'name';
+      const orderAsc = sortBy === 'stock_desc' ? false : true;
+      const { data: itemsData, error: itemsError, count: itemsCount } = await itemsQuery
+        .order(orderCol, { ascending: orderAsc })
+        .range(offset, offset + limit - 1);
+
+      if (itemsError) throw itemsError;
+
+      const list = itemsData || [];
+      const total = itemsCount ?? list.length;
+      const itemIds = list.map((r: any) => r.id);
+
+      // Cuántas bodegas (activas) tienen cada ítem
+      let warehouseCountByItem: Record<string, number> = {};
+      if (itemIds.length > 0) {
+        const { data: activeWh } = await supabase.from('warehouses').select('id').eq('active', true);
+        const whIdsActive = new Set((activeWh ?? []).map((w: any) => w.id));
+        const { data: snapCounts } = await supabase
+          .from('stock_snapshots')
+          .select('item_id, warehouse_id')
+          .in('item_id', itemIds);
+        const byItem = new Map<string, Set<string>>();
+        for (const row of snapCounts || []) {
+          if (whIdsActive.has(row.warehouse_id)) {
+            if (!byItem.has(row.item_id)) byItem.set(row.item_id, new Set());
+            byItem.get(row.item_id)!.add(row.warehouse_id);
+          }
+        }
+        byItem.forEach((set, id) => { warehouseCountByItem[id] = set.size; });
+      }
+
+      const formatted = list.map((row: any) => ({
+        id: row.id,
+        item_id: row.id,
+        item_name: row.name,
+        sku: row.sku,
+        color: row.color,
+        state: row.state,
+        category: row.category || null,
+        brand: row.marca || null,
+        warehouse_id: null,
+        warehouse_code: null,
+        warehouse_name: null,
+        qty: null,
+        warehouse_count: warehouseCountByItem[row.id] ?? 0,
+        stock_total: row.stock_total ?? 0,
+        price: row.price ?? 0,
+        synced_at: null,
+        grouped: true,
+      }));
+
+      return NextResponse.json({
+        data: formatted,
+        page,
+        limit,
+        total,
+        totalPages: Math.ceil(total / limit),
+      });
+    }
 
     if (search) {
       const trimmed = search.trim();

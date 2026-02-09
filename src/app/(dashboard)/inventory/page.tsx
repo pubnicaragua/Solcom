@@ -133,7 +133,7 @@ export default function InventoryPage() {
   const warehouseOptions = [
     { value: '', label: 'Todas las bodegas' },
     ...warehouses.map((w) => ({
-      value: w.code,
+      value: w.id,
       label: `${w.code} - ${w.name}`,
     })),
   ];
@@ -448,6 +448,16 @@ export default function InventoryPage() {
             itemId: row.item_id,
             itemName: row.item_name,
             currentWarehouse: row.warehouse_id,
+            currentWarehouseLabel: row.warehouse_name || row.warehouse_code,
+          });
+          setTransferModalOpen(true);
+        }}
+        onTransferFromWarehouse={(itemId, itemName, warehouseId, warehouseLabel) => {
+          setTransferProduct({
+            itemId,
+            itemName,
+            currentWarehouse: warehouseId,
+            currentWarehouseLabel: warehouseLabel,
           });
           setTransferModalOpen(true);
         }}
@@ -491,6 +501,7 @@ export default function InventoryPage() {
         itemId={transferProduct?.itemId}
         itemName={transferProduct?.itemName}
         currentWarehouse={transferProduct?.currentWarehouse}
+        currentWarehouseLabel={transferProduct?.currentWarehouseLabel}
       />
 
       <ProductDetailsModal
