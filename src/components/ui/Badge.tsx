@@ -10,9 +10,9 @@ interface BadgeProps {
 export default function Badge({ children, variant = 'neutral', size = 'md', style }: BadgeProps) {
   const variantStyles: Record<string, React.CSSProperties> = {
     success: {
-      background: 'rgba(16, 185, 129, 0.15)',
+      background: 'rgba(18, 191, 133, 0.15)',
       color: 'var(--success)',
-      border: '1px solid rgba(18, 177, 124, 0.3)',
+      border: '1px solid rgba(21, 178, 126, 0.3)',
     },
     warning: {
       background: 'rgba(245, 158, 11, 0.15)',
