@@ -186,6 +186,19 @@ export async function POST(request: Request) {
       }
     }
 
+    // Insertar los nuevos snapshots en lotes
+    if (snapshots.length > 0) {
+      const batchSize = 500;
+      for (let i = 0; i < snapshots.length; i += batchSize) {
+        const batch = snapshots.slice(i, i + batchSize);
+        const { error: insertError } = await supabase.from('stock_snapshots').insert(batch);
+        if (insertError) {
+          console.error('Error inserting snapshots batch:', insertError);
+        }
+      }
+      snapshotsCreated = snapshots.length;
+    }
+
     // Recalcular stock_total para excluir bodegas inactivas
     // Esto asegura que el total en la UI coincida con la suma de bodegas visibles
     if (itemIdsToReplace.size > 0) {
