@@ -12,6 +12,7 @@ interface WarehouseQty {
   code: string;
   name: string;
   qty: number;
+  active?: boolean;
 }
 
 interface InventoryItem {
@@ -504,14 +505,34 @@ export default function InventoryTable({ filters, onSelectionChange, onTransfer,
                     <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                       <Warehouse size={16} color="var(--muted)" />
                       <div>
-                        <div style={{ fontWeight: 600, fontSize: 14 }}>{w.name || w.code}</div>
+                        <div style={{ fontWeight: 600, fontSize: 14, display: 'flex', alignItems: 'center', gap: 6 }}>
+                          {w.name || w.code}
+                          {!w.active && w.active !== undefined && (
+                            <span style={{
+                              fontSize: 10,
+                              background: '#FCA5A5',
+                              color: '#7F1D1D',
+                              padding: '2px 6px',
+                              borderRadius: 4,
+                              fontWeight: 700
+                            }}>
+                              INACTIVA
+                            </span>
+                          )}
+                        </div>
                         {w.name && w.code !== w.name && (
                           <div style={{ fontSize: 12, color: 'var(--muted)' }}>{w.code}</div>
                         )}
                       </div>
                     </div>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                      <span style={{ fontWeight: 600, fontSize: 15, color: 'var(--text)' }}>{w.qty} un.</span>
+                      <span style={{
+                        fontWeight: 600,
+                        fontSize: 15,
+                        color: w.qty < 0 ? '#DC2626' : 'var(--text)'
+                      }}>
+                        {w.qty} un.
+                      </span>
                       {onTransferFromWarehouse && (
                         <Button
                           variant="secondary"

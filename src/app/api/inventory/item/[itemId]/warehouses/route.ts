@@ -15,11 +15,10 @@ export async function GET(
 
     const supabase = createServerClient();
 
-    // Todas las bodegas activas
+    // Obtener todas las bodegas (activas e inactivas) para no ocultar stock
     const { data: allWarehouses, error: whError } = await supabase
       .from('warehouses')
-      .select('id, code, name')
-      .eq('active', true)
+      .select('id, code, name, active')
       .order('code');
 
     if (whError) {
@@ -42,13 +41,21 @@ export async function GET(
       qtyByWarehouse.set(row.warehouse_id, current + (row.qty ?? 0));
     }
 
-    // Una entrada por bodega activa; 0 si no hay snapshot
+    // Una entrada por bodega; 0 si no hay snapshot
     const warehouses = (allWarehouses || []).map((w: any) => ({
       id: w.id,
       code: w.code ?? '',
       name: w.name ?? w.code ?? '',
+      active: w.active,
       qty: qtyByWarehouse.get(w.id) ?? 0,
-    })).sort((a: any, b: any) => b.qty - a.qty);
+    }))
+      // Filtrar: mostrar si está activa O si tiene stock (aunque esté inactiva)
+      .filter((w) => w.active || w.qty !== 0)
+      // Ordenar: primero activas, luego por cantidad descendente
+      .sort((a, b) => {
+        if (a.active !== b.active) return a.active ? -1 : 1;
+        return b.qty - a.qty;
+      });
 
     return NextResponse.json({ warehouses });
   } catch (e) {
