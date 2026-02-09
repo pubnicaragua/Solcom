@@ -57,26 +57,36 @@ export async function POST() {
     }
 
     const { accessToken, apiDomain } = auth;
-    const url = `${apiDomain}/inventory/v1/warehouses?organization_id=${organizationId}`;
-    const response = await fetch(url, {
-      headers: {
-        Authorization: `Zoho-oauthtoken ${accessToken}`,
-      },
-      cache: 'no-store',
-    });
+    const allZohoWarehouses: any[] = [];
+    let page = 1;
+    let hasMore = true;
 
-    if (!response.ok) {
-      const errorText = await response.text();
-      return NextResponse.json(
-        { error: `Zoho Inventory error: ${response.status} - ${errorText}` },
-        { status: 500 }
-      );
+    while (hasMore) {
+      const url = `${apiDomain}/inventory/v1/warehouses?organization_id=${organizationId}&page=${page}&per_page=200`;
+      const response = await fetch(url, {
+        headers: {
+          Authorization: `Zoho-oauthtoken ${accessToken}`,
+        },
+        cache: 'no-store',
+      });
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        return NextResponse.json(
+          { error: `Zoho Inventory error: ${response.status} - ${errorText}` },
+          { status: 500 }
+        );
+      }
+
+      const result = await response.json();
+      const pageWarehouses = result.warehouses || [];
+      allZohoWarehouses.push(...pageWarehouses);
+
+      hasMore = result.page_context?.has_more_page || false;
+      page++;
     }
 
-    const result = await response.json();
-    const zohoWarehouses = result.warehouses || [];
-
-    if (zohoWarehouses.length === 0) {
+    if (allZohoWarehouses.length === 0) {
       return NextResponse.json({
         success: true,
         inserted: 0,
@@ -85,101 +95,41 @@ export async function POST() {
       });
     }
 
+    console.log(`[WAREHOUSE SYNC] Fetched ${allZohoWarehouses.length} warehouses from Zoho.`);
+
     const supabase = createServerClient();
     let inserted = 0;
     let updated = 0;
 
-    for (const w of zohoWarehouses) {
-      const normalizedCode = (w.warehouse_name || '').trim() || w.warehouse_id;
+    for (const w of allZohoWarehouses) {
       const payload = {
-        code: normalizedCode,
+        code: w.warehouse_name, // Usamos el nombre como código para que sea legible
         name: w.warehouse_name,
         zoho_warehouse_id: w.warehouse_id,
         active: w.status === 'active',
       };
 
-      // 1) Try update by zoho_warehouse_id
-      const { data: updatedByZoho, error: updateZohoError } = await supabase
+      // Intentar actualizar por zoho_warehouse_id
+      const { data: updatedRows, error: updateError } = await supabase
         .from('warehouses')
-        .update(payload)
-        .eq('zoho_warehouse_id', w.warehouse_id)
+        .upsert(payload, { onConflict: 'zoho_warehouse_id' })
         .select('id');
 
-      if (updateZohoError) {
-        return NextResponse.json(
-          { error: updateZohoError.message },
-          { status: 500 }
-        );
-      }
-
-      if (updatedByZoho && updatedByZoho.length > 0) {
-        updated += updatedByZoho.length;
-        continue;
-      }
-
-      // 2) Try update by code (warehouse_name) and attach zoho_warehouse_id
-      const { data: updatedByCode, error: updateCodeError } = await supabase
-        .from('warehouses')
-        .update(payload)
-        .eq('code', normalizedCode)
-        .select('id');
-
-      if (updateCodeError) {
-        return NextResponse.json(
-          { error: updateCodeError.message },
-          { status: 500 }
-        );
-      }
-
-      if (updatedByCode && updatedByCode.length > 0) {
-        updated += updatedByCode.length;
-        continue;
-      }
-
-      // 3) Safety: check if code already exists (case/space mismatch)
-      const { data: existingByCode, error: existingByCodeError } = await supabase
-        .from('warehouses')
-        .select('id')
-        .eq('code', normalizedCode)
-        .limit(1);
-
-      if (existingByCodeError) {
-        return NextResponse.json(
-          { error: existingByCodeError.message },
-          { status: 500 }
-        );
-      }
-
-      if (existingByCode && existingByCode.length > 0) {
-        updated += existingByCode.length;
-        continue;
-      }
-
-      // 4) Insert new warehouse (fallback to unique code if needed)
-      const { data: insertedRow, error: insertError } = await supabase
-        .from('warehouses')
-        .insert(payload)
-        .select('id');
-
-      if (insertError) {
-        const fallbackCode = `${normalizedCode} (${w.warehouse_id})`;
-        const { data: fallbackRow, error: fallbackError } = await supabase
+      if (updateError) {
+        // Si falla el upsert (ej. por conflicto de 'code' único), intentamos buscar y parchar
+        console.warn(`[WAREHOUSE SYNC] Conflict for ${w.warehouse_name}, trying manual update...`);
+        const { error: patchError } = await supabase
           .from('warehouses')
-          .insert({ ...payload, code: fallbackCode })
-          .select('id');
+          .update(payload)
+          .eq('zoho_warehouse_id', w.warehouse_id);
 
-        if (fallbackError) {
-          return NextResponse.json(
-            { error: fallbackError.message },
-            { status: 500 }
-          );
+        if (patchError) {
+          console.error(`[WAREHOUSE SYNC] Failed to sync ${w.warehouse_name}:`, patchError);
+          continue;
         }
-
-        if (fallbackRow && fallbackRow.length > 0) {
-          inserted += fallbackRow.length;
-        }
-      } else if (insertedRow && insertedRow.length > 0) {
-        inserted += insertedRow.length;
+        updated++;
+      } else if (updatedRows && updatedRows.length > 0) {
+        updated++;
       }
     }
 

@@ -20,13 +20,13 @@ interface Warehouse {
   stock?: number;
 }
 
-export default function TransferModal({ 
-  isOpen, 
-  onClose, 
-  itemId, 
-  itemName, 
+export default function TransferModal({
+  isOpen,
+  onClose,
+  itemId,
+  itemName,
   currentWarehouse,
-  currentWarehouseLabel 
+  currentWarehouseLabel
 }: TransferModalProps) {
   const [warehouses, setWarehouses] = useState<Warehouse[]>([]);
   const [selectedWarehouse, setSelectedWarehouse] = useState('');
@@ -96,7 +96,7 @@ export default function TransferModal({
 
   if (!isOpen) return null;
 
-  const availableWarehouses = warehouses.filter((w) => w.id !== currentWarehouse);
+  const availableWarehouses = warehouses.filter((w: any) => w.id !== currentWarehouse && w.active);
   const originWarehouse = warehouses.find((w) => w.id === currentWarehouse);
 
   return (

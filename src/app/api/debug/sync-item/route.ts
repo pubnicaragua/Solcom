@@ -7,7 +7,7 @@ export const dynamic = 'force-dynamic';
 export async function GET(request: NextRequest) {
     const logs: string[] = [];
     function log(msg: string, data?: any) {
-        console.log(msg, data || '');
+        console.log(`[DEBUG-SYNC-ITEM] ${msg}`, data ? JSON.stringify(data) : '');
         logs.push(`${msg} ${data ? JSON.stringify(data) : ''}`);
     }
 
@@ -36,58 +36,60 @@ export async function GET(request: NextRequest) {
         }
         log(`Found local item: ${item.name} (${item.zoho_item_id})`);
 
-        // 2. Get Warehouses
+        // 2. Get Warehouses (All of them to see mapping)
         const { data: warehouses } = await supabase
             .from('warehouses')
-            .select('id, code, zoho_warehouse_id, active')
-            .not('zoho_warehouse_id', 'is', null);
+            .select('*');
 
         const warehouseMap = new Map(
-            (warehouses || []).map((w: any) => [String(w.zoho_warehouse_id ?? ''), w.id])
+            (warehouses || []).filter(w => w.zoho_warehouse_id).map((w: any) => [String(w.zoho_warehouse_id), w.id])
         );
-        log(`Loaded ${warehouses?.length} warehouses`);
+        log(`Loaded ${warehouses?.length} warehouses. Map size: ${warehouseMap.size}`);
 
         // 3. Fetch from Zoho
+        log('Authenticating with Zoho...');
         const auth = await getZohoAccessToken();
         if ('error' in auth) {
-            log('Auth error', auth);
+            log('Auth error', auth.error);
             return NextResponse.json({ logs, error: auth.error });
         }
 
-        const start = Date.now();
-        log('Fetching locations from Zoho...');
-        const locations = await fetchItemLocations(
-            auth.accessToken,
-            auth.apiDomain,
-            process.env.ZOHO_BOOKS_ORGANIZATION_ID!,
-            item.zoho_item_id
-        );
-        log(`Fetch took ${Date.now() - start}ms`);
-        log('Locations received:', locations);
+        const orgId = process.env.ZOHO_BOOKS_ORGANIZATION_ID;
+        log(`Using Org ID: ${orgId}`);
 
-        if (!locations || locations.length === 0) {
-            log('No locations returned from Zoho API');
-            return NextResponse.json({ logs, result: 'No locations' });
+        const start = Date.now();
+        log(`Fetching locations for item ID ${item.zoho_item_id} from Zoho...`);
+        let locations = [];
+        try {
+            locations = await fetchItemLocations(
+                auth.accessToken,
+                auth.apiDomain,
+                orgId!,
+                item.zoho_item_id
+            );
+        } catch (err: any) {
+            log(`CRITICAL FETCH ERROR: ${err.message}`);
+            return NextResponse.json({ logs, error: err.message });
         }
+        log(`Fetch took ${Date.now() - start}ms. Received ${locations.length} locations.`);
 
         // 4. Map and Insert Snapshots
         const snapshots = [];
         let cleanStock = 0;
-
-        // Delete existing snapshots
-        await supabase.from('stock_snapshots').delete().eq('item_id', item.id);
-        log('Deleted old snapshots');
+        let mappedCount = 0;
+        let ignoredCount = 0;
 
         for (const loc of locations) {
             const locId = String(loc.location_id);
             const localWhId = warehouseMap.get(locId);
-            const whName = warehouses?.find(w => w.id === localWhId)?.name || 'Unknown';
-            const whActive = warehouses?.find(w => w.id === localWhId)?.active;
+            const localWh = warehouses?.find(w => w.id === localWhId);
 
-            log(`Processing location: ${loc.location_name} (${locId}) -> Local: ${whName} (Active: ${whActive})`);
+            const qty = loc.location_stock_on_hand ?? 0;
 
             if (localWhId) {
-                const qty = loc.location_stock_on_hand ?? 0;
+                mappedCount++;
+                log(`MATCH: Zoho '${loc.location_name}' (${locId}) -> Local '${localWh?.code}' (${localWhId}). Qty: ${qty}`);
+
                 snapshots.push({
                     warehouse_id: localWhId,
                     item_id: item.id,
@@ -96,47 +98,52 @@ export async function GET(request: NextRequest) {
                     synced_at: new Date().toISOString()
                 });
 
-                if (whActive) {
+                if (localWh?.active) {
                     cleanStock += qty;
+                } else {
+                    log(`NOTE: Warehouse ${localWh?.code} is INACTIVE. Qty ${qty} not added to cleanStock.`);
                 }
             } else {
-                log('WARNING: Location not mapped to local warehouse', loc);
+                ignoredCount++;
+                log(`MISSING MAPPING: Zoho '${loc.location_name}' (${locId}) not found in Supabase! Qty: ${qty}`);
             }
         }
 
-        log(`Created ${snapshots.length} snapshot objects`);
+        // 5. Database Update
+        log(`Final Stats: Mapped ${mappedCount}, Ignored ${ignoredCount}, Clean Stock Sum: ${cleanStock}`);
 
         if (snapshots.length > 0) {
+            log('Deleting old snapshots...');
+            await supabase.from('stock_snapshots').delete().eq('item_id', item.id);
+
+            log(`Inserting ${snapshots.length} new snapshots...`);
             const { error: insertError } = await supabase.from('stock_snapshots').insert(snapshots);
-            if (insertError) {
-                log('Error inserting snapshots', insertError);
-            } else {
-                log('Snapshots inserted successfully');
-            }
+            if (insertError) log('Insert error', insertError);
         }
 
-        // 5. Update Item Stock Total
-        log(`Calculated Clean Stock: ${cleanStock}. Updating item...`);
+        log(`Updating item stock_total to ${cleanStock}...`);
         const { error: updateError } = await supabase
             .from('items')
             .update({ stock_total: cleanStock })
             .eq('id', item.id);
 
-        if (updateError) log('Error updating item stock', updateError);
-        else log('Item stock updated successfully');
+        if (updateError) log('Update error', updateError);
 
         return NextResponse.json({
             success: true,
-            item: item.sku,
+            sku: item.sku,
             cleanStock,
-            snapshotsCount: snapshots.length,
+            snapshotsCreated: snapshots.length,
+            mappedCount,
+            ignoredCount,
+            zohoLocations: locations,
             logs
         });
 
-    } catch (error) {
-        log('CRITICAL ERROR', error);
+    } catch (error: any) {
+        log('GLOBAL ERROR', error.message);
         return NextResponse.json({
-            error: error instanceof Error ? error.message : 'Unknown error',
+            error: error.message,
             logs
         }, { status: 500 });
     }

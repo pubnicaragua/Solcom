@@ -154,8 +154,10 @@ export async function POST(request: Request) {
       for (const loc of locationsList) {
         const locId = loc?.location_id != null ? String(loc.location_id) : '';
         if (locId) sampleZohoWarehouseIds.add(locId);
+
         const localWarehouseId = warehouseMap.get(locId);
         if (!localWarehouseId) {
+          console.log(`[SYNC DEBUG] Warehouse mapping FAILED for location: ${loc.location_name} (ID: ${locId})`);
           missingWarehouseMappings += 1;
           continue;
         }
@@ -165,6 +167,7 @@ export async function POST(request: Request) {
           loc.location_available_stock ??
           0;
 
+        console.log(`[SYNC DEBUG] Adding snapshot for ${zohoItem.name} in ${loc.location_name}: ${qty}`);
         itemIdsToReplace.add(itemId);
         snapshots.push({
           warehouse_id: localWarehouseId,
@@ -175,6 +178,8 @@ export async function POST(request: Request) {
         });
       }
     }
+
+    console.log(`[SYNC DEBUG] Finished processing items. Found ${snapshots.length} total snapshots to insert.`);
 
     // Borrar todos los snapshots de los ítems que vamos a reescribir (evita dejar todo en X1)
     const itemIdsArray = Array.from(itemIdsToReplace);
@@ -188,12 +193,13 @@ export async function POST(request: Request) {
 
     // Insertar los nuevos snapshots en lotes
     if (snapshots.length > 0) {
+      console.log(`[SYNC DEBUG] Inserting ${snapshots.length} snapshots in batches...`);
       const batchSize = 500;
       for (let i = 0; i < snapshots.length; i += batchSize) {
         const batch = snapshots.slice(i, i + batchSize);
         const { error: insertError } = await supabase.from('stock_snapshots').insert(batch);
         if (insertError) {
-          console.error('Error inserting snapshots batch:', insertError);
+          console.error('[SYNC ERROR] Insert snapshots batch failed:', insertError);
         }
       }
       snapshotsCreated = snapshots.length;
@@ -202,6 +208,7 @@ export async function POST(request: Request) {
     // Recalcular stock_total para excluir bodegas inactivas
     // Esto asegura que el total en la UI coincida con la suma de bodegas visibles
     if (itemIdsToReplace.size > 0) {
+      console.log(`[SYNC DEBUG] Recalculating stock_total for ${itemIdsToReplace.size} items...`);
       const allItemIds = Array.from(itemIdsToReplace);
       // Procesar en lotes para no saturar
       const batchSize = 100;
@@ -227,12 +234,8 @@ export async function POST(request: Request) {
           const updates = batch.map(itemId => ({
             id: itemId,
             stock_total: sumsByItem.get(itemId) ?? 0,
-            // Mantener otros campos requeridos si es necesario, o usar update selectivo
           }));
 
-          // Supabase upsert/update masivo no es directo para columnas parciales con diferentes valores
-          // Hacemos updates individuales o agrupados por valor (complejo), 
-          // mejor iteramos paralelamente con limitación de concurrencia
           await Promise.all(
             updates.map(update =>
               supabase.from('items').update({ stock_total: update.stock_total }).eq('id', update.id)
