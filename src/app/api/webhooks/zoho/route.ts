@@ -38,8 +38,8 @@ export async function POST(request: NextRequest) {
         const action = payload.action?.toLowerCase() || payload.event_type?.toLowerCase() || '';
         const data = payload.data || payload;
 
-        // Manejar eventos de Items
-        if (module === 'item' || module === 'items') {
+        // Manejar eventos de Items/Article
+        if (module === 'item' || module === 'items' || module === 'article') {
             const zohoItemId = data.item_id;
 
             if (!zohoItemId) {
@@ -116,8 +116,8 @@ export async function POST(request: NextRequest) {
             }
         }
 
-        // Manejar eventos de Sales Order / Invoice (actualizar stock)
-        if (module === 'salesorder' || module === 'invoice') {
+        // Manejar eventos de Sales Order / Invoice / Inventory Adjustment
+        if (module === 'salesorder' || module === 'sales order' || module === 'invoice' || module === 'inventoryadjustment' || module === 'inventory adjustment') {
             // Cuando hay una venta, Zoho actualiza el stock automáticamente
             // Podríamos hacer una sync incremental de los items afectados
             const lineItems = data.line_items || [];
