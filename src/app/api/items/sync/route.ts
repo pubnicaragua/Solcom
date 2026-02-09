@@ -44,7 +44,7 @@ async function fetchZohoItems(accessToken: string, apiDomain: string, organizati
   let hasMore = true;
 
   while (hasMore) {
-    const url = `${apiDomain}/inventory/v1/items?organization_id=${organizationId}&page=${page}&per_page=200`;
+    const url = `${apiDomain}/inventory/v1/items?organization_id=${organizationId}&status=active&page=${page}&per_page=200`;
     const response = await fetch(url, {
       headers: {
         Authorization: `Zoho-oauthtoken ${accessToken}`,
@@ -183,11 +183,45 @@ export async function POST() {
       }
     }
 
+    // Eliminar items que ya no existen en Zoho
+    const zohoItemIds = zohoItems.map((z: any) => z.item_id).filter(Boolean);
+
+    let deleted = 0;
+    if (zohoItemIds.length > 0) {
+      // Obtener todos los items de Supabase que tienen zoho_item_id
+      const { data: supabaseItems, error: fetchError } = await supabase
+        .from('items')
+        .select('id, zoho_item_id')
+        .not('zoho_item_id', 'is', null);
+
+      if (!fetchError && supabaseItems) {
+        // Encontrar items que están en Supabase pero no en Zoho
+        const itemsToDelete = supabaseItems.filter(
+          (item: any) => !zohoItemIds.includes(item.zoho_item_id)
+        );
+
+        if (itemsToDelete.length > 0) {
+          const idsToDelete = itemsToDelete.map((item: any) => item.id);
+          const { error: deleteError } = await supabase
+            .from('items')
+            .delete()
+            .in('id', idsToDelete);
+
+          if (!deleteError) {
+            deleted = itemsToDelete.length;
+          } else {
+            console.error('Error eliminando items:', deleteError);
+          }
+        }
+      }
+    }
+
     return NextResponse.json({
       success: true,
       inserted,
       updated,
-      message: `Items sincronizados: ${inserted + updated}`,
+      deleted,
+      message: `Items sincronizados: ${inserted} insertados, ${updated} actualizados, ${deleted} eliminados`,
     });
   } catch (error) {
     console.error('Items sync error:', error);
