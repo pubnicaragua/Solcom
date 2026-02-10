@@ -7,7 +7,7 @@ import Input from '@/components/ui/Input';
 import Select from '@/components/ui/Select';
 import Badge from '@/components/ui/Badge';
 import KPIGrid from '@/components/dashboard/KPIGrid';
-import InventoryTable from '@/components/dashboard/InventoryTable';
+import PivotInventoryTable from '@/components/dashboard/PivotInventoryTable';
 import TransferHistory from '@/components/dashboard/TransferHistory';
 import EditProductModal from '@/components/modals/EditProductModal';
 import UpdateStockModal from '@/components/modals/UpdateStockModal';
@@ -115,7 +115,7 @@ export default function InventoryPage() {
       alert('La exportación a PDF requiere una librería adicional. Por favor usa Excel/CSV por ahora.');
       return;
     }
-    
+
     const params = new URLSearchParams(filters);
     params.append('format', format);
     window.open(`/api/inventory/export?${params}`, '_blank');
@@ -308,9 +308,9 @@ export default function InventoryPage() {
                 { value: 'tablet', label: 'Tablet' },
                 { value: 'control', label: 'Control' },
                 { value: 'radio', label: 'Radio' },
-                { value:'consola', label:'Consola' },
-                { value:'bocina', label:'Bocina' },
-                { value:'accesorios', label:'Accesorios' },
+                { value: 'consola', label: 'Consola' },
+                { value: 'bocina', label: 'Bocina' },
+                { value: 'accesorios', label: 'Accesorios' },
               ]}
               value={filters.category}
               onChange={(e) => handleFilterChange('category', e.target.value)}
@@ -440,32 +440,7 @@ export default function InventoryPage() {
         </Card>
       )}
 
-      <InventoryTable
-        filters={filters}
-        onSelectionChange={setSelectedItems}
-        onTransfer={(row) => {
-          setTransferProduct({
-            itemId: row.item_id,
-            itemName: row.item_name,
-            currentWarehouse: row.warehouse_id,
-            currentWarehouseLabel: row.warehouse_name || row.warehouse_code,
-          });
-          setTransferModalOpen(true);
-        }}
-        onTransferFromWarehouse={(itemId, itemName, warehouseId, warehouseLabel) => {
-          setTransferProduct({
-            itemId,
-            itemName,
-            currentWarehouse: warehouseId,
-            currentWarehouseLabel: warehouseLabel,
-          });
-          setTransferModalOpen(true);
-        }}
-        onViewDetails={(row) => {
-          setDetailsProduct(row);
-          setDetailsModalOpen(true);
-        }}
-      />
+      <PivotInventoryTable filters={filters} />
 
       <Card>
         <div style={{ padding: 16, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>

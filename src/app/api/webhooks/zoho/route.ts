@@ -59,41 +59,42 @@ export async function POST(request: NextRequest) {
         const cfColor = customFields.cf_color || itemData.cf_color || null;
         const cfEstado = customFields.cf_estado || itemData.cf_estado || null;
 
-        // Calcular stock real excluyendo bodegas inactivas
+        // Calcular stock real excluyendo bodegas inactivas + crear snapshots por bodega
         let stockTotal = itemData.actual_available_stock ?? itemData.stock_on_hand ?? 0;
+        let locationsData: any[] = [];
+        let warehousesData: any[] = [];
 
         try {
-            // Intentar obtener detalle de bodegas para limpiar el stock total
             const organizationId = process.env.ZOHO_BOOKS_ORGANIZATION_ID;
             if (organizationId) {
                 const auth = await getZohoAccessToken();
                 if (!('error' in auth)) {
-                    const locations = await fetchItemLocations(
+                    locationsData = await fetchItemLocations(
                         auth.accessToken,
                         auth.apiDomain,
                         organizationId,
                         zohoItemId
                     );
 
-                    // Mapear bodegas de Supabase para saber cuáles son activas
+                    // Mapear bodegas de Supabase
                     const { data: warehouses } = await supabase
                         .from('warehouses')
                         .select('id, zoho_warehouse_id, active')
                         .not('zoho_warehouse_id', 'is', null);
 
-                    if (warehouses) {
+                    warehousesData = warehouses || [];
+
+                    if (warehousesData.length > 0) {
                         const warehouseMap = new Map(
-                            warehouses.map((w: any) => [String(w.zoho_warehouse_id), w.active])
+                            warehousesData.map((w: any) => [String(w.zoho_warehouse_id), { id: w.id, active: w.active }])
                         );
 
-                        // Sumar solo stock de bodegas activas
+                        // Sumar solo stock de bodegas activas para stock_total
                         let cleanStock = 0;
-                        for (const loc of locations) {
+                        for (const loc of locationsData) {
                             const locId = String(loc.location_id);
-                            // Si la bodega existe en nuestro mapa y está ACTIVA, sumamos
-                            // Si no existe, asumimos inactiva por seguridad o lo sumamos?
-                            // Mejor: solo sumar si sabemos que es activa.
-                            if (warehouseMap.get(locId) === true) {
+                            const wh = warehouseMap.get(locId);
+                            if (wh?.active === true) {
                                 cleanStock += (loc.location_stock_on_hand ?? 0);
                             }
                         }
@@ -104,7 +105,6 @@ export async function POST(request: NextRequest) {
             }
         } catch (err) {
             console.error('Error recalculating stock in webhook:', err);
-            // Fallback al stock original si falla el cálculo
         }
 
         // Preparar payload para Supabase
@@ -142,6 +142,9 @@ export async function POST(request: NextRequest) {
         }
 
         // Intentar update primero
+        let supabaseItemId: string | null = null;
+        let action = '';
+
         const { data: updated, error: updateError } = await supabase
             .from('items')
             .update(itemPayload)
@@ -154,32 +157,73 @@ export async function POST(request: NextRequest) {
         }
 
         if (updated && updated.length > 0) {
-            console.log('Item updated:', zohoItemId);
-            return NextResponse.json({
-                success: true,
-                action: 'updated',
-                item_id: zohoItemId,
-                supabase_id: updated[0].id
-            });
+            supabaseItemId = updated[0].id;
+            action = 'updated';
+        } else {
+            // No existe, insertar nuevo
+            const { data: inserted, error: insertError } = await supabase
+                .from('items')
+                .insert(itemPayload)
+                .select('id');
+
+            if (insertError) {
+                console.error('Error inserting item:', insertError);
+                return NextResponse.json({ error: insertError.message }, { status: 500 });
+            }
+            supabaseItemId = inserted?.[0]?.id || null;
+            action = 'inserted';
         }
 
-        // No existe, insertar nuevo
-        const { data: inserted, error: insertError } = await supabase
-            .from('items')
-            .insert(itemPayload)
-            .select('id');
+        // Crear/actualizar stock_snapshots por bodega
+        let snapshotsCreated = 0;
+        if (supabaseItemId && locationsData.length > 0 && warehousesData.length > 0) {
+            const warehouseMap = new Map(
+                warehousesData.map((w: any) => [String(w.zoho_warehouse_id), w.id])
+            );
 
-        if (insertError) {
-            console.error('Error inserting item:', insertError);
-            return NextResponse.json({ error: insertError.message }, { status: 500 });
+            // Eliminar snapshots anteriores de este item
+            await supabase
+                .from('stock_snapshots')
+                .delete()
+                .eq('item_id', supabaseItemId);
+
+            // Insertar nuevos snapshots por bodega
+            const snapshots = [];
+            for (const loc of locationsData) {
+                const locId = String(loc.location_id);
+                const localWarehouseId = warehouseMap.get(locId);
+                if (!localWarehouseId) continue;
+
+                snapshots.push({
+                    warehouse_id: localWarehouseId,
+                    item_id: supabaseItemId,
+                    qty: loc.location_stock_on_hand ?? loc.location_available_stock ?? 0,
+                    source_ts: new Date().toISOString(),
+                    synced_at: new Date().toISOString(),
+                });
+            }
+
+            if (snapshots.length > 0) {
+                const { error: snapError } = await supabase
+                    .from('stock_snapshots')
+                    .insert(snapshots);
+
+                if (snapError) {
+                    console.error('Error inserting snapshots from webhook:', snapError);
+                } else {
+                    snapshotsCreated = snapshots.length;
+                    console.log(`Webhook: ${snapshotsCreated} snapshots created for item ${zohoItemId}`);
+                }
+            }
         }
 
-        console.log('Item inserted:', zohoItemId);
+        console.log(`Item ${action}:`, zohoItemId);
         return NextResponse.json({
             success: true,
-            action: 'inserted',
+            action,
             item_id: zohoItemId,
-            supabase_id: inserted?.[0]?.id
+            supabase_id: supabaseItemId,
+            snapshots_created: snapshotsCreated,
         });
 
     } catch (error) {

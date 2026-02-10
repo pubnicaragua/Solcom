@@ -498,7 +498,7 @@ export default function InventoryTable({ filters, onSelectionChange, onTransfer,
                       alignItems: 'center',
                       justifyContent: 'space-between',
                       padding: '12px 0',
-                      borderBottom: '1px solid var(--border)',
+                      borderBottom: '1px solid white',
                       gap: 12,
                     }}
                   >
