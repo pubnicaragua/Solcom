@@ -5,7 +5,8 @@ export const dynamic = 'force-dynamic';
 
 export async function GET(request: Request) {
     const { searchParams } = new URL(request.url);
-    const sku = searchParams.get('sku') || 'CABLE-USB-C';
+    const sku = searchParams.get('sku') || 'TEST-01';
+    const type = searchParams.get('type') || 'item'; // 'item' or 'adjustment'
 
     const supabase = createServerClient();
 
@@ -20,21 +21,45 @@ export async function GET(request: Request) {
         return NextResponse.json({ error: `Item not found: ${sku}` });
     }
 
-    // Simulate webhook call to local endpoint
-    const webhookPayload = {
-        item: {
-            item_id: item.zoho_item_id,
-            sku: item.sku,
-            name: item.name,
-            stock_on_hand: item.stock_total,
-            status: 'active',
-        }
-    };
+    let webhookPayload: any = {};
+
+    if (type === 'item') {
+        // Simulate Item Updated event
+        webhookPayload = {
+            item: {
+                item_id: item.zoho_item_id,
+                sku: item.sku,
+                name: item.name + ' (TEST)',
+                stock_on_hand: item.stock_total,
+                status: 'active',
+                custom_field_hash: {
+                    cf_color: 'AZUL',
+                    cf_estado: 'NUEVO'
+                }
+            }
+        };
+    } else {
+        // Simulate Inventory Adjustment event
+        webhookPayload = {
+            inventory_adjustment: {
+                adjustment_id: '999999',
+                reason: 'Webhook Test',
+                line_items: [
+                    {
+                        item_id: item.zoho_item_id,
+                        sku: item.sku,
+                        name: item.name,
+                        quantity_adjusted: 5,
+                    }
+                ]
+            }
+        };
+    }
 
     const baseUrl = request.url.split('/api/')[0];
     const webhookUrl = `${baseUrl}/api/webhooks/zoho`;
 
-    console.log(`[TEST] Calling webhook at ${webhookUrl} with item ${item.sku} (zoho_id: ${item.zoho_item_id})`);
+    console.log(`[TEST] Calling webhook (${type}) at ${webhookUrl} for item ${item.sku}`);
 
     const response = await fetch(webhookUrl, {
         method: 'POST',
@@ -53,6 +78,7 @@ export async function GET(request: Request) {
         .limit(20);
 
     return NextResponse.json({
+        test_type: type,
         item: { id: item.id, sku: item.sku, zoho_item_id: item.zoho_item_id },
         webhook_response: result,
         snapshots_after: snapshots?.length || 0,

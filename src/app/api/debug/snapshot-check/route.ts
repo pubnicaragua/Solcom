@@ -17,11 +17,18 @@ export async function GET(request: Request) {
         const { data: allWarehouses } = await supabase.from('warehouses').select('*');
 
         // 2. Find items matching query
-        const { data: items } = await supabase
-            .from('items')
-            .select('*')
-            .or(`sku.ilike.%${query}%,name.ilike.%${query}%`)
-            .limit(5);
+        let queryBuilder = supabase.from('items').select('*');
+
+        // Check if query is a UUID
+        const isUUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(query);
+
+        if (isUUID) {
+            queryBuilder = queryBuilder.eq('id', query);
+        } else {
+            queryBuilder = queryBuilder.or(`sku.ilike.%${query}%,name.ilike.%${query}%`);
+        }
+
+        const { data: items } = await queryBuilder.limit(5);
 
         if (!items || items.length === 0) {
             return NextResponse.json({ message: 'No items found', query });

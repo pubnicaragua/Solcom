@@ -4,242 +4,200 @@ import { getZohoAccessToken, fetchItemLocations } from '@/lib/zoho/inventory-uti
 
 export const dynamic = 'force-dynamic';
 
-interface ZohoItemData {
-    item_id?: string;
-    sku?: string;
-    name?: string;
-    stock_on_hand?: number;
-    actual_available_stock?: number;
-    purchase_rate?: number;
-    category_name?: string;
-    status?: string;
-    custom_field_hash?: {
-        cf_color?: string;
-        cf_estado?: string;
-        [key: string]: any;
+function getSystemStatus() {
+    return {
+        has_org_id: !!process.env.ZOHO_BOOKS_ORGANIZATION_ID,
+        has_client_id: !!process.env.ZOHO_BOOKS_CLIENT_ID,
+        has_client_secret: !!process.env.ZOHO_BOOKS_CLIENT_SECRET,
+        has_refresh_token: !!process.env.ZOHO_BOOKS_REFRESH_TOKEN,
+        has_supabase_url: !!process.env.NEXT_PUBLIC_SUPABASE_URL,
+        has_supabase_anon: !!process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY,
     };
-    [key: string]: any;
 }
 
-interface ZohoWebhookPayload {
-    // Zoho puede enviar datos en diferentes formatos
-    item?: ZohoItemData;
-    data?: ZohoItemData;
-    module?: string;
-    action?: string;
-    event_type?: string;
-    [key: string]: any;
-}
+// =============================================
+// Helper: sincronizar stock de UN item por zoho_item_id
+// =============================================
+async function syncItemStock(
+    zohoItemId: string,
+    supabase: any,
+    warehouseMap: Map<string, { id: string; active: boolean }>,
+    debugLog: string[]
+): Promise<{ snapshotsCreated: number; stockTotal: number }> {
+    const organizationId = process.env.ZOHO_BOOKS_ORGANIZATION_ID;
+    if (!organizationId) {
+        debugLog.push(`[syncItemStock] ERROR: No ZOHO_BOOKS_ORGANIZATION_ID`);
+        return { snapshotsCreated: 0, stockTotal: 0 };
+    }
 
-export async function POST(request: NextRequest) {
+    const auth = await getZohoAccessToken();
+    if ('error' in auth) {
+        debugLog.push(`[syncItemStock] ERROR auth: ${(auth as any).error}`);
+        return { snapshotsCreated: 0, stockTotal: 0 };
+    }
+
     try {
-        const payload: ZohoWebhookPayload = await request.json();
-
-        console.log('Zoho Webhook received:', JSON.stringify(payload, null, 2));
-
-        const supabase = createServerClient();
-
-        // Zoho envía los datos del item en payload.item
-        const itemData = payload.item || payload.data || payload;
-
-        // Verificar si tenemos datos de un item
-        const zohoItemId = itemData.item_id;
-
-        if (!zohoItemId) {
-            console.log('No item_id found in payload, skipping...');
-            return NextResponse.json({
-                success: true,
-                message: 'Webhook recibido pero sin item_id',
-                received_keys: Object.keys(payload)
-            });
-        }
-
-        // Extraer campos personalizados
-        const customFields = itemData.custom_field_hash || {};
-        const cfColor = customFields.cf_color || itemData.cf_color || null;
-        const cfEstado = customFields.cf_estado || itemData.cf_estado || null;
-
-        // Calcular stock real excluyendo bodegas inactivas + crear snapshots por bodega
-        let stockTotal = itemData.actual_available_stock ?? itemData.stock_on_hand ?? 0;
-        let locationsData: any[] = [];
-        let warehousesData: any[] = [];
-
-        try {
-            const organizationId = process.env.ZOHO_BOOKS_ORGANIZATION_ID;
-            if (organizationId) {
-                const auth = await getZohoAccessToken();
-                if (!('error' in auth)) {
-                    locationsData = await fetchItemLocations(
-                        auth.accessToken,
-                        auth.apiDomain,
-                        organizationId,
-                        zohoItemId
-                    );
-
-                    // Mapear bodegas de Supabase
-                    const { data: warehouses } = await supabase
-                        .from('warehouses')
-                        .select('id, zoho_warehouse_id, active')
-                        .not('zoho_warehouse_id', 'is', null);
-
-                    warehousesData = warehouses || [];
-
-                    if (warehousesData.length > 0) {
-                        const warehouseMap = new Map(
-                            warehousesData.map((w: any) => [String(w.zoho_warehouse_id), { id: w.id, active: w.active }])
-                        );
-
-                        // Sumar solo stock de bodegas activas para stock_total
-                        let cleanStock = 0;
-                        for (const loc of locationsData) {
-                            const locId = String(loc.location_id);
-                            const wh = warehouseMap.get(locId);
-                            if (wh?.active === true) {
-                                cleanStock += (loc.location_stock_on_hand ?? 0);
-                            }
-                        }
-                        console.log(`Recalculated stock for ${zohoItemId}: Raw=${stockTotal}, Clean=${cleanStock}`);
-                        stockTotal = cleanStock;
-                    }
-                }
-            }
-        } catch (err) {
-            console.error('Error recalculating stock in webhook:', err);
-        }
-
-        // Preparar payload para Supabase
-        const itemPayload = {
-            sku: itemData.sku || `NO-SKU-${zohoItemId}`,
-            name: itemData.name || 'Sin nombre',
-            category: itemData.category_name || null,
-            color: cfColor,
-            state: cfEstado,
-            zoho_item_id: zohoItemId,
-            stock_total: stockTotal,
-            price: itemData.purchase_rate ?? null,
-        };
-
-        console.log('Processing item:', zohoItemId, 'with payload:', itemPayload);
-
-        // Si el item está inactivo, eliminarlo
-        if (itemData.status === 'inactive') {
-            const { error: deleteError } = await supabase
-                .from('items')
-                .delete()
-                .eq('zoho_item_id', zohoItemId);
-
-            if (deleteError) {
-                console.error('Error deleting item:', deleteError);
-                return NextResponse.json({ error: deleteError.message }, { status: 500 });
-            }
-
-            console.log('Item deleted:', zohoItemId);
-            return NextResponse.json({
-                success: true,
-                action: 'deleted',
-                item_id: zohoItemId
-            });
-        }
-
-        // Intentar update primero
-        let supabaseItemId: string | null = null;
-        let action = '';
-
-        const { data: updated, error: updateError } = await supabase
-            .from('items')
-            .update(itemPayload)
-            .eq('zoho_item_id', zohoItemId)
-            .select('id');
-
-        if (updateError) {
-            console.error('Error updating item:', updateError);
-            return NextResponse.json({ error: updateError.message }, { status: 500 });
-        }
-
-        if (updated && updated.length > 0) {
-            supabaseItemId = updated[0].id;
-            action = 'updated';
-        } else {
-            // No existe, insertar nuevo
-            const { data: inserted, error: insertError } = await supabase
-                .from('items')
-                .insert(itemPayload)
-                .select('id');
-
-            if (insertError) {
-                console.error('Error inserting item:', insertError);
-                return NextResponse.json({ error: insertError.message }, { status: 500 });
-            }
-            supabaseItemId = inserted?.[0]?.id || null;
-            action = 'inserted';
-        }
-
-        // Crear/actualizar stock_snapshots por bodega
-        let snapshotsCreated = 0;
-        if (supabaseItemId && locationsData.length > 0 && warehousesData.length > 0) {
-            const warehouseMap = new Map(
-                warehousesData.map((w: any) => [String(w.zoho_warehouse_id), w.id])
-            );
-
-            // Eliminar snapshots anteriores de este item
-            await supabase
-                .from('stock_snapshots')
-                .delete()
-                .eq('item_id', supabaseItemId);
-
-            // Insertar nuevos snapshots por bodega
-            const snapshots = [];
-            for (const loc of locationsData) {
-                const locId = String(loc.location_id);
-                const localWarehouseId = warehouseMap.get(locId);
-                if (!localWarehouseId) continue;
-
-                snapshots.push({
-                    warehouse_id: localWarehouseId,
-                    item_id: supabaseItemId,
-                    qty: loc.location_stock_on_hand ?? loc.location_available_stock ?? 0,
-                    source_ts: new Date().toISOString(),
-                    synced_at: new Date().toISOString(),
-                });
-            }
-
-            if (snapshots.length > 0) {
-                const { error: snapError } = await supabase
-                    .from('stock_snapshots')
-                    .insert(snapshots);
-
-                if (snapError) {
-                    console.error('Error inserting snapshots from webhook:', snapError);
-                } else {
-                    snapshotsCreated = snapshots.length;
-                    console.log(`Webhook: ${snapshotsCreated} snapshots created for item ${zohoItemId}`);
-                }
-            }
-        }
-
-        console.log(`Item ${action}:`, zohoItemId);
-        return NextResponse.json({
-            success: true,
-            action,
-            item_id: zohoItemId,
-            supabase_id: supabaseItemId,
-            snapshots_created: snapshotsCreated,
-        });
-
-    } catch (error) {
-        console.error('Webhook error:', error);
-        return NextResponse.json(
-            { error: 'Error procesando webhook', details: error instanceof Error ? error.message : 'Unknown' },
-            { status: 500 }
+        const locations = await fetchItemLocations(
+            auth.accessToken,
+            auth.apiDomain,
+            organizationId,
+            zohoItemId
         );
+        debugLog.push(`[syncItemStock] ${zohoItemId}: ${locations.length} locations`);
+
+        const { data: itemRows } = await supabase
+            .from('items')
+            .select('id')
+            .eq('zoho_item_id', zohoItemId)
+            .limit(1);
+
+        const supabaseItemId = itemRows?.[0]?.id;
+        if (!supabaseItemId) {
+            debugLog.push(`[syncItemStock] WARN: Item ${zohoItemId} not in DB`);
+            return { snapshotsCreated: 0, stockTotal: 0 };
+        }
+
+        let stockTotal = 0;
+        for (const loc of locations) {
+            const wh = warehouseMap.get(String(loc.location_id));
+            if (wh?.active) {
+                stockTotal += (loc.location_stock_on_hand ?? 0);
+            }
+        }
+
+        await supabase.from('items').update({ stock_total: stockTotal }).eq('id', supabaseItemId);
+        await supabase.from('stock_snapshots').delete().eq('item_id', supabaseItemId);
+
+        const snapshots = [];
+        for (const loc of locations) {
+            const wh = warehouseMap.get(String(loc.location_id));
+            if (!wh) continue;
+            snapshots.push({
+                warehouse_id: wh.id,
+                item_id: supabaseItemId,
+                qty: loc.location_stock_on_hand ?? loc.location_available_stock ?? 0,
+                source_ts: new Date().toISOString(),
+                synced_at: new Date().toISOString(),
+            });
+        }
+
+        let snapshotsCreated = 0;
+        if (snapshots.length > 0) {
+            const { error } = await supabase.from('stock_snapshots').insert(snapshots);
+            if (!error) snapshotsCreated = snapshots.length;
+        }
+
+        return { snapshotsCreated, stockTotal };
+    } catch (err) {
+        debugLog.push(`[syncItemStock] ERROR fatal: ${err instanceof Error ? err.message : 'Unknown'}`);
+        return { snapshotsCreated: 0, stockTotal: 0 };
     }
 }
 
-// GET para verificar que el endpoint existe
+// =============================================
+// Main Webhook Handler
+// =============================================
+export async function POST(request: NextRequest) {
+    const debugLog: string[] = [];
+    const systemStatus = getSystemStatus();
+
+    try {
+        const payload = await request.json();
+        const payloadKeys = Object.keys(payload);
+        debugLog.push(`Payload received. Keys: ${payloadKeys.join(', ')}`);
+
+        const supabase = createServerClient();
+
+        // 1. Cargar bodegas
+        const { data: warehouses } = await supabase.from('warehouses').select('id, zoho_warehouse_id, active').not('zoho_warehouse_id', 'is', null);
+        const warehousesData = warehouses || [];
+        const warehouseMap = new Map(warehousesData.map((w: any) => [String(w.zoho_warehouse_id), { id: w.id, active: w.active }]));
+        debugLog.push(`Warehouses in DB: ${warehousesData.length}`);
+
+        // 2. Determinar tipo de evento
+        const isItemEvent = payloadKeys.includes('item') || payloadKeys.includes('data');
+        const isInventoryAdjustment = payloadKeys.includes('inventory_adjustment') || payloadKeys.includes('stockadjustment') || payload.module?.includes('adjustment');
+        const isCommonStockEvent = payloadKeys.includes('salesorder') || payloadKeys.includes('purchaseorder') || payloadKeys.includes('invoice') || payloadKeys.includes('bill') || payloadKeys.includes('transferorder');
+
+        // --- Caso A: Item Event ---
+        if (isItemEvent && !isInventoryAdjustment && !isCommonStockEvent) {
+            debugLog.push('Routing to ITEM EVENT handler');
+            const itemData = payload.item || payload.data || payload;
+            const zohoItemId = String(itemData.item_id || '');
+
+            if (!zohoItemId) {
+                return NextResponse.json({ success: true, message: 'No item_id', debug: debugLog, systemStatus });
+            }
+
+            const customFields = itemData.custom_field_hash || {};
+            const itemPayload = {
+                sku: itemData.sku || `NO-SKU-${zohoItemId}`,
+                name: itemData.name || 'Sin nombre',
+                color: customFields.cf_color || null,
+                state: customFields.cf_estado || null,
+                zoho_item_id: zohoItemId,
+                price: itemData.purchase_rate ?? null,
+            };
+
+            const { data: updated } = await supabase.from('items').update(itemPayload).eq('zoho_item_id', zohoItemId).select('id');
+            let supabaseId = updated?.[0]?.id;
+
+            if (!supabaseId) {
+                const { data: inserted } = await supabase.from('items').insert(itemPayload).select('id');
+                supabaseId = inserted?.[0]?.id;
+            }
+
+            if (supabaseId) {
+                const result = await syncItemStock(zohoItemId, supabase, warehouseMap, debugLog);
+                return NextResponse.json({ success: true, type: 'item', action: 'synced', supabase_id: supabaseId, snapshots: result.snapshotsCreated, debug: debugLog, systemStatus });
+            }
+        }
+
+        // --- Caso B: Stock Events (Adjustments, Sales, etc) ---
+        if (isInventoryAdjustment || isCommonStockEvent) {
+            debugLog.push(`Routing to STOCK EVENT handler (isAdj=${isInventoryAdjustment})`);
+
+            const eventData = payload.inventory_adjustment || payload.stockadjustment ||
+                payload.salesorder || payload.purchaseorder ||
+                payload.invoice || payload.bill ||
+                payload.transferorder || payload;
+
+            const lineItems: any[] = eventData.line_items || [];
+
+            // Si no hay line items pero hay un item_id directo (ajuste de un solo item)
+            let uniqueItemIds = [...new Set(lineItems.map((li: any) => String(li.item_id)).filter(Boolean))];
+            if (uniqueItemIds.length === 0 && eventData.item_id) {
+                uniqueItemIds = [String(eventData.item_id)];
+            }
+
+            debugLog.push(`Items to sync: ${uniqueItemIds.length}`);
+
+            let totalSnapshots = 0;
+            for (const zohoId of uniqueItemIds) {
+                const result = await syncItemStock(zohoId, supabase, warehouseMap, debugLog);
+                totalSnapshots += result.snapshotsCreated;
+            }
+
+            return NextResponse.json({
+                success: true,
+                type: isInventoryAdjustment ? 'adjustment' : 'stock_event',
+                items_synced: uniqueItemIds.length,
+                snapshots_created: totalSnapshots,
+                debug: debugLog,
+                systemStatus
+            });
+        }
+
+        // Si no detectamos el tipo, registrar llaves y devolver
+        debugLog.push(`WARN: Event type not recognized. Payload module: ${payload.module}`);
+        return NextResponse.json({ success: true, message: 'Evento no reconocido', debug: debugLog, systemStatus });
+
+    } catch (error) {
+        debugLog.push(`FATAL: ${error instanceof Error ? error.message : 'Unknown'}`);
+        return NextResponse.json({ error: 'Webhook processing failed', debug: debugLog, systemStatus }, { status: 500 });
+    }
+}
+
 export async function GET() {
-    return NextResponse.json({
-        status: 'ok',
-        message: 'Zoho webhook endpoint activo',
-        timestamp: new Date().toISOString()
-    });
+    return NextResponse.json({ status: 'active', systemStatus: getSystemStatus() });
 }
