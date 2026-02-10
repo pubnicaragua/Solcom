@@ -3,6 +3,8 @@
 import { useState, useEffect, useMemo } from 'react';
 import Card from '@/components/ui/Card';
 import { ChevronRight, ChevronDown, Loader2 } from 'lucide-react';
+import { supabase } from '@/lib/supabase/client';
+
 
 /* ───── types ───── */
 interface WarehouseCol {
@@ -156,8 +158,30 @@ export default function PivotInventoryTable({ filters }: PivotInventoryTableProp
         fetchPivotData();
     }, [filters]);
 
+    /* ───── realtime ───── */
+
+    useEffect(() => {
+        const channel = supabase
+            .channel('inventory-updates')
+            .on(
+                'postgres_changes',
+                { event: '*', schema: 'public', table: 'stock_snapshots' },
+                () => {
+                    console.log('Realtime update received! Refreshing pivot data...');
+                    fetchPivotData();
+                }
+            )
+            .subscribe();
+
+        return () => {
+            supabase.removeChannel(channel);
+        };
+    }, []);
+
     async function fetchPivotData() {
-        setLoading(true);
+        // Don't set loading to true on background refreshes if data exists
+        if (!data) setLoading(true);
+
         try {
             const params = new URLSearchParams();
             if (filters && typeof filters === 'object') {
@@ -168,14 +192,11 @@ export default function PivotInventoryTable({ filters }: PivotInventoryTableProp
                 });
             }
             const res = await fetch(`/api/inventory/pivot?${params.toString()}`);
-            console.log('Pivot fetch status:', res.status);
             if (res.ok) {
                 const result = await res.json();
-                console.log('Pivot data received:', result?.warehouses?.length, 'warehouses,', result?.items?.length, 'items');
                 setData(result);
             } else {
-                const errText = await res.text();
-                console.error('Pivot API error:', res.status, errText);
+                console.error('Pivot API error:', res.status);
             }
         } catch (error) {
             console.error('Error fetching pivot data:', error);
