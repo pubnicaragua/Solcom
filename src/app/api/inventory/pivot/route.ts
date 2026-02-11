@@ -63,7 +63,9 @@ export async function GET(request: Request) {
         const allWhIds = allWarehouses.map(w => w.id);
 
         let allSnapshots: any[] = [];
-        const BATCH_SIZE = 200;
+        // Batch size reduced: 200 items × 15 warehouses × multiple syncs exceeded
+        // Supabase's default 1000-row limit, silently dropping snapshot data
+        const BATCH_SIZE = 50;
         for (let i = 0; i < itemIds.length; i += BATCH_SIZE) {
             const batch = itemIds.slice(i, i + BATCH_SIZE);
             const { data: snapBatch } = await supabase
@@ -71,7 +73,8 @@ export async function GET(request: Request) {
                 .select('item_id, warehouse_id, qty, synced_at')
                 .in('item_id', batch)
                 .in('warehouse_id', allWhIds)
-                .order('synced_at', { ascending: false });
+                .order('synced_at', { ascending: false })
+                .limit(10000);
             if (snapBatch) allSnapshots = allSnapshots.concat(snapBatch);
         }
 
