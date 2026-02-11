@@ -69,7 +69,7 @@ export default function KPIGrid() {
 
   async function fetchKPIs() {
     try {
-      const res = await fetch('/api/inventory/kpis');
+      const res = await fetch('/api/inventory/kpis/local');
       if (res.ok) {
         const data = await res.json();
         setKpis({

@@ -22,6 +22,7 @@ export default function ReportsPage() {
   const [stockSnapshots, setStockSnapshots] = useState<any[]>([]);
   const [warehouses, setWarehouses] = useState<any[]>([]);
   const [stats, setStats] = useState<any>(null);
+  const [agingData, setAgingData] = useState<any>(null); // New state for Zoho aging
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [globalFilters, setGlobalFilters] = useState({
@@ -74,13 +75,14 @@ export default function ReportsPage() {
       const dateFilter = new Date();
       dateFilter.setDate(dateFilter.getDate() - daysAgo);
 
-      const [itemsData, snapshotsResult, warehousesResult, kpisResponse] = await Promise.all([
+      const [itemsData, snapshotsResult, warehousesResult, kpisResponse, agingResponse] = await Promise.all([
         fetchAllItems(),
         supabase.from('stock_snapshots').select('*, items(*), warehouses(*)')
           .gte('synced_at', dateFilter.toISOString())
           .range(0, 9999),
         supabase.from('warehouses').select('*').eq('active', true),
-        fetch('/api/inventory/kpis')
+        fetch('/api/inventory/kpis'),
+        fetch('/api/inventory/aging')
       ]);
 
       if (snapshotsResult.error) throw new Error(`Error snapshots: ${snapshotsResult.error.message}`);
@@ -89,10 +91,12 @@ export default function ReportsPage() {
       const snapshotsData = snapshotsResult.data || [];
       const warehousesData = warehousesResult.data || [];
       const kpis = kpisResponse.ok ? await kpisResponse.json() : null;
+      const aging = agingResponse.ok ? await agingResponse.json() : null;
 
       setItems(itemsData);
       setStockSnapshots(snapshotsData);
       setWarehouses(warehousesData);
+      setAgingData(aging);
 
       // Obtener opciones de filtros
       const categories = new Set<string>();
@@ -100,7 +104,7 @@ export default function ReportsPage() {
       const warehouseCodes = new Set<string>();
       const states = new Set<string>();
       const colors = new Set<string>();
-      
+
       snapshotsData.forEach((s: any) => {
         if (s.items?.category) categories.add(s.items.category);
         if (s.items?.marca) marcas.add(s.items.marca);
@@ -126,12 +130,8 @@ export default function ReportsPage() {
       if (globalFilters.color) filtered = filtered.filter((s: any) => s.items?.color === globalFilters.color);
 
       setFilteredSnapshots(filtered);
-      
-      const calculatedTotalValue = itemsData.reduce(
-        (sum, item) => sum + ((item.stock_total || 0) * (item.price || 0)),
-        0
-      );
-      calculateStats(itemsData, filtered, warehousesData, calculatedTotalValue, kpis);
+
+      calculateStats(itemsData, filtered, warehousesData, kpis);
     } catch (err: any) {
       setError(err.message || 'Error al cargar datos');
       console.error('Error fetching data:', err);
@@ -144,12 +144,11 @@ export default function ReportsPage() {
     items: any[],
     snapshots: any[],
     warehouses: any[],
-    zohoTotalValue: number = 0,
-    kpis?: { totalProducts?: number; totalStock?: number; activeWarehouses?: number }
+    kpis?: { totalProducts?: number; totalStock?: number; totalValue?: number; activeWarehouses?: number }
   ) {
     const totalStock = kpis?.totalStock ?? items.reduce((sum, item) => sum + (item.stock_total || 0), 0);
-    // Usar el valor real de Zoho en lugar del cálculo manual
-    const totalValue = zohoTotalValue > 0 ? zohoTotalValue : items.reduce((sum, item) => sum + ((item.stock_total || 0) * (item.price || 0)), 0);
+    // Use Zoho's real inventory valuation
+    const totalValue = kpis?.totalValue ?? items.reduce((sum, item) => sum + ((item.stock_total || 0) * (item.price || 0)), 0);
     const lowStockItems = items.filter(i => (i.stock_total || 0) > 0 && (i.stock_total || 0) < 10).length;
     const outOfStockItems = items.filter(i => (i.stock_total || 0) === 0).length;
 
@@ -639,7 +638,7 @@ export default function ReportsPage() {
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: 12 }}>
             <Select
               value={globalFilters.category}
-              onChange={(e) => { setGlobalFilters({...globalFilters, category: e.target.value}); }}
+              onChange={(e) => { setGlobalFilters({ ...globalFilters, category: e.target.value }); }}
               options={[
                 { value: '', label: 'Todas las categorías' },
                 ...(filterOptions?.categories || []).map((c: string) => ({ value: c, label: c }))
@@ -647,7 +646,7 @@ export default function ReportsPage() {
             />
             <Select
               value={globalFilters.marca}
-              onChange={(e) => { setGlobalFilters({...globalFilters, marca: e.target.value}); }}
+              onChange={(e) => { setGlobalFilters({ ...globalFilters, marca: e.target.value }); }}
               options={[
                 { value: '', label: 'Todas las marcas' },
                 ...(filterOptions?.marcas || []).map((m: string) => ({ value: m, label: m }))
@@ -655,7 +654,7 @@ export default function ReportsPage() {
             />
             <Select
               value={globalFilters.warehouse}
-              onChange={(e) => { setGlobalFilters({...globalFilters, warehouse: e.target.value}); }}
+              onChange={(e) => { setGlobalFilters({ ...globalFilters, warehouse: e.target.value }); }}
               options={[
                 { value: '', label: 'Todos los almacenes' },
                 ...(filterOptions?.warehouses || []).map((w: string) => ({ value: w, label: w }))
@@ -663,7 +662,7 @@ export default function ReportsPage() {
             />
             <Select
               value={globalFilters.state}
-              onChange={(e) => { setGlobalFilters({...globalFilters, state: e.target.value}); }}
+              onChange={(e) => { setGlobalFilters({ ...globalFilters, state: e.target.value }); }}
               options={[
                 { value: '', label: 'Todos los estados' },
                 ...(filterOptions?.states || []).map((s: string) => ({ value: s, label: s }))
@@ -671,7 +670,7 @@ export default function ReportsPage() {
             />
             <Select
               value={globalFilters.color}
-              onChange={(e) => { setGlobalFilters({...globalFilters, color: e.target.value}); }}
+              onChange={(e) => { setGlobalFilters({ ...globalFilters, color: e.target.value }); }}
               options={[
                 { value: '', label: 'Todos los colores' },
                 ...(filterOptions?.colors || []).map((c: string) => ({ value: c, label: c }))
@@ -683,9 +682,103 @@ export default function ReportsPage() {
 
       {/* SECCIÓN 1: INVENTARIO REMANENTE */}
       <div style={{ background: 'linear-gradient(135deg, #dc2626 0%, #991b1b 100%)', padding: '12px 20px', borderRadius: 8 }}>
-        <h2 style={{ color: 'white', fontSize: 18, fontWeight: 700, margin: 0 }}>Inventario Remanente ≥ 90 Días</h2>
+        <h2 style={{ color: 'white', fontSize: 18, fontWeight: 700, margin: 0 }}>Inventario Remanente {'>'}= 90 Días (Zoho Books)</h2>
       </div>
-      <ReportPlaceholder title="Inventario Remanente ≥90 días" reason="Falta campo de fecha de último movimiento" height={250} />
+      {loading ? (
+        <Card><div style={{ height: 250, background: 'var(--panel)', borderRadius: 4, animation: 'pulse 1.5s infinite' }} /></Card>
+      ) : (() => {
+        // Use real Zoho data if available, otherwise fallback to local calculation
+        const agingItems = agingData?.items ? agingData.items : items
+          .filter(item => {
+            const stock = item.stock_total || 0;
+            if (stock <= 0) return false;
+            const lastUpdate = item.updated_at ? new Date(item.updated_at) : null;
+            const ninetyDaysAgo = new Date();
+            ninetyDaysAgo.setDate(ninetyDaysAgo.getDate() - 90);
+            return lastUpdate && lastUpdate < ninetyDaysAgo;
+          })
+          .map(item => {
+            const lastUpdate = new Date(item.updated_at);
+            const daysAgo = Math.floor((Date.now() - lastUpdate.getTime()) / (1000 * 60 * 60 * 24));
+            return { ...item, daysAgo };
+          })
+          .sort((a, b) => b.daysAgo - a.daysAgo);
+
+        const agingTotalUnits = agingData?.totalUnits ?? agingItems.reduce((sum: number, i: any) => sum + (i.stock_total || 0), 0);
+        const agingTotalValue = agingData?.totalValue ?? agingItems.reduce((sum: number, i: any) => sum + ((i.stock_total || 0) * (i.price || 0)), 0);
+
+        return (
+          <Card>
+            <div style={{ padding: 16 }}>
+              {/* Summary stats */}
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 12, marginBottom: 16 }}>
+                <div style={{ background: 'var(--panel)', borderRadius: 8, padding: 12, textAlign: 'center' }}>
+                  <div style={{ fontSize: 24, fontWeight: 700, color: '#ef4444' }}>{agingItems.length}</div>
+                  <div style={{ fontSize: 12, color: 'var(--muted)' }}>Productos estancados</div>
+                </div>
+                <div style={{ background: 'var(--panel)', borderRadius: 8, padding: 12, textAlign: 'center' }}>
+                  <div style={{ fontSize: 24, fontWeight: 700, color: '#f97316' }}>{agingTotalUnits.toLocaleString('es-NI')}</div>
+                  <div style={{ fontSize: 12, color: 'var(--muted)' }}>Unidades sin movimiento</div>
+                </div>
+                <div style={{ background: 'var(--panel)', borderRadius: 8, padding: 12, textAlign: 'center' }}>
+                  <div style={{ fontSize: 24, fontWeight: 700, color: '#eab308' }}>${agingTotalValue.toLocaleString('es-NI', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</div>
+                  <div style={{ fontSize: 12, color: 'var(--muted)' }}>Capital inmovilizado</div>
+                </div>
+              </div>
+
+              {agingItems.length === 0 ? (
+                <div style={{ textAlign: 'center', padding: '30px 0', color: 'var(--muted)' }}>
+                  <Package size={32} style={{ marginBottom: 8, opacity: 0.5 }} />
+                  <div>No hay productos con stock estancado {'>'}= 90 días</div>
+                </div>
+              ) : (
+                <div style={{ maxHeight: 400, overflowY: 'auto', borderRadius: 8, border: '1px solid var(--border)' }}>
+                  <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
+                    <thead>
+                      <tr style={{ background: 'var(--panel)', position: 'sticky', top: 0, zIndex: 1 }}>
+                        <th style={{ padding: '10px 12px', textAlign: 'left', fontWeight: 600, borderBottom: '1px solid var(--border)' }}>SKU</th>
+                        <th style={{ padding: '10px 12px', textAlign: 'left', fontWeight: 600, borderBottom: '1px solid var(--border)' }}>Producto</th>
+                        <th style={{ padding: '10px 12px', textAlign: 'left', fontWeight: 600, borderBottom: '1px solid var(--border)' }}>Categoría</th>
+                        <th style={{ padding: '10px 12px', textAlign: 'right', fontWeight: 600, borderBottom: '1px solid var(--border)' }}>Stock</th>
+                        <th style={{ padding: '10px 12px', textAlign: 'right', fontWeight: 600, borderBottom: '1px solid var(--border)' }}>Valor</th>
+                        <th style={{ padding: '10px 12px', textAlign: 'center', fontWeight: 600, borderBottom: '1px solid var(--border)' }}>Días sin movimiento</th>
+                        <th style={{ padding: '10px 12px', textAlign: 'left', fontWeight: 600, borderBottom: '1px solid var(--border)' }}>Último cambio (Aprox)</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {agingItems.slice(0, 100).map((item: any, idx: number) => {
+                        const badgeColor = item.daysAgo >= 180 ? '#ef4444' : item.daysAgo >= 120 ? '#f97316' : '#eab308';
+                        return (
+                          <tr key={item.id} style={{ borderBottom: '1px solid var(--border)', background: idx % 2 === 0 ? 'transparent' : 'var(--panel)' }}>
+                            <td style={{ padding: '8px 12px', fontFamily: 'monospace', fontSize: 12 }}>{item.sku}</td>
+                            <td style={{ padding: '8px 12px', maxWidth: 220, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{item.name}</td>
+                            <td style={{ padding: '8px 12px', color: 'var(--muted)' }}>{item.category || '—'}</td>
+                            <td style={{ padding: '8px 12px', textAlign: 'right', fontWeight: 600 }}>{(item.stock_total || 0).toLocaleString('es-NI')}</td>
+                            <td style={{ padding: '8px 12px', textAlign: 'right' }}>${((item.stock_total || 0) * (item.price || 0)).toLocaleString('es-NI', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
+                            <td style={{ padding: '8px 12px', textAlign: 'center' }}>
+                              <span style={{ background: badgeColor + '20', color: badgeColor, padding: '2px 8px', borderRadius: 12, fontSize: 12, fontWeight: 600 }}>
+                                {item.daysAgo}d
+                              </span>
+                            </td>
+                            <td style={{ padding: '8px 12px', fontSize: 12, color: 'var(--muted)' }}>
+                              {new Date(item.updated_at).toLocaleDateString('es-NI', { day: '2-digit', month: 'short', year: 'numeric' })}
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                  {agingItems.length > 100 && (
+                    <div style={{ padding: '8px 12px', fontSize: 12, color: 'var(--muted)', textAlign: 'center', background: 'var(--panel)' }}>
+                      Mostrando 100 de {agingItems.length} productos
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+          </Card>
+        );
+      })()}
 
       {/* SECCIÓN 2: EXISTENCIAS GENERALES */}
       <div style={{ background: 'linear-gradient(135deg, #dc2626 0%, #991b1b 100%)', padding: '12px 20px', borderRadius: 8 }}>

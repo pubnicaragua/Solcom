@@ -257,15 +257,19 @@ export default function PivotInventoryTable({ filters }: PivotInventoryTableProp
     flatten(tree, '', 0);
 
     const stickyColWidth = 250;
+    const skuColWidth = 110;
+    const marcaColWidth = 100;
+    const colorColWidth = 90;
     const cellWidth = 75;
     const totalColWidth = 90;
+    const extraColsWidth = skuColWidth + marcaColWidth + colorColWidth;
 
     return (
         <Card padding={0}>
             <div style={{ position: 'relative', overflow: 'hidden' }}>
                 {/* Scrollable wrapper */}
                 <div style={{ overflowX: 'auto', overflowY: 'auto', maxHeight: '75vh' }}>
-                    <table style={{ borderCollapse: 'separate', borderSpacing: 0, tableLayout: 'fixed', width: stickyColWidth + warehouseCodes.length * cellWidth + totalColWidth }}>
+                    <table style={{ borderCollapse: 'separate', borderSpacing: 0, tableLayout: 'fixed', width: stickyColWidth + extraColsWidth + warehouseCodes.length * cellWidth + totalColWidth }}>
                         {/* ─── Header ─── */}
                         <thead>
                             <tr>
@@ -287,9 +291,50 @@ export default function PivotInventoryTable({ filters }: PivotInventoryTableProp
                                     whiteSpace: 'nowrap',
                                     borderRight: '2px solid white',
                                     borderBottom: '2px solid white',
-                                }}>
-                                    Cuenta de product_name
-                                </th>
+                                }}>Producto</th>
+                                {/* ─── Extra info columns ─── */}
+                                <th style={{
+                                    position: 'sticky', top: 0, zIndex: 3,
+                                    background: '#0f1b2d',
+                                    padding: '10px 8px',
+                                    textAlign: 'left',
+                                    fontSize: 11, fontWeight: 700,
+                                    color: 'var(--muted)',
+                                    textTransform: 'uppercase',
+                                    letterSpacing: '0.5px',
+                                    minWidth: skuColWidth, width: skuColWidth,
+                                    whiteSpace: 'nowrap',
+                                    borderBottom: '2px solid white',
+                                    borderRight: '1px solid rgba(255,255,255,0.15)',
+                                }}>SKU</th>
+                                <th style={{
+                                    position: 'sticky', top: 0, zIndex: 3,
+                                    background: '#0f1b2d',
+                                    padding: '10px 8px',
+                                    textAlign: 'left',
+                                    fontSize: 11, fontWeight: 700,
+                                    color: 'var(--muted)',
+                                    textTransform: 'uppercase',
+                                    letterSpacing: '0.5px',
+                                    minWidth: marcaColWidth, width: marcaColWidth,
+                                    whiteSpace: 'nowrap',
+                                    borderBottom: '2px solid white',
+                                    borderRight: '1px solid rgba(255,255,255,0.15)',
+                                }}>Marca</th>
+                                <th style={{
+                                    position: 'sticky', top: 0, zIndex: 3,
+                                    background: '#0f1b2d',
+                                    padding: '10px 8px',
+                                    textAlign: 'left',
+                                    fontSize: 11, fontWeight: 700,
+                                    color: 'var(--muted)',
+                                    textTransform: 'uppercase',
+                                    letterSpacing: '0.5px',
+                                    minWidth: colorColWidth, width: colorColWidth,
+                                    whiteSpace: 'nowrap',
+                                    borderBottom: '2px solid white',
+                                    borderRight: '2px solid white',
+                                }}>Color</th>
                                 {warehouseCodes.map((code) => (
                                     <th key={code} style={{
                                         position: 'sticky', top: 0, zIndex: 2,
@@ -378,6 +423,32 @@ export default function PivotInventoryTable({ filters }: PivotInventoryTableProp
                                                 {node.label}
                                             </span>
                                         </td>
+
+                                        {/* ─── SKU, Marca, Color cells ─── */}
+                                        {(() => {
+                                            const leafItem = node.level === 4 && node.items?.[0] ? node.items[0] : null;
+                                            const skuVal = leafItem ? leafItem.sku : '';
+                                            const marcaVal = node.level === 1 ? node.label : (leafItem ? (leafItem.brand || '') : '');
+                                            const colorVal = node.level === 3 ? node.label : (leafItem ? (leafItem.color || '') : '');
+                                            const infoStyle = {
+                                                padding: '6px 8px',
+                                                fontSize: 11,
+                                                color: '#94a3b8',
+                                                whiteSpace: 'nowrap' as const,
+                                                overflow: 'hidden' as const,
+                                                textOverflow: 'ellipsis' as const,
+                                                borderBottom: '1px solid rgba(255, 255, 255, 1)',
+                                                borderRight: '1px solid rgba(255,255,255,0.15)',
+                                                background: style.bg === 'transparent' ? undefined : style.bg,
+                                            };
+                                            return (
+                                                <>
+                                                    <td style={{ ...infoStyle, minWidth: skuColWidth, maxWidth: skuColWidth }}>{skuVal}</td>
+                                                    <td style={{ ...infoStyle, minWidth: marcaColWidth, maxWidth: marcaColWidth }}>{marcaVal}</td>
+                                                    <td style={{ ...infoStyle, minWidth: colorColWidth, maxWidth: colorColWidth, borderRight: '2px solid white' }}>{colorVal}</td>
+                                                </>
+                                            );
+                                        })()}
 
                                         {/* Warehouse qty cells */}
                                         {warehouseCodes.map((code) => {
