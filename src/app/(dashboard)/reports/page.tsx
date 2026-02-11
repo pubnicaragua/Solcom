@@ -23,6 +23,7 @@ export default function ReportsPage() {
   const [warehouses, setWarehouses] = useState<any[]>([]);
   const [stats, setStats] = useState<any>(null);
   const [agingData, setAgingData] = useState<any>(null); // New state for Zoho aging
+  const [initialStats, setInitialStats] = useState<any>(null); // Store server-side KPIs
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [globalFilters, setGlobalFilters] = useState({
@@ -124,6 +125,7 @@ export default function ReportsPage() {
       setItems(itemsData);
       setStockSnapshots(allSnapshotsData); // Use ALL snapshots for charts
       setWarehouses(warehousesData);
+      setInitialStats(kpis);
       setAgingData(aging);
 
       // Obtener opciones de filtros from ALL snapshots
@@ -176,9 +178,12 @@ export default function ReportsPage() {
     dateFilter.setDate(dateFilter.getDate() - daysAgo);
     const periodFiltered = filtered.filter((s: any) => new Date(s.synced_at) >= dateFilter);
 
-    calculateStats(items, filtered, warehouses, undefined, periodFiltered);
+    // Check if we have active filters
+    const hasActiveFilters = Object.values(globalFilters).some(val => val !== '');
 
-  }, [globalFilters, stockSnapshots, items, warehouses, period]);
+    calculateStats(items, filtered, warehouses, hasActiveFilters ? undefined : initialStats, periodFiltered);
+
+  }, [globalFilters, stockSnapshots, items, warehouses, period, initialStats]);
 
   // Deduplicate snapshots: keep only the latest snapshot per item_id + warehouse_id
   function deduplicateSnapshots(snapshots: any[]): any[] {

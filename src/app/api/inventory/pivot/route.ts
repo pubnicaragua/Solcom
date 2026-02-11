@@ -49,7 +49,7 @@ export async function GET(request: Request) {
             }
         }
 
-        const { data: itemsData, error: itemsError } = await itemsQuery.order('name', { ascending: true });
+        const { data: itemsData, error: itemsError } = await itemsQuery.order('name', { ascending: true }).limit(10000);
         console.log('Pivot API - active warehouses:', activeWarehouses.length, 'all warehouses:', allWarehouses.length, 'items:', itemsData?.length);
         if (itemsError) throw itemsError;
 
