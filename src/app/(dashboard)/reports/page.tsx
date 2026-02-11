@@ -211,7 +211,14 @@ export default function ReportsPage() {
 
     // Calculate totals from filtered snapshots if KPIS is undefined (meaning we are filtering)
     const effectiveTotalStock = kpis?.totalStock ?? deduped.reduce((sum, s) => sum + s.qty, 0);
-    const effectiveTotalValue = kpis?.totalValue ?? deduped.reduce((sum, s) => sum + (s.qty * (s.items?.price || 0)), 0);
+    const effectiveTotalValue = kpis?.totalValue ?? deduped.reduce((sum, s) => {
+      // Use purchase_rate (cost) if available, otherwise fallback to price (retail)
+      const rate = s.items?.purchase_rate || s.items?.price || 0;
+      return sum + (s.qty * rate);
+    }, 0);
+
+    // Count unique items for product count (deduped contains item-warehouse pairs)
+    const uniqueItemCount = new Set(deduped.map((s: any) => s.item_id)).size;
 
     const categoryBreakdown: Record<string, number> = {};
     deduped.forEach(s => {
@@ -250,7 +257,7 @@ export default function ReportsPage() {
     });
 
     setStats({
-      totalProducts: kpis?.totalProducts ?? deduped.length,
+      totalProducts: kpis?.totalProducts ?? uniqueItemCount,
       totalStock: effectiveTotalStock,
       totalValue: effectiveTotalValue,
       lowStockItems,

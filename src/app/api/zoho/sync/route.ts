@@ -37,7 +37,7 @@ export async function POST(request: Request) {
     let itemsProcessed = 0;
 
     for (const zohoItem of zohoItems) {
-      
+
       const defaultWarehouseCode = 'X1';
 
       let warehouseId: string | null = null;
@@ -76,6 +76,14 @@ export async function POST(request: Request) {
 
       if (itemQuery.data) {
         itemId = itemQuery.data.id;
+        // Update existing item metadata (especially purchase_rate found in Zoho)
+        await supabase.from('items').update({
+          name: zohoItem.name,
+          purchase_rate: zohoItem.purchase_rate || 0,
+          price: zohoItem.rate || 0,
+          zoho_item_id: zohoItem.item_id,
+          updated_at: new Date().toISOString()
+        } as any).eq('id', itemId as string);
       } else {
         const { data: newItem }: any = await supabase
           .from('items')
@@ -83,6 +91,8 @@ export async function POST(request: Request) {
             sku: zohoItem.sku,
             name: zohoItem.name,
             zoho_item_id: zohoItem.item_id,
+            purchase_rate: zohoItem.purchase_rate || 0,
+            price: zohoItem.rate || 0,
           } as any)
           .select('id')
           .single();
