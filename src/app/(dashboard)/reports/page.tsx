@@ -67,6 +67,33 @@ export default function ReportsPage() {
     return allItems;
   }
 
+  async function fetchAllSnapshots() {
+    const allSnaps: any[] = [];
+    const pageSize = 1000;
+    let from = 0;
+    let hasMore = true;
+
+    while (hasMore) {
+      const { data, error } = await supabase
+        .from('stock_snapshots')
+        .select('*, items(*), warehouses(*)')
+        .range(from, from + pageSize - 1);
+
+      if (error) throw new Error(`Error snapshots: ${error.message}`);
+
+      const batch = data || [];
+      allSnaps.push(...batch);
+
+      if (batch.length < pageSize) {
+        hasMore = false;
+      } else {
+        from += pageSize;
+      }
+    }
+
+    return allSnaps;
+  }
+
   async function fetchAllData() {
     setLoading(true);
     setError(null);
@@ -75,37 +102,38 @@ export default function ReportsPage() {
       const dateFilter = new Date();
       dateFilter.setDate(dateFilter.getDate() - daysAgo);
 
-      const [itemsData, snapshotsResult, warehousesResult, kpisResponse, agingResponse] = await Promise.all([
+      const [itemsData, allSnapshotsData, warehousesResult, kpisResponse, agingResponse] = await Promise.all([
         fetchAllItems(),
-        supabase.from('stock_snapshots').select('*, items(*), warehouses(*)')
-          .gte('synced_at', dateFilter.toISOString())
-          .range(0, 9999),
+        fetchAllSnapshots(),
         supabase.from('warehouses').select('*').eq('active', true),
         fetch('/api/inventory/kpis'),
         fetch('/api/inventory/aging')
       ]);
 
-      if (snapshotsResult.error) throw new Error(`Error snapshots: ${snapshotsResult.error.message}`);
       if (warehousesResult.error) throw new Error(`Error warehouses: ${warehousesResult.error.message}`);
 
-      const snapshotsData = snapshotsResult.data || [];
+      // Period-filtered snapshots for stock history only
+      const periodSnapshots = allSnapshotsData.filter(
+        (s: any) => new Date(s.synced_at) >= dateFilter
+      );
+
       const warehousesData = warehousesResult.data || [];
       const kpis = kpisResponse.ok ? await kpisResponse.json() : null;
       const aging = agingResponse.ok ? await agingResponse.json() : null;
 
       setItems(itemsData);
-      setStockSnapshots(snapshotsData);
+      setStockSnapshots(allSnapshotsData); // Use ALL snapshots for charts
       setWarehouses(warehousesData);
       setAgingData(aging);
 
-      // Obtener opciones de filtros
+      // Obtener opciones de filtros from ALL snapshots
       const categories = new Set<string>();
       const marcas = new Set<string>();
       const warehouseCodes = new Set<string>();
       const states = new Set<string>();
       const colors = new Set<string>();
 
-      snapshotsData.forEach((s: any) => {
+      allSnapshotsData.forEach((s: any) => {
         if (s.items?.category) categories.add(s.items.category);
         if (s.items?.marca) marcas.add(s.items.marca);
         if (s.warehouses?.code) warehouseCodes.add(s.warehouses.code);
@@ -121,17 +149,7 @@ export default function ReportsPage() {
         colors: Array.from(colors).sort()
       });
 
-      // Aplicar filtros
-      let filtered = snapshotsData;
-      if (globalFilters.category) filtered = filtered.filter((s: any) => s.items?.category === globalFilters.category);
-      if (globalFilters.marca) filtered = filtered.filter((s: any) => s.items?.marca === globalFilters.marca);
-      if (globalFilters.warehouse) filtered = filtered.filter((s: any) => s.warehouses?.code === globalFilters.warehouse);
-      if (globalFilters.state) filtered = filtered.filter((s: any) => s.items?.state === globalFilters.state);
-      if (globalFilters.color) filtered = filtered.filter((s: any) => s.items?.color === globalFilters.color);
-
-      setFilteredSnapshots(filtered);
-
-      calculateStats(itemsData, filtered, warehousesData, kpis);
+      // Filtering is now handled by the useEffect below
     } catch (err: any) {
       setError(err.message || 'Error al cargar datos');
       console.error('Error fetching data:', err);
@@ -140,11 +158,47 @@ export default function ReportsPage() {
     }
   }
 
+  // Handle filtering and stats updates when filters or data change
+  useEffect(() => {
+    if (!stockSnapshots || stockSnapshots.length === 0) return;
+
+    let filtered = stockSnapshots;
+    if (globalFilters.category) filtered = filtered.filter((s: any) => s.items?.category === globalFilters.category);
+    if (globalFilters.marca) filtered = filtered.filter((s: any) => s.items?.marca === globalFilters.marca);
+    if (globalFilters.warehouse) filtered = filtered.filter((s: any) => s.warehouses?.code === globalFilters.warehouse);
+    if (globalFilters.state) filtered = filtered.filter((s: any) => s.items?.state === globalFilters.state);
+    if (globalFilters.color) filtered = filtered.filter((s: any) => s.items?.color === globalFilters.color);
+
+    setFilteredSnapshots(filtered);
+
+    const daysAgo = parseInt(period);
+    const dateFilter = new Date();
+    dateFilter.setDate(dateFilter.getDate() - daysAgo);
+    const periodFiltered = filtered.filter((s: any) => new Date(s.synced_at) >= dateFilter);
+
+    calculateStats(items, filtered, warehouses, undefined, periodFiltered);
+
+  }, [globalFilters, stockSnapshots, items, warehouses, period]);
+
+  // Deduplicate snapshots: keep only the latest snapshot per item_id + warehouse_id
+  function deduplicateSnapshots(snapshots: any[]): any[] {
+    const map = new Map<string, any>();
+    snapshots.forEach((s: any) => {
+      const key = `${s.item_id || s.items?.id || ''}_${s.warehouse_id || s.warehouses?.id || ''}`;
+      const existing = map.get(key);
+      if (!existing || new Date(s.synced_at) > new Date(existing.synced_at)) {
+        map.set(key, s);
+      }
+    });
+    return Array.from(map.values());
+  }
+
   function calculateStats(
     items: any[],
     snapshots: any[],
     warehouses: any[],
-    kpis?: { totalProducts?: number; totalStock?: number; totalValue?: number; activeWarehouses?: number }
+    kpis?: { totalProducts?: number; totalStock?: number; totalValue?: number; activeWarehouses?: number },
+    periodSnapshots?: any[]
   ) {
     const totalStock = kpis?.totalStock ?? items.reduce((sum, item) => sum + (item.stock_total || 0), 0);
     // Use Zoho's real inventory valuation
@@ -152,8 +206,15 @@ export default function ReportsPage() {
     const lowStockItems = items.filter(i => (i.stock_total || 0) > 0 && (i.stock_total || 0) < 10).length;
     const outOfStockItems = items.filter(i => (i.stock_total || 0) === 0).length;
 
+    // Use deduplicated snapshots for breakdowns and totals if kpis not provided
+    const deduped = deduplicateSnapshots(snapshots);
+
+    // Calculate totals from filtered snapshots if KPIS is undefined (meaning we are filtering)
+    const effectiveTotalStock = kpis?.totalStock ?? deduped.reduce((sum, s) => sum + s.qty, 0);
+    const effectiveTotalValue = kpis?.totalValue ?? deduped.reduce((sum, s) => sum + (s.qty * (s.items?.price || 0)), 0);
+
     const categoryBreakdown: Record<string, number> = {};
-    snapshots.forEach(s => {
+    deduped.forEach(s => {
       if (s.items) {
         const cat = s.items.category || 'Sin categoría';
         categoryBreakdown[cat] = (categoryBreakdown[cat] || 0) + s.qty;
@@ -161,7 +222,7 @@ export default function ReportsPage() {
     });
 
     const warehouseBreakdown: Record<string, { stock: number; items: number }> = {};
-    snapshots.forEach(s => {
+    deduped.forEach(s => {
       if (s.warehouses) {
         const code = s.warehouses.code;
         if (!warehouseBreakdown[code]) {
@@ -172,6 +233,8 @@ export default function ReportsPage() {
       }
     });
 
+    // Use period-filtered snapshots for stock history
+    const historySource = periodSnapshots || snapshots;
     const stockHistory: Array<{ date: string; stock: number }> = [];
     const last7Days = Array.from({ length: 7 }, (_, i) => {
       const date = new Date();
@@ -180,15 +243,16 @@ export default function ReportsPage() {
     });
 
     last7Days.forEach(date => {
-      const daySnapshots = snapshots.filter(s => s.synced_at.startsWith(date));
-      const dayStock = daySnapshots.reduce((sum, s) => sum + s.qty, 0);
+      const daySnapshots = historySource.filter(s => s.synced_at.startsWith(date));
+      const dayDeduped = deduplicateSnapshots(daySnapshots);
+      const dayStock = dayDeduped.reduce((sum, s) => sum + s.qty, 0);
       stockHistory.push({ date, stock: dayStock || totalStock / 7 });
     });
 
     setStats({
-      totalProducts: kpis?.totalProducts ?? items.length,
-      totalStock,
-      totalValue,
+      totalProducts: kpis?.totalProducts ?? deduped.length,
+      totalStock: effectiveTotalStock,
+      totalValue: effectiveTotalValue,
       lowStockItems,
       outOfStockItems,
       activeWarehouses: kpis?.activeWarehouses ?? warehouses.length,
@@ -291,8 +355,9 @@ export default function ReportsPage() {
   // Funciones de transformación
   const groupByCategoryUnits = (snapshots: any[]) => {
     if (!snapshots || snapshots.length === 0) return null;
+    const deduped = deduplicateSnapshots(snapshots);
     const groups: Record<string, number> = {};
-    snapshots.forEach((s: any) => {
+    deduped.forEach((s: any) => {
       const cat = s.items?.category || 'Sin categoría';
       groups[cat] = (groups[cat] || 0) + s.qty;
     });
@@ -301,8 +366,9 @@ export default function ReportsPage() {
 
   const groupByBrandUnits = (snapshots: any[]) => {
     if (!snapshots || snapshots.length === 0) return null;
+    const deduped = deduplicateSnapshots(snapshots);
     const groups: Record<string, number> = {};
-    snapshots.forEach((s: any) => {
+    deduped.forEach((s: any) => {
       const marca = s.items?.marca || 'Sin marca';
       groups[marca] = (groups[marca] || 0) + s.qty;
     });
@@ -344,9 +410,11 @@ export default function ReportsPage() {
 
   // Resolve quantity per item preferring snapshots (filteredSnapshots) when present,
   // otherwise fall back to `item.stock_total`. Returns items augmented with `resolved_qty`.
+  // Deduplicate snapshots first, then sum per item to get accurate totals
   const resolveItemQuantities = (itemsList: any[], snapshotsList: any[]) => {
+    const deduped = deduplicateSnapshots(snapshotsList || []);
     const snapshotMap: Record<string, number> = {};
-    (snapshotsList || []).forEach((s: any) => {
+    deduped.forEach((s: any) => {
       if (!s.item_id) return;
       snapshotMap[s.item_id] = (snapshotMap[s.item_id] || 0) + (Number(s.qty) || 0);
     });
@@ -360,8 +428,9 @@ export default function ReportsPage() {
 
   const groupByWarehouseUnits = (snapshots: any[]) => {
     if (!snapshots || snapshots.length === 0) return null;
+    const deduped = deduplicateSnapshots(snapshots);
     const groups: Record<string, number> = {};
-    snapshots.forEach((s: any) => {
+    deduped.forEach((s: any) => {
       const warehouse = s.warehouses?.name || s.warehouses?.code || 'Sin almacén';
       groups[warehouse] = (groups[warehouse] || 0) + s.qty;
     });
@@ -381,8 +450,14 @@ export default function ReportsPage() {
     if (globalFilters.state) list = list.filter((i: any) => i.state === globalFilters.state);
     if (globalFilters.color) list = list.filter((i: any) => i.color === globalFilters.color);
     if (globalFilters.warehouse) {
-      const ids = new Set(filteredSnapshots.map((s: any) => s.item_id));
+      console.log('Filtering by warehouse:', globalFilters.warehouse);
+      console.log('Filtered snapshots count:', filteredSnapshots.length);
+      const positiveSnapshots = filteredSnapshots.filter((s: any) => s.qty > 0);
+      console.log('Positive qty snapshots:', positiveSnapshots.length);
+      const ids = new Set(positiveSnapshots.map((s: any) => s.item_id));
+      console.log('Unique item IDs in warehouse:', ids.size);
       list = list.filter((i: any) => ids.has(i.id));
+      console.log('List size after filter:', list.length);
     }
     return list;
   }, [items, globalFilters, filteredSnapshots]);
@@ -395,7 +470,7 @@ export default function ReportsPage() {
     if (globalFilters.state) list = list.filter((i: any) => i.state === globalFilters.state);
     if (globalFilters.color) list = list.filter((i: any) => i.color === globalFilters.color);
     if (globalFilters.warehouse) {
-      const ids = new Set(filteredSnapshots.map((s: any) => s.item_id));
+      const ids = new Set(filteredSnapshots.filter((s: any) => s.qty > 0).map((s: any) => s.item_id));
       list = list.filter((i: any) => ids.has(i.id));
     }
     return list;

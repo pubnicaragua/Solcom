@@ -35,6 +35,8 @@ const req = http.request(options, (res) => {
                 console.log(`- Productos: ${json.totalProducts}`);
                 console.log(`- Stock Total: ${json.totalStock}`);
                 console.log(`- Valor Total: ${json.totalValue}`);
+                console.log(`- Bodegas Activas: ${json.activeWarehouses}`);
+                console.log(`- Última Sincronización: ${json.lastSync}`);
 
                 console.log('\n🐛 INFO DE DEBUG:');
                 console.log(`- Fuente: ${json.source}`);

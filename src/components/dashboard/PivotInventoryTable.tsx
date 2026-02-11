@@ -37,7 +37,7 @@ interface PivotInventoryTableProps {
 
 interface TreeNode {
     label: string;
-    level: number; // 0=state, 1=brand, 2=product, 3=color, 4=leaf(sku)
+    level: number; // 0=state, 1=brand, 2=product, 3=leaf(sku)
     items?: PivotItem[]; // only on leaf nodes
     children: TreeNode[];
     totals: Record<string, number>; // warehouse code → subtotal
@@ -45,7 +45,7 @@ interface TreeNode {
 }
 
 function buildTree(items: PivotItem[], warehouseCodes: string[]): TreeNode[] {
-    // Group: state → brand → name → color → sku
+    // Group: state → brand → name → sku (no color grouping)
     const stateGroups = groupBy(items, (i) => (i.state || 'SIN ESTADO').toUpperCase());
     const roots: TreeNode[] = [];
 
@@ -59,32 +59,23 @@ function buildTree(items: PivotItem[], warehouseCodes: string[]): TreeNode[] {
 
             for (const [productName, productItems] of sortedEntries(productGroups)) {
                 const productNode = makeGroupNode(productName, 2, warehouseCodes);
-                const colorGroups = groupBy(productItems, (i) => (i.color || 'SIN COLOR').toUpperCase());
 
-                for (const [colorName, colorItems] of sortedEntries(colorGroups)) {
-                    const colorNode = makeGroupNode(colorName, 3, warehouseCodes);
+                // Go straight to items (no color sub-grouping)
+                for (const item of productItems) {
+                    if (item.total === 0) continue;
 
-                    for (const item of colorItems) {
-                        // Filter out items with 0 stock
-                        if (item.total === 0) continue;
-
-                        // Leaf node = SKU row
-                        const leafNode: TreeNode = {
-                            label: item.sku,
-                            level: 4,
-                            items: [item],
-                            children: [],
-                            totals: { ...item.warehouseQty },
-                            grandTotal: item.total,
-                        };
-                        colorNode.children.push(leafNode);
-                        accumulateTotals(colorNode, item, warehouseCodes);
-                    }
-                    if (colorNode.children.length > 0) {
-                        productNode.children.push(colorNode);
-                        accumulateFromChild(productNode, colorNode, warehouseCodes);
-                    }
+                    const leafNode: TreeNode = {
+                        label: item.sku,
+                        level: 3,
+                        items: [item],
+                        children: [],
+                        totals: { ...item.warehouseQty },
+                        grandTotal: item.total,
+                    };
+                    productNode.children.push(leafNode);
+                    accumulateTotals(productNode, item, warehouseCodes);
                 }
+
                 if (productNode.children.length > 0) {
                     brandNode.children.push(productNode);
                     accumulateFromChild(brandNode, productNode, warehouseCodes);
@@ -134,17 +125,16 @@ function sortedEntries<T>(map: Map<string, T[]>): [string, T[]][] {
 
 /* ───── styling ───── */
 const LEVEL_COLORS: Record<number, { bg: string; text: string; fontWeight: number }> = {
-    0: { bg: '#1a365d', text: '#fbbf24', fontWeight: 700 },   // Estado — dark blue, gold text
-    1: { bg: '#1e3a5f', text: '#60a5fa', fontWeight: 700 },   // Marca — blue-ish
+    0: { bg: '#1a365d', text: '#fbbf24', fontWeight: 700 },   // Estado
+    1: { bg: '#1e3a5f', text: '#60a5fa', fontWeight: 700 },   // Marca
     2: { bg: 'transparent', text: '#e2e8f0', fontWeight: 500 },// Producto
-    3: { bg: 'transparent', text: '#94a3b8', fontWeight: 600 },// Color
-    4: { bg: 'transparent', text: '#64748b', fontWeight: 400 },// SKU (leaf)
+    3: { bg: 'rgba(255,255,255,0.02)', text: '#64748b', fontWeight: 400 },// SKU (leaf)
 };
 
 function getCellColor(qty: number): string | undefined {
-    if (qty >= 100) return '#7c3aed'; // purple for very high
-    if (qty >= 50) return '#eab308';  // yellow for high
-    if (qty >= 20) return '#22c55e';  // green for medium
+    if (qty >= 100) return '#7c3aed';
+    if (qty >= 50) return '#eab308';
+    if (qty >= 20) return '#22c55e';
     return undefined;
 }
 
@@ -153,12 +143,18 @@ export default function PivotInventoryTable({ filters }: PivotInventoryTableProp
     const [data, setData] = useState<PivotData | null>(null);
     const [loading, setLoading] = useState(true);
     const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
+    const [copiedSku, setCopiedSku] = useState<string | null>(null);
+
+    const handleCopySku = (sku: string) => {
+        if (!sku) return;
+        navigator.clipboard.writeText(sku);
+        setCopiedSku(sku);
+        setTimeout(() => setCopiedSku(null), 2000);
+    };
 
     useEffect(() => {
         fetchPivotData();
     }, [filters]);
-
-    /* ───── realtime ───── */
 
     useEffect(() => {
         const channel = supabase
@@ -179,7 +175,6 @@ export default function PivotInventoryTable({ filters }: PivotInventoryTableProp
     }, []);
 
     async function fetchPivotData() {
-        // Don't set loading to true on background refreshes if data exists
         if (!data) setLoading(true);
 
         try {
@@ -257,17 +252,16 @@ export default function PivotInventoryTable({ filters }: PivotInventoryTableProp
     flatten(tree, '', 0);
 
     const stickyColWidth = 250;
-    const skuColWidth = 110;
+    const skuColWidth = 120;
     const marcaColWidth = 100;
     const colorColWidth = 90;
-    const cellWidth = 75;
-    const totalColWidth = 90;
+    const cellWidth = 100;
+    const totalColWidth = 100;
     const extraColsWidth = skuColWidth + marcaColWidth + colorColWidth;
 
     return (
         <Card padding={0}>
             <div style={{ position: 'relative', overflow: 'hidden' }}>
-                {/* Scrollable wrapper */}
                 <div style={{ overflowX: 'auto', overflowY: 'auto', maxHeight: '75vh' }}>
                     <table style={{ borderCollapse: 'separate', borderSpacing: 0, tableLayout: 'fixed', width: stickyColWidth + extraColsWidth + warehouseCodes.length * cellWidth + totalColWidth }}>
                         {/* ─── Header ─── */}
@@ -278,21 +272,15 @@ export default function PivotInventoryTable({ filters }: PivotInventoryTableProp
                                     background: '#0f1b2d',
                                     padding: '10px 14px',
                                     textAlign: 'left',
-                                    fontSize: 11,
-                                    fontWeight: 700,
+                                    fontSize: 11, fontWeight: 700,
                                     color: 'var(--muted)',
                                     textTransform: 'uppercase',
                                     letterSpacing: '0.5px',
-                                    minWidth: stickyColWidth,
-                                    maxWidth: stickyColWidth,
-                                    width: stickyColWidth,
-                                    overflow: 'hidden',
-                                    textOverflow: 'ellipsis',
-                                    whiteSpace: 'nowrap',
+                                    minWidth: stickyColWidth, maxWidth: stickyColWidth, width: stickyColWidth,
+                                    overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
                                     borderRight: '2px solid white',
                                     borderBottom: '2px solid white',
                                 }}>Producto</th>
-                                {/* ─── Extra info columns ─── */}
                                 <th style={{
                                     position: 'sticky', top: 0, zIndex: 3,
                                     background: '#0f1b2d',
@@ -339,10 +327,9 @@ export default function PivotInventoryTable({ filters }: PivotInventoryTableProp
                                     <th key={code} style={{
                                         position: 'sticky', top: 0, zIndex: 2,
                                         background: '#0f1b2d',
-                                        padding: '10px 6px',
+                                        padding: '10px 12px',
                                         textAlign: 'right',
-                                        fontSize: 10,
-                                        fontWeight: 700,
+                                        fontSize: 10, fontWeight: 700,
                                         color: 'var(--muted)',
                                         textTransform: 'uppercase',
                                         letterSpacing: '0.3px',
@@ -356,10 +343,9 @@ export default function PivotInventoryTable({ filters }: PivotInventoryTableProp
                                 <th style={{
                                     position: 'sticky', top: 0, zIndex: 2,
                                     background: '#0f1b2d',
-                                    padding: '10px 10px',
+                                    padding: '10px 12px',
                                     textAlign: 'right',
-                                    fontSize: 11,
-                                    fontWeight: 700,
+                                    fontSize: 11, fontWeight: 700,
                                     color: '#fbbf24',
                                     textTransform: 'uppercase',
                                     minWidth: totalColWidth,
@@ -373,10 +359,17 @@ export default function PivotInventoryTable({ filters }: PivotInventoryTableProp
                         {/* ─── Body ─── */}
                         <tbody>
                             {flatRows.map(({ node, path, indent }) => {
-                                const isGroup = node.level < 4;
-                                const isCollapsed = collapsed.has(path);
-                                const style = LEVEL_COLORS[node.level] || LEVEL_COLORS[4];
+                                const isLeaf = node.level === 3;
+                                const isGroup = !isLeaf;
+                                const style = LEVEL_COLORS[node.level] || LEVEL_COLORS[3];
                                 const hasChildren = node.children.length > 0;
+                                const isCollapsed = collapsed.has(path);
+
+                                // For leaf rows, get the item data for horizontal-only display
+                                const leafItem = isLeaf && node.items?.[0] ? node.items[0] : null;
+                                const skuVal = leafItem ? leafItem.sku : '';
+                                const marcaVal = node.level === 1 ? node.label : (leafItem ? (leafItem.brand || '') : '');
+                                const colorVal = leafItem ? (leafItem.color || '') : '';
 
                                 return (
                                     <tr
@@ -392,22 +385,21 @@ export default function PivotInventoryTable({ filters }: PivotInventoryTableProp
                                             e.currentTarget.style.background = style.bg;
                                         }}
                                     >
-                                        {/* Label (sticky) */}
+                                        {/* Producto (sticky) — empty for leaf rows to avoid duplication */}
                                         <td style={{
                                             position: 'sticky', left: 0, zIndex: 1,
-                                            background: style.bg === 'transparent' ? 'var(--card)' : style.bg,
+                                            background: style.bg === 'transparent' || style.bg.startsWith('rgba') ? 'var(--card)' : style.bg,
                                             padding: '6px 10px',
                                             paddingLeft: 14 + indent * 20,
                                             fontWeight: style.fontWeight,
-                                            fontSize: node.level <= 1 ? 13 : node.level === 4 ? 11 : 12,
+                                            fontSize: node.level <= 1 ? 13 : 12,
                                             color: style.text,
                                             whiteSpace: 'nowrap',
                                             overflow: 'hidden',
                                             textOverflow: 'ellipsis',
-                                            maxWidth: stickyColWidth,
-                                            width: stickyColWidth,
+                                            maxWidth: stickyColWidth, width: stickyColWidth,
                                             borderRight: '2px solid white',
-                                            borderBottom: '1px solid rgba(255, 255, 255, 1)',
+                                            borderBottom: '1px solid rgba(255,255,255,1)',
                                             cursor: hasChildren ? 'pointer' : 'default',
                                             userSelect: 'none',
                                         }}
@@ -420,50 +412,74 @@ export default function PivotInventoryTable({ filters }: PivotInventoryTableProp
                                                         : <ChevronDown size={14} style={{ opacity: 0.7, flexShrink: 0 }} />
                                                 )}
                                                 {node.level <= 1 && <span style={{ display: 'inline-block', width: 10, height: 10, borderRadius: 2, background: style.text, marginRight: 2, flexShrink: 0 }} />}
-                                                {node.label}
+                                                {isLeaf ? '' : node.label}
                                             </span>
                                         </td>
 
-                                        {/* ─── SKU, Marca, Color cells ─── */}
-                                        {(() => {
-                                            const leafItem = node.level === 4 && node.items?.[0] ? node.items[0] : null;
-                                            const skuVal = leafItem ? leafItem.sku : '';
-                                            const marcaVal = node.level === 1 ? node.label : (leafItem ? (leafItem.brand || '') : '');
-                                            const colorVal = node.level === 3 ? node.label : (leafItem ? (leafItem.color || '') : '');
-                                            const infoStyle = {
+                                        {/* SKU — click to copy */}
+                                        <td
+                                            style={{
                                                 padding: '6px 8px',
                                                 fontSize: 11,
-                                                color: '#94a3b8',
-                                                whiteSpace: 'nowrap' as const,
-                                                overflow: 'hidden' as const,
-                                                textOverflow: 'ellipsis' as const,
-                                                borderBottom: '1px solid rgba(255, 255, 255, 1)',
+                                                color: copiedSku === skuVal && skuVal ? '#4ade80' : '#94a3b8',
+                                                whiteSpace: 'nowrap',
+                                                overflow: 'hidden',
+                                                textOverflow: 'ellipsis',
+                                                borderBottom: '1px solid rgba(255,255,255,1)',
                                                 borderRight: '1px solid rgba(255,255,255,0.15)',
-                                                background: style.bg === 'transparent' ? undefined : style.bg,
-                                            };
-                                            return (
-                                                <>
-                                                    <td style={{ ...infoStyle, minWidth: skuColWidth, maxWidth: skuColWidth }}>{skuVal}</td>
-                                                    <td style={{ ...infoStyle, minWidth: marcaColWidth, maxWidth: marcaColWidth }}>{marcaVal}</td>
-                                                    <td style={{ ...infoStyle, minWidth: colorColWidth, maxWidth: colorColWidth, borderRight: '2px solid white' }}>{colorVal}</td>
-                                                </>
-                                            );
-                                        })()}
+                                                background: style.bg === 'transparent' || style.bg.startsWith('rgba') ? undefined : style.bg,
+                                                minWidth: skuColWidth, maxWidth: skuColWidth,
+                                                cursor: skuVal ? 'pointer' : 'default',
+                                                transition: 'color 0.2s',
+                                            }}
+                                            onClick={() => handleCopySku(skuVal)}
+                                            title={skuVal ? 'Click para copiar' : ''}
+                                        >
+                                            {copiedSku === skuVal && skuVal ? '¡Copiado!' : skuVal}
+                                        </td>
+
+                                        {/* Marca */}
+                                        <td style={{
+                                            padding: '6px 8px',
+                                            fontSize: 11,
+                                            color: '#94a3b8',
+                                            whiteSpace: 'nowrap',
+                                            overflow: 'hidden',
+                                            textOverflow: 'ellipsis',
+                                            borderBottom: '1px solid rgba(255,255,255,1)',
+                                            borderRight: '1px solid rgba(255,255,255,0.15)',
+                                            background: style.bg === 'transparent' || style.bg.startsWith('rgba') ? undefined : style.bg,
+                                            minWidth: marcaColWidth, maxWidth: marcaColWidth,
+                                        }}>{marcaVal}</td>
+
+                                        {/* Color — only on leaf rows */}
+                                        <td style={{
+                                            padding: '6px 8px',
+                                            fontSize: 11,
+                                            color: '#94a3b8',
+                                            whiteSpace: 'nowrap',
+                                            overflow: 'hidden',
+                                            textOverflow: 'ellipsis',
+                                            borderBottom: '1px solid rgba(255,255,255,1)',
+                                            borderRight: '2px solid white',
+                                            background: style.bg === 'transparent' || style.bg.startsWith('rgba') ? undefined : style.bg,
+                                            minWidth: colorColWidth, maxWidth: colorColWidth,
+                                        }}>{colorVal}</td>
 
                                         {/* Warehouse qty cells */}
                                         {warehouseCodes.map((code) => {
                                             const qty = node.totals[code] || 0;
-                                            const highlight = isGroup ? getCellColor(qty) : getCellColor(qty);
+                                            const highlight = getCellColor(qty);
                                             return (
                                                 <td key={code} style={{
-                                                    padding: '6px 6px',
+                                                    padding: '8px 12px',
                                                     textAlign: 'right',
                                                     fontSize: node.level <= 1 ? 13 : 12,
                                                     fontWeight: isGroup ? 700 : 400,
                                                     color: highlight || (qty !== 0 ? '#e2e8f0' : 'rgba(100,116,139,0.4)'),
                                                     background: highlight ? `${highlight}22` : undefined,
                                                     fontVariantNumeric: 'tabular-nums',
-                                                    borderBottom: '1px solid rgba(255, 255, 255, 1)',
+                                                    borderBottom: '1px solid rgba(255,255,255,1)',
                                                 }}>
                                                     {qty !== 0 ? qty.toLocaleString() : ''}
                                                 </td>
@@ -478,7 +494,7 @@ export default function PivotInventoryTable({ filters }: PivotInventoryTableProp
                                             fontWeight: 700,
                                             color: '#fbbf24',
                                             borderLeft: '2px solid white',
-                                            borderBottom: '1px solid rgba(255, 255, 255, 1)',
+                                            borderBottom: '1px solid rgba(255,255,255,1)',
                                             fontVariantNumeric: 'tabular-nums',
                                         }}>
                                             {node.grandTotal !== 0 ? node.grandTotal.toLocaleString() : ''}

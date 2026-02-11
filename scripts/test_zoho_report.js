@@ -6,12 +6,9 @@ async function getZohoToken() {
     const clientId = process.env.ZOHO_BOOKS_CLIENT_ID;
     const clientSecret = process.env.ZOHO_BOOKS_CLIENT_SECRET;
 
-    if (!refreshToken || !clientId || !clientSecret) {
-        console.error('Faltan credenciales en .env.local');
-        return null;
-    }
+    if (!refreshToken || !clientId || !clientSecret) return null;
 
-    return new Promise((resolve, reject) => {
+    return new Promise((resolve) => {
         const postData = new URLSearchParams({
             refresh_token: refreshToken,
             client_id: clientId,
@@ -21,63 +18,73 @@ async function getZohoToken() {
 
         const req = https.request('https://accounts.zoho.com/oauth/v2/token', {
             method: 'POST',
-            headers: {
-                'Content-Type': 'application/x-www-form-urlencoded',
-                'Content-Length': postData.length
-            }
+            headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+            body: postData
+        }, (res) => {
+            let data = '';
+            res.on('data', (chunk) => data += chunk);
+            res.on('end', () => {
+                if (res.statusCode !== 200) {
+                    console.error('Token Error:', res.statusCode, data);
+                    resolve(null);
+                    return;
+                }
+                try {
+                    resolve(JSON.parse(data).access_token);
+                } catch (e) {
+                    console.error('JSON Parse Error:', e);
+                    resolve(null);
+                }
+            });
+        });
+        req.end();
+    });
+}
+
+async function fetchReport(token) {
+    const orgId = process.env.ZOHO_BOOKS_ORGANIZATION_ID;
+    // Requesting inventoryvaluation
+    const url = `https://www.zohoapis.com/books/v3/reports/inventoryvaluation?organization_id=${orgId}&page=1&per_page=200`;
+
+    console.log('Consultando inventoryvaluation...');
+
+    return new Promise((resolve) => {
+        const req = https.request(url, {
+            method: 'GET',
+            headers: { 'Authorization': `Zoho-oauthtoken ${token}` }
         }, (res) => {
             let data = '';
             res.on('data', (chunk) => data += chunk);
             res.on('end', () => {
                 const json = JSON.parse(data);
-                if (json.access_token) resolve(json.access_token);
-                else {
-                    console.error('Error obteniendo token:', json);
-                    resolve(null);
-                }
-            });
-        });
+                if (json.inventory_valuation) {
+                    console.log('Items found:', json.inventory_valuation.length);
 
-        req.on('error', (e) => resolve(null));
-        req.write(postData);
-        req.end();
-    });
-}
+                    // Flatten all items from groups
+                    let allItems = [];
+                    json.inventory_valuation.forEach(group => {
+                        if (group.item_details) allItems.push(...group.item_details);
+                    });
 
-async function fetchReport(token, reportType) {
-    const orgId = process.env.ZOHO_BOOKS_ORGANIZATION_ID;
-    const url = `https://www.zohoapis.com/books/v3/reports/${reportType}?organization_id=${orgId}`;
+                    console.log('Total items in page 1:', allItems.length);
 
-    console.log(`Consultando reporte: ${reportType}...`);
-
-    return new Promise((resolve) => {
-        const req = https.request(url, {
-            method: 'GET',
-            headers: {
-                'Authorization': `Zoho-oauthtoken ${token}`
-            }
-        }, (res) => {
-            let data = '';
-            res.on('data', (chunk) => data += chunk);
-            res.on('end', () => {
-                try {
-                    const json = JSON.parse(data);
-                    console.log(`--- Respuesta para ${reportType} ---`);
-                    console.log('Root Keys:', Object.keys(json));
-                    if (json.page_context) console.log('Page Context:', json.page_context);
-
-                    if (json.inventory_valuation) {
-                        console.log('Entries:', json.inventory_valuation.length);
-                        if (json.inventory_valuation.length > 0) {
-                            console.log('First Entry Keys:', Object.keys(json.inventory_valuation[0]));
-                        }
+                    // Find item with category
+                    const itemWithCat = allItems.find(i => i.category_id || i.category_name);
+                    if (itemWithCat) {
+                        console.log('Found item with category:', JSON.stringify(itemWithCat, null, 2));
+                    } else {
+                        console.log('No item with category info found in page 1.');
+                        console.log('Sample item:', JSON.stringify(allItems[0], null, 2));
                     }
-                    resolve(json);
-                } catch (e) {
-                    console.error('Error parseando JSON:', e);
-                    console.log('Raw:', data);
-                    resolve(null);
+
+                    // Check keys generally
+                    if (allItems.length > 0) {
+                        console.log('All Keys on first item:', Object.keys(allItems[0]));
+                    }
+                } else {
+                    console.log('No inventory_valuation field:', Object.keys(json));
                 }
+                resolve();
             });
         });
         req.end();
@@ -86,11 +93,5 @@ async function fetchReport(token, reportType) {
 
 (async () => {
     const token = await getZohoToken();
-    if (token) {
-        // Try Inventory Valuation
-        // Try Inventory Summary
-        await fetchReport(token, 'inventorysummary');
-        // Try Inventory Summary logic ? Zoho Books doesn't have "inventorysummary" typically, 
-        // but let's try 'inventoryvaluation' first as it matches the screenshot title.
-    }
+    if (token) await fetchReport(token);
 })();
