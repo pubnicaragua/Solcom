@@ -80,7 +80,7 @@ async function syncItemStock(
             snapshots.push({
                 warehouse_id: wh.id,
                 item_id: supabaseItemId,
-                qty: loc.location_stock_on_hand ?? loc.location_available_stock ?? 0,
+                qty: loc.location_available_stock ?? loc.location_stock_on_hand ?? 0,
                 source_ts: new Date().toISOString(),
                 synced_at: new Date().toISOString(),
             });

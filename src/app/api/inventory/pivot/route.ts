@@ -49,11 +49,30 @@ export async function GET(request: Request) {
             }
         }
 
-        const { data: itemsData, error: itemsError } = await itemsQuery.order('name', { ascending: true }).limit(10000);
-        console.log('Pivot API - active warehouses:', activeWarehouses.length, 'all warehouses:', allWarehouses.length, 'items:', itemsData?.length);
-        if (itemsError) throw itemsError;
+        // Fetch items with pagination to bypass Supabase 1000-row limit
+        let allItems: any[] = [];
+        let page = 0;
+        const PAGE_SIZE = 1000;
+        let hasMore = true;
 
-        const items = itemsData || [];
+        while (hasMore) {
+            const { data, error } = await itemsQuery.range(page * PAGE_SIZE, (page + 1) * PAGE_SIZE - 1).order('name', { ascending: true });
+
+            if (error) throw error;
+
+            if (data && data.length > 0) {
+                allItems = allItems.concat(data);
+                if (data.length < PAGE_SIZE) hasMore = false;
+                else page++;
+            } else {
+                hasMore = false;
+            }
+            if (page > 20) break; // Safety
+        }
+
+        console.log('Pivot API - active warehouses:', activeWarehouses.length, 'all warehouses:', allWarehouses.length, 'items:', allItems.length);
+
+        const items = allItems;
         if (items.length === 0) {
             return NextResponse.json({ warehouses: activeWarehouses.map(w => ({ code: w.code, name: w.name })), items: [] });
         }
@@ -63,19 +82,32 @@ export async function GET(request: Request) {
         const allWhIds = allWarehouses.map(w => w.id);
 
         let allSnapshots: any[] = [];
-        // Batch size reduced: 200 items × 15 warehouses × multiple syncs exceeded
-        // Supabase's default 1000-row limit, silently dropping snapshot data
-        const BATCH_SIZE = 50;
-        for (let i = 0; i < itemIds.length; i += BATCH_SIZE) {
-            const batch = itemIds.slice(i, i + BATCH_SIZE);
-            const { data: snapBatch } = await supabase
-                .from('stock_snapshots')
-                .select('item_id, warehouse_id, qty, synced_at')
-                .in('item_id', batch)
-                .in('warehouse_id', allWhIds)
-                .order('synced_at', { ascending: false })
-                .limit(10000);
-            if (snapBatch) allSnapshots = allSnapshots.concat(snapBatch);
+
+        // Chunk size reduced to 40 to avoid "Bad Request" (URL too long)
+        const CHUNK_SIZE = 40;
+        const snapshotPromises = [];
+
+        for (let i = 0; i < itemIds.length; i += CHUNK_SIZE) {
+            const batch = itemIds.slice(i, i + CHUNK_SIZE);
+            snapshotPromises.push(
+                supabase
+                    .from('stock_snapshots')
+                    .select('item_id, warehouse_id, qty, synced_at')
+                    .in('item_id', batch)
+                    .in('warehouse_id', allWhIds)
+                    .order('synced_at', { ascending: false })
+            );
+        }
+
+        const snapshotResults = await Promise.all(snapshotPromises);
+
+        for (const res of snapshotResults) {
+            if (res.data) {
+                allSnapshots = allSnapshots.concat(res.data);
+            } else if (res.error) {
+                console.error('Error fetching snapshots chunk:', res.error);
+                // Continua con lo que haya? O lanza error? Mejo log y continue.
+            }
         }
 
         // Deduplicate: keep only the latest snapshot per (item_id, warehouse_id)

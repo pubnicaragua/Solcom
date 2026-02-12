@@ -42,6 +42,9 @@ export interface ZohoBooksItem {
   cf_estado?: string;
   cf_color?: string;
   cf_marca?: string;
+  // Available stock fields
+  available_stock?: number;
+  actual_available_stock?: number;
 }
 
 export interface ZohoApiResponse<T> {

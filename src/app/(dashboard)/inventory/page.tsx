@@ -28,6 +28,15 @@ export default function InventoryPage() {
     sortBy: 'name',
   });
   const [selectedItems, setSelectedItems] = useState<string[]>([]);
+  const [searchTerm, setSearchTerm] = useState('');
+
+  // Debounce search filter
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setFilters(prev => ({ ...prev, search: searchTerm }));
+    }, 500);
+    return () => clearTimeout(timer);
+  }, [searchTerm]);
   const [showAdvancedFilters, setShowAdvancedFilters] = useState(false);
   const [editModalOpen, setEditModalOpen] = useState(false);
   const [stockModalOpen, setStockModalOpen] = useState(false);
@@ -285,8 +294,8 @@ export default function InventoryPage() {
               />
               <Input
                 placeholder="Buscar por nombre, SKU, código de barras..."
-                value={filters.search}
-                onChange={(e) => handleFilterChange('search', e.target.value)}
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
                 style={{ paddingLeft: 40 }}
               />
             </div>
