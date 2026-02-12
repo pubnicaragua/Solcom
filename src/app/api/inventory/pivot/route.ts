@@ -10,6 +10,7 @@ export async function GET(request: Request) {
         const marca = searchParams.get('marca') || searchParams.get('brand') || '';
         const color = searchParams.get('color') || '';
         const stockLevel = searchParams.get('stockLevel') || '';
+        const showZeroStock = searchParams.get('showZeroStock') !== 'false'; // default true
 
         const supabase = createServerClient();
 
@@ -23,7 +24,6 @@ export async function GET(request: Request) {
         if (allWhError) throw allWhError;
         const activeWarehouses = activeWhRaw || [];
         const allWarehouses = allWhRaw || [];
-        const activeWhIdSet = new Set(activeWarehouses.map(w => w.id));
 
         // 2) Fetch items with filters
         let itemsQuery = supabase
@@ -81,33 +81,35 @@ export async function GET(request: Request) {
         const itemIds = items.map((i: any) => i.id);
         const allWhIds = allWarehouses.map(w => w.id);
 
+        // Fetch ALL snapshots using paginated .range() — only ~2-3 sequential queries
+        // instead of 78 chunked queries that saturate the connection pool
         let allSnapshots: any[] = [];
+        const SNAP_PAGE = 1000;
+        let snapPage = 0;
+        let snapHasMore = true;
 
-        // Chunk size reduced to 40 to avoid "Bad Request" (URL too long)
-        const CHUNK_SIZE = 40;
-        const snapshotPromises = [];
+        while (snapHasMore) {
+            const from = snapPage * SNAP_PAGE;
+            const to = from + SNAP_PAGE - 1;
+            const { data, error } = await supabase
+                .from('stock_snapshots')
+                .select('item_id, warehouse_id, qty, synced_at')
+                .in('warehouse_id', allWhIds)
+                .order('synced_at', { ascending: false })
+                .range(from, to);
 
-        for (let i = 0; i < itemIds.length; i += CHUNK_SIZE) {
-            const batch = itemIds.slice(i, i + CHUNK_SIZE);
-            snapshotPromises.push(
-                supabase
-                    .from('stock_snapshots')
-                    .select('item_id, warehouse_id, qty, synced_at')
-                    .in('item_id', batch)
-                    .in('warehouse_id', allWhIds)
-                    .order('synced_at', { ascending: false })
-            );
-        }
-
-        const snapshotResults = await Promise.all(snapshotPromises);
-
-        for (const res of snapshotResults) {
-            if (res.data) {
-                allSnapshots = allSnapshots.concat(res.data);
-            } else if (res.error) {
-                console.error('Error fetching snapshots chunk:', res.error);
-                // Continua con lo que haya? O lanza error? Mejo log y continue.
+            if (error) {
+                console.error('Error fetching snapshots page:', error);
+                break;
             }
+            if (data && data.length > 0) {
+                allSnapshots = allSnapshots.concat(data);
+                if (data.length < SNAP_PAGE) snapHasMore = false;
+                else snapPage++;
+            } else {
+                snapHasMore = false;
+            }
+            if (snapPage > 50) break; // safety: max 50k snapshots
         }
 
         // Deduplicate: keep only the latest snapshot per (item_id, warehouse_id)
@@ -119,20 +121,36 @@ export async function GET(request: Request) {
             }
         }
 
+        // Track which items have ANY snapshot data
+        const itemsWithSnapshots = new Set<string>();
+        for (const snap of allSnapshots) {
+            itemsWithSnapshots.add(snap.item_id);
+        }
+
         // 4) Build result: columns = active warehouses, total = ALL warehouses
+        //    FALLBACK: if an item has NO snapshots at all, use items.stock_total
         const resultItems = items.map((item: any) => {
             const warehouseQty: Record<string, number> = {};
+            const hasSnapshots = itemsWithSnapshots.has(item.id);
+
             // Columns: only active warehouses
             for (const w of activeWarehouses) {
                 const key = `${item.id}__${w.id}`;
                 warehouseQty[w.code] = latestSnap.get(key) ?? 0;
             }
+
             // Total: sum ALL warehouses (active + inactive)
             let total = 0;
-            for (const w of allWarehouses) {
-                const key = `${item.id}__${w.id}`;
-                total += latestSnap.get(key) ?? 0;
+            if (hasSnapshots) {
+                for (const w of allWarehouses) {
+                    const key = `${item.id}__${w.id}`;
+                    total += latestSnap.get(key) ?? 0;
+                }
+            } else {
+                // No snapshots exist — use item's stock_total from Zoho sync as fallback
+                total = item.stock_total ?? 0;
             }
+
             return {
                 id: item.id,
                 sku: item.sku,
@@ -143,12 +161,17 @@ export async function GET(request: Request) {
                 category: item.category || null,
                 warehouseQty,
                 total,
+                hasSnapshots, // let frontend know if data comes from snapshots or fallback
             };
         });
 
+        // Optionally filter out zero-stock items
+        const finalItems = showZeroStock ? resultItems : resultItems.filter(i => i.total > 0);
+
         return NextResponse.json({
             warehouses: activeWarehouses.map((w: any) => ({ code: w.code, name: w.name })),
-            items: resultItems,
+            items: finalItems,
+            totalBeforeFilter: resultItems.length,
         });
     } catch (error) {
         console.error('Pivot inventory error:', error);

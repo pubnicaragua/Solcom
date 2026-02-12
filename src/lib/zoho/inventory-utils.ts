@@ -33,6 +33,13 @@ export async function getZohoAccessToken() {
     };
 }
 
+export class AuthExpiredError extends Error {
+    constructor() {
+        super('Zoho access token expired');
+        this.name = 'AuthExpiredError';
+    }
+}
+
 export async function fetchItemLocations(
     accessToken: string,
     apiDomain: string,
@@ -49,6 +56,10 @@ export async function fetchItemLocations(
 
     if (!response.ok) {
         const errorText = await response.text();
+        // 401 = token expired, caller should refresh and retry
+        if (response.status === 401) {
+            throw new AuthExpiredError();
+        }
         // 404 = artículo eliminado o no existe en Zoho; tratamos como sin ubicaciones
         if (response.status === 404) {
             return [];

@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import { createServerClient } from '@/lib/supabase/server';
 import { syncRequestSchema } from '@/lib/validators/inventory';
-import { getZohoAccessToken, fetchItemLocations } from '@/lib/zoho/inventory-utils';
+import { getZohoAccessToken, fetchItemLocations, AuthExpiredError } from '@/lib/zoho/inventory-utils';
 
 export const dynamic = 'force-dynamic';
 
@@ -78,7 +78,7 @@ export async function POST(request: Request) {
     }
 
 
-    const { accessToken, apiDomain } = auth;
+    let { accessToken, apiDomain } = auth;
     const zohoItems = await fetchZohoItems(accessToken, apiDomain, organizationId);
 
     const supabase = createServerClient();
@@ -129,7 +129,27 @@ export async function POST(request: Request) {
           zohoItem.item_id
         );
       } catch (error) {
-        console.error('Error fetching item locations:', zohoItem.item_id, error);
+        // Token expired — refresh and retry once
+        if (error instanceof AuthExpiredError) {
+          console.log('[SYNC] Token expired, refreshing...');
+          const newAuth = await getZohoAccessToken();
+          if (!('error' in newAuth)) {
+            accessToken = newAuth.accessToken;
+            apiDomain = newAuth.apiDomain;
+            try {
+              locationsList = await fetchItemLocations(
+                accessToken,
+                apiDomain,
+                organizationId,
+                zohoItem.item_id
+              );
+            } catch (retryError) {
+              console.error('Error fetching item locations after token refresh:', zohoItem.item_id, retryError);
+            }
+          }
+        } else {
+          console.error('Error fetching item locations:', zohoItem.item_id, error);
+        }
       }
 
       if (!Array.isArray(locationsList) || locationsList.length === 0) {
