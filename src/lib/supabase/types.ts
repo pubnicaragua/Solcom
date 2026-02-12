@@ -126,6 +126,63 @@ export interface Database {
           }
         ]
       }
+      transfer_orders: {
+        Row: {
+          id: string
+          zoho_transfer_order_id: string
+          transfer_order_number: string | null
+          date: string | null
+          from_warehouse_id: string | null
+          to_warehouse_id: string | null
+          status: string | null
+          line_items: Json | null
+          notes: string | null
+          received_at: string | null
+          created_at: string
+        }
+        Insert: {
+          id?: string
+          zoho_transfer_order_id: string
+          transfer_order_number?: string | null
+          date?: string | null
+          from_warehouse_id?: string | null
+          to_warehouse_id?: string | null
+          status?: string | null
+          line_items?: Json | null
+          notes?: string | null
+          received_at?: string | null
+          created_at?: string
+        }
+        Update: {
+          id?: string
+          zoho_transfer_order_id?: string
+          transfer_order_number?: string | null
+          date?: string | null
+          from_warehouse_id?: string | null
+          to_warehouse_id?: string | null
+          status?: string | null
+          line_items?: Json | null
+          notes?: string | null
+          received_at?: string | null
+          created_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "transfer_orders_from_warehouse_id_fkey"
+            columns: ["from_warehouse_id"]
+            isOneToOne: false
+            referencedRelation: "warehouses"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "transfer_orders_to_warehouse_id_fkey"
+            columns: ["to_warehouse_id"]
+            isOneToOne: false
+            referencedRelation: "warehouses"
+            referencedColumns: ["id"]
+          }
+        ]
+      }
       stock_movements: {
         Row: {
           id: string

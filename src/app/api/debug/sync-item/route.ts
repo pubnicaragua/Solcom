@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createServerClient } from '@/lib/supabase/server';
-import { getZohoAccessToken, fetchItemLocations } from '@/lib/zoho/inventory-utils';
+import { getZohoAccessToken, fetchItemLocations, AuthExpiredError } from '@/lib/zoho/inventory-utils';
 
 export const dynamic = 'force-dynamic';
 
@@ -72,8 +72,28 @@ export async function GET(request: NextRequest) {
                 item.zoho_item_id
             );
         } catch (err: any) {
-            log(`CRITICAL FETCH ERROR: ${err.message}`);
-            return NextResponse.json({ logs, error: err.message });
+            if (err instanceof AuthExpiredError) {
+                log('Token expired on first attempt, refreshing and retrying...');
+                const retryAuth = await getZohoAccessToken();
+                if ('error' in retryAuth) {
+                    log(`CRITICAL FETCH ERROR after refresh auth: ${retryAuth.error}`);
+                    return NextResponse.json({ logs, error: retryAuth.error });
+                }
+                try {
+                    locations = await fetchItemLocations(
+                        retryAuth.accessToken,
+                        retryAuth.apiDomain,
+                        orgId!,
+                        item.zoho_item_id
+                    );
+                } catch (retryErr: any) {
+                    log(`CRITICAL FETCH ERROR after retry: ${retryErr.message}`);
+                    return NextResponse.json({ logs, error: retryErr.message });
+                }
+            } else {
+                log(`CRITICAL FETCH ERROR: ${err.message}`);
+                return NextResponse.json({ logs, error: err.message });
+            }
         }
         log(`Fetch took ${Date.now() - start}ms. Received ${locations.length} locations.`);
 

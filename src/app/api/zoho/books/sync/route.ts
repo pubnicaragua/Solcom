@@ -82,35 +82,70 @@ export async function POST(request: Request) {
     const zohoItems = await fetchZohoItems(accessToken, apiDomain, organizationId);
 
     const supabase = createServerClient();
-    const { data: warehouses } = await supabase
+    const { data: allWarehouses } = await supabase
       .from('warehouses')
-      .select('id, code, zoho_warehouse_id')
-      .not('zoho_warehouse_id', 'is', null);
+      .select('id, code, zoho_warehouse_id');
 
     const { data: items } = await supabase
       .from('items')
       .select('id, zoho_item_id')
       .not('zoho_item_id', 'is', null);
 
+    const warehousesWithMapping = (allWarehouses || []).filter((w: any) => !!w.zoho_warehouse_id);
     // Claves en string para que el lookup coincida con location_id (Zoho puede devolver number o string)
     const warehouseMap = new Map(
-      (warehouses || []).map((w: any) => [String(w.zoho_warehouse_id ?? ''), w.id])
+      warehousesWithMapping.map((w: any) => [String(w.zoho_warehouse_id ?? ''), w.id])
     );
-    const preferredWarehouse = (warehouses || []).find((w: any) => w.code === 'X1');
+    const preferredWarehouse = (allWarehouses || []).find((w: any) => w.code === 'X1');
     const defaultWarehouseId =
-      preferredWarehouse?.id || (warehouses && warehouses.length > 0 ? warehouses[0].id : null);
+      preferredWarehouse?.id || (allWarehouses && allWarehouses.length > 0 ? allWarehouses[0].id : null);
     const itemMap = new Map(
       (items || []).map((i: any) => [String(i.zoho_item_id ?? ''), i.id])
     );
+
+    const toQty = (value: unknown): number => {
+      const n = Number(value);
+      return Number.isFinite(n) ? n : 0;
+    };
+
+    const addSnapshot = (
+      snapshots: any[],
+      indexByItemWarehouse: Map<string, number>,
+      warehouseId: string,
+      itemId: string,
+      qty: number
+    ) => {
+      const key = `${itemId}::${warehouseId}`;
+      const existingIndex = indexByItemWarehouse.get(key);
+      if (existingIndex !== undefined) {
+        snapshots[existingIndex].qty += qty;
+        snapshots[existingIndex].synced_at = new Date().toISOString();
+        snapshots[existingIndex].source_ts = new Date().toISOString();
+        return;
+      }
+
+      snapshots.push({
+        warehouse_id: warehouseId,
+        item_id: itemId,
+        qty,
+        source_ts: new Date().toISOString(),
+        synced_at: new Date().toISOString(),
+      });
+      indexByItemWarehouse.set(key, snapshots.length - 1);
+    };
 
     let snapshotsCreated = 0;
     let itemsSkipped = 0;
     let itemsWithWarehouses = 0;
     let itemsWithoutWarehouses = 0;
     let missingWarehouseMappings = 0;
+    let itemsWithUnmappedLocations = 0;
+    let qtyRoutedToDefault = 0;
+    let fallbackItemsToDefault = 0;
     const sampleZohoWarehouseIds = new Set<string>();
 
     const snapshots: any[] = [];
+    const snapshotIndexByItemWarehouse = new Map<string, number>();
     const itemIdsToReplace = new Set<string>();
 
     for (const zohoItem of zohoItems) {
@@ -156,20 +191,18 @@ export async function POST(request: Request) {
         itemsWithoutWarehouses += 1;
 
         if (defaultWarehouseId) {
-          const qty = zohoItem.stock_on_hand ?? 0;
+          const qty = toQty(zohoItem.stock_on_hand);
           itemIdsToReplace.add(itemId);
-          snapshots.push({
-            warehouse_id: defaultWarehouseId,
-            item_id: itemId,
-            qty,
-            source_ts: new Date().toISOString(),
-            synced_at: new Date().toISOString(),
-          });
+          addSnapshot(snapshots, snapshotIndexByItemWarehouse, defaultWarehouseId, itemId, qty);
+          fallbackItemsToDefault += 1;
         }
         continue;
       }
 
       itemsWithWarehouses += 1;
+      let unmappedQtyForItem = 0;
+      let missingMappingsForItem = 0;
+      let hasMappedLocation = false;
 
       for (const loc of locationsList) {
         const locId = loc?.location_id != null ? String(loc.location_id) : '';
@@ -179,23 +212,44 @@ export async function POST(request: Request) {
         if (!localWarehouseId) {
           console.log(`[SYNC DEBUG] Warehouse mapping FAILED for location: ${loc.location_name} (ID: ${locId})`);
           missingWarehouseMappings += 1;
+          missingMappingsForItem += 1;
+          unmappedQtyForItem += toQty(
+            loc.location_stock_on_hand ??
+            loc.location_available_stock
+          );
           continue;
         }
 
-        const qty =
+        const qty = toQty(
           loc.location_stock_on_hand ??
-          loc.location_available_stock ??
-          0;
+          loc.location_available_stock
+        );
 
         console.log(`[SYNC DEBUG] Adding snapshot for ${zohoItem.name} in ${loc.location_name}: ${qty}`);
+        hasMappedLocation = true;
         itemIdsToReplace.add(itemId);
-        snapshots.push({
-          warehouse_id: localWarehouseId,
-          item_id: itemId,
-          qty,
-          source_ts: new Date().toISOString(),
-          synced_at: new Date().toISOString(),
-        });
+        addSnapshot(snapshots, snapshotIndexByItemWarehouse, localWarehouseId, itemId, qty);
+      }
+
+      // Si hay ubicaciones sin mapear, enrutar su qty a bodega default para no perder stock.
+      if (missingMappingsForItem > 0) {
+        itemsWithUnmappedLocations += 1;
+        if (defaultWarehouseId && unmappedQtyForItem !== 0) {
+          itemIdsToReplace.add(itemId);
+          addSnapshot(snapshots, snapshotIndexByItemWarehouse, defaultWarehouseId, itemId, unmappedQtyForItem);
+          qtyRoutedToDefault += unmappedQtyForItem;
+        }
+      }
+
+      // Fallback adicional: si no hubo ninguna ubicación mapeada y no pudimos sumar qty sin mapear,
+      // usar stock_on_hand para evitar dejar snapshots obsoletos.
+      if (!hasMappedLocation && defaultWarehouseId && unmappedQtyForItem === 0) {
+        const fallbackQty = toQty(zohoItem.stock_on_hand);
+        if (fallbackQty !== 0) {
+          itemIdsToReplace.add(itemId);
+          addSnapshot(snapshots, snapshotIndexByItemWarehouse, defaultWarehouseId, itemId, fallbackQty);
+          fallbackItemsToDefault += 1;
+        }
       }
     }
 
@@ -272,6 +326,9 @@ export async function POST(request: Request) {
       itemsWithWarehouses,
       itemsWithoutWarehouses,
       missingWarehouseMappings,
+      itemsWithUnmappedLocations,
+      qtyRoutedToDefault,
+      fallbackItemsToDefault,
       zohoItemsTotal: zohoItems.length,
       warehousesMapped: warehouseMap.size,
       itemsMapped: itemMap.size,

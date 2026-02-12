@@ -56,10 +56,32 @@ export async function fetchItemLocations(
 
     if (!response.ok) {
         const errorText = await response.text();
-        // 401 = token expired, caller should refresh and retry
+
+        // 401 can be true token expiry OR permission/org issues.
         if (response.status === 401) {
-            throw new AuthExpiredError();
+            let parsed: any = null;
+            try {
+                parsed = JSON.parse(errorText);
+            } catch {
+                parsed = null;
+            }
+
+            const message = String(parsed?.message || errorText || '').toLowerCase();
+            const code = parsed?.code ?? null;
+            const isExpired =
+                message.includes('expired') ||
+                message.includes('invalid oauth') ||
+                message.includes('invalid token');
+
+            if (isExpired) {
+                throw new AuthExpiredError();
+            }
+
+            throw new Error(
+                `Zoho Inventory unauthorized (possible org/scope issue): ${code ?? 'unknown'} - ${parsed?.message || errorText}`
+            );
         }
+
         // 404 = artículo eliminado o no existe en Zoho; tratamos como sin ubicaciones
         if (response.status === 404) {
             return [];
