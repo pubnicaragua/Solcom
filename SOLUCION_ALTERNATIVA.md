@@ -205,6 +205,7 @@ Si después de esto sigue sin funcionar, el problema puede ser:
 1. Configuración de Auth en Supabase (email confirmations)
 2. Rate limiting activo
 3. Problema con el proyecto de Supabase (requiere soporte)
+**
 
 ---
 
