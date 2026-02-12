@@ -70,3 +70,34 @@ export interface ZohoTokenResponse {
   token_type: string;
 }
 
+
+export interface TransferOrderLineItem {
+  item_id: string;
+  name: string;
+  description?: string;
+  quantity_transfer: number;
+  unit?: string;
+}
+
+export interface TransferOrderPayload {
+  transfer_order_number?: string;
+  date: string;
+  from_location_id: string; // warehouse_id
+  to_location_id: string;   // warehouse_id
+  line_items: TransferOrderLineItem[];
+  is_intransit_order: boolean; // true for 2-step flow
+}
+
+export interface TransferOrderResponse {
+  code: number;
+  message: string;
+  transfer_order: {
+    transfer_order_id: string;
+    transfer_order_number: string;
+    date: string;
+    from_location_id: string;
+    to_location_id: string;
+    status: string;
+    line_items: TransferOrderLineItem[];
+  };
+}

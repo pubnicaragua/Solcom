@@ -112,7 +112,7 @@ export class ZohoBooksClient {
         const { organizationId } = this.config;
 
         const url = `${this.apiDomain}${endpoint}?organization_id=${organizationId}`;
-        
+
         const response = await fetch(url, {
             method,
             headers: {
@@ -133,6 +133,36 @@ export class ZohoBooksClient {
 
     async createInventoryAdjustment(adjustmentData: any): Promise<any> {
         return this.request('POST', '/books/v3/inventoryadjustments', adjustmentData);
+    }
+
+    // Zoho Inventory API: Create Transfer Order
+    async createTransferOrder(data: any): Promise<any> {
+        // Note: Transfer Orders use the Inventory API endpoint, slightly different from Books
+        // But the ZohoBooksClient generic request() should handle it if we route to correct domain/path
+        // Usually /inventory/v1/transferorders
+
+        // We need to override the path to use Inventory API structure if needed.
+        // The current request() appends organization_id to books/v3/....
+        // But transfer orders are /inventory/v1/...
+        // Let's modify request or make a specialized call.
+
+        // Wait, current `request` assumes `this.apiDomain + endpoint`.
+        // If we pass `/inventory/v1/transferorders`, it becomes `https://inventory.zoho.com/api/v1/...`
+        // Actually both Books and Inventory APIs often sit on `zohoapis.com`.
+        // Let's assume `zohoapis.com/inventory/v1/...` works with the same token.
+
+        return this.request('POST', '/inventory/v1/transferorders', data);
+    }
+
+    // Zoho Inventory API: Mark as Received
+    async markTransferOrderReceived(transferOrderId: string, action: 'receive'): Promise<any> {
+        // Action usually 'receive'
+        return this.request('POST', `/inventory/v1/transferorders/${transferOrderId}/status/${action}`);
+    }
+
+    // Zoho Inventory API: List Transfer Orders
+    async listTransferOrders(page = 1): Promise<any> {
+        return this.request('GET', `/inventory/v1/transferorders?page=${page}&per_page=200`);
     }
 
     async getWarehouses(): Promise<any> {

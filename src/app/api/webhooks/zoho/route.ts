@@ -1,6 +1,11 @@
+
 import { NextRequest, NextResponse } from 'next/server';
-import { createServerClient } from '@/lib/supabase/server';
+import { createClient } from '@supabase/supabase-js';
 import { getZohoAccessToken, fetchItemLocations } from '@/lib/zoho/inventory-utils';
+
+// Service Role Client for Webhooks (Bypasses RLS)
+const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
+const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
 
 export const dynamic = 'force-dynamic';
 
@@ -31,8 +36,8 @@ async function syncItemStock(
     }
 
     const auth = await getZohoAccessToken();
-    if ('error' in auth) {
-        debugLog.push(`[syncItemStock] ERROR auth: ${(auth as any).error}`);
+    if (!auth || 'error' in auth) { // Robust check
+        debugLog.push(`[syncItemStock] ERROR auth: ${(auth as any)?.error || 'Unknown'}`);
         return { snapshotsCreated: 0, stockTotal: 0 };
     }
 
@@ -102,11 +107,35 @@ export async function POST(request: NextRequest) {
     const systemStatus = getSystemStatus();
 
     try {
-        const payload = await request.json();
+        const { searchParams } = new URL(request.url);
+        const secret = searchParams.get('secret');
+
+        // Optional Secret Check (Warn only to prevent breaking valid legitimate hooks without secret)
+        if (secret && process.env.ZOHO_WEBHOOK_SECRET && secret !== process.env.ZOHO_WEBHOOK_SECRET) {
+            return NextResponse.json({ error: 'Invalid secret' }, { status: 401 });
+        }
+        if (!secret && process.env.ZOHO_WEBHOOK_SECRET) {
+            debugLog.push('WARN: Missing secret in webhook URL');
+        }
+
+        const contentType = request.headers.get('content-type') || '';
+        let payload: any = {};
+
+        if (contentType.includes('application/json')) {
+            payload = await request.json();
+        } else if (contentType.includes('application/x-www-form-urlencoded') || contentType.includes('multipart/form-data')) {
+            const formData = await request.formData();
+            const jsonString = formData.get('JSONString');
+            if (jsonString && typeof jsonString === 'string') {
+                payload = JSON.parse(jsonString);
+            }
+        }
+
         const payloadKeys = Object.keys(payload);
         debugLog.push(`Payload received. Keys: ${payloadKeys.join(', ')}`);
 
-        const supabase = createServerClient();
+        // Use Service Role Client
+        const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
         // 1. Cargar bodegas
         const { data: warehouses } = await supabase.from('warehouses').select('id, zoho_warehouse_id, active').not('zoho_warehouse_id', 'is', null);
@@ -114,83 +143,98 @@ export async function POST(request: NextRequest) {
         const warehouseMap = new Map(warehousesData.map((w: any) => [String(w.zoho_warehouse_id), { id: w.id, active: w.active }]));
         debugLog.push(`Warehouses in DB: ${warehousesData.length}`);
 
-        // 2. Determinar tipo de evento
+        // --- NEW: Handle Transfer Order Upsert ---
+        const transferOrder = payload.transfer_order || payload.transferorder;
+        if (transferOrder) {
+            debugLog.push(`Processing Transfer Order: ${transferOrder.transfer_order_number}`);
+
+            const fromId = warehouseMap.get(String(transferOrder.from_location_id || transferOrder.from_warehouse_id))?.id;
+            const toId = warehouseMap.get(String(transferOrder.to_location_id || transferOrder.to_warehouse_id))?.id;
+            const status = transferOrder.status === 'received' ? 'received' : 'in_transit';
+
+            const { error: upsertError } = await supabase
+                .from('transfer_orders')
+                .upsert({
+                    zoho_transfer_order_id: transferOrder.transfer_order_id,
+                    transfer_order_number: transferOrder.transfer_order_number,
+                    date: transferOrder.date,
+                    from_warehouse_id: fromId,
+                    to_warehouse_id: toId,
+                    status: status,
+                    line_items: transferOrder.line_items,
+                    notes: transferOrder.notes || '',
+                    // Only set received_at if it's new receipt or keep existing?
+                    // Simple logic: if status received, set date.
+                    received_at: status === 'received' ? new Date().toISOString() : null
+                }, { onConflict: 'zoho_transfer_order_id' });
+
+            if (upsertError) {
+                debugLog.push(`ERROR upserting transfer: ${upsertError.message}`);
+            } else {
+                debugLog.push('Transfer Order upserted successfully');
+            }
+        }
+
+        // 2. Determinar tipo de evento (Legacy Logic)
         const isItemEvent = payloadKeys.includes('item') || payloadKeys.includes('data');
         const isInventoryAdjustment = payloadKeys.includes('inventory_adjustment') || payloadKeys.includes('stockadjustment') || payload.module?.includes('adjustment');
-        const isCommonStockEvent = payloadKeys.includes('salesorder') || payloadKeys.includes('purchaseorder') || payloadKeys.includes('invoice') || payloadKeys.includes('bill') || payloadKeys.includes('transferorder');
+        const isCommonStockEvent = payloadKeys.includes('salesorder') || payloadKeys.includes('purchaseorder') || payloadKeys.includes('invoice') || payloadKeys.includes('bill') || payloadKeys.includes('transferorder') || payloadKeys.includes('transfer_order');
 
         // --- Caso A: Item Event ---
         if (isItemEvent && !isInventoryAdjustment && !isCommonStockEvent) {
+            // ... existing item logic ...
+            // (Re-implementing simplified based on git show content)
             debugLog.push('Routing to ITEM EVENT handler');
             const itemData = payload.item || payload.data || payload;
             const zohoItemId = String(itemData.item_id || '');
 
-            if (!zohoItemId) {
-                return NextResponse.json({ success: true, message: 'No item_id', debug: debugLog, systemStatus });
-            }
+            if (zohoItemId) {
+                const customFields = itemData.custom_field_hash || {};
+                const itemPayload = {
+                    sku: itemData.sku || `NO-SKU-${zohoItemId}`,
+                    name: itemData.name || 'Sin nombre',
+                    color: customFields.cf_color || null,
+                    state: customFields.cf_estado || null,
+                    zoho_item_id: zohoItemId,
+                    price: itemData.purchase_rate ?? null,
+                };
 
-            const customFields = itemData.custom_field_hash || {};
-            const itemPayload = {
-                sku: itemData.sku || `NO-SKU-${zohoItemId}`,
-                name: itemData.name || 'Sin nombre',
-                color: customFields.cf_color || null,
-                state: customFields.cf_estado || null,
-                zoho_item_id: zohoItemId,
-                price: itemData.purchase_rate ?? null,
-            };
+                const { data: updated } = await supabase.from('items').update(itemPayload).eq('zoho_item_id', zohoItemId).select('id');
+                let supabaseId = updated?.[0]?.id;
 
-            const { data: updated } = await supabase.from('items').update(itemPayload).eq('zoho_item_id', zohoItemId).select('id');
-            let supabaseId = updated?.[0]?.id;
+                if (!supabaseId) {
+                    const { data: inserted } = await supabase.from('items').insert(itemPayload).select('id');
+                    supabaseId = inserted?.[0]?.id;
+                }
 
-            if (!supabaseId) {
-                const { data: inserted } = await supabase.from('items').insert(itemPayload).select('id');
-                supabaseId = inserted?.[0]?.id;
-            }
-
-            if (supabaseId) {
-                const result = await syncItemStock(zohoItemId, supabase, warehouseMap, debugLog);
-                return NextResponse.json({ success: true, type: 'item', action: 'synced', supabase_id: supabaseId, snapshots: result.snapshotsCreated, debug: debugLog, systemStatus });
+                if (supabaseId) {
+                    await syncItemStock(zohoItemId, supabase, warehouseMap, debugLog);
+                }
             }
         }
 
-        // --- Caso B: Stock Events (Adjustments, Sales, etc) ---
+        // --- Caso B: Stock Events ---
         if (isInventoryAdjustment || isCommonStockEvent) {
-            debugLog.push(`Routing to STOCK EVENT handler (isAdj=${isInventoryAdjustment})`);
+            debugLog.push(`Routing to STOCK EVENT handler`);
 
             const eventData = payload.inventory_adjustment || payload.stockadjustment ||
                 payload.salesorder || payload.purchaseorder ||
                 payload.invoice || payload.bill ||
-                payload.transferorder || payload;
+                payload.transferorder || payload.transfer_order || payload;
 
             const lineItems: any[] = eventData.line_items || [];
-
-            // Si no hay line items pero hay un item_id directo (ajuste de un solo item)
             let uniqueItemIds = [...new Set(lineItems.map((li: any) => String(li.item_id)).filter(Boolean))];
+
             if (uniqueItemIds.length === 0 && eventData.item_id) {
                 uniqueItemIds = [String(eventData.item_id)];
             }
 
-            debugLog.push(`Items to sync: ${uniqueItemIds.length}`);
-
-            let totalSnapshots = 0;
             for (const zohoId of uniqueItemIds) {
-                const result = await syncItemStock(zohoId, supabase, warehouseMap, debugLog);
-                totalSnapshots += result.snapshotsCreated;
+                await syncItemStock(zohoId, supabase, warehouseMap, debugLog);
             }
-
-            return NextResponse.json({
-                success: true,
-                type: isInventoryAdjustment ? 'adjustment' : 'stock_event',
-                items_synced: uniqueItemIds.length,
-                snapshots_created: totalSnapshots,
-                debug: debugLog,
-                systemStatus
-            });
         }
 
-        // Si no detectamos el tipo, registrar llaves y devolver
-        debugLog.push(`WARN: Event type not recognized. Payload module: ${payload.module}`);
-        return NextResponse.json({ success: true, message: 'Evento no reconocido', debug: debugLog, systemStatus });
+        return NextResponse.json({ success: true, debug: debugLog, systemStatus });
 
     } catch (error) {
         debugLog.push(`FATAL: ${error instanceof Error ? error.message : 'Unknown'}`);

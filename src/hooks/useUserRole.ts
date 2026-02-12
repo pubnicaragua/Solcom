@@ -12,7 +12,7 @@ export function useUserRole() {
     async function fetchRole() {
       try {
         const { data: { user }, error: userError } = await supabase.auth.getUser();
-        
+
         if (!user) {
           setLoading(false);
           return;
@@ -42,9 +42,9 @@ export function useUserRole() {
 
 export function hasPermission(role: UserRole, module: string): boolean {
   const permissions: Record<UserRole, string[]> = {
-    admin: ['inventory', 'reports', 'ai-agents', 'roles', 'settings', 'entregables', 'next-steps'],
-    manager: ['inventory', 'reports', 'ai-agents', 'entregables'],
-    operator: ['inventory', 'reports'],
+    admin: ['inventory', 'reports', 'ai-agents', 'roles', 'settings', 'entregables', 'next-steps', 'transfers'],
+    manager: ['inventory', 'reports', 'ai-agents', 'entregables', 'transfers'],
+    operator: ['inventory', 'reports', 'transfers'],
     auditor: ['reports'],
   };
 

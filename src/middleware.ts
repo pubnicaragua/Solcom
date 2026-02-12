@@ -123,9 +123,9 @@ export async function middleware(request: NextRequest) {
 
       // Definir permisos por rol
       const rolePermissions: Record<string, string[]> = {
-        admin: ['/inventory', '/reports', '/ai-agents', '/roles', '/settings', '/how-it-works', '/next-steps', '/entregables', '/cliente'],
-        manager: ['/inventory', '/reports', '/ai-agents', '/how-it-works', '/entregables', '/cliente'],
-        operator: ['/inventory', '/reports', '/how-it-works', '/cliente'],
+        admin: ['/inventory', '/reports', '/ai-agents', '/roles', '/settings', '/how-it-works', '/next-steps', '/entregables', '/cliente', '/transfers'],
+        manager: ['/inventory', '/reports', '/ai-agents', '/how-it-works', '/entregables', '/cliente', '/transfers'],
+        operator: ['/inventory', '/reports', '/how-it-works', '/cliente', '/transfers'],
         auditor: ['/reports', '/how-it-works', '/cliente'],
       };
 

@@ -22,8 +22,8 @@ export default function ReportsPage() {
   const [stockSnapshots, setStockSnapshots] = useState<any[]>([]);
   const [warehouses, setWarehouses] = useState<any[]>([]);
   const [stats, setStats] = useState<any>(null);
-  const [agingData, setAgingData] = useState<any>(null); // New state for Zoho aging
-  const [initialStats, setInitialStats] = useState<any>(null); // Store server-side KPIs
+  const [agingData, setAgingData] = useState<any>(null); 
+  const [initialStats, setInitialStats] = useState<any>(null); 
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [globalFilters, setGlobalFilters] = useState({
