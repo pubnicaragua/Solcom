@@ -458,6 +458,17 @@ export async function POST(request: Request) {
 
         if (dbError) {
             console.error('Error saving to DB:', dbError);
+            if (isRlsOrPermissionError(dbError)) {
+                return NextResponse.json({
+                    success: true,
+                    local_saved: false,
+                    warning: 'Transferencia creada en Zoho. Guardado local bloqueado por RLS.',
+                    transfer_id: null,
+                    zoho_transfer_order_id: zohoTransfer.transfer_order_id,
+                    transfer_order_number: zohoTransfer.transfer_order_number,
+                    status: zohoTransfer.status || 'in_transit',
+                });
+            }
             return NextResponse.json({
                 error: 'Creado en Zoho pero falló guardado local',
                 details: dbError.message,

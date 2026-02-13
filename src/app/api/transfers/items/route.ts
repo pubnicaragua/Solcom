@@ -34,85 +34,56 @@ export async function GET(request: Request) {
 
         const supabase = createServerClient();
 
-        // Preferred source: inventory_balance (modelo v2)
+        // Load both sources and choose the freshest row per item.
+        let balanceRows: any[] = [];
         try {
-            const { data: balanceRows, error: balanceError } = await (supabase.from as any)('inventory_balance')
+            const { data, error } = await (supabase.from as any)('inventory_balance')
                 .select('item_id, qty_on_hand, updated_at')
                 .eq('warehouse_id', warehouseId)
                 .gt('qty_on_hand', 0)
-                .limit(1000);
+                .limit(3000);
 
-            if (balanceError) {
-                if (!isMissingRelationError(balanceError)) throw balanceError;
+            if (error) {
+                if (!isMissingRelationError(error)) throw error;
             } else {
-                const latestByItem = new Map<string, { qty: number; updatedAt: number }>();
-                for (const row of balanceRows || []) {
-                    const itemId = String((row as any).item_id || '');
-                    if (!itemId) continue;
-                    const current = latestByItem.get(itemId);
-                    const candidate = {
-                        qty: asQty((row as any).qty_on_hand),
-                        updatedAt: toEpoch((row as any).updated_at),
-                    };
-                    if (!current || candidate.updatedAt >= current.updatedAt) {
-                        latestByItem.set(itemId, candidate);
-                    }
-                }
-
-                const itemIds = Array.from(latestByItem.keys());
-                if (itemIds.length === 0) {
-                    return NextResponse.json([]);
-                }
-
-                let itemQuery = supabase
-                    .from('items')
-                    .select('id, name, sku, zoho_item_id')
-                    .in('id', itemIds)
-                    .limit(500);
-
-                if (search) {
-                    itemQuery = itemQuery.or(`name.ilike.%${search}%,sku.ilike.%${search}%`);
-                }
-
-                const { data: items, error: itemError } = await itemQuery;
-                if (itemError) throw itemError;
-
-                const result = (items || [])
-                    .map((item: any) => ({
-                        id: item.id,
-                        zoho_item_id: item.zoho_item_id,
-                        name: item.name,
-                        sku: item.sku,
-                        current_stock: latestByItem.get(item.id)?.qty ?? 0,
-                    }))
-                    .filter((row: any) => row.current_stock > 0)
-                    .sort((a: any, b: any) => b.current_stock - a.current_stock)
-                    .slice(0, 20);
-
-                return NextResponse.json(result);
+                balanceRows = data || [];
             }
         } catch (balanceError: any) {
-            // fallback below
             console.warn('[transfers/items] inventory_balance unavailable, fallback to stock_snapshots', balanceError?.message);
         }
 
-        // Legacy fallback: latest stock_snapshots por item en la bodega
-        const { data: snapshots, error } = await supabase
+        const { data: snapshots, error: snapshotError } = await supabase
             .from('stock_snapshots')
             .select('item_id, qty, synced_at')
             .eq('warehouse_id', warehouseId)
             .order('synced_at', { ascending: false })
-            .limit(1000);
-        if (error) throw error;
+            .limit(5000);
+        if (snapshotError) throw snapshotError;
 
-        const latestByItem = new Map<string, { qty: number; syncedAt: number }>();
+        const latestByItem = new Map<string, { qty: number; ts: number }>();
+        for (const row of balanceRows || []) {
+            const itemId = String((row as any).item_id || '');
+            if (!itemId) continue;
+            const candidate = {
+                qty: asQty((row as any).qty_on_hand),
+                ts: toEpoch((row as any).updated_at),
+            };
+            const current = latestByItem.get(itemId);
+            if (!current || candidate.ts >= current.ts) {
+                latestByItem.set(itemId, candidate);
+            }
+        }
         for (const row of snapshots || []) {
             const itemId = String((row as any).item_id || '');
-            if (!itemId || latestByItem.has(itemId)) continue;
-            latestByItem.set(itemId, {
+            if (!itemId) continue;
+            const candidate = {
                 qty: asQty((row as any).qty),
-                syncedAt: toEpoch((row as any).synced_at),
-            });
+                ts: toEpoch((row as any).synced_at),
+            };
+            const current = latestByItem.get(itemId);
+            if (!current || candidate.ts >= current.ts) {
+                latestByItem.set(itemId, candidate);
+            }
         }
 
         const itemIds = Array.from(latestByItem.keys());
