@@ -9,46 +9,66 @@ export async function GET() {
     try {
         const supabase = createServerClient();
 
-        // Fetch synchronized data from Supabase
-        // We fetch count first to know how many pages
-        const [warehousesResult, snapshotsResult, countResult] = await Promise.all([
+        // Keep queries cheap and resilient under load.
+        const [warehousesResult, snapshotsResult, balanceSyncResult] = await Promise.all([
             supabase.from('warehouses').select('id', { count: 'exact', head: true }).eq('active', true),
             supabase.from('stock_snapshots').select('synced_at').order('synced_at', { ascending: false }).limit(1),
-            supabase.from('items').select('*', { count: 'exact', head: true }),
+            // v2 model compatibility: if inventory_balance exists, this gives a fresher sync marker.
+            (supabase.from as any)('inventory_balance')
+                .select('updated_at')
+                .order('updated_at', { ascending: false })
+                .limit(1),
         ]);
 
         let totalStock = 0;
         let totalValue = 0;
-        let totalProducts = countResult.count || 0;
+        let totalProducts = 0;
 
-        // Fetch all items in batches of 1000 (Supabase default limit)
+        // Avoid expensive exact count. Iterate pages until exhausted.
         const batchSize = 1000;
-        const batches = Math.ceil(totalProducts / batchSize);
-        const itemPromises = [];
+        let page = 0;
+        let hasMore = true;
 
-        for (let i = 0; i < batches; i++) {
-            const from = i * batchSize;
+        while (hasMore) {
+            const from = page * batchSize;
             const to = from + batchSize - 1;
-            itemPromises.push(
-                supabase.from('items').select('stock_total, price').range(from, to)
-            );
-        }
+            const { data, error } = await supabase
+                .from('items')
+                .select('stock_total, price')
+                .order('id', { ascending: true })
+                .range(from, to);
 
-        const itemBatches = await Promise.all(itemPromises);
+            if (error) {
+                console.error('[KPIs local] items page error:', error);
+                break;
+            }
 
-        for (const batch of itemBatches) {
-            if (batch.data) {
-                for (const item of batch.data) {
-                    const stock = item.stock_total || 0;
-                    const price = item.price || 0;
-                    totalStock += stock;
-                    totalValue += (stock * price);
-                }
+            const rows = data || [];
+            for (const item of rows) {
+                totalProducts += 1;
+                const stock = Number(item.stock_total || 0);
+                const price = Number(item.price || 0);
+                totalStock += stock;
+                totalValue += (stock * price);
+            }
+
+            if (rows.length < batchSize) {
+                hasMore = false;
+            } else {
+                page += 1;
+            }
+            if (page > 200) {
+                // Safety cap (200k rows).
+                hasMore = false;
             }
         }
 
-        const lastSync = (snapshotsResult.data as any)?.[0]?.synced_at
-            ? format(new Date((snapshotsResult.data as any)[0].synced_at), "dd MMM yyyy, HH:mm", { locale: es })
+        const balanceUpdatedAt = (balanceSyncResult as any)?.data?.[0]?.updated_at || null;
+        const snapshotSyncedAt = (snapshotsResult.data as any)?.[0]?.synced_at || null;
+        const lastSyncTs = balanceUpdatedAt || snapshotSyncedAt;
+
+        const lastSync = lastSyncTs
+            ? format(new Date(lastSyncTs), "dd MMM yyyy, HH:mm", { locale: es })
             : 'Nunca';
 
         return NextResponse.json(
@@ -63,6 +83,8 @@ export async function GET() {
                 debug: {
                     message: 'KPIs calculated from local Supabase DB for performance',
                     itemsCount: totalProducts,
+                    pagesRead: page + 1,
+                    balanceSyncAvailable: !!balanceUpdatedAt,
                     calculationTime: new Date().toISOString()
                 }
             },

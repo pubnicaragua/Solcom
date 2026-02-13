@@ -38,8 +38,6 @@ export default function LoginPage() {
         return;
       }
 
-      await supabase.auth.getSession();
-      await new Promise(resolve => setTimeout(resolve, 1000));
       window.location.replace('/inventory');
     } catch (error: any) {
       // Mensajes amigables según el tipo de error

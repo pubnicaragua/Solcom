@@ -3,12 +3,38 @@ import { NextResponse, type NextRequest } from 'next/server';
 
 export async function middleware(request: NextRequest) {
   const path = request.nextUrl.pathname;
+  const publicRoutes = ['/login', '/signup', '/reset-password', '/reuniones', '/login-clientes'];
+  const clientRoutes = ['/cliente'];
+  const isPublicRoute = publicRoutes.some(route => request.nextUrl.pathname.startsWith(route));
+  const isClientRoute = clientRoutes.some(route => request.nextUrl.pathname.startsWith(route));
 
   let response = NextResponse.next({
     request: {
       headers: request.headers,
     },
   });
+
+  // Fast path for anonymous users: avoid calling Supabase Auth on every public request.
+  // This keeps /login responsive when Supabase auth is under heavy load.
+  const hasAuthCookie = request.cookies
+    .getAll()
+    .some((cookie) => cookie.name.startsWith('sb-') && cookie.name.includes('auth-token'));
+
+  if (!hasAuthCookie) {
+    if (path === '/') {
+      return NextResponse.redirect(new URL('/login', request.url));
+    }
+
+    if (isClientRoute) {
+      return NextResponse.redirect(new URL('/login-clientes', request.url));
+    }
+
+    if (!isPublicRoute && !isClientRoute) {
+      return NextResponse.redirect(new URL('/login', request.url));
+    }
+
+    return response;
+  }
 
   const supabase = createServerClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -59,12 +85,15 @@ export async function middleware(request: NextRequest) {
 
   const {
     data: { user },
+    error: userError,
   } = await supabase.auth.getUser();
 
-  const publicRoutes = ['/login', '/signup', '/reset-password', '/reuniones', '/login-clientes'];
-  const clientRoutes = ['/cliente'];
-  const isPublicRoute = publicRoutes.some(route => request.nextUrl.pathname.startsWith(route));
-  const isClientRoute = clientRoutes.some(route => request.nextUrl.pathname.startsWith(route));
+  // If auth is temporarily down, keep public routes reachable and fail closed on protected ones.
+  if (userError && !user) {
+    if (isPublicRoute) return response;
+    if (isClientRoute) return NextResponse.redirect(new URL('/login-clientes', request.url));
+    return NextResponse.redirect(new URL('/login', request.url));
+  }
 
   if (path === '/' && user) {
     return NextResponse.redirect(new URL('/inventory', request.url));
