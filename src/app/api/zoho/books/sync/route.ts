@@ -11,6 +11,13 @@ function isMissingRelationError(error: any): boolean {
   return code === '42P01' || message.includes('does not exist');
 }
 
+function normalizeSku(value: unknown): string {
+  return String(value ?? '')
+    .trim()
+    .replace(/\s+/g, ' ')
+    .toUpperCase();
+}
+
 async function fetchZohoItems(accessToken: string, apiDomain: string, organizationId: string) {
   const items: any[] = [];
   let page = 1;
@@ -94,17 +101,33 @@ export async function POST(request: Request) {
 
     const { data: items } = await supabase
       .from('items')
-      .select('id, zoho_item_id')
-      .not('zoho_item_id', 'is', null);
+      .select('id, sku, zoho_item_id');
 
     const warehousesWithMapping = (allWarehouses || []).filter((w: any) => !!w.zoho_warehouse_id);
     // Claves en string para que el lookup coincida con location_id (Zoho puede devolver number o string)
     const warehouseMap = new Map(
       warehousesWithMapping.map((w: any) => [String(w.zoho_warehouse_id ?? ''), w.id])
     );
-    const itemMap = new Map(
-      (items || []).map((i: any) => [String(i.zoho_item_id ?? ''), i.id])
-    );
+    const itemsData = items || [];
+    const itemMapByZoho = new Map<string, string>();
+    const itemMapBySku = new Map<string, string>();
+    const duplicateSkus = new Set<string>();
+
+    for (const item of itemsData) {
+      const zohoId = String(item?.zoho_item_id ?? '').trim();
+      if (zohoId) {
+        itemMapByZoho.set(zohoId, item.id);
+      }
+
+      const skuKey = normalizeSku(item?.sku);
+      if (!skuKey) continue;
+      const existingId = itemMapBySku.get(skuKey);
+      if (!existingId) {
+        itemMapBySku.set(skuKey, item.id);
+      } else if (existingId !== item.id) {
+        duplicateSkus.add(skuKey);
+      }
+    }
 
     const toQty = (value: unknown): number => {
       const n = Number(value);
@@ -141,6 +164,8 @@ export async function POST(request: Request) {
     let inventoryBalanceRows = 0;
     let inventoryBalanceSynced = false;
     let itemsSkipped = 0;
+    let itemsMatchedBySku = 0;
+    let itemsRelinkedBySku = 0;
     let itemsWithWarehouses = 0;
     let itemsWithoutWarehouses = 0;
     let missingWarehouseMappings = 0;
@@ -154,7 +179,28 @@ export async function POST(request: Request) {
     const itemIdsToReplace = new Set<string>();
 
     for (const zohoItem of zohoItems) {
-      const itemId = itemMap.get(String(zohoItem.item_id ?? ''));
+      const zohoItemId = String(zohoItem.item_id ?? '').trim();
+      const skuKey = normalizeSku(zohoItem.sku);
+      let itemId = itemMapByZoho.get(zohoItemId);
+
+      if (!itemId && skuKey && !duplicateSkus.has(skuKey)) {
+        itemId = itemMapBySku.get(skuKey);
+        if (itemId) {
+          itemsMatchedBySku += 1;
+          const { error: relinkError } = await supabase
+            .from('items')
+            .update({ zoho_item_id: zohoItemId })
+            .eq('id', itemId);
+
+          if (!relinkError) {
+            itemsRelinkedBySku += 1;
+            itemMapByZoho.set(zohoItemId, itemId);
+          } else {
+            console.error(`[SYNC WARN] Could not relink SKU ${zohoItem.sku} to Zoho item ${zohoItemId}:`, relinkError.message);
+          }
+        }
+      }
+
       if (!itemId) {
         itemsSkipped += 1;
         continue;
@@ -377,7 +423,9 @@ export async function POST(request: Request) {
       preservedWithUnmappedLocations,
       zohoItemsTotal: zohoItems.length,
       warehousesMapped: warehouseMap.size,
-      itemsMapped: itemMap.size,
+      itemsMapped: itemMapByZoho.size,
+      itemsMatchedBySku,
+      itemsRelinkedBySku,
       sampleZohoWarehouseIds: Array.from(sampleZohoWarehouseIds).slice(0, 10),
       inventoryBalanceSynced,
       inventoryBalanceRows,

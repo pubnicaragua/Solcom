@@ -4,6 +4,12 @@ import { getZohoAccessToken, fetchItemLocations, AuthExpiredError } from '@/lib/
 
 export const dynamic = 'force-dynamic';
 
+function isMissingRelationError(error: any): boolean {
+    const code = String(error?.code || '');
+    const message = String(error?.message || '').toLowerCase();
+    return code === '42P01' || message.includes('does not exist');
+}
+
 export async function GET(request: NextRequest) {
     const logs: string[] = [];
     function log(msg: string, data?: any) {
@@ -43,6 +49,9 @@ export async function GET(request: NextRequest) {
 
         const warehouseMap = new Map(
             (warehouses || []).filter(w => w.zoho_warehouse_id).map((w: any) => [String(w.zoho_warehouse_id), w.id])
+        );
+        const mappedWarehouseIds = Array.from(
+            new Set((warehouses || []).filter((w: any) => !!w.zoho_warehouse_id).map((w: any) => w.id))
         );
         log(`Loaded ${warehouses?.length} warehouses. Map size: ${warehouseMap.size}`);
 
@@ -136,6 +145,38 @@ export async function GET(request: NextRequest) {
         // 5. Database Update
         log(`Final Stats: Mapped ${mappedCount}, Ignored ${ignoredCount}, Clean Stock Sum: ${cleanStock}`);
 
+        if (ignoredCount > 0) {
+            log('STRICT MODE: item has unmapped locations, preserving current snapshots/stock_total');
+            return NextResponse.json({
+                success: false,
+                preserved: true,
+                reason: 'unmapped_locations',
+                sku: item.sku,
+                cleanStock,
+                snapshotsPrepared: snapshots.length,
+                mappedCount,
+                ignoredCount,
+                zohoLocations: locations,
+                logs
+            });
+        }
+
+        if (locations.length === 0) {
+            log('STRICT MODE: Zoho returned 0 locations, preserving current snapshots/stock_total');
+            return NextResponse.json({
+                success: false,
+                preserved: true,
+                reason: 'no_locations',
+                sku: item.sku,
+                cleanStock: item.stock_total ?? 0,
+                snapshotsPrepared: 0,
+                mappedCount,
+                ignoredCount,
+                zohoLocations: locations,
+                logs
+            });
+        }
+
         if (snapshots.length > 0) {
             log('Deleting old snapshots...');
             await supabase.from('stock_snapshots').delete().eq('item_id', item.id);
@@ -153,11 +194,52 @@ export async function GET(request: NextRequest) {
 
         if (updateError) log('Update error', updateError);
 
+        let inventoryBalanceUpdated = 0;
+        if (mappedWarehouseIds.length > 0) {
+            log('Replacing inventory_balance rows for this item...');
+            const { error: deleteBalanceError } = await supabase
+                .from('inventory_balance' as any)
+                .delete()
+                .eq('item_id', item.id)
+                .in('warehouse_id', mappedWarehouseIds);
+
+            if (deleteBalanceError) {
+                if (isMissingRelationError(deleteBalanceError)) {
+                    log('WARN: inventory_balance table not found, skipping');
+                } else {
+                    log('inventory_balance delete error', deleteBalanceError);
+                }
+            } else if (snapshots.length > 0) {
+                const nowIso = new Date().toISOString();
+                const balanceRows = snapshots.map((snapshot: any) => ({
+                    item_id: item.id,
+                    warehouse_id: snapshot.warehouse_id,
+                    qty_on_hand: snapshot.qty ?? 0,
+                    source: 'debug_sync_item',
+                    source_ts: nowIso,
+                    updated_at: nowIso,
+                }));
+
+                const { error: insertBalanceError } = await (supabase.from as any)('inventory_balance').insert(balanceRows);
+                if (insertBalanceError) {
+                    if (isMissingRelationError(insertBalanceError)) {
+                        log('WARN: inventory_balance table not found on insert, skipping');
+                    } else {
+                        log('inventory_balance insert error', insertBalanceError);
+                    }
+                } else {
+                    inventoryBalanceUpdated = balanceRows.length;
+                    log(`Inserted ${inventoryBalanceUpdated} inventory_balance rows`);
+                }
+            }
+        }
+
         return NextResponse.json({
             success: true,
             sku: item.sku,
             cleanStock,
             snapshotsCreated: snapshots.length,
+            inventoryBalanceUpdated,
             mappedCount,
             ignoredCount,
             zohoLocations: locations,
