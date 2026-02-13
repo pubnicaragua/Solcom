@@ -96,9 +96,6 @@ export async function POST(request: Request) {
     const warehouseMap = new Map(
       warehousesWithMapping.map((w: any) => [String(w.zoho_warehouse_id ?? ''), w.id])
     );
-    const preferredWarehouse = (allWarehouses || []).find((w: any) => w.code === 'X1');
-    const defaultWarehouseId =
-      preferredWarehouse?.id || (allWarehouses && allWarehouses.length > 0 ? allWarehouses[0].id : null);
     const itemMap = new Map(
       (items || []).map((i: any) => [String(i.zoho_item_id ?? ''), i.id])
     );
@@ -140,8 +137,8 @@ export async function POST(request: Request) {
     let itemsWithoutWarehouses = 0;
     let missingWarehouseMappings = 0;
     let itemsWithUnmappedLocations = 0;
-    let qtyRoutedToDefault = 0;
-    let fallbackItemsToDefault = 0;
+    let preservedWithoutLocations = 0;
+    let preservedWithUnmappedLocations = 0;
     const sampleZohoWarehouseIds = new Set<string>();
 
     const snapshots: any[] = [];
@@ -189,20 +186,15 @@ export async function POST(request: Request) {
 
       if (!Array.isArray(locationsList) || locationsList.length === 0) {
         itemsWithoutWarehouses += 1;
-
-        if (defaultWarehouseId) {
-          const qty = toQty(zohoItem.stock_on_hand);
-          itemIdsToReplace.add(itemId);
-          addSnapshot(snapshots, snapshotIndexByItemWarehouse, defaultWarehouseId, itemId, qty);
-          fallbackItemsToDefault += 1;
-        }
+        // Strict mapping mode:
+        // do not force stock_on_hand into a default warehouse, keep current snapshots untouched.
+        preservedWithoutLocations += 1;
         continue;
       }
 
       itemsWithWarehouses += 1;
-      let unmappedQtyForItem = 0;
       let missingMappingsForItem = 0;
-      let hasMappedLocation = false;
+      const itemSnapshots: { warehouseId: string; qty: number }[] = [];
 
       for (const loc of locationsList) {
         const locId = loc?.location_id != null ? String(loc.location_id) : '';
@@ -213,10 +205,6 @@ export async function POST(request: Request) {
           console.log(`[SYNC DEBUG] Warehouse mapping FAILED for location: ${loc.location_name} (ID: ${locId})`);
           missingWarehouseMappings += 1;
           missingMappingsForItem += 1;
-          unmappedQtyForItem += toQty(
-            loc.location_stock_on_hand ??
-            loc.location_available_stock
-          );
           continue;
         }
 
@@ -226,30 +214,24 @@ export async function POST(request: Request) {
         );
 
         console.log(`[SYNC DEBUG] Adding snapshot for ${zohoItem.name} in ${loc.location_name}: ${qty}`);
-        hasMappedLocation = true;
-        itemIdsToReplace.add(itemId);
-        addSnapshot(snapshots, snapshotIndexByItemWarehouse, localWarehouseId, itemId, qty);
+        itemSnapshots.push({ warehouseId: localWarehouseId, qty });
       }
 
-      // Si hay ubicaciones sin mapear, enrutar su qty a bodega default para no perder stock.
+      // If any location is unmapped, skip replacing this item to avoid wrong warehouse assignment.
       if (missingMappingsForItem > 0) {
         itemsWithUnmappedLocations += 1;
-        if (defaultWarehouseId && unmappedQtyForItem !== 0) {
-          itemIdsToReplace.add(itemId);
-          addSnapshot(snapshots, snapshotIndexByItemWarehouse, defaultWarehouseId, itemId, unmappedQtyForItem);
-          qtyRoutedToDefault += unmappedQtyForItem;
-        }
+        preservedWithUnmappedLocations += 1;
+        continue;
       }
 
-      // Fallback adicional: si no hubo ninguna ubicación mapeada y no pudimos sumar qty sin mapear,
-      // usar stock_on_hand para evitar dejar snapshots obsoletos.
-      if (!hasMappedLocation && defaultWarehouseId && unmappedQtyForItem === 0) {
-        const fallbackQty = toQty(zohoItem.stock_on_hand);
-        if (fallbackQty !== 0) {
-          itemIdsToReplace.add(itemId);
-          addSnapshot(snapshots, snapshotIndexByItemWarehouse, defaultWarehouseId, itemId, fallbackQty);
-          fallbackItemsToDefault += 1;
-        }
+      if (itemSnapshots.length === 0) {
+        preservedWithoutLocations += 1;
+        continue;
+      }
+
+      itemIdsToReplace.add(itemId);
+      for (const snapshot of itemSnapshots) {
+        addSnapshot(snapshots, snapshotIndexByItemWarehouse, snapshot.warehouseId, itemId, snapshot.qty);
       }
     }
 
@@ -327,8 +309,8 @@ export async function POST(request: Request) {
       itemsWithoutWarehouses,
       missingWarehouseMappings,
       itemsWithUnmappedLocations,
-      qtyRoutedToDefault,
-      fallbackItemsToDefault,
+      preservedWithoutLocations,
+      preservedWithUnmappedLocations,
       zohoItemsTotal: zohoItems.length,
       warehousesMapped: warehouseMap.size,
       itemsMapped: itemMap.size,

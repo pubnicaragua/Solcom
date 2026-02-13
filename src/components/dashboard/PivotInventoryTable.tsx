@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import Card from '@/components/ui/Card';
 import { ChevronRight, ChevronDown, Loader2, Eye, EyeOff, Package } from 'lucide-react';
 import { supabase } from '@/lib/supabase/client';
@@ -22,6 +22,7 @@ interface PivotItem {
     category: string | null;
     warehouseQty: Record<string, number>;
     total: number;
+    daysInStock?: number | null;
     hasSnapshots?: boolean;
 }
 
@@ -152,6 +153,9 @@ export default function PivotInventoryTable({ filters }: PivotInventoryTableProp
     const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
     const [copiedSku, setCopiedSku] = useState<string | null>(null);
     const [hideZeroStock, setHideZeroStock] = useState(false);
+    const requestIdRef = useRef(0);
+    const abortRef = useRef<AbortController | null>(null);
+    const hasLoadedOnceRef = useRef(false);
 
     const handleCopySku = (sku: string) => {
         if (!sku) return;
@@ -160,30 +164,14 @@ export default function PivotInventoryTable({ filters }: PivotInventoryTableProp
         setTimeout(() => setCopiedSku(null), 2000);
     };
 
-    useEffect(() => {
-        fetchPivotData();
-    }, [filters, hideZeroStock]);
+    const fetchPivotData = useCallback(async () => {
+        const requestId = ++requestIdRef.current;
 
-    useEffect(() => {
-        const channel = supabase
-            .channel('inventory-updates')
-            .on(
-                'postgres_changes',
-                { event: '*', schema: 'public', table: 'stock_snapshots' },
-                () => {
-                    console.log('Realtime update received! Refreshing pivot data...');
-                    fetchPivotData();
-                }
-            )
-            .subscribe();
+        abortRef.current?.abort();
+        const controller = new AbortController();
+        abortRef.current = controller;
 
-        return () => {
-            supabase.removeChannel(channel);
-        };
-    }, []);
-
-    async function fetchPivotData() {
-        if (!data) setLoading(true);
+        if (!hasLoadedOnceRef.current) setLoading(true);
 
         try {
             const params = new URLSearchParams();
@@ -197,19 +185,72 @@ export default function PivotInventoryTable({ filters }: PivotInventoryTableProp
             if (hideZeroStock) {
                 params.set('showZeroStock', 'false');
             }
-            const res = await fetch(`/api/inventory/pivot?${params.toString()}`);
+
+            const res = await fetch(`/api/inventory/pivot?${params.toString()}`, {
+                signal: controller.signal,
+                cache: 'no-store',
+            });
+
+            if (requestId !== requestIdRef.current) return;
+
             if (res.ok) {
                 const result = await res.json();
                 setData(result);
+                hasLoadedOnceRef.current = true;
             } else {
                 console.error('Pivot API error:', res.status);
             }
-        } catch (error) {
-            console.error('Error fetching pivot data:', error);
+        } catch (error: any) {
+            if (error?.name !== 'AbortError') {
+                console.error('Error fetching pivot data:', error);
+            }
         } finally {
-            setLoading(false);
+            if (requestId === requestIdRef.current && !controller.signal.aborted) {
+                setLoading(false);
+            }
         }
-    }
+    }, [filters, hideZeroStock]);
+
+    useEffect(() => {
+        void fetchPivotData();
+    }, [fetchPivotData]);
+
+    useEffect(() => {
+        const channel = supabase
+            .channel('inventory-updates')
+            .on(
+                'postgres_changes',
+                { event: '*', schema: 'public', table: 'stock_snapshots' },
+                () => {
+                    void fetchPivotData();
+                }
+            )
+            .on(
+                'postgres_changes',
+                { event: '*', schema: 'public', table: 'inventory_balance' },
+                () => {
+                    void fetchPivotData();
+                }
+            )
+            .on(
+                'postgres_changes',
+                { event: '*', schema: 'public', table: 'items' },
+                () => {
+                    void fetchPivotData();
+                }
+            )
+            .subscribe();
+
+        return () => {
+            supabase.removeChannel(channel);
+        };
+    }, [fetchPivotData]);
+
+    useEffect(() => {
+        return () => {
+            abortRef.current?.abort();
+        };
+    }, []);
 
     const warehouseCodes = useMemo(() => data?.warehouses.map(w => w.code) || [], [data]);
     const tree = useMemo(() => {
@@ -304,9 +345,10 @@ export default function PivotInventoryTable({ filters }: PivotInventoryTableProp
     const skuColWidth = 130;
     const marcaColWidth = 110;
     const colorColWidth = 95;
+    const remanenteColWidth = 110;
     const cellWidth = 100;
     const totalColWidth = 105;
-    const extraColsWidth = skuColWidth + marcaColWidth + colorColWidth;
+    const extraColsWidth = skuColWidth + marcaColWidth + colorColWidth + remanenteColWidth;
 
     /* ─── Grand totals row ─── */
     const grandTotals: Record<string, number> = {};
@@ -443,6 +485,20 @@ export default function PivotInventoryTable({ filters }: PivotInventoryTableProp
                                     borderBottom: '2px solid rgba(255,255,255,0.12)',
                                     borderRight: '2px solid rgba(255,255,255,0.12)',
                                 }}>Color</th>
+                                <th style={{
+                                    position: 'sticky', top: 0, zIndex: 3,
+                                    background: '#080f1d',
+                                    padding: '11px 8px',
+                                    textAlign: 'right',
+                                    fontSize: 10, fontWeight: 700,
+                                    color: '#64748b',
+                                    textTransform: 'uppercase',
+                                    letterSpacing: '0.8px',
+                                    minWidth: remanenteColWidth, width: remanenteColWidth,
+                                    whiteSpace: 'nowrap',
+                                    borderBottom: '2px solid rgba(255,255,255,0.12)',
+                                    borderRight: '2px solid rgba(255,255,255,0.12)',
+                                }}>Remanente (d)</th>
                                 {warehouseCodes.map((code) => (
                                     <th key={code} style={{
                                         position: 'sticky', top: 0, zIndex: 2,
@@ -492,6 +548,7 @@ export default function PivotInventoryTable({ filters }: PivotInventoryTableProp
                                 const skuVal = leafItem ? leafItem.sku : '';
                                 const marcaVal = node.level === 1 ? node.label : (leafItem ? (leafItem.brand || '') : '');
                                 const colorVal = leafItem ? (leafItem.color || '') : '';
+                                const daysInStockVal = leafItem?.daysInStock ?? null;
 
                                 return (
                                     <tr
@@ -601,6 +658,24 @@ export default function PivotInventoryTable({ filters }: PivotInventoryTableProp
                                             minWidth: colorColWidth, maxWidth: colorColWidth,
                                         }}>{colorVal}</td>
 
+                                        {/* Remanente (dias) */}
+                                        <td style={{
+                                            padding: '7px 8px',
+                                            fontSize: 11,
+                                            textAlign: 'right',
+                                            color: !isLeaf ? '#64748b' : (daysInStockVal == null ? 'rgba(100,116,139,0.5)' : '#fbbf24'),
+                                            whiteSpace: 'nowrap',
+                                            overflow: 'hidden',
+                                            textOverflow: 'ellipsis',
+                                            borderBottom: `1px solid rgba(255,255,255,${node.level <= 1 ? '0.12' : '0.05'})`,
+                                            borderRight: '2px solid rgba(255,255,255,0.12)',
+                                            background: style.bg === 'transparent' || style.bg.startsWith('rgba') ? undefined : style.bg,
+                                            minWidth: remanenteColWidth, maxWidth: remanenteColWidth,
+                                            fontVariantNumeric: 'tabular-nums',
+                                        }}>
+                                            {!isLeaf ? '' : (daysInStockVal == null ? '—' : `${daysInStockVal}d`)}
+                                        </td>
+
                                         {/* Warehouse qty cells */}
                                         {/* Warehouse qty cells — show "-" if no snapshot breakdown */}
                                         {warehouseCodes.map((code) => {
@@ -684,6 +759,11 @@ export default function PivotInventoryTable({ filters }: PivotInventoryTableProp
                                     background: '#060c18',
                                     borderTop: '2px solid rgba(251,191,36,0.3)',
                                     borderRight: '1px solid rgba(255,255,255,0.06)',
+                                }} />
+                                <td style={{
+                                    background: '#060c18',
+                                    borderTop: '2px solid rgba(251,191,36,0.3)',
+                                    borderRight: '2px solid rgba(255,255,255,0.12)',
                                 }} />
                                 <td style={{
                                     background: '#060c18',

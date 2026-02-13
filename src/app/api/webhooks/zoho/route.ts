@@ -93,11 +93,12 @@ async function syncItemStock(
 
         const { data: itemRows } = await supabase
             .from('items')
-            .select('id')
+            .select('id, stock_total')
             .eq('zoho_item_id', zohoItemId)
             .limit(1);
 
         const supabaseItemId = itemRows?.[0]?.id;
+        const currentStockTotal = Number(itemRows?.[0]?.stock_total ?? 0);
         if (!supabaseItemId) {
             debugLog.push(`[syncItemStock] WARN: Item ${zohoItemId} not in DB`);
             return { snapshotsCreated: 0, stockTotal: 0 };
@@ -129,8 +130,16 @@ async function syncItemStock(
             });
         }
 
+        if (locations.length === 0) {
+            debugLog.push(`[syncItemStock] WARN: ${zohoItemId} returned 0 locations; preserving current snapshots`);
+            return { snapshotsCreated: 0, stockTotal: currentStockTotal };
+        }
+
         if (unmappedCount > 0) {
             debugLog.push(`[syncItemStock] WARN: ${zohoItemId} has ${unmappedCount} unmapped locations`);
+            // Strict mapping mode:
+            // preserve current snapshots/stock_total to avoid assigning stock to wrong warehouses.
+            return { snapshotsCreated: 0, stockTotal: currentStockTotal };
         }
 
         // Evitar borrar snapshots existentes si no hubo ninguna ubicación mapeada.

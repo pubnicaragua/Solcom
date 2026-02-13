@@ -1,10 +1,18 @@
 import { NextResponse } from 'next/server';
 import { createServerClient } from '@/lib/supabase/server';
 
+function sanitizeSearchTerm(raw: string): string {
+    return raw
+        .trim()
+        .replace(/[,%()'"]/g, ' ')
+        .replace(/\s+/g, ' ')
+        .trim();
+}
+
 export async function GET(request: Request) {
     try {
         const { searchParams } = new URL(request.url);
-        const search = searchParams.get('search') || '';
+        const search = sanitizeSearchTerm(searchParams.get('search') || '');
         const state = searchParams.get('state') || '';
         const category = searchParams.get('category') || '';
         const marca = searchParams.get('marca') || searchParams.get('brand') || '';
@@ -25,113 +33,290 @@ export async function GET(request: Request) {
         const activeWarehouses = activeWhRaw || [];
         const allWarehouses = allWhRaw || [];
 
-        // 2) Fetch items with filters
-        let itemsQuery = supabase
-            .from('items')
-            .select('id, sku, name, color, state, category, marca, stock_total, price')
-            .is('zoho_removed_at', null);
+        // 2) Fetch items with filters (search precision-first)
+        const buildItemsQuery = (searchMode: 'prefix' | 'contains' | null) => {
+            let itemsQuery = supabase
+                .from('items')
+                .select('id, sku, name, color, state, category, marca, stock_total, price, zoho_item_id')
+                .is('zoho_removed_at', null);
 
-        if (search?.trim()) {
-            const t = search.trim();
-            itemsQuery = itemsQuery.or(`name.ilike.%${t}%,sku.ilike.%${t}%`);
-        }
-        if (marca) itemsQuery = itemsQuery.eq('marca', marca);
-        if (color) itemsQuery = itemsQuery.ilike('color', `%${color}%`);
-        if (state) itemsQuery = itemsQuery.eq('state', state);
-        if (category) itemsQuery = itemsQuery.ilike('category', `%${category}%`);
-        if (stockLevel) {
-            switch (stockLevel) {
-                case 'out': itemsQuery = itemsQuery.eq('stock_total', 0); break;
-                case 'critical': itemsQuery = itemsQuery.gte('stock_total', 1).lte('stock_total', 5); break;
-                case 'low': itemsQuery = itemsQuery.gte('stock_total', 6).lte('stock_total', 20); break;
-                case 'medium': itemsQuery = itemsQuery.gte('stock_total', 21).lte('stock_total', 50); break;
-                case 'high': itemsQuery = itemsQuery.gt('stock_total', 50); break;
+            if (marca) itemsQuery = itemsQuery.eq('marca', marca);
+            if (color) itemsQuery = itemsQuery.ilike('color', `%${color}%`);
+            if (state) itemsQuery = itemsQuery.eq('state', state);
+            if (category) itemsQuery = itemsQuery.ilike('category', `%${category}%`);
+            if (stockLevel) {
+                switch (stockLevel) {
+                    case 'out': itemsQuery = itemsQuery.eq('stock_total', 0); break;
+                    case 'critical': itemsQuery = itemsQuery.gte('stock_total', 1).lte('stock_total', 5); break;
+                    case 'low': itemsQuery = itemsQuery.gte('stock_total', 6).lte('stock_total', 20); break;
+                    case 'medium': itemsQuery = itemsQuery.gte('stock_total', 21).lte('stock_total', 50); break;
+                    case 'high': itemsQuery = itemsQuery.gt('stock_total', 50); break;
+                }
             }
-        }
 
-        // Fetch items with pagination to bypass Supabase 1000-row limit
+            if (search) {
+                if (searchMode === 'prefix') {
+                    itemsQuery = itemsQuery.or(`sku.eq.${search},sku.ilike.${search}%,name.ilike.${search}%`);
+                } else if (searchMode === 'contains') {
+                    itemsQuery = itemsQuery.or(`sku.ilike.%${search}%,name.ilike.%${search}%`);
+                }
+            }
+
+            return itemsQuery;
+        };
+
+        const fetchAllItems = async (itemsQuery: any) => {
+            const rows: any[] = [];
+            let page = 0;
+            const PAGE_SIZE = 1000;
+            const maxPages = search ? 6 : 20;
+            let hasMore = true;
+
+            while (hasMore) {
+                const { data, error } = await itemsQuery
+                    .order('name', { ascending: true })
+                    .order('id', { ascending: true })
+                    .range(page * PAGE_SIZE, (page + 1) * PAGE_SIZE - 1);
+
+                if (error) throw error;
+
+                if (data && data.length > 0) {
+                    rows.push(...data);
+                    if (data.length < PAGE_SIZE) {
+                        hasMore = false;
+                    } else {
+                        page += 1;
+                    }
+                } else {
+                    hasMore = false;
+                }
+                if (page > maxPages) break;
+            }
+
+            return rows;
+        };
+
         let allItems: any[] = [];
-        let page = 0;
-        const PAGE_SIZE = 1000;
-        let hasMore = true;
-
-        while (hasMore) {
-            const { data, error } = await itemsQuery.range(page * PAGE_SIZE, (page + 1) * PAGE_SIZE - 1).order('name', { ascending: true });
-
-            if (error) throw error;
-
-            if (data && data.length > 0) {
-                allItems = allItems.concat(data);
-                if (data.length < PAGE_SIZE) hasMore = false;
-                else page++;
-            } else {
-                hasMore = false;
+        if (search) {
+            allItems = await fetchAllItems(buildItemsQuery('prefix'));
+            if (allItems.length === 0) {
+                allItems = await fetchAllItems(buildItemsQuery('contains'));
             }
-            if (page > 20) break; // Safety
+        } else {
+            allItems = await fetchAllItems(buildItemsQuery(null));
         }
 
         console.log('Pivot API - active warehouses:', activeWarehouses.length, 'all warehouses:', allWarehouses.length, 'items:', allItems.length);
 
-        const items = allItems;
+        // Deduplicate items by SKU — keep the one with zoho_item_id (preferred)
+        const skuMap = new Map<string, any>();
+        for (const item of allItems) {
+            const existing = skuMap.get(item.sku);
+            if (!existing) {
+                skuMap.set(item.sku, item);
+            } else {
+                // Prefer the one with a zoho_item_id
+                if (!existing.zoho_item_id && item.zoho_item_id) {
+                    skuMap.set(item.sku, item);
+                }
+            }
+        }
+        const items = Array.from(skuMap.values());
         if (items.length === 0) {
             return NextResponse.json({ warehouses: activeWarehouses.map(w => ({ code: w.code, name: w.name })), items: [] });
         }
 
-        // 3) Fetch stock_snapshots for ALL warehouses (needed for accurate total)
+        // 3) Resolve stock breakdown.
+        // Prefer inventory_balance (v2 model). Fallback to stock_snapshots (legacy model).
         const itemIds = items.map((i: any) => i.id);
         const allWhIds = allWarehouses.map(w => w.id);
+        const lotAgeByItem = new Map<string, number>();
 
-        // Fetch ALL snapshots using paginated .range() — only ~2-3 sequential queries
-        // instead of 78 chunked queries that saturate the connection pool
-        let allSnapshots: any[] = [];
-        const SNAP_PAGE = 1000;
-        let snapPage = 0;
-        let snapHasMore = true;
-
-        while (snapHasMore) {
-            const from = snapPage * SNAP_PAGE;
-            const to = from + SNAP_PAGE - 1;
-            const { data, error } = await supabase
-                .from('stock_snapshots')
-                .select('item_id, warehouse_id, qty, synced_at')
-                .in('warehouse_id', allWhIds)
-                .order('synced_at', { ascending: false })
-                .range(from, to);
-
-            if (error) {
-                console.error('Error fetching snapshots page:', error);
-                break;
-            }
-            if (data && data.length > 0) {
-                allSnapshots = allSnapshots.concat(data);
-                if (data.length < SNAP_PAGE) snapHasMore = false;
-                else snapPage++;
-            } else {
-                snapHasMore = false;
-            }
-            if (snapPage > 50) break; // safety: max 50k snapshots
-        }
-
-        // Deduplicate: keep only the latest snapshot per (item_id, warehouse_id)
         const latestSnap = new Map<string, number>();
-        for (const snap of allSnapshots) {
-            const key = `${snap.item_id}__${snap.warehouse_id}`;
-            if (!latestSnap.has(key)) {
-                latestSnap.set(key, snap.qty);
+        const itemsWithBreakdown = new Set<string>();
+        let usingBalanceModel = false;
+        let usedSnapshotGapFill = false;
+
+        const ITEM_CHUNK = 250;
+        const BAL_PAGE = 1000;
+        const LOT_PAGE = 1000;
+
+        // Optional: lot aging metric ("remanente en dias").
+        // Uses the oldest lot still in stock per item.
+        try {
+            for (let i = 0; i < itemIds.length; i += ITEM_CHUNK) {
+                const itemChunk = itemIds.slice(i, i + ITEM_CHUNK);
+                let page = 0;
+                let hasMore = true;
+
+                while (hasMore) {
+                    const from = page * LOT_PAGE;
+                    const to = from + LOT_PAGE - 1;
+                    const { data, error } = await (supabase.from as any)('v_inventory_lot_aging')
+                        .select('item_id, days_in_stock')
+                        .in('item_id', itemChunk)
+                        .range(from, to);
+
+                    if (error) throw error;
+
+                    const rows = data || [];
+                    for (const row of rows) {
+                        const current = lotAgeByItem.get(row.item_id);
+                        if (current == null || (row.days_in_stock ?? 0) > current) {
+                            lotAgeByItem.set(row.item_id, row.days_in_stock ?? 0);
+                        }
+                    }
+
+                    if (rows.length < LOT_PAGE) {
+                        hasMore = false;
+                    } else {
+                        page += 1;
+                    }
+                    if (page > 50) break;
+                }
             }
+        } catch (lotAgingError) {
+            // View may not exist yet before inventory-v2.sql is applied.
+            console.log('Pivot lot aging unavailable:', lotAgingError);
         }
 
-        // Track which items have ANY snapshot data
-        const itemsWithSnapshots = new Set<string>();
-        for (const snap of allSnapshots) {
-            itemsWithSnapshots.add(snap.item_id);
+        try {
+            for (let i = 0; i < itemIds.length; i += ITEM_CHUNK) {
+                const itemChunk = itemIds.slice(i, i + ITEM_CHUNK);
+                let page = 0;
+                let hasMore = true;
+
+                while (hasMore) {
+                    const from = page * BAL_PAGE;
+                    const to = from + BAL_PAGE - 1;
+                    const { data, error } = await (supabase.from as any)('inventory_balance')
+                        .select('item_id, warehouse_id, qty_on_hand')
+                        .in('item_id', itemChunk)
+                        .in('warehouse_id', allWhIds)
+                        .range(from, to);
+
+                    if (error) {
+                        throw error;
+                    }
+
+                    const rows = data || [];
+                    for (const row of rows) {
+                        latestSnap.set(`${row.item_id}__${row.warehouse_id}`, row.qty_on_hand ?? 0);
+                        itemsWithBreakdown.add(row.item_id);
+                    }
+
+                    if (rows.length < BAL_PAGE) {
+                        hasMore = false;
+                    } else {
+                        page += 1;
+                    }
+                    if (page > 50) break;
+                }
+            }
+            usingBalanceModel = true;
+
+            // Transitional compatibility:
+            // if some items are still only in stock_snapshots (no inventory_balance row yet),
+            // fill just those missing items from latest snapshots.
+            const missingItemIds = itemIds.filter((id: string) => !itemsWithBreakdown.has(id));
+            if (missingItemIds.length > 0) {
+                const SNAP_PAGE = 1000;
+                for (let i = 0; i < missingItemIds.length; i += ITEM_CHUNK) {
+                    const itemChunk = missingItemIds.slice(i, i + ITEM_CHUNK);
+                    let snapPage = 0;
+                    let snapHasMore = true;
+
+                    while (snapHasMore) {
+                        const from = snapPage * SNAP_PAGE;
+                        const to = from + SNAP_PAGE - 1;
+                        const { data, error } = await supabase
+                            .from('stock_snapshots')
+                            .select('item_id, warehouse_id, qty, synced_at')
+                            .in('item_id', itemChunk)
+                            .in('warehouse_id', allWhIds)
+                            .order('synced_at', { ascending: false })
+                            .range(from, to);
+
+                        if (error) {
+                            console.error('Error gap-filling from snapshots:', error);
+                            snapHasMore = false;
+                            continue;
+                        }
+
+                        const rows = data || [];
+                        for (const snap of rows) {
+                            const key = `${snap.item_id}__${snap.warehouse_id}`;
+                            if (!latestSnap.has(key)) {
+                                latestSnap.set(key, snap.qty ?? 0);
+                            }
+                            itemsWithBreakdown.add(snap.item_id);
+                        }
+
+                        if (rows.length < SNAP_PAGE) {
+                            snapHasMore = false;
+                        } else {
+                            snapPage += 1;
+                        }
+                        if (snapPage > 50) break;
+                    }
+                }
+                usedSnapshotGapFill = true;
+            }
+        } catch (balanceError) {
+            // Legacy fallback: if inventory_balance doesn't exist yet, keep current behavior.
+            console.log('Pivot fallback to stock_snapshots:', balanceError);
+            let allSnapshots: any[] = [];
+            const SNAP_PAGE = 1000;
+
+            for (let i = 0; i < itemIds.length; i += ITEM_CHUNK) {
+                const itemChunk = itemIds.slice(i, i + ITEM_CHUNK);
+                let snapPage = 0;
+                let snapHasMore = true;
+
+                while (snapHasMore) {
+                    const from = snapPage * SNAP_PAGE;
+                    const to = from + SNAP_PAGE - 1;
+                    const { data, error } = await supabase
+                        .from('stock_snapshots')
+                        .select('item_id, warehouse_id, qty, synced_at')
+                        .in('item_id', itemChunk)
+                        .in('warehouse_id', allWhIds)
+                        .order('synced_at', { ascending: false })
+                        .range(from, to);
+
+                    if (error) {
+                        console.error('Error fetching snapshots page:', error);
+                        snapHasMore = false;
+                        continue;
+                    }
+                    if (data && data.length > 0) {
+                        allSnapshots = allSnapshots.concat(data);
+                        if (data.length < SNAP_PAGE) {
+                            snapHasMore = false;
+                        } else {
+                            snapPage += 1;
+                        }
+                    } else {
+                        snapHasMore = false;
+                    }
+                    if (snapPage > 50) break;
+                }
+            }
+
+            for (const snap of allSnapshots) {
+                const key = `${snap.item_id}__${snap.warehouse_id}`;
+                if (!latestSnap.has(key)) {
+                    latestSnap.set(key, snap.qty);
+                }
+                itemsWithBreakdown.add(snap.item_id);
+            }
         }
 
         // 4) Build result: columns = active warehouses, total = ALL warehouses
         //    FALLBACK: if an item has NO snapshots at all, use items.stock_total
         const resultItems = items.map((item: any) => {
             const warehouseQty: Record<string, number> = {};
-            const hasSnapshots = itemsWithSnapshots.has(item.id);
+            const hasBreakdown = itemsWithBreakdown.has(item.id);
 
             // Columns: only active warehouses
             for (const w of activeWarehouses) {
@@ -141,7 +326,7 @@ export async function GET(request: Request) {
 
             // Total: sum ALL warehouses (active + inactive)
             let total = 0;
-            if (hasSnapshots) {
+            if (hasBreakdown) {
                 for (const w of allWarehouses) {
                     const key = `${item.id}__${w.id}`;
                     total += latestSnap.get(key) ?? 0;
@@ -161,17 +346,21 @@ export async function GET(request: Request) {
                 category: item.category || null,
                 warehouseQty,
                 total,
-                hasSnapshots, // let frontend know if data comes from snapshots or fallback
+                daysInStock: lotAgeByItem.get(item.id) ?? null,
+                // Keep compatibility with existing frontend naming.
+                hasSnapshots: hasBreakdown,
             };
         });
 
-        // Optionally filter out zero-stock items
-        const finalItems = showZeroStock ? resultItems : resultItems.filter(i => i.total > 0);
+        // Optionally filter out only zero-stock items (keep negatives visible).
+        const finalItems = showZeroStock ? resultItems : resultItems.filter(i => i.total !== 0);
 
         return NextResponse.json({
             warehouses: activeWarehouses.map((w: any) => ({ code: w.code, name: w.name })),
             items: finalItems,
             totalBeforeFilter: resultItems.length,
+            model: usingBalanceModel ? 'inventory_balance' : 'stock_snapshots',
+            usedSnapshotGapFill,
         });
     } catch (error) {
         console.error('Pivot inventory error:', error);

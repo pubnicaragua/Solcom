@@ -34,7 +34,7 @@ export default function InventoryPage() {
   useEffect(() => {
     const timer = setTimeout(() => {
       setFilters(prev => ({ ...prev, search: searchTerm }));
-    }, 500);
+    }, 300);
     return () => clearTimeout(timer);
   }, [searchTerm]);
   const [showAdvancedFilters, setShowAdvancedFilters] = useState(false);
