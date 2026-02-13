@@ -61,6 +61,73 @@ function collectItemIdsFromPayload(payload: any): string[] {
     return Array.from(ids);
 }
 
+function isMissingRelationError(error: any): boolean {
+    const code = String(error?.code || '');
+    const message = String(error?.message || '').toLowerCase();
+    return code === '42P01' || message.includes('does not exist');
+}
+
+async function replaceInventoryBalanceForItem(
+    supabase: any,
+    itemId: string,
+    snapshots: Array<{ warehouse_id: string; qty: number }>,
+    mappedWarehouseIds: string[],
+    source: string,
+    debugLog: string[]
+): Promise<void> {
+    if (!itemId || mappedWarehouseIds.length === 0) return;
+
+    const DELETE_CHUNK = 200;
+    for (let i = 0; i < mappedWarehouseIds.length; i += DELETE_CHUNK) {
+        const warehouseBatch = mappedWarehouseIds.slice(i, i + DELETE_CHUNK);
+        const { error: deleteError } = await supabase
+            .from('inventory_balance')
+            .delete()
+            .eq('item_id', itemId)
+            .in('warehouse_id', warehouseBatch);
+
+        if (deleteError) {
+            if (isMissingRelationError(deleteError)) {
+                debugLog.push('[syncItemStock] WARN: inventory_balance table not found; skipping balance write');
+                return;
+            }
+            debugLog.push(`[syncItemStock] ERROR deleting inventory_balance rows: ${deleteError.message}`);
+            return;
+        }
+    }
+
+    if (snapshots.length === 0) {
+        return;
+    }
+
+    const nowIso = new Date().toISOString();
+    const balanceRows = snapshots.map((snapshot) => ({
+        item_id: itemId,
+        warehouse_id: snapshot.warehouse_id,
+        qty_on_hand: snapshot.qty ?? 0,
+        source,
+        source_ts: nowIso,
+        updated_at: nowIso,
+    }));
+
+    const INSERT_CHUNK = 500;
+    for (let i = 0; i < balanceRows.length; i += INSERT_CHUNK) {
+        const batch = balanceRows.slice(i, i + INSERT_CHUNK);
+        const { error: insertError } = await supabase
+            .from('inventory_balance')
+            .insert(batch);
+
+        if (insertError) {
+            if (isMissingRelationError(insertError)) {
+                debugLog.push('[syncItemStock] WARN: inventory_balance table not found; skipping balance write');
+                return;
+            }
+            debugLog.push(`[syncItemStock] ERROR inserting inventory_balance rows: ${insertError.message}`);
+            return;
+        }
+    }
+}
+
 // =============================================
 // Helper: sincronizar stock de UN item por zoho_item_id
 // =============================================
@@ -103,6 +170,9 @@ async function syncItemStock(
             debugLog.push(`[syncItemStock] WARN: Item ${zohoItemId} not in DB`);
             return { snapshotsCreated: 0, stockTotal: 0 };
         }
+        const mappedWarehouseIds = Array.from(
+            new Set(Array.from(warehouseMap.values()).map((warehouse) => warehouse.id))
+        );
 
         let stockTotal = 0;
         let mappedCount = 0;
@@ -189,6 +259,15 @@ async function syncItemStock(
                 debugLog.push(`[syncItemStock] ERROR inserting snapshots: ${error.message}`);
             }
         }
+
+        await replaceInventoryBalanceForItem(
+            supabase,
+            supabaseItemId,
+            snapshots,
+            mappedWarehouseIds,
+            'webhook',
+            debugLog
+        );
 
         return { snapshotsCreated, stockTotal };
     } catch (err) {
@@ -295,6 +374,10 @@ export async function POST(request: NextRequest) {
             moduleName.includes('salesorder') ||
             moduleName.includes('purchaseorder') ||
             moduleName.includes('transferorder');
+        const payloadItemIds = collectItemIdsFromPayload(payload);
+        const processedItemIds = new Set<string>();
+        debugLog.push(`Routing flags item=${isItemEvent} adjustment=${isInventoryAdjustment} commonStock=${isCommonStockEvent}`);
+        debugLog.push(`Payload item_ids detected: ${payloadItemIds.length}`);
 
         // --- Caso A: Item Event ---
         if (isItemEvent && !isInventoryAdjustment && !isCommonStockEvent) {
@@ -325,6 +408,7 @@ export async function POST(request: NextRequest) {
 
                 if (supabaseId) {
                     await syncItemStock(zohoItemId, supabase, warehouseMap, debugLog);
+                    processedItemIds.add(zohoItemId);
                 }
             } else {
                 debugLog.push('WARN: ITEM EVENT received without item_id');
@@ -334,15 +418,28 @@ export async function POST(request: NextRequest) {
         // --- Caso B: Stock Events ---
         if (isInventoryAdjustment || isCommonStockEvent) {
             debugLog.push(`Routing to STOCK EVENT handler`);
-
-            const uniqueItemIds = collectItemIdsFromPayload(payload);
+            const uniqueItemIds = payloadItemIds;
             debugLog.push(`Stock event item_ids detected: ${uniqueItemIds.length}`);
 
             for (const zohoId of uniqueItemIds) {
                 await syncItemStock(zohoId, supabase, warehouseMap, debugLog);
+                processedItemIds.add(zohoId);
             }
             if (uniqueItemIds.length === 0) {
                 debugLog.push('WARN: STOCK EVENT without item_id; no sync executed');
+            }
+        }
+
+        // Fallback: if we can extract item_ids but event routing didn't classify it,
+        // still sync those items to avoid silent stale stock.
+        if (!isInventoryAdjustment && !isCommonStockEvent) {
+            const pendingItemIds = payloadItemIds.filter((itemId) => !processedItemIds.has(itemId));
+            if (pendingItemIds.length > 0) {
+                debugLog.push(`Routing to FALLBACK ITEM_ID handler (${pendingItemIds.length} items)`);
+                for (const zohoId of pendingItemIds) {
+                    await syncItemStock(zohoId, supabase, warehouseMap, debugLog);
+                    processedItemIds.add(zohoId);
+                }
             }
         }
 

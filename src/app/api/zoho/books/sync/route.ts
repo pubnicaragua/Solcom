@@ -5,6 +5,12 @@ import { getZohoAccessToken, fetchItemLocations, AuthExpiredError } from '@/lib/
 
 export const dynamic = 'force-dynamic';
 
+function isMissingRelationError(error: any): boolean {
+  const code = String(error?.code || '');
+  const message = String(error?.message || '').toLowerCase();
+  return code === '42P01' || message.includes('does not exist');
+}
+
 async function fetchZohoItems(accessToken: string, apiDomain: string, organizationId: string) {
   const items: any[] = [];
   let page = 1;
@@ -132,6 +138,8 @@ export async function POST(request: Request) {
     };
 
     let snapshotsCreated = 0;
+    let inventoryBalanceRows = 0;
+    let inventoryBalanceSynced = false;
     let itemsSkipped = 0;
     let itemsWithWarehouses = 0;
     let itemsWithoutWarehouses = 0;
@@ -261,6 +269,62 @@ export async function POST(request: Request) {
       snapshotsCreated = snapshots.length;
     }
 
+    // Mantener inventory_balance (modelo v2) alineado con snapshots.
+    // Reemplaza balances solo de los ítems procesados para no tocar inventario ajeno.
+    if (itemIdsArray.length > 0) {
+      let canSyncInventoryBalance = true;
+      const deleteBatchSize = 500;
+
+      for (let i = 0; i < itemIdsArray.length; i += deleteBatchSize) {
+        const batch = itemIdsArray.slice(i, i + deleteBatchSize);
+        const { error } = await supabase
+          .from('inventory_balance' as any)
+          .delete()
+          .in('item_id', batch);
+
+        if (error) {
+          if (isMissingRelationError(error)) {
+            console.warn('[SYNC WARN] inventory_balance table not found, skipping v2 balance sync');
+          } else {
+            console.error('[SYNC ERROR] Failed deleting inventory_balance rows:', error);
+          }
+          canSyncInventoryBalance = false;
+          break;
+        }
+      }
+
+      if (canSyncInventoryBalance && snapshots.length > 0) {
+        const nowIso = new Date().toISOString();
+        const balanceRows = snapshots.map((snapshot) => ({
+          item_id: snapshot.item_id,
+          warehouse_id: snapshot.warehouse_id,
+          qty_on_hand: snapshot.qty ?? 0,
+          source: 'full_sync',
+          source_ts: snapshot.source_ts || nowIso,
+          updated_at: nowIso,
+        }));
+
+        const insertBatchSize = 500;
+        for (let i = 0; i < balanceRows.length; i += insertBatchSize) {
+          const batch = balanceRows.slice(i, i + insertBatchSize);
+          const { error } = await (supabase.from as any)('inventory_balance').insert(batch as any);
+
+          if (error) {
+            if (isMissingRelationError(error)) {
+              console.warn('[SYNC WARN] inventory_balance table not found during insert, skipping v2 balance sync');
+            } else {
+              console.error('[SYNC ERROR] Failed inserting inventory_balance rows:', error);
+            }
+            canSyncInventoryBalance = false;
+            break;
+          }
+          inventoryBalanceRows += batch.length;
+        }
+      }
+
+      inventoryBalanceSynced = canSyncInventoryBalance;
+    }
+
     // Recalcular stock_total para excluir bodegas inactivas
     // Esto asegura que el total en la UI coincida con la suma de bodegas visibles
     if (itemIdsToReplace.size > 0) {
@@ -315,6 +379,8 @@ export async function POST(request: Request) {
       warehousesMapped: warehouseMap.size,
       itemsMapped: itemMap.size,
       sampleZohoWarehouseIds: Array.from(sampleZohoWarehouseIds).slice(0, 10),
+      inventoryBalanceSynced,
+      inventoryBalanceRows,
       message: `Sincronización de inventario completada: ${snapshotsCreated} snapshots`,
     });
   } catch (error) {
