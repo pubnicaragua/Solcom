@@ -1,42 +1,8 @@
 import { NextResponse } from 'next/server';
 import { createServerClient } from '@/lib/supabase/server';
+import { getZohoAccessToken } from '@/lib/zoho/inventory-utils';
 
 export const dynamic = 'force-dynamic';
-
-async function getZohoAccessToken() {
-  const clientId = process.env.ZOHO_BOOKS_CLIENT_ID;
-  const clientSecret = process.env.ZOHO_BOOKS_CLIENT_SECRET;
-  const refreshToken = process.env.ZOHO_BOOKS_REFRESH_TOKEN;
-
-  if (!clientId || !clientSecret || !refreshToken) {
-    return { error: 'Configuración de Zoho Books incompleta' };
-  }
-
-  const authDomain = process.env.ZOHO_AUTH_DOMAIN || 'https://accounts.zoho.com';
-  const response = await fetch(`${authDomain}/oauth/v2/token`, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/x-www-form-urlencoded',
-    },
-    body: new URLSearchParams({
-      refresh_token: refreshToken,
-      client_id: clientId,
-      client_secret: clientSecret,
-      grant_type: 'refresh_token',
-    }),
-  });
-
-  if (!response.ok) {
-    const errorText = await response.text();
-    return { error: `Zoho auth failed: ${response.status} - ${errorText}` };
-  }
-
-  const data = await response.json();
-  return {
-    accessToken: data.access_token as string,
-    apiDomain: (data.api_domain as string) || 'https://www.zohoapis.com',
-  };
-}
 
 /**
  * Sincroniza ubicaciones (location_id + location_name) desde Zoho Inventory
