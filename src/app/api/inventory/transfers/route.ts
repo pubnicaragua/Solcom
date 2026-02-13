@@ -3,47 +3,77 @@ import { createServerClient } from '@/lib/supabase/server';
 
 export const dynamic = 'force-dynamic';
 
+function normalizeQty(line: any): number {
+  const value = line?.quantity ?? line?.quantity_transfer ?? line?.qty ?? 0;
+  const n = Number(value);
+  return Number.isFinite(n) ? n : 0;
+}
+
 export async function GET() {
   try {
     const supabase = createServerClient();
 
     const { data, error } = await supabase
-      .from('stock_movements')
+      .from('transfer_orders')
       .select(`
         id,
-        quantity,
-        reason,
+        transfer_order_number,
+        date,
         status,
-        movement_type,
+        notes,
+        line_items,
         created_at,
-        items!inner(sku, name),
-        from_warehouse:warehouses!stock_movements_from_warehouse_id_fkey(code, name),
-        to_warehouse:warehouses!stock_movements_to_warehouse_id_fkey(code, name)
+        received_at,
+        from_warehouse:warehouses!transfer_orders_from_warehouse_id_fkey(code, name),
+        to_warehouse:warehouses!transfer_orders_to_warehouse_id_fkey(code, name)
       `)
-      .eq('movement_type', 'transfer')
       .order('created_at', { ascending: false })
-      .limit(50);
+      .limit(200);
 
     if (error) {
       throw error;
     }
 
-    const formatted = (data || []).map((row: any) => ({
-      id: row.id,
-      quantity: row.quantity,
-      reason: row.reason,
-      status: row.status,
-      created_at: row.created_at,
-      item_name: row.items?.name,
-      sku: row.items?.sku,
-      from_code: row.from_warehouse?.code,
-      from_name: row.from_warehouse?.name,
-      to_code: row.to_warehouse?.code,
-      to_name: row.to_warehouse?.name,
-    }));
+    const rows: any[] = [];
+    for (const transfer of data || []) {
+      const lineItems = Array.isArray(transfer.line_items) ? transfer.line_items : [];
+      if (lineItems.length === 0) {
+        rows.push({
+          id: transfer.id,
+          quantity: 0,
+          reason: transfer.notes || null,
+          status: transfer.status || null,
+          created_at: transfer.created_at,
+          item_name: 'Sin detalle',
+          sku: '—',
+          from_code: transfer.from_warehouse?.code || '—',
+          from_name: transfer.from_warehouse?.name || 'Origen desconocido',
+          to_code: transfer.to_warehouse?.code || '—',
+          to_name: transfer.to_warehouse?.name || 'Destino desconocido',
+        });
+        continue;
+      }
+
+      for (let idx = 0; idx < lineItems.length; idx += 1) {
+        const line: any = lineItems[idx] || {};
+        rows.push({
+          id: `${transfer.id}:${idx}`,
+          quantity: normalizeQty(line),
+          reason: transfer.notes || null,
+          status: transfer.status || null,
+          created_at: transfer.created_at,
+          item_name: line?.name || line?.item_name || 'Producto',
+          sku: line?.sku || '—',
+          from_code: transfer.from_warehouse?.code || '—',
+          from_name: transfer.from_warehouse?.name || 'Origen desconocido',
+          to_code: transfer.to_warehouse?.code || '—',
+          to_name: transfer.to_warehouse?.name || 'Destino desconocido',
+        });
+      }
+    }
 
     return NextResponse.json({
-      data: formatted,
+      data: rows,
     });
   } catch (error) {
     console.error('Transfers error:', error);

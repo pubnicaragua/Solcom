@@ -61,6 +61,19 @@ function collectItemIdsFromPayload(payload: any): string[] {
     return Array.from(ids);
 }
 
+function collectItemIdsFromTransferOrder(transferOrder: any): string[] {
+    const ids = new Set<string>();
+    const lineItems = Array.isArray(transferOrder?.line_items) ? transferOrder.line_items : [];
+    for (const line of lineItems) {
+        const id =
+            normalizeItemId((line as any)?.item_id) ||
+            normalizeItemId((line as any)?.itemId) ||
+            normalizeItemId((line as any)?.zoho_item_id);
+        if (id) ids.add(id);
+    }
+    return Array.from(ids);
+}
+
 function isMissingRelationError(error: any): boolean {
     const code = String(error?.code || '');
     const message = String(error?.message || '').toLowerCase();
@@ -325,6 +338,7 @@ export async function POST(request: NextRequest) {
 
         // --- NEW: Handle Transfer Order Upsert ---
         const transferOrder = payload.transfer_order || payload.transferorder;
+        const transferOrderItemIds = new Set<string>();
         if (transferOrder) {
             debugLog.push(`Processing Transfer Order: ${transferOrder.transfer_order_number}`);
 
@@ -353,6 +367,11 @@ export async function POST(request: NextRequest) {
             } else {
                 debugLog.push('Transfer Order upserted successfully');
             }
+
+            for (const itemId of collectItemIdsFromTransferOrder(transferOrder)) {
+                transferOrderItemIds.add(itemId);
+            }
+            debugLog.push(`Transfer Order item_ids detected: ${transferOrderItemIds.size}`);
         }
 
         // 2. Determinar tipo de evento (Legacy Logic)
@@ -374,7 +393,12 @@ export async function POST(request: NextRequest) {
             moduleName.includes('salesorder') ||
             moduleName.includes('purchaseorder') ||
             moduleName.includes('transferorder');
-        const payloadItemIds = collectItemIdsFromPayload(payload);
+        const payloadItemIds = Array.from(
+            new Set<string>([
+                ...collectItemIdsFromPayload(payload),
+                ...Array.from(transferOrderItemIds),
+            ])
+        );
         const processedItemIds = new Set<string>();
         debugLog.push(`Routing flags item=${isItemEvent} adjustment=${isInventoryAdjustment} commonStock=${isCommonStockEvent}`);
         debugLog.push(`Payload item_ids detected: ${payloadItemIds.length}`);

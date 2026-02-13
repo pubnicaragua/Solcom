@@ -72,14 +72,19 @@ export class InventorySyncService {
       };
 
       const response = await this.zohoClient.request('POST', '/books/v3/inventoryadjustments', adjustmentPayload);
-      
-      if (response.data?.inventoryadjustment?.inventoryadjustment_id) {
+
+      const adjustmentId =
+        response?.inventoryadjustment?.inventoryadjustment_id ||
+        response?.data?.inventoryadjustment?.inventoryadjustment_id ||
+        null;
+
+      if (adjustmentId) {
         // 4. Guardar auditoría
         // await this.logSyncSuccess(transfer, response.data.inventoryadjustment.inventoryadjustment_id);
         
         return {
           success: true,
-          zoho_adjustment_id: response.data.inventoryadjustment.inventoryadjustment_id
+          zoho_adjustment_id: adjustmentId
         };
       }
 
@@ -103,7 +108,7 @@ export class InventorySyncService {
         throw new Error('Zoho client no está configurado');
       }
       const response = await this.zohoClient.request('GET', `/books/v3/items/${zohoItemId}`);
-      return response.data?.item?.rate || null;
+      return response?.item?.rate ?? response?.data?.item?.rate ?? null;
     } catch {
       return null;
     }
@@ -147,7 +152,8 @@ export class InventorySyncService {
         };
       }
       const response = await this.zohoClient.request('GET', '/books/v3/warehouses');
-      const zohoWarehouse = response.data?.warehouses?.find(
+      const warehouses = response?.warehouses || response?.data?.warehouses || [];
+      const zohoWarehouse = warehouses.find(
         (w: any) => w.warehouse_name === localWarehouse.code || w.warehouse_name === `Bodega ${localWarehouse.code}`
       );
 

@@ -62,7 +62,7 @@ export default function TransferForm({ onSuccess }: { onSuccess: () => void }) {
 
     function addItem(item: any) {
         if (lineItems.find(i => i.id === item.id)) return;
-        setLineItems([...lineItems, { ...item, quantity: 1 }]);
+        setLineItems([...lineItems, { ...item, quantity: 1, serial_number_value: '' }]);
         setSearchTerm('');
         setSearchResults([]);
     }
@@ -75,6 +75,12 @@ export default function TransferForm({ onSuccess }: { onSuccess: () => void }) {
 
     function removeItem(index: number) {
         setLineItems(lineItems.filter((_, i) => i !== index));
+    }
+
+    function updateSerials(index: number, value: string) {
+        const newItems = [...lineItems];
+        newItems[index].serial_number_value = value;
+        setLineItems(newItems);
     }
 
     async function handleSubmit() {
@@ -105,7 +111,10 @@ export default function TransferForm({ onSuccess }: { onSuccess: () => void }) {
             });
 
             const result = await res.json();
-            if (!res.ok) throw new Error(result.error || 'Error al crear la transferencia');
+            if (!res.ok) {
+                const detailSuffix = result?.details ? ` (${result.details})` : '';
+                throw new Error(`${result.error || 'Error al crear la transferencia'}${detailSuffix}`);
+            }
 
             alert('Transferencia creada exitosamente');
             onSuccess();
@@ -276,6 +285,7 @@ export default function TransferForm({ onSuccess }: { onSuccess: () => void }) {
                                         <th className="p-4 pl-6 font-semibold">Producto</th>
                                         <th className="p-4 font-semibold">SKU</th>
                                         <th className="p-4 font-semibold w-32 text-center">Cantidad</th>
+                                        <th className="p-4 font-semibold">Seriales (si aplica)</th>
                                         <th className="p-4 w-16"></th>
                                     </tr>
                                 </thead>
@@ -299,6 +309,15 @@ export default function TransferForm({ onSuccess }: { onSuccess: () => void }) {
                                                     <span className="absolute -bottom-5 left-0 right-0 text-[10px] text-slate-600 text-center">Max: {item.current_stock}</span>
                                                 </div>
                                             </td>
+                                            <td className="p-4">
+                                                <input
+                                                    type="text"
+                                                    value={item.serial_number_value || ''}
+                                                    onChange={(e) => updateSerials(index, e.target.value)}
+                                                    placeholder="SN1,SN2,..."
+                                                    className="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-xs text-white focus:ring-2 focus:ring-indigo-500/50 outline-none"
+                                                />
+                                            </td>
                                             <td className="p-4 text-right">
                                                 <button
                                                     onClick={() => removeItem(index)}
@@ -321,6 +340,7 @@ export default function TransferForm({ onSuccess }: { onSuccess: () => void }) {
                     <div className="text-xs text-slate-500 mr-auto max-w-md hidden md:block">
                         Al confirmar, se creará una orden de transferencia en estado <strong>En Tránsito</strong>.
                         El stock se descontará de <em>{warehouses.find(w => w.id === formData.from_warehouse_id)?.name || 'Origen'}</em> inmediatamente.
+                        Para productos serializados, escribe los seriales separados por coma.
                     </div>
 
                     <Button

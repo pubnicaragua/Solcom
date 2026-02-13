@@ -31,6 +31,7 @@ export default function TransferModal({
   const [warehouses, setWarehouses] = useState<Warehouse[]>([]);
   const [selectedWarehouse, setSelectedWarehouse] = useState('');
   const [quantity, setQuantity] = useState(1);
+  const [serials, setSerials] = useState('');
   const [reason, setReason] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
@@ -71,6 +72,7 @@ export default function TransferModal({
           from_warehouse_id: currentWarehouse,
           to_warehouse_id: selectedWarehouse,
           quantity,
+          serial_number_value: serials,
           reason: reason || 'Transferencia manual'
         })
       });
@@ -85,7 +87,8 @@ export default function TransferModal({
           window.location.reload();
         }, 2000);
       } else {
-        setError(result.error || 'Error en transferencia');
+        const detailSuffix = result?.details ? ` (${result.details})` : '';
+        setError(`${result.error || 'Error en transferencia'}${detailSuffix}`);
       }
     } catch (err: any) {
       setError('Error de conexión');
@@ -142,9 +145,9 @@ export default function TransferModal({
               textAlign: 'center'
             }}>
               <CheckCircle size={48} color="var(--success)" style={{ marginBottom: 16 }} />
-              <h3 style={{ margin: 0, color: 'var(--success)' }}>¡Transferencia Completada!</h3>
+              <h3 style={{ margin: 0, color: 'var(--success)' }}>¡Transferencia Creada!</h3>
               <p style={{ margin: '8px 0 0 0', color: 'var(--muted)' }}>
-                {warehouses.find(w => w.id === selectedWarehouse)?.name}
+                En tránsito hacia {warehouses.find(w => w.id === selectedWarehouse)?.name}
               </p>
             </div>
           ) : (
@@ -207,6 +210,28 @@ export default function TransferModal({
                   min="1"
                   value={quantity}
                   onChange={(e) => setQuantity(parseInt(e.target.value) || 0)}
+                  style={{
+                    width: '100%',
+                    padding: 12,
+                    border: '1px solid var(--border)',
+                    borderRadius: 6,
+                    fontSize: 14,
+                    background: 'var(--card)',
+                    color: 'var(--text)'
+                  }}
+                />
+              </div>
+
+              {/* Seriales */}
+              <div>
+                <label style={{ display: 'block', fontSize: 13, fontWeight: 500, marginBottom: 6 }}>
+                  Seriales (si aplica)
+                </label>
+                <input
+                  type="text"
+                  value={serials}
+                  onChange={(e) => setSerials(e.target.value)}
+                  placeholder="SN1,SN2,..."
                   style={{
                     width: '100%',
                     padding: 12,

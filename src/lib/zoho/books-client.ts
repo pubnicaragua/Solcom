@@ -91,7 +91,7 @@ export class ZohoBooksClient {
         const token = await this.getAccessToken();
         const { organizationId } = this.config;
 
-        const response = await fetch(`https://www.zohobooks.com/api/v3/items/${itemId}?organization_id=${organizationId}`, {
+        const response = await fetch(`${this.apiDomain}/books/v3/items/${itemId}?organization_id=${organizationId}`, {
             headers: {
                 'Authorization': `Zoho-oauthtoken ${token}`,
             },
@@ -107,11 +107,17 @@ export class ZohoBooksClient {
         return result.item || null;
     }
 
+    async getItemLocationDetails(itemId: string): Promise<any[]> {
+        const result = await this.request('GET', `/inventory/v1/items/${itemId}/locationdetails`);
+        return result?.item_location_details?.locations || [];
+    }
+
     async request(method: string, endpoint: string, data?: any): Promise<any> {
         const token = await this.getAccessToken();
         const { organizationId } = this.config;
 
-        const url = `${this.apiDomain}${endpoint}?organization_id=${organizationId}`;
+        const joiner = endpoint.includes('?') ? '&' : '?';
+        const url = `${this.apiDomain}${endpoint}${joiner}organization_id=${organizationId}`;
 
         const response = await fetch(url, {
             method,
