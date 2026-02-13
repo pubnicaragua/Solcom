@@ -356,7 +356,6 @@ export async function POST(request: NextRequest) {
                     to_warehouse_id: toId,
                     status: status,
                     line_items: transferOrder.line_items,
-                    notes: transferOrder.notes || '',
                     // Only set received_at if it's new receipt or keep existing?
                     // Simple logic: if status received, set date.
                     received_at: status === 'received' ? new Date().toISOString() : null

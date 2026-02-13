@@ -361,7 +361,6 @@ export async function POST(request: Request) {
       to_warehouse_id,
       status: zohoTransfer.status || 'in_transit',
       line_items: lineItems,
-      notes: reason || 'Transferencia creada desde ERP',
     };
 
     let { data: transferRow, error: insertError } = await persistTransferOrder(supabase, localPayload);

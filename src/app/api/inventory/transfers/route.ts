@@ -9,13 +9,16 @@ function normalizeQty(line: any): number {
   return Number.isFinite(n) ? n : 0;
 }
 
+function missingNotesColumn(error: any): boolean {
+  const message = String(error?.message || '').toLowerCase();
+  return message.includes("could not find the 'notes' column of 'transfer_orders'");
+}
+
 export async function GET() {
   try {
     const supabase = createServerClient();
 
-    const { data, error } = await supabase
-      .from('transfer_orders')
-      .select(`
+    const selectWithNotes = `
         id,
         transfer_order_number,
         date,
@@ -26,9 +29,35 @@ export async function GET() {
         received_at,
         from_warehouse:warehouses!transfer_orders_from_warehouse_id_fkey(code, name),
         to_warehouse:warehouses!transfer_orders_to_warehouse_id_fkey(code, name)
-      `)
+      `;
+
+    const selectWithoutNotes = `
+        id,
+        transfer_order_number,
+        date,
+        status,
+        line_items,
+        created_at,
+        received_at,
+        from_warehouse:warehouses!transfer_orders_from_warehouse_id_fkey(code, name),
+        to_warehouse:warehouses!transfer_orders_to_warehouse_id_fkey(code, name)
+      `;
+
+    let { data, error } = await supabase
+      .from('transfer_orders')
+      .select(selectWithNotes)
       .order('created_at', { ascending: false })
       .limit(200);
+
+    if (error && missingNotesColumn(error)) {
+      const retry = await supabase
+        .from('transfer_orders')
+        .select(selectWithoutNotes)
+        .order('created_at', { ascending: false })
+        .limit(200);
+      data = retry.data as any;
+      error = retry.error as any;
+    }
 
     if (error) {
       throw error;

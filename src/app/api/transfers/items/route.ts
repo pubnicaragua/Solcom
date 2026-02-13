@@ -12,6 +12,16 @@ function sanitizeTerm(raw: string): string {
     return raw.trim().replace(/[,%()'"]/g, ' ').replace(/\s+/g, ' ');
 }
 
+function toEpoch(value: unknown): number {
+    const n = new Date(String(value || '')).getTime();
+    return Number.isFinite(n) ? n : 0;
+}
+
+function asQty(value: unknown): number {
+    const n = Number(value);
+    return Number.isFinite(n) ? n : 0;
+}
+
 export async function GET(request: Request) {
     try {
         const { searchParams } = new URL(request.url);
@@ -26,35 +36,56 @@ export async function GET(request: Request) {
 
         // Preferred source: inventory_balance (modelo v2)
         try {
-            let balanceQuery = (supabase.from as any)('inventory_balance')
-                .select('item_id, qty_on_hand, items!inner(id, name, sku, zoho_item_id)')
+            const { data: balanceRows, error: balanceError } = await (supabase.from as any)('inventory_balance')
+                .select('item_id, qty_on_hand, updated_at')
                 .eq('warehouse_id', warehouseId)
                 .gt('qty_on_hand', 0)
-                .limit(100);
+                .limit(1000);
 
-            if (search) {
-                balanceQuery = balanceQuery.or(`name.ilike.%${search}%,sku.ilike.%${search}%`, {
-                    referencedTable: 'items',
-                });
-            }
-
-            const { data, error } = await balanceQuery;
-            if (error) {
-                if (!isMissingRelationError(error)) throw error;
+            if (balanceError) {
+                if (!isMissingRelationError(balanceError)) throw balanceError;
             } else {
-                const result = (data || [])
-                    .map((row: any) => {
-                        const item = Array.isArray(row.items) ? row.items[0] : row.items;
-                        if (!item) return null;
-                        return {
-                            id: item.id,
-                            zoho_item_id: item.zoho_item_id,
-                            name: item.name,
-                            sku: item.sku,
-                            current_stock: Number(row.qty_on_hand ?? 0),
-                        };
-                    })
-                    .filter(Boolean)
+                const latestByItem = new Map<string, { qty: number; updatedAt: number }>();
+                for (const row of balanceRows || []) {
+                    const itemId = String((row as any).item_id || '');
+                    if (!itemId) continue;
+                    const current = latestByItem.get(itemId);
+                    const candidate = {
+                        qty: asQty((row as any).qty_on_hand),
+                        updatedAt: toEpoch((row as any).updated_at),
+                    };
+                    if (!current || candidate.updatedAt >= current.updatedAt) {
+                        latestByItem.set(itemId, candidate);
+                    }
+                }
+
+                const itemIds = Array.from(latestByItem.keys());
+                if (itemIds.length === 0) {
+                    return NextResponse.json([]);
+                }
+
+                let itemQuery = supabase
+                    .from('items')
+                    .select('id, name, sku, zoho_item_id')
+                    .in('id', itemIds)
+                    .limit(500);
+
+                if (search) {
+                    itemQuery = itemQuery.or(`name.ilike.%${search}%,sku.ilike.%${search}%`);
+                }
+
+                const { data: items, error: itemError } = await itemQuery;
+                if (itemError) throw itemError;
+
+                const result = (items || [])
+                    .map((item: any) => ({
+                        id: item.id,
+                        zoho_item_id: item.zoho_item_id,
+                        name: item.name,
+                        sku: item.sku,
+                        current_stock: latestByItem.get(item.id)?.qty ?? 0,
+                    }))
+                    .filter((row: any) => row.current_stock > 0)
                     .sort((a: any, b: any) => b.current_stock - a.current_stock)
                     .slice(0, 20);
 
@@ -66,41 +97,49 @@ export async function GET(request: Request) {
         }
 
         // Legacy fallback: latest stock_snapshots por item en la bodega
-        let snapQuery = supabase
+        const { data: snapshots, error } = await supabase
             .from('stock_snapshots')
-            .select('item_id, warehouse_id, qty, synced_at, items!inner(id, name, sku, zoho_item_id)')
+            .select('item_id, qty, synced_at')
             .eq('warehouse_id', warehouseId)
             .order('synced_at', { ascending: false })
-            .limit(300);
+            .limit(1000);
+        if (error) throw error;
 
-        if (search) {
-            snapQuery = snapQuery.or(`name.ilike.%${search}%,sku.ilike.%${search}%`, {
-                referencedTable: 'items',
+        const latestByItem = new Map<string, { qty: number; syncedAt: number }>();
+        for (const row of snapshots || []) {
+            const itemId = String((row as any).item_id || '');
+            if (!itemId || latestByItem.has(itemId)) continue;
+            latestByItem.set(itemId, {
+                qty: asQty((row as any).qty),
+                syncedAt: toEpoch((row as any).synced_at),
             });
         }
 
-        const { data: snapshots, error } = await snapQuery;
-        if (error) throw error;
+        const itemIds = Array.from(latestByItem.keys());
+        if (itemIds.length === 0) return NextResponse.json([]);
 
-        const latestByItem = new Map<string, any>();
-        for (const row of snapshots || []) {
-            if (latestByItem.has(row.item_id)) continue;
-            latestByItem.set(row.item_id, row);
+        let itemQuery = supabase
+            .from('items')
+            .select('id, name, sku, zoho_item_id')
+            .in('id', itemIds)
+            .limit(500);
+
+        if (search) {
+            itemQuery = itemQuery.or(`name.ilike.%${search}%,sku.ilike.%${search}%`);
         }
 
-        const result = Array.from(latestByItem.values())
-            .map((row: any) => {
-                const item = Array.isArray(row.items) ? row.items[0] : row.items;
-                if (!item) return null;
-                return {
-                    id: item.id,
-                    zoho_item_id: item.zoho_item_id,
-                    name: item.name,
-                    sku: item.sku,
-                    current_stock: Number(row.qty ?? 0),
-                };
-            })
-            .filter((row: any) => row && row.current_stock > 0)
+        const { data: items, error: itemError } = await itemQuery;
+        if (itemError) throw itemError;
+
+        const result = (items || [])
+            .map((item: any) => ({
+                id: item.id,
+                zoho_item_id: item.zoho_item_id,
+                name: item.name,
+                sku: item.sku,
+                current_stock: latestByItem.get(item.id)?.qty ?? 0,
+            }))
+            .filter((row: any) => row.current_stock > 0)
             .sort((a: any, b: any) => b.current_stock - a.current_stock)
             .slice(0, 20);
 

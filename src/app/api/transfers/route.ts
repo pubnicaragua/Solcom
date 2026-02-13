@@ -442,7 +442,6 @@ export async function POST(request: Request) {
             to_warehouse_id,
             status: zohoTransfer.status || 'in_transit',
             line_items: normalizedLines,
-            notes: notes || null,
             created_at: new Date().toISOString(),
         };
 
