@@ -105,12 +105,7 @@ export default function KPIGrid() {
       value: !mounted || loading ? '...' : kpis.totalProducts.toLocaleString('es-NI'),
       color: 'var(--success)',
     },
-    {
-      icon: Boxes,
-      label: 'Total Stock',
-      value: !mounted || loading ? '...' : kpis.totalStock.toLocaleString('es-NI'),
-      color: '#3B82F6',
-    },
+
     {
       icon: Warehouse,
       label: 'Bodegas Activas',

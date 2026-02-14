@@ -146,6 +146,45 @@ function getCellColor(qty: number): string | undefined {
     return undefined;
 }
 
+/* ───── instant tooltip CSS (injected once) ───── */
+const TOOLTIP_CSS_ID = 'pivot-tooltip-css';
+function ensureTooltipCSS() {
+    if (typeof document === 'undefined') return;
+    if (document.getElementById(TOOLTIP_CSS_ID)) return;
+    const style = document.createElement('style');
+    style.id = TOOLTIP_CSS_ID;
+    style.textContent = `
+        .pivot-name-cell { position: relative; }
+        .pivot-name-cell .pivot-tooltip {
+            visibility: hidden;
+            opacity: 0;
+            position: absolute;
+            left: 14px;
+            top: 100%;
+            z-index: 100;
+            background: #1e293b;
+            color: #e2e8f0;
+            padding: 6px 10px;
+            border-radius: 6px;
+            font-size: 12px;
+            font-weight: 500;
+            white-space: normal;
+            max-width: 400px;
+            min-width: 200px;
+            box-shadow: 0 4px 16px rgba(0,0,0,0.5);
+            border: 1px solid rgba(255,255,255,0.1);
+            pointer-events: none;
+            transition: opacity 0.08s, visibility 0.08s;
+            line-height: 1.4;
+        }
+        .pivot-name-cell:hover .pivot-tooltip {
+            visibility: visible;
+            opacity: 1;
+        }
+    `;
+    document.head.appendChild(style);
+}
+
 /* ───── component ───── */
 export default function PivotInventoryTable({ filters }: PivotInventoryTableProps) {
     const [data, setData] = useState<PivotData | null>(null);
@@ -214,6 +253,9 @@ export default function PivotInventoryTable({ filters }: PivotInventoryTableProp
     useEffect(() => {
         void fetchPivotData();
     }, [fetchPivotData]);
+
+    // Inject tooltip CSS once
+    useEffect(() => { ensureTooltipCSS(); }, []);
 
     useEffect(() => {
         const channel = supabase
@@ -341,14 +383,16 @@ export default function PivotInventoryTable({ filters }: PivotInventoryTableProp
     }
     flatten(tree, '', 0);
 
-    const stickyColWidth = 260;
-    const skuColWidth = 130;
+    const stickyColWidth = 420;
+    const skuColWidth = 150;
     const marcaColWidth = 110;
     const colorColWidth = 95;
     const remanenteColWidth = 110;
     const cellWidth = 100;
     const totalColWidth = 105;
-    const extraColsWidth = skuColWidth + marcaColWidth + colorColWidth + remanenteColWidth;
+    // All frozen columns widths (sticky)
+    const frozenWidth = stickyColWidth + skuColWidth + marcaColWidth + colorColWidth + remanenteColWidth + totalColWidth;
+    const extraColsWidth = skuColWidth + marcaColWidth + colorColWidth + remanenteColWidth + totalColWidth;
 
     /* ─── Grand totals row ─── */
     const grandTotals: Record<string, number> = {};
@@ -360,7 +404,7 @@ export default function PivotInventoryTable({ filters }: PivotInventoryTableProp
     }
 
     return (
-        <Card padding={0}>
+        <Card padding={0} style={{ overflow: 'hidden', maxWidth: '100%' }}>
             {/* ─── Toolbar ─── */}
             <div style={{
                 padding: '12px 16px',
@@ -418,13 +462,13 @@ export default function PivotInventoryTable({ filters }: PivotInventoryTableProp
                 </button>
             </div>
 
-            <div style={{ position: 'relative', overflow: 'hidden' }}>
-                <div style={{ overflowX: 'auto', overflowY: 'auto', maxHeight: '75vh' }}>
+            <div style={{ position: 'relative', overflow: 'hidden', width: '100%' }}>
+                <div style={{ overflowX: 'auto', overflowY: 'auto', maxHeight: '75vh', width: '100%' }}>
                     <table style={{
                         borderCollapse: 'separate',
                         borderSpacing: 0,
                         tableLayout: 'fixed',
-                        width: stickyColWidth + extraColsWidth + warehouseCodes.length * cellWidth + totalColWidth,
+                        width: stickyColWidth + extraColsWidth + warehouseCodes.length * cellWidth,
                     }}>
                         {/* ─── Header ─── */}
                         <thead>
@@ -440,11 +484,11 @@ export default function PivotInventoryTable({ filters }: PivotInventoryTableProp
                                     letterSpacing: '0.8px',
                                     minWidth: stickyColWidth, maxWidth: stickyColWidth, width: stickyColWidth,
                                     overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
-                                    borderRight: '2px solid rgba(255,255,255,0.12)',
+                                    borderRight: '1px solid rgba(255,255,255,0.06)',
                                     borderBottom: '2px solid rgba(255,255,255,0.12)',
                                 }}>Producto</th>
                                 <th style={{
-                                    position: 'sticky', top: 0, zIndex: 3,
+                                    position: 'sticky', left: stickyColWidth, top: 0, zIndex: 4,
                                     background: '#080f1d',
                                     padding: '11px 8px',
                                     textAlign: 'left',
@@ -458,7 +502,7 @@ export default function PivotInventoryTable({ filters }: PivotInventoryTableProp
                                     borderRight: '1px solid rgba(255,255,255,0.06)',
                                 }}>SKU</th>
                                 <th style={{
-                                    position: 'sticky', top: 0, zIndex: 3,
+                                    position: 'sticky', left: stickyColWidth + skuColWidth, top: 0, zIndex: 4,
                                     background: '#080f1d',
                                     padding: '11px 8px',
                                     textAlign: 'left',
@@ -472,7 +516,7 @@ export default function PivotInventoryTable({ filters }: PivotInventoryTableProp
                                     borderRight: '1px solid rgba(255,255,255,0.06)',
                                 }}>Marca</th>
                                 <th style={{
-                                    position: 'sticky', top: 0, zIndex: 3,
+                                    position: 'sticky', left: stickyColWidth + skuColWidth + marcaColWidth, top: 0, zIndex: 4,
                                     background: '#080f1d',
                                     padding: '11px 8px',
                                     textAlign: 'left',
@@ -483,10 +527,10 @@ export default function PivotInventoryTable({ filters }: PivotInventoryTableProp
                                     minWidth: colorColWidth, width: colorColWidth,
                                     whiteSpace: 'nowrap',
                                     borderBottom: '2px solid rgba(255,255,255,0.12)',
-                                    borderRight: '2px solid rgba(255,255,255,0.12)',
+                                    borderRight: '1px solid rgba(255,255,255,0.06)',
                                 }}>Color</th>
                                 <th style={{
-                                    position: 'sticky', top: 0, zIndex: 3,
+                                    position: 'sticky', left: stickyColWidth + skuColWidth + marcaColWidth + colorColWidth, top: 0, zIndex: 4,
                                     background: '#080f1d',
                                     padding: '11px 8px',
                                     textAlign: 'right',
@@ -497,8 +541,25 @@ export default function PivotInventoryTable({ filters }: PivotInventoryTableProp
                                     minWidth: remanenteColWidth, width: remanenteColWidth,
                                     whiteSpace: 'nowrap',
                                     borderBottom: '2px solid rgba(255,255,255,0.12)',
-                                    borderRight: '2px solid rgba(255,255,255,0.12)',
+                                    borderRight: '1px solid rgba(255,255,255,0.06)',
                                 }}>Remanente (d)</th>
+                                {/* Total column — before warehouses (also sticky) */}
+                                <th style={{
+                                    position: 'sticky', left: stickyColWidth + skuColWidth + marcaColWidth + colorColWidth + remanenteColWidth, top: 0, zIndex: 4,
+                                    background: '#080f1d',
+                                    padding: '11px 12px',
+                                    textAlign: 'right',
+                                    fontSize: 10, fontWeight: 700,
+                                    color: '#fbbf24',
+                                    textTransform: 'uppercase',
+                                    letterSpacing: '0.8px',
+                                    minWidth: totalColWidth,
+                                    borderLeft: '2px solid rgba(255,255,255,0.12)',
+                                    borderRight: '2px solid rgba(255,255,255,0.12)',
+                                    borderBottom: '2px solid rgba(255,255,255,0.12)',
+                                }}>
+                                    Total
+                                </th>
                                 {warehouseCodes.map((code) => (
                                     <th key={code} style={{
                                         position: 'sticky', top: 0, zIndex: 2,
@@ -516,21 +577,6 @@ export default function PivotInventoryTable({ filters }: PivotInventoryTableProp
                                         {code}
                                     </th>
                                 ))}
-                                <th style={{
-                                    position: 'sticky', top: 0, zIndex: 2,
-                                    background: '#080f1d',
-                                    padding: '11px 12px',
-                                    textAlign: 'right',
-                                    fontSize: 10, fontWeight: 700,
-                                    color: '#fbbf24',
-                                    textTransform: 'uppercase',
-                                    letterSpacing: '0.8px',
-                                    minWidth: totalColWidth,
-                                    borderLeft: '2px solid rgba(255,255,255,0.12)',
-                                    borderBottom: '2px solid rgba(255,255,255,0.12)',
-                                }}>
-                                    Total
-                                </th>
                             </tr>
                         </thead>
                         {/* ─── Body ─── */}
@@ -566,23 +612,25 @@ export default function PivotInventoryTable({ filters }: PivotInventoryTableProp
                                         }}
                                     >
                                         {/* Producto (sticky) */}
-                                        <td style={{
-                                            position: 'sticky', left: 0, zIndex: 1,
-                                            background: style.bg === 'transparent' || style.bg.startsWith('rgba') ? 'var(--card)' : style.bg,
-                                            padding: '7px 10px',
-                                            paddingLeft: 14 + indent * 20,
-                                            fontWeight: style.fontWeight,
-                                            fontSize: node.level <= 1 ? 13 : 12,
-                                            color: style.text,
-                                            whiteSpace: 'nowrap',
-                                            overflow: 'hidden',
-                                            textOverflow: 'ellipsis',
-                                            maxWidth: stickyColWidth, width: stickyColWidth,
-                                            borderRight: '2px solid rgba(255,255,255,0.12)',
-                                            borderBottom: `1px solid rgba(255,255,255,${node.level <= 1 ? '0.12' : '0.05'})`,
-                                            cursor: hasChildren ? 'pointer' : 'default',
-                                            userSelect: 'none',
-                                        }}
+                                        <td
+                                            className="pivot-name-cell"
+                                            style={{
+                                                position: 'sticky', left: 0, zIndex: 2,
+                                                background: style.bg === 'transparent' || style.bg.startsWith('rgba') ? 'var(--card)' : style.bg,
+                                                padding: '7px 10px',
+                                                paddingLeft: 14 + indent * 20,
+                                                fontWeight: style.fontWeight,
+                                                fontSize: node.level <= 1 ? 13 : 12,
+                                                color: style.text,
+                                                whiteSpace: 'nowrap',
+                                                overflow: 'hidden',
+                                                textOverflow: 'ellipsis',
+                                                maxWidth: stickyColWidth, width: stickyColWidth,
+                                                borderRight: '1px solid rgba(255,255,255,0.06)',
+                                                borderBottom: `1px solid rgba(255,255,255,${node.level <= 1 ? '0.12' : '0.05'})`,
+                                                cursor: hasChildren ? 'pointer' : 'default',
+                                                userSelect: 'none',
+                                            }}
                                             onClick={() => hasChildren && toggleCollapse(path)}
                                         >
                                             <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
@@ -602,13 +650,18 @@ export default function PivotInventoryTable({ filters }: PivotInventoryTableProp
                                                     marginRight: 2,
                                                     flexShrink: 0,
                                                 }} />}
-                                                {isLeaf ? node.label : node.label}
+                                                {isLeaf ? '' : node.label}
                                             </span>
+                                            {/* Instant tooltip for long names */}
+                                            {node.level === 2 && node.label.length > 30 && (
+                                                <span className="pivot-tooltip">{node.label}</span>
+                                            )}
                                         </td>
 
-                                        {/* SKU — click to copy */}
+                                        {/* SKU — click to copy (sticky) */}
                                         <td
                                             style={{
+                                                position: 'sticky', left: stickyColWidth, zIndex: 2,
                                                 padding: '7px 8px',
                                                 fontSize: 11,
                                                 color: copiedSku === skuVal && skuVal ? '#4ade80' : '#94a3b8',
@@ -617,7 +670,7 @@ export default function PivotInventoryTable({ filters }: PivotInventoryTableProp
                                                 textOverflow: 'ellipsis',
                                                 borderBottom: `1px solid rgba(255,255,255,${node.level <= 1 ? '0.12' : '0.05'})`,
                                                 borderRight: '1px solid rgba(255,255,255,0.06)',
-                                                background: style.bg === 'transparent' || style.bg.startsWith('rgba') ? undefined : style.bg,
+                                                background: style.bg === 'transparent' || style.bg.startsWith('rgba') ? 'var(--card)' : style.bg,
                                                 minWidth: skuColWidth, maxWidth: skuColWidth,
                                                 cursor: skuVal ? 'pointer' : 'default',
                                                 transition: 'color 0.2s',
@@ -630,8 +683,9 @@ export default function PivotInventoryTable({ filters }: PivotInventoryTableProp
                                             {copiedSku === skuVal && skuVal ? '✓ Copiado' : skuVal}
                                         </td>
 
-                                        {/* Marca */}
+                                        {/* Marca (sticky) */}
                                         <td style={{
+                                            position: 'sticky', left: stickyColWidth + skuColWidth, zIndex: 2,
                                             padding: '7px 8px',
                                             fontSize: 11,
                                             color: '#94a3b8',
@@ -640,12 +694,13 @@ export default function PivotInventoryTable({ filters }: PivotInventoryTableProp
                                             textOverflow: 'ellipsis',
                                             borderBottom: `1px solid rgba(255,255,255,${node.level <= 1 ? '0.12' : '0.05'})`,
                                             borderRight: '1px solid rgba(255,255,255,0.06)',
-                                            background: style.bg === 'transparent' || style.bg.startsWith('rgba') ? undefined : style.bg,
+                                            background: style.bg === 'transparent' || style.bg.startsWith('rgba') ? 'var(--card)' : style.bg,
                                             minWidth: marcaColWidth, maxWidth: marcaColWidth,
                                         }}>{marcaVal}</td>
 
-                                        {/* Color */}
+                                        {/* Color (sticky) */}
                                         <td style={{
+                                            position: 'sticky', left: stickyColWidth + skuColWidth + marcaColWidth, zIndex: 2,
                                             padding: '7px 8px',
                                             fontSize: 11,
                                             color: '#94a3b8',
@@ -653,13 +708,14 @@ export default function PivotInventoryTable({ filters }: PivotInventoryTableProp
                                             overflow: 'hidden',
                                             textOverflow: 'ellipsis',
                                             borderBottom: `1px solid rgba(255,255,255,${node.level <= 1 ? '0.12' : '0.05'})`,
-                                            borderRight: '2px solid rgba(255,255,255,0.12)',
-                                            background: style.bg === 'transparent' || style.bg.startsWith('rgba') ? undefined : style.bg,
+                                            borderRight: '1px solid rgba(255,255,255,0.06)',
+                                            background: style.bg === 'transparent' || style.bg.startsWith('rgba') ? 'var(--card)' : style.bg,
                                             minWidth: colorColWidth, maxWidth: colorColWidth,
                                         }}>{colorVal}</td>
 
-                                        {/* Remanente (dias) */}
+                                        {/* Remanente (dias) (sticky) */}
                                         <td style={{
+                                            position: 'sticky', left: stickyColWidth + skuColWidth + marcaColWidth + colorColWidth, zIndex: 2,
                                             padding: '7px 8px',
                                             fontSize: 11,
                                             textAlign: 'right',
@@ -668,42 +724,17 @@ export default function PivotInventoryTable({ filters }: PivotInventoryTableProp
                                             overflow: 'hidden',
                                             textOverflow: 'ellipsis',
                                             borderBottom: `1px solid rgba(255,255,255,${node.level <= 1 ? '0.12' : '0.05'})`,
-                                            borderRight: '2px solid rgba(255,255,255,0.12)',
-                                            background: style.bg === 'transparent' || style.bg.startsWith('rgba') ? undefined : style.bg,
+                                            borderRight: '1px solid rgba(255,255,255,0.06)',
+                                            background: style.bg === 'transparent' || style.bg.startsWith('rgba') ? 'var(--card)' : style.bg,
                                             minWidth: remanenteColWidth, maxWidth: remanenteColWidth,
                                             fontVariantNumeric: 'tabular-nums',
                                         }}>
                                             {!isLeaf ? '' : (daysInStockVal == null ? '—' : `${daysInStockVal}d`)}
                                         </td>
 
-                                        {/* Warehouse qty cells */}
-                                        {/* Warehouse qty cells — show "-" if no snapshot breakdown */}
-                                        {warehouseCodes.map((code) => {
-                                            const qty = node.totals[code] || 0;
-                                            const highlight = getCellColor(qty);
-                                            const noBreakdown = isLeaf && leafItem && leafItem.hasSnapshots === false;
-                                            return (
-                                                <td key={code} style={{
-                                                    padding: '7px 12px',
-                                                    textAlign: 'right',
-                                                    fontSize: node.level <= 1 ? 13 : 12,
-                                                    fontWeight: isGroup ? 700 : 400,
-                                                    color: noBreakdown
-                                                        ? 'rgba(100,116,139,0.25)'
-                                                        : highlight || (qty !== 0 ? '#e2e8f0' : 'rgba(100,116,139,0.3)'),
-                                                    background: highlight && !noBreakdown ? `${highlight}15` : undefined,
-                                                    fontVariantNumeric: 'tabular-nums',
-                                                    borderBottom: `1px solid rgba(255,255,255,${node.level <= 1 ? '0.12' : '0.05'})`,
-                                                    transition: 'background 0.15s',
-                                                    fontStyle: noBreakdown ? 'italic' : undefined,
-                                                }}>
-                                                    {noBreakdown ? '·' : (qty !== 0 ? qty.toLocaleString() : (isLeaf ? '—' : ''))}
-                                                </td>
-                                            );
-                                        })}
-
-                                        {/* Grand total */}
+                                        {/* Grand total — before warehouses (sticky) */}
                                         <td style={{
+                                            position: 'sticky', left: stickyColWidth + skuColWidth + marcaColWidth + colorColWidth + remanenteColWidth, zIndex: 2,
                                             padding: '7px 12px',
                                             textAlign: 'right',
                                             fontSize: node.level <= 1 ? 14 : 12,
@@ -711,7 +742,9 @@ export default function PivotInventoryTable({ filters }: PivotInventoryTableProp
                                             color: node.grandTotal === 0
                                                 ? 'rgba(251,191,36,0.3)'
                                                 : '#fbbf24',
+                                            background: style.bg === 'transparent' || style.bg.startsWith('rgba') ? 'var(--card)' : style.bg,
                                             borderLeft: '2px solid rgba(255,255,255,0.12)',
+                                            borderRight: '2px solid rgba(255,255,255,0.12)',
                                             borderBottom: `1px solid rgba(255,255,255,${node.level <= 1 ? '0.12' : '0.05'})`,
                                             fontVariantNumeric: 'tabular-nums',
                                         }}>
@@ -730,6 +763,33 @@ export default function PivotInventoryTable({ filters }: PivotInventoryTableProp
                                                 )}
                                             </span>
                                         </td>
+
+                                        {/* Warehouse qty cells — show "-" if no snapshot breakdown */}
+                                        {
+                                            warehouseCodes.map((code) => {
+                                                const qty = node.totals[code] || 0;
+                                                const highlight = getCellColor(qty);
+                                                const noBreakdown = isLeaf && leafItem && leafItem.hasSnapshots === false;
+                                                return (
+                                                    <td key={code} style={{
+                                                        padding: '7px 12px',
+                                                        textAlign: 'right',
+                                                        fontSize: node.level <= 1 ? 13 : 12,
+                                                        fontWeight: isGroup ? 700 : 400,
+                                                        color: noBreakdown
+                                                            ? 'rgba(100,116,139,0.25)'
+                                                            : highlight || (qty !== 0 ? '#e2e8f0' : 'rgba(100,116,139,0.3)'),
+                                                        background: highlight && !noBreakdown ? `${highlight}15` : undefined,
+                                                        fontVariantNumeric: 'tabular-nums',
+                                                        borderBottom: `1px solid rgba(255,255,255,${node.level <= 1 ? '0.12' : '0.05'})`,
+                                                        transition: 'background 0.15s',
+                                                        fontStyle: noBreakdown ? 'italic' : undefined,
+                                                    }}>
+                                                        {noBreakdown ? '·' : (qty !== 0 ? qty.toLocaleString() : (isLeaf ? '—' : ''))}
+                                                    </td>
+                                                );
+                                            })
+                                        }
                                     </tr>
                                 );
                             })}
@@ -737,7 +797,7 @@ export default function PivotInventoryTable({ filters }: PivotInventoryTableProp
                             {/* ─── Grand Total Footer Row ─── */}
                             <tr>
                                 <td style={{
-                                    position: 'sticky', left: 0, zIndex: 1,
+                                    position: 'sticky', left: 0, zIndex: 2,
                                     background: '#060c18',
                                     padding: '10px 14px',
                                     fontWeight: 800,
@@ -745,31 +805,52 @@ export default function PivotInventoryTable({ filters }: PivotInventoryTableProp
                                     color: '#fbbf24',
                                     textTransform: 'uppercase',
                                     letterSpacing: '0.5px',
-                                    borderRight: '2px solid rgba(255,255,255,0.12)',
+                                    borderRight: '1px solid rgba(255,255,255,0.06)',
                                     borderTop: '2px solid rgba(251,191,36,0.3)',
                                 }}>
                                     Gran Total
                                 </td>
                                 <td style={{
+                                    position: 'sticky', left: stickyColWidth, zIndex: 2,
                                     background: '#060c18',
                                     borderTop: '2px solid rgba(251,191,36,0.3)',
                                     borderRight: '1px solid rgba(255,255,255,0.06)',
                                 }} />
                                 <td style={{
+                                    position: 'sticky', left: stickyColWidth + skuColWidth, zIndex: 2,
                                     background: '#060c18',
                                     borderTop: '2px solid rgba(251,191,36,0.3)',
                                     borderRight: '1px solid rgba(255,255,255,0.06)',
                                 }} />
                                 <td style={{
+                                    position: 'sticky', left: stickyColWidth + skuColWidth + marcaColWidth, zIndex: 2,
                                     background: '#060c18',
                                     borderTop: '2px solid rgba(251,191,36,0.3)',
-                                    borderRight: '2px solid rgba(255,255,255,0.12)',
+                                    borderRight: '1px solid rgba(255,255,255,0.06)',
                                 }} />
                                 <td style={{
+                                    position: 'sticky', left: stickyColWidth + skuColWidth + marcaColWidth + colorColWidth, zIndex: 2,
                                     background: '#060c18',
                                     borderTop: '2px solid rgba(251,191,36,0.3)',
-                                    borderRight: '2px solid rgba(255,255,255,0.12)',
+                                    borderRight: '1px solid rgba(255,255,255,0.06)',
                                 }} />
+                                {/* Grand total — before warehouses (sticky) */}
+                                <td style={{
+                                    position: 'sticky', left: stickyColWidth + skuColWidth + marcaColWidth + colorColWidth + remanenteColWidth, zIndex: 2,
+                                    background: '#060c18',
+                                    padding: '10px 12px',
+                                    textAlign: 'right',
+                                    fontSize: 14,
+                                    fontWeight: 800,
+                                    color: '#fbbf24',
+                                    fontVariantNumeric: 'tabular-nums',
+                                    borderLeft: '2px solid rgba(255,255,255,0.12)',
+                                    borderRight: '2px solid rgba(255,255,255,0.12)',
+                                    borderTop: '2px solid rgba(251,191,36,0.3)',
+                                    textShadow: '0 0 12px rgba(251,191,36,0.4)',
+                                }}>
+                                    {grandGrandTotal.toLocaleString()}
+                                </td>
                                 {warehouseCodes.map((code) => (
                                     <td key={code} style={{
                                         background: '#060c18',
@@ -784,20 +865,6 @@ export default function PivotInventoryTable({ filters }: PivotInventoryTableProp
                                         {grandTotals[code] !== 0 ? grandTotals[code].toLocaleString() : ''}
                                     </td>
                                 ))}
-                                <td style={{
-                                    background: '#060c18',
-                                    padding: '10px 12px',
-                                    textAlign: 'right',
-                                    fontSize: 14,
-                                    fontWeight: 800,
-                                    color: '#fbbf24',
-                                    fontVariantNumeric: 'tabular-nums',
-                                    borderLeft: '2px solid rgba(255,255,255,0.12)',
-                                    borderTop: '2px solid rgba(251,191,36,0.3)',
-                                    textShadow: '0 0 12px rgba(251,191,36,0.4)',
-                                }}>
-                                    {grandGrandTotal.toLocaleString()}
-                                </td>
                             </tr>
                         </tbody>
                     </table>
@@ -837,6 +904,6 @@ export default function PivotInventoryTable({ filters }: PivotInventoryTableProp
                     </span>
                 </div>
             </div>
-        </Card>
+        </Card >
     );
 }
