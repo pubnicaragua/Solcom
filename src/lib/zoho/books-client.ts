@@ -160,10 +160,106 @@ export class ZohoBooksClient {
         return this.request('POST', '/inventory/v1/transferorders', data);
     }
 
+    private isInvalidUrlError(error: any): boolean {
+        const message = String(error?.message || '');
+        return (
+            message.includes('Invalid URL Passed') ||
+            message.includes('Zoho Books API error: 404')
+        );
+    }
+
+    private isInvalidDateError(error: any): boolean {
+        const message = String(error?.message || '').toLowerCase();
+        return message.includes('invalid value passed for date');
+    }
+
+    private formatDateYmd(date: Date): string {
+        return date.toISOString().slice(0, 10);
+    }
+
+    private formatDateDmy(date: Date): string {
+        const dd = String(date.getDate()).padStart(2, '0');
+        const mm = String(date.getMonth() + 1).padStart(2, '0');
+        const yyyy = date.getFullYear();
+        return `${dd}/${mm}/${yyyy}`;
+    }
+
     // Zoho Inventory API: Mark as Received
-    async markTransferOrderReceived(transferOrderId: string, action: 'receive'): Promise<any> {
-        // Action usually 'receive'
-        return this.request('POST', `/inventory/v1/transferorders/${transferOrderId}/status/${action}`);
+    async markTransferOrderReceived(transferOrderId: string, preferredDate?: string | null): Promise<any> {
+        const endpoints = [
+            `/inventory/v1/transferorders/${transferOrderId}/markastransferred`,
+            `/inventory/v1/transferorders/${transferOrderId}/status/transferred`,
+            `/inventory/v1/transferorders/${transferOrderId}/status/received`,
+            `/inventory/v1/transferorders/${transferOrderId}/status/receive`,
+            `/inventory/v1/transferorders/${transferOrderId}/received`,
+            `/inventory/v1/transferorders/${transferOrderId}/receive`,
+        ];
+
+        let lastError: any = null;
+        for (const endpoint of endpoints) {
+            try {
+                return await this.request('POST', endpoint);
+            } catch (error: any) {
+                if (this.isInvalidDateError(error)) {
+                    const now = new Date();
+                    const dateCandidates = Array.from(
+                        new Set([
+                            String(preferredDate || '').trim(),
+                            this.formatDateYmd(now),
+                            this.formatDateDmy(now),
+                        ].filter(Boolean))
+                    );
+
+                    const payloads = dateCandidates.flatMap((dateValue) => ([
+                        { date: dateValue },
+                        { transfer_date: dateValue },
+                        { transferred_date: dateValue },
+                        { mark_as_transferred_date: dateValue },
+                    ]));
+
+                    for (const payload of payloads) {
+                        try {
+                            return await this.request('POST', endpoint, payload);
+                        } catch (dateRetryError: any) {
+                            if (this.isInvalidDateError(dateRetryError)) {
+                                lastError = dateRetryError;
+                                continue;
+                            }
+                            throw dateRetryError;
+                        }
+                    }
+
+                    for (const dateValue of dateCandidates) {
+                        const queryEndpoints = [
+                            `${endpoint}?date=${encodeURIComponent(dateValue)}`,
+                            `${endpoint}?transfer_date=${encodeURIComponent(dateValue)}`,
+                            `${endpoint}?transferred_date=${encodeURIComponent(dateValue)}`,
+                        ];
+                        for (const queryEndpoint of queryEndpoints) {
+                            try {
+                                return await this.request('POST', queryEndpoint);
+                            } catch (queryRetryError: any) {
+                                if (this.isInvalidDateError(queryRetryError)) {
+                                    lastError = queryRetryError;
+                                    continue;
+                                }
+                                throw queryRetryError;
+                            }
+                        }
+                    }
+
+                    lastError = error;
+                    continue;
+                }
+
+                if (!this.isInvalidUrlError(error)) {
+                    throw error;
+                }
+                lastError = error;
+            }
+        }
+
+        throw lastError || new Error('Zoho receive endpoint not found');
     }
 
     // Zoho Inventory API: List Transfer Orders

@@ -19,6 +19,45 @@ function toQty(value: unknown): number {
     return Number.isFinite(n) ? n : 0;
 }
 
+function isInvalidUrlZohoError(error: any): boolean {
+    const message = String(error?.message || '').toLowerCase();
+    return message.includes('invalid url passed') || (message.includes('zoho books api error: 404') && message.includes('"code":5'));
+}
+
+async function resolveZohoTransferOrderId(zohoClient: any, transfer: any): Promise<string | null> {
+    const directId = String(transfer?.zoho_transfer_order_id || '').trim();
+    if (/^\d+$/.test(directId)) {
+        return directId;
+    }
+
+    const transferNumber = String(transfer?.transfer_order_number || '').trim();
+    if (!transferNumber) {
+        return directId || null;
+    }
+
+    let page = 1;
+    while (page <= 15) {
+        const res = await zohoClient.listTransferOrders(page);
+        const orders = Array.isArray(res?.transferorders)
+            ? res.transferorders
+            : Array.isArray(res?.transfer_orders)
+                ? res.transfer_orders
+                : [];
+
+        const found = orders.find((order: any) => (
+            String(order?.transfer_order_number || '').trim() === transferNumber
+        ));
+        if (found?.transfer_order_id) {
+            return String(found.transfer_order_id);
+        }
+
+        if (!res?.page_context?.has_more_page) break;
+        page += 1;
+    }
+
+    return directId || null;
+}
+
 async function replaceInventoryBalance(
     supabase: any,
     itemId: string,
@@ -187,10 +226,45 @@ export async function POST(request: Request, { params }: { params: { id: string 
         }
 
         // 2. Mark as Received in Zoho
-        const zohoRes = await zohoClient.markTransferOrderReceived(transfer.zoho_transfer_order_id, 'receive');
+        let zohoTransferOrderId = await resolveZohoTransferOrderId(zohoClient, transfer);
+        if (!zohoTransferOrderId) {
+            return NextResponse.json({
+                error: 'Transferencia sin zoho_transfer_order_id válido',
+                details: `id_local=${transfer.id} zoho_transfer_order_id=${transfer.zoho_transfer_order_id ?? 'null'} transfer_order_number=${transfer.transfer_order_number ?? 'null'}`
+            }, { status: 400 });
+        }
+
+        let zohoRes: any;
+        try {
+            zohoRes = await zohoClient.markTransferOrderReceived(zohoTransferOrderId, transfer.date || null);
+        } catch (error: any) {
+            if (isInvalidUrlZohoError(error) && transfer.transfer_order_number) {
+                const resolvedByNumber = await resolveZohoTransferOrderId(zohoClient, {
+                    zoho_transfer_order_id: '',
+                    transfer_order_number: transfer.transfer_order_number,
+                });
+
+                if (resolvedByNumber && resolvedByNumber !== zohoTransferOrderId) {
+                    zohoTransferOrderId = resolvedByNumber;
+                    zohoRes = await zohoClient.markTransferOrderReceived(zohoTransferOrderId, transfer.date || null);
+                } else {
+                    throw error;
+                }
+            } else {
+                throw error;
+            }
+        }
 
         if (zohoRes.code !== 0) {
             throw new Error(`Zoho Error: ${zohoRes.message}`);
+        }
+
+        // If we resolved a different Zoho ID, persist it for future operations.
+        if (String(transfer.zoho_transfer_order_id || '') !== zohoTransferOrderId) {
+            await supabase
+                .from('transfer_orders')
+                .update({ zoho_transfer_order_id: zohoTransferOrderId })
+                .eq('id', id);
         }
 
         // 3. Update local transfer status

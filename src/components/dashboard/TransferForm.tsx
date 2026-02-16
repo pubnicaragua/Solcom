@@ -48,7 +48,9 @@ export default function TransferForm({ onSuccess }: { onSuccess: () => void }) {
 
             setSearching(true);
             try {
-                const res = await fetch(`/api/transfers/items?search=${searchTerm}&warehouseId=${formData.from_warehouse_id}`);
+                const res = await fetch(`/api/transfers/items?search=${encodeURIComponent(searchTerm)}&warehouseId=${formData.from_warehouse_id}&_ts=${Date.now()}`, {
+                    cache: 'no-store',
+                });
                 const data = await res.json();
                 if (Array.isArray(data)) setSearchResults(data);
             } catch (e) {
