@@ -48,7 +48,7 @@ export class ZohoBooksClient {
         return this.accessToken;
     }
 
-    async fetchItems(): Promise<ZohoBooksItem[]> {
+    async fetchItems(queryParams: string = ''): Promise<ZohoBooksItem[]> {
         const token = await this.getAccessToken();
         const { organizationId } = this.config;
 
@@ -58,7 +58,7 @@ export class ZohoBooksClient {
 
         while (hasMorePages) {
             const response = await fetch(
-                `${this.apiDomain}/books/v3/items?organization_id=${organizationId}&page=${page}&per_page=200`,
+                `${this.apiDomain}/books/v3/items?organization_id=${organizationId}&page=${page}&per_page=200${queryParams ? '&' + queryParams : ''}`,
                 {
                     headers: {
                         'Authorization': `Zoho-oauthtoken ${token}`,

@@ -12,6 +12,7 @@ interface KPIData {
   lastSync: string;
 }
 
+
 export default function KPIGrid() {
   const [kpis, setKpis] = useState<KPIData>({
     totalSKUs: 0,

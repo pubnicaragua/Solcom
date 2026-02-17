@@ -1,31 +1,27 @@
 'use client';
 
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect } from 'react';
 import Card from '@/components/ui/Card';
 import Button from '@/components/ui/Button';
 import Select from '@/components/ui/Select';
 import ChartCard from '@/components/reports/ChartCard';
 import BarChart from '@/components/reports/BarChart';
-import LineChart from '@/components/reports/LineChart';
-import DonutChart from '@/components/reports/DonutChart';
 import HorizontalBarChart from '@/components/charts/HorizontalBarChart';
 import PieChart from '@/components/charts/PieChart';
 import ReportPlaceholder from '@/components/reports/ReportPlaceholder';
-import { Download, Package, TrendingUp, TrendingDown, Calendar, Warehouse, AlertTriangle, DollarSign, FileText, Filter } from 'lucide-react';
-import { supabase } from '@/lib/supabase/client';
+import { Download, Package, TrendingUp, TrendingDown, Calendar, Warehouse, AlertTriangle, DollarSign, FileText, Filter, Loader } from 'lucide-react';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 
 export default function ReportsPage() {
   const [period, setPeriod] = useState('30');
-  const [items, setItems] = useState<any[]>([]);
-  const [stockSnapshots, setStockSnapshots] = useState<any[]>([]);
-  const [warehouses, setWarehouses] = useState<any[]>([]);
-  const [stats, setStats] = useState<any>(null);
-  const [agingData, setAgingData] = useState<any>(null); 
-  const [initialStats, setInitialStats] = useState<any>(null); 
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [reportData, setReportData] = useState<any>(null);
+  const [zohoKpis, setZohoKpis] = useState<any>(null);
+  const [zohoKpisLoaded, setZohoKpisLoaded] = useState(false);
+  const [warehouseData, setWarehouseData] = useState<any[] | null>(null);
+  const [warehouseLoading, setWarehouseLoading] = useState(false);
   const [globalFilters, setGlobalFilters] = useState({
     category: '',
     marca: '',
@@ -33,248 +29,80 @@ export default function ReportsPage() {
     state: '',
     color: ''
   });
-  const [filterOptions, setFilterOptions] = useState<any>(null);
-  const [filteredSnapshots, setFilteredSnapshots] = useState<any[]>([]);
 
+  // Phase 1: Load report data (instant, items table only)
   useEffect(() => {
-    fetchAllData();
-  }, [period]);
+    let cancelled = false;
 
-  async function fetchAllItems() {
-    const allItems: any[] = [];
-    const pageSize = 1000;
-    let from = 0;
-    let hasMore = true;
+    async function load() {
+      setLoading(true);
+      setError(null);
+      setZohoKpis(null);
+      setZohoKpisLoaded(false);
+      setWarehouseData(null);
+      try {
+        const params = new URLSearchParams();
+        if (globalFilters.category) params.set('category', globalFilters.category);
+        if (globalFilters.marca) params.set('marca', globalFilters.marca);
+        if (globalFilters.warehouse) params.set('warehouse', globalFilters.warehouse);
+        if (globalFilters.state) params.set('state', globalFilters.state);
+        if (globalFilters.color) params.set('color', globalFilters.color);
 
-    while (hasMore) {
-      const { data, error } = await supabase
-        .from('items')
-        .select('*')
-        .order('created_at', { ascending: false })
-        .range(from, from + pageSize - 1);
+        const res = await fetch(`/api/reports/data?${params.toString()}`);
+        if (cancelled) return;
+        if (!res.ok) throw new Error(`Error ${res.status}`);
+        const data = await res.json();
+        if (cancelled) return;
+        setReportData(data);
+        setLoading(false);
 
-      if (error) throw new Error(`Error items: ${error.message}`);
+        // Phase 2: Fire and forget - load Zoho KPIs + warehouse in background
+        const hasFilters = Object.values(globalFilters).some(v => v !== '');
 
-      const batch = data || [];
-      allItems.push(...batch);
-
-      if (batch.length < pageSize) {
-        hasMore = false;
-      } else {
-        from += pageSize;
-      }
-    }
-
-    return allItems;
-  }
-
-  async function fetchAllSnapshots() {
-    const allSnaps: any[] = [];
-    const pageSize = 1000;
-    let from = 0;
-    let hasMore = true;
-
-    while (hasMore) {
-      const { data, error } = await supabase
-        .from('stock_snapshots')
-        .select('*, items(*), warehouses(*)')
-        .range(from, from + pageSize - 1);
-
-      if (error) throw new Error(`Error snapshots: ${error.message}`);
-
-      const batch = data || [];
-      allSnaps.push(...batch);
-
-      if (batch.length < pageSize) {
-        hasMore = false;
-      } else {
-        from += pageSize;
-      }
-    }
-
-    return allSnaps;
-  }
-
-  async function fetchAllData() {
-    setLoading(true);
-    setError(null);
-    try {
-      const daysAgo = parseInt(period);
-      const dateFilter = new Date();
-      dateFilter.setDate(dateFilter.getDate() - daysAgo);
-
-      const [itemsData, allSnapshotsData, warehousesResult, kpisResponse, agingResponse] = await Promise.all([
-        fetchAllItems(),
-        fetchAllSnapshots(),
-        supabase.from('warehouses').select('*').eq('active', true),
-        fetch('/api/inventory/kpis'),
-        fetch('/api/inventory/aging')
-      ]);
-
-      if (warehousesResult.error) throw new Error(`Error warehouses: ${warehousesResult.error.message}`);
-
-      // Period-filtered snapshots for stock history only
-      const periodSnapshots = allSnapshotsData.filter(
-        (s: any) => new Date(s.synced_at) >= dateFilter
-      );
-
-      const warehousesData = warehousesResult.data || [];
-      const kpis = kpisResponse.ok ? await kpisResponse.json() : null;
-      const aging = agingResponse.ok ? await agingResponse.json() : null;
-
-      setItems(itemsData);
-      setStockSnapshots(allSnapshotsData); // Use ALL snapshots for charts
-      setWarehouses(warehousesData);
-      setInitialStats(kpis);
-      setAgingData(aging);
-
-      // Obtener opciones de filtros from ALL snapshots
-      const categories = new Set<string>();
-      const marcas = new Set<string>();
-      const warehouseCodes = new Set<string>();
-      const states = new Set<string>();
-      const colors = new Set<string>();
-
-      allSnapshotsData.forEach((s: any) => {
-        if (s.items?.category) categories.add(s.items.category);
-        if (s.items?.marca) marcas.add(s.items.marca);
-        if (s.warehouses?.code) warehouseCodes.add(s.warehouses.code);
-        if (s.items?.state) states.add(s.items.state);
-        if (s.items?.color) colors.add(s.items.color);
-      });
-
-      setFilterOptions({
-        categories: Array.from(categories).sort(),
-        marcas: Array.from(marcas).sort(),
-        warehouses: Array.from(warehouseCodes).sort(),
-        states: Array.from(states).sort(),
-        colors: Array.from(colors).sort()
-      });
-
-      // Filtering is now handled by the useEffect below
-    } catch (err: any) {
-      setError(err.message || 'Error al cargar datos');
-      console.error('Error fetching data:', err);
-    } finally {
-      setLoading(false);
-    }
-  }
-
-  // Handle filtering and stats updates when filters or data change
-  useEffect(() => {
-    if (!stockSnapshots || stockSnapshots.length === 0) return;
-
-    let filtered = stockSnapshots;
-    if (globalFilters.category) filtered = filtered.filter((s: any) => s.items?.category === globalFilters.category);
-    if (globalFilters.marca) filtered = filtered.filter((s: any) => s.items?.marca === globalFilters.marca);
-    if (globalFilters.warehouse) filtered = filtered.filter((s: any) => s.warehouses?.code === globalFilters.warehouse);
-    if (globalFilters.state) filtered = filtered.filter((s: any) => s.items?.state === globalFilters.state);
-    if (globalFilters.color) filtered = filtered.filter((s: any) => s.items?.color === globalFilters.color);
-
-    setFilteredSnapshots(filtered);
-
-    const daysAgo = parseInt(period);
-    const dateFilter = new Date();
-    dateFilter.setDate(dateFilter.getDate() - daysAgo);
-    const periodFiltered = filtered.filter((s: any) => new Date(s.synced_at) >= dateFilter);
-
-    // Check if we have active filters
-    const hasActiveFilters = Object.values(globalFilters).some(val => val !== '');
-
-    calculateStats(items, filtered, warehouses, hasActiveFilters ? undefined : initialStats, periodFiltered);
-
-  }, [globalFilters, stockSnapshots, items, warehouses, period, initialStats]);
-
-  // Deduplicate snapshots: keep only the latest snapshot per item_id + warehouse_id
-  function deduplicateSnapshots(snapshots: any[]): any[] {
-    const map = new Map<string, any>();
-    snapshots.forEach((s: any) => {
-      const key = `${s.item_id || s.items?.id || ''}_${s.warehouse_id || s.warehouses?.id || ''}`;
-      const existing = map.get(key);
-      if (!existing || new Date(s.synced_at) > new Date(existing.synced_at)) {
-        map.set(key, s);
-      }
-    });
-    return Array.from(map.values());
-  }
-
-  function calculateStats(
-    items: any[],
-    snapshots: any[],
-    warehouses: any[],
-    kpis?: { totalProducts?: number; totalStock?: number; totalValue?: number; activeWarehouses?: number },
-    periodSnapshots?: any[]
-  ) {
-    const totalStock = kpis?.totalStock ?? items.reduce((sum, item) => sum + (item.stock_total || 0), 0);
-    // Use Zoho's real inventory valuation
-    const totalValue = kpis?.totalValue ?? items.reduce((sum, item) => sum + ((item.stock_total || 0) * (item.price || 0)), 0);
-    const lowStockItems = items.filter(i => (i.stock_total || 0) > 0 && (i.stock_total || 0) < 10).length;
-    const outOfStockItems = items.filter(i => (i.stock_total || 0) === 0).length;
-
-    // Use deduplicated snapshots for breakdowns and totals if kpis not provided
-    const deduped = deduplicateSnapshots(snapshots);
-
-    // Calculate totals from filtered snapshots if KPIS is undefined (meaning we are filtering)
-    const effectiveTotalStock = kpis?.totalStock ?? deduped.reduce((sum, s) => sum + s.qty, 0);
-    const effectiveTotalValue = kpis?.totalValue ?? deduped.reduce((sum, s) => {
-      // Use purchase_rate (cost) if available, otherwise fallback to price (retail)
-      const rate = s.items?.purchase_rate || s.items?.price || 0;
-      return sum + (s.qty * rate);
-    }, 0);
-
-    // Count unique items for product count (deduped contains item-warehouse pairs)
-    const uniqueItemCount = new Set(deduped.map((s: any) => s.item_id)).size;
-
-    const categoryBreakdown: Record<string, number> = {};
-    deduped.forEach(s => {
-      if (s.items) {
-        const cat = s.items.category || 'Sin categoría';
-        categoryBreakdown[cat] = (categoryBreakdown[cat] || 0) + s.qty;
-      }
-    });
-
-    const warehouseBreakdown: Record<string, { stock: number; items: number }> = {};
-    deduped.forEach(s => {
-      if (s.warehouses) {
-        const code = s.warehouses.code;
-        if (!warehouseBreakdown[code]) {
-          warehouseBreakdown[code] = { stock: 0, items: 0 };
+        if (!hasFilters) {
+          fetch('/api/inventory/kpis')
+            .then(r => r.ok ? r.json() : null)
+            .then(kpis => { if (!cancelled && kpis?.totalValue) setZohoKpis(kpis); })
+            .catch(() => { })
+            .finally(() => { if (!cancelled) setZohoKpisLoaded(true); });
+        } else {
+          setZohoKpisLoaded(true);
         }
-        warehouseBreakdown[code].stock += s.qty;
-        warehouseBreakdown[code].items += 1;
+
+        setWarehouseLoading(true);
+        fetch('/api/reports/warehouses')
+          .then(r => r.ok ? r.json() : null)
+          .then(data => { if (!cancelled && data) setWarehouseData(data.warehouseBreakdown || []); })
+          .catch(() => { })
+          .finally(() => { if (!cancelled) setWarehouseLoading(false); });
+
+      } catch (err: any) {
+        if (!cancelled) {
+          setError(err.message || 'Error al cargar datos');
+          setLoading(false);
+        }
       }
-    });
+    }
 
-    // Use period-filtered snapshots for stock history
-    const historySource = periodSnapshots || snapshots;
-    const stockHistory: Array<{ date: string; stock: number }> = [];
-    const last7Days = Array.from({ length: 7 }, (_, i) => {
-      const date = new Date();
-      date.setDate(date.getDate() - (6 - i));
-      return date.toISOString().split('T')[0];
-    });
+    load();
+    return () => { cancelled = true; };
+  }, [globalFilters]);
 
-    last7Days.forEach(date => {
-      const daySnapshots = historySource.filter(s => s.synced_at.startsWith(date));
-      const dayDeduped = deduplicateSnapshots(daySnapshots);
-      const dayStock = dayDeduped.reduce((sum, s) => sum + s.qty, 0);
-      stockHistory.push({ date, stock: dayStock || totalStock / 7 });
-    });
-
-    setStats({
-      totalProducts: kpis?.totalProducts ?? uniqueItemCount,
-      totalStock: effectiveTotalStock,
-      totalValue: effectiveTotalValue,
-      lowStockItems,
-      outOfStockItems,
-      activeWarehouses: kpis?.activeWarehouses ?? warehouses.length,
-      categoryBreakdown,
-      warehouseBreakdown,
-      stockHistory
-    });
-  }
+  // Merge display stats: prefer Zoho KPIs when available, fallback to local
+  const localStats = reportData?.stats;
+  const stats = localStats ? {
+    ...localStats,
+    ...(zohoKpis ? {
+      totalValue: zohoKpis.totalValue ?? localStats.totalValue,
+    } : {})
+  } : null;
+  const charts = reportData?.charts;
+  const filterOptions = reportData?.filterOptions;
+  const agingData = reportData?.aging;
+  const sinMarcaCount = reportData?.sinMarcaCount || 0;
 
   async function exportToPDF() {
+    if (!stats) return;
     try {
       const doc = new jsPDF();
       doc.setFontSize(18);
@@ -286,25 +114,25 @@ export default function ReportsPage() {
       doc.setFontSize(14);
       doc.text('Resumen Ejecutivo', 14, 45);
       doc.setFontSize(10);
-      doc.text(`Total Productos: ${stats?.totalProducts || 0}`, 14, 52);
-      doc.text(`Total Stock: ${stats?.totalStock.toLocaleString('es-NI') || 0} unidades`, 14, 58);
-      doc.text(`Valor Estimado: $${stats?.totalValue.toLocaleString('es-NI') || 0}`, 14, 64);
-      doc.text(`Items Stock Bajo: ${stats?.lowStockItems || 0}`, 14, 70);
-      doc.text(`Items Sin Stock: ${stats?.outOfStockItems || 0}`, 14, 76);
-      doc.text(`Bodegas Activas: ${stats?.activeWarehouses || 0}`, 14, 82);
+      doc.text(`Total Productos: ${stats.totalProducts || 0}`, 14, 52);
+      doc.text(`Total Stock: ${stats.totalStock?.toLocaleString('es-NI') || 0} unidades`, 14, 58);
+      doc.text(`Valor Estimado: $${stats.totalValue?.toLocaleString('es-NI') || 0}`, 14, 64);
+      doc.text(`Items Stock Bajo: ${stats.lowStockItems || 0}`, 14, 70);
+      doc.text(`Items Sin Stock: ${stats.outOfStockItems || 0}`, 14, 76);
+      doc.text(`Bodegas Activas: ${stats.activeWarehouses || 0}`, 14, 82);
 
-      const tableData = stockSnapshots.slice(0, 50).map(s => [
-        s.items?.sku || 'N/A',
-        s.items?.name || 'N/A',
-        s.items?.category || 'Sin categoría',
-        s.warehouses?.code || 'N/A',
-        s.qty.toString(),
-        new Date(s.synced_at).toLocaleDateString('es-NI')
+      const tableData = (agingData?.items || []).slice(0, 50).map((item: any) => [
+        item.sku || 'N/A',
+        item.name || 'N/A',
+        item.category || 'Sin categoría',
+        (item.stock_total || 0).toString(),
+        `$${((item.stock_total || 0) * (item.price || 0)).toLocaleString('es-NI', { minimumFractionDigits: 2 })}`,
+        `${item.daysAgo}d`
       ]);
 
       autoTable(doc, {
         startY: 90,
-        head: [['SKU', 'Producto', 'Categoría', 'Bodega', 'Stock', 'Actualizado']],
+        head: [['SKU', 'Producto', 'Categoría', 'Stock', 'Valor', 'Días']],
         body: tableData,
         theme: 'grid',
         styles: { fontSize: 8 },
@@ -318,21 +146,20 @@ export default function ReportsPage() {
   }
 
   async function exportToExcel() {
+    if (!agingData?.items) return;
     try {
       const csvRows = [
-        ['SKU', 'Producto', 'Categoría', 'Color', 'Estado', 'Bodega', 'Stock', 'Actualizado'].join(','),
+        ['SKU', 'Producto', 'Categoría', 'Stock', 'Valor', 'Días sin movimiento'].join(','),
       ];
 
-      stockSnapshots.forEach((snapshot) => {
+      agingData.items.forEach((item: any) => {
         csvRows.push([
-          snapshot.items?.sku || '',
-          `"${snapshot.items?.name || ''}"`,
-          `"${snapshot.items?.category || 'Sin categoría'}"`,
-          `"${snapshot.items?.color || 'N/A'}"`,
-          `"${snapshot.items?.state || 'N/A'}"`,
-          `"${snapshot.warehouses?.code || 'N/A'}"`,
-          snapshot.qty.toString(),
-          new Date(snapshot.synced_at).toLocaleDateString('es-NI'),
+          item.sku || '',
+          `"${item.name || ''}"`,
+          `"${item.category || 'Sin categoría'}"`,
+          String(item.stock_total ?? 0),
+          String((item.stock_total || 0) * (item.price || 0)),
+          String(item.daysAgo || 0),
         ].join(','));
       });
 
@@ -351,143 +178,6 @@ export default function ReportsPage() {
     }
   }
 
-  const topProducts = stockSnapshots
-    .reduce((acc: any, s: any) => {
-      const existing = acc.find((p: any) => p.item_id === s.item_id);
-      if (existing) {
-        existing.totalQty += s.qty;
-      } else {
-        acc.push({ item_id: s.item_id, item: s.items, totalQty: s.qty });
-      }
-      return acc;
-    }, [])
-    .sort((a: any, b: any) => b.totalQty - a.totalQty)
-    .slice(0, 10);
-
-  // Funciones de transformación
-  const groupByCategoryUnits = (snapshots: any[]) => {
-    if (!snapshots || snapshots.length === 0) return null;
-    const deduped = deduplicateSnapshots(snapshots);
-    const groups: Record<string, number> = {};
-    deduped.forEach((s: any) => {
-      const cat = s.items?.category || 'Sin categoría';
-      groups[cat] = (groups[cat] || 0) + s.qty;
-    });
-    return Object.entries(groups).map(([label, value]) => ({ label, value })).sort((a: any, b: any) => b.value - a.value);
-  };
-
-  const groupByBrandUnits = (snapshots: any[]) => {
-    if (!snapshots || snapshots.length === 0) return null;
-    const deduped = deduplicateSnapshots(snapshots);
-    const groups: Record<string, number> = {};
-    deduped.forEach((s: any) => {
-      const marca = s.items?.marca || 'Sin marca';
-      groups[marca] = (groups[marca] || 0) + s.qty;
-    });
-    return Object.entries(groups).map(([label, value]) => ({ label, value })).sort((a: any, b: any) => b.value - a.value);
-  };
-
-  // Conteo por marca desde items (stock_total): evita duplicados por snapshot/bodega y límite 10k filas.
-  // Normaliza marca (trim + mayúsculas) para unificar "Samsung" y "SAMSUNG".
-  const groupByBrandUnitsFromItems = (itemsList: any[]) => {
-    if (!itemsList || itemsList.length === 0) return null;
-    const groups: Record<string, { value: number; label: string }> = {};
-    itemsList.forEach((item: any) => {
-      const raw = (item.marca || '').trim() || 'Sin marca';
-      const key = raw.toUpperCase();
-      const qty = Number(item.stock_total) || 0;
-      if (!groups[key]) groups[key] = { value: 0, label: raw };
-      groups[key].value += qty;
-    });
-    return Object.values(groups)
-      .map(({ label, value }) => ({ label, value }))
-      .sort((a: any, b: any) => b.value - a.value);
-  };
-
-  // Agrupar por categoría usando `items.stock_total` (evita depender solo de `stock_snapshots`).
-  const groupByCategoryUnitsFromItems = (itemsList: any[]) => {
-    if (!itemsList || itemsList.length === 0) return null;
-    const groups: Record<string, { value: number; label: string }> = {};
-    itemsList.forEach((item: any) => {
-      const catRaw = (item.category || '').toString().trim() || 'Sin categoría';
-      const key = catRaw.toUpperCase();
-      const qty = Number(item.stock_total) || 0;
-      if (!groups[key]) groups[key] = { value: 0, label: catRaw };
-      groups[key].value += qty;
-    });
-    return Object.values(groups)
-      .map(({ label, value }) => ({ label, value }))
-      .sort((a: any, b: any) => b.value - a.value);
-  };
-
-  // Resolve quantity per item preferring snapshots (filteredSnapshots) when present,
-  // otherwise fall back to `item.stock_total`. Returns items augmented with `resolved_qty`.
-  // Deduplicate snapshots first, then sum per item to get accurate totals
-  const resolveItemQuantities = (itemsList: any[], snapshotsList: any[]) => {
-    const deduped = deduplicateSnapshots(snapshotsList || []);
-    const snapshotMap: Record<string, number> = {};
-    deduped.forEach((s: any) => {
-      if (!s.item_id) return;
-      snapshotMap[s.item_id] = (snapshotMap[s.item_id] || 0) + (Number(s.qty) || 0);
-    });
-
-    return (itemsList || []).map((it: any) => {
-      const qtyFromSnapshots = snapshotMap[it.id];
-      const resolved = typeof qtyFromSnapshots === 'number' ? qtyFromSnapshots : (Number(it.stock_total) || 0);
-      return { ...it, resolved_qty: resolved };
-    });
-  };
-
-  const groupByWarehouseUnits = (snapshots: any[]) => {
-    if (!snapshots || snapshots.length === 0) return null;
-    const deduped = deduplicateSnapshots(snapshots);
-    const groups: Record<string, number> = {};
-    deduped.forEach((s: any) => {
-      const warehouse = s.warehouses?.name || s.warehouses?.code || 'Sin almacén';
-      groups[warehouse] = (groups[warehouse] || 0) + s.qty;
-    });
-    return Object.entries(groups).map(([label, value]) => ({ label, value })).sort((a: any, b: any) => b.value - a.value);
-  };
-
-  const topN = (data: any, n: number) => {
-    if (!data || data.length === 0) return null;
-    return data.slice(0, n);
-  };
-
-  // Ítems filtrados por los mismos criterios globales (para gráficos por marca desde items)
-  const itemsForBrandCharts = useMemo(() => {
-    let list = items;
-    if (globalFilters.category) list = list.filter((i: any) => i.category === globalFilters.category);
-    if (globalFilters.marca) list = list.filter((i: any) => (i.marca || '').trim() === globalFilters.marca);
-    if (globalFilters.state) list = list.filter((i: any) => i.state === globalFilters.state);
-    if (globalFilters.color) list = list.filter((i: any) => i.color === globalFilters.color);
-    if (globalFilters.warehouse) {
-      console.log('Filtering by warehouse:', globalFilters.warehouse);
-      console.log('Filtered snapshots count:', filteredSnapshots.length);
-      const positiveSnapshots = filteredSnapshots.filter((s: any) => s.qty > 0);
-      console.log('Positive qty snapshots:', positiveSnapshots.length);
-      const ids = new Set(positiveSnapshots.map((s: any) => s.item_id));
-      console.log('Unique item IDs in warehouse:', ids.size);
-      list = list.filter((i: any) => ids.has(i.id));
-      console.log('List size after filter:', list.length);
-    }
-    return list;
-  }, [items, globalFilters, filteredSnapshots]);
-
-  // Ítems filtrados para gráficos por categoría (mismas reglas que `itemsForBrandCharts`)
-  const itemsForCategoryCharts = useMemo(() => {
-    let list = items;
-    if (globalFilters.category) list = list.filter((i: any) => i.category === globalFilters.category);
-    if (globalFilters.marca) list = list.filter((i: any) => (i.marca || '').trim() === globalFilters.marca);
-    if (globalFilters.state) list = list.filter((i: any) => i.state === globalFilters.state);
-    if (globalFilters.color) list = list.filter((i: any) => i.color === globalFilters.color);
-    if (globalFilters.warehouse) {
-      const ids = new Set(filteredSnapshots.filter((s: any) => s.qty > 0).map((s: any) => s.item_id));
-      list = list.filter((i: any) => ids.has(i.id));
-    }
-    return list;
-  }, [items, globalFilters, filteredSnapshots]);
-
   const generateColors = (count: number) => {
     const baseColors = ['#3B82F6', '#8B5CF6', '#10B981', '#F59E0B', '#EF4444', '#EC4899', '#14B8A6', '#F97316', '#6366F1', '#84CC16'];
     const colors: string[] = [];
@@ -495,49 +185,7 @@ export default function ReportsPage() {
     return colors;
   };
 
-  const [showDebugCategory, setShowDebugCategory] = useState(false);
-
-
-  // Productos sin marca asignada (para exportar lista)
-  const itemsSinMarca = useMemo(
-    () => items.filter((i: any) => !(i.marca || '').trim()),
-    [items]
-  );
-
-  function exportSinMarca() {
-    if (itemsSinMarca.length === 0) {
-      alert('No hay productos sin marca para exportar.');
-      return;
-    }
-    try {
-      const csvRows = [
-        ['SKU', 'Nombre', 'Categoría', 'Stock total', 'Precio', 'Estado', 'Color'].join(','),
-      ];
-      itemsSinMarca.forEach((item: any) => {
-        csvRows.push([
-          item.sku || '',
-          `"${(item.name || '').replace(/"/g, '""')}"`,
-          `"${(item.category || '').replace(/"/g, '""')}"`,
-          String(item.stock_total ?? 0),
-          String(item.price ?? ''),
-          `"${(item.state || '').replace(/"/g, '""')}"`,
-          `"${(item.color || '').replace(/"/g, '""')}"`,
-        ].join(','));
-      });
-      const csv = '\uFEFF' + csvRows.join('\n');
-      const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
-      const url = window.URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = `productos_sin_marca_${new Date().toISOString().split('T')[0]}.csv`;
-      document.body.appendChild(a);
-      a.click();
-      window.URL.revokeObjectURL(url);
-      document.body.removeChild(a);
-    } catch (err: any) {
-      alert(`Error al exportar: ${err?.message || err}`);
-    }
-  }
+  const hasFilters = Object.values(globalFilters).some(v => v !== '');
 
   return (
     <div style={{ display: 'grid', gap: 14 }}>
@@ -571,7 +219,7 @@ export default function ReportsPage() {
         </div>
       </Card>
 
-      {itemsSinMarca.length > 0 && (
+      {sinMarcaCount > 0 && (
         <Card>
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 12, padding: 12 }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
@@ -579,14 +227,10 @@ export default function ReportsPage() {
               <div>
                 <div style={{ fontWeight: 600 }}>Productos sin marca</div>
                 <div style={{ fontSize: 13, color: 'var(--muted)' }}>
-                  {itemsSinMarca.length.toLocaleString('es-NI')} productos sin marca asignada
+                  {sinMarcaCount.toLocaleString('es-NI')} productos sin marca asignada
                 </div>
               </div>
             </div>
-            <Button variant="secondary" size="sm" onClick={exportSinMarca}>
-              <Download size={16} style={{ marginRight: 6 }} />
-              Exportar lista (CSV)
-            </Button>
           </div>
         </Card>
       )}
@@ -599,25 +243,9 @@ export default function ReportsPage() {
         </Card>
       )}
 
+      {/* KPI CARDS */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: 14 }}>
-        <Card>
-          <div style={{ padding: 16 }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 12 }}>
-              <div style={{ width: 40, height: 40, borderRadius: 8, background: 'var(--success)15', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                <TrendingUp size={20} color="var(--success)" />
-              </div>
-              <div style={{ fontSize: 13, color: 'var(--muted)' }}>Total Productos</div>
-            </div>
-            {loading ? (
-              <div style={{ height: 32, background: 'var(--panel)', borderRadius: 4, animation: 'pulse 1.5s infinite' }} />
-            ) : (
-              <>
-                <div style={{ fontSize: 28, fontWeight: 600 }}>{stats?.totalProducts.toLocaleString('es-NI') || 0}</div>
-                <div style={{ fontSize: 12, color: 'var(--muted)', marginTop: 4 }}>Productos en inventario</div>
-              </>
-            )}
-          </div>
-        </Card>
+
 
         <Card>
           <div style={{ padding: 16 }}>
@@ -631,7 +259,7 @@ export default function ReportsPage() {
               <div style={{ height: 32, background: 'var(--panel)', borderRadius: 4, animation: 'pulse 1.5s infinite' }} />
             ) : (
               <>
-                <div style={{ fontSize: 28, fontWeight: 600 }}>{stats?.totalStock.toLocaleString('es-NI') || 0}</div>
+                <div style={{ fontSize: 28, fontWeight: 600 }}>{stats?.totalStock?.toLocaleString('es-NI') || 0}</div>
                 <div style={{ fontSize: 12, color: 'var(--muted)', marginTop: 4 }}>Unidades totales</div>
               </>
             )}
@@ -648,10 +276,16 @@ export default function ReportsPage() {
             </div>
             {loading ? (
               <div style={{ height: 32, background: 'var(--panel)', borderRadius: 4, animation: 'pulse 1.5s infinite' }} />
+            ) : !hasFilters && !zohoKpisLoaded ? (
+              <div style={{ height: 32, background: 'var(--panel)', borderRadius: 4, animation: 'pulse 1.5s infinite', width: '60%' }} />
             ) : (
               <>
-                <div style={{ fontSize: 24, fontWeight: 600 }}>${stats?.totalValue.toLocaleString('es-NI') || 0}</div>
-                <div style={{ fontSize: 12, color: 'var(--muted)', marginTop: 4 }}>Inventario total</div>
+                <div style={{ fontSize: 24, fontWeight: 600, display: 'flex', alignItems: 'center', gap: 6 }}>
+                  ${stats?.totalValue?.toLocaleString('es-NI', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) || '0'}
+                </div>
+                <div style={{ fontSize: 12, color: 'var(--muted)', marginTop: 4 }}>
+                  Inventario total
+                </div>
               </>
             )}
           </div>
@@ -769,35 +403,18 @@ export default function ReportsPage() {
 
       {/* SECCIÓN 1: INVENTARIO REMANENTE */}
       <div style={{ background: 'linear-gradient(135deg, #dc2626 0%, #991b1b 100%)', padding: '12px 20px', borderRadius: 8 }}>
-        <h2 style={{ color: 'white', fontSize: 18, fontWeight: 700, margin: 0 }}>Inventario Remanente {'>'}= 90 Días (Zoho Books)</h2>
+        <h2 style={{ color: 'white', fontSize: 18, fontWeight: 700, margin: 0 }}>Inventario Remanente {'>'} = 90 Días</h2>
       </div>
       {loading ? (
         <Card><div style={{ height: 250, background: 'var(--panel)', borderRadius: 4, animation: 'pulse 1.5s infinite' }} /></Card>
       ) : (() => {
-        // Use real Zoho data if available, otherwise fallback to local calculation
-        const agingItems = agingData?.items ? agingData.items : items
-          .filter(item => {
-            const stock = item.stock_total || 0;
-            if (stock <= 0) return false;
-            const lastUpdate = item.updated_at ? new Date(item.updated_at) : null;
-            const ninetyDaysAgo = new Date();
-            ninetyDaysAgo.setDate(ninetyDaysAgo.getDate() - 90);
-            return lastUpdate && lastUpdate < ninetyDaysAgo;
-          })
-          .map(item => {
-            const lastUpdate = new Date(item.updated_at);
-            const daysAgo = Math.floor((Date.now() - lastUpdate.getTime()) / (1000 * 60 * 60 * 24));
-            return { ...item, daysAgo };
-          })
-          .sort((a, b) => b.daysAgo - a.daysAgo);
-
-        const agingTotalUnits = agingData?.totalUnits ?? agingItems.reduce((sum: number, i: any) => sum + (i.stock_total || 0), 0);
-        const agingTotalValue = agingData?.totalValue ?? agingItems.reduce((sum: number, i: any) => sum + ((i.stock_total || 0) * (i.price || 0)), 0);
+        const agingItems = agingData?.items || [];
+        const agingTotalUnits = agingData?.totalUnits || 0;
+        const agingTotalValue = agingData?.totalValue || 0;
 
         return (
           <Card>
             <div style={{ padding: 16 }}>
-              {/* Summary stats */}
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 12, marginBottom: 16 }}>
                 <div style={{ background: 'var(--panel)', borderRadius: 8, padding: 12, textAlign: 'center' }}>
                   <div style={{ fontSize: 24, fontWeight: 700, color: '#ef4444' }}>{agingItems.length}</div>
@@ -833,7 +450,7 @@ export default function ReportsPage() {
                       </tr>
                     </thead>
                     <tbody>
-                      {agingItems.slice(0, 100).map((item: any, idx: number) => {
+                      {agingItems.map((item: any, idx: number) => {
                         const badgeColor = item.daysAgo >= 180 ? '#ef4444' : item.daysAgo >= 120 ? '#f97316' : '#eab308';
                         return (
                           <tr key={item.id} style={{ borderBottom: '1px solid var(--border)', background: idx % 2 === 0 ? 'transparent' : 'var(--panel)' }}>
@@ -855,9 +472,9 @@ export default function ReportsPage() {
                       })}
                     </tbody>
                   </table>
-                  {agingItems.length > 100 && (
+                  {agingItems.length >= 100 && (
                     <div style={{ padding: '8px 12px', fontSize: 12, color: 'var(--muted)', textAlign: 'center', background: 'var(--panel)' }}>
-                      Mostrando 100 de {agingItems.length} productos
+                      Mostrando top 100 productos
                     </div>
                   )}
                 </div>
@@ -877,37 +494,21 @@ export default function ReportsPage() {
           {loading ? (
             <div style={{ height: 300, background: 'var(--panel)', borderRadius: 4, animation: 'pulse 1.5s infinite' }} />
           ) : (() => {
-            const resolved = resolveItemQuantities(itemsForCategoryCharts, filteredSnapshots);
-            const data = groupByCategoryUnitsFromItems(resolved.map((i: any) => ({ ...i, stock_total: i.resolved_qty })));
-            return data ? (
+            const data = charts?.categoryBreakdown;
+            return data && data.length > 0 ? (
               <HorizontalBarChart data={data.map((d: any, i: number) => ({ ...d, color: generateColors(data.length)[i] }))} height={300} />
             ) : (
               <ReportPlaceholder title="Sin datos" height={300} />
             );
           })()}
-
-          <div style={{ padding: '8px 12px', borderTop: '1px solid rgba(255,255,255,0.02)', display: 'flex', justifyContent: 'flex-end' }}>
-            <button onClick={() => setShowDebugCategory(v => !v)} style={{ background: 'transparent', color: 'var(--muted)', border: 'none', cursor: 'pointer' }}>
-              {showDebugCategory ? 'Ocultar debug' : 'Mostrar debug'}
-            </button>
-          </div>
-          {showDebugCategory && (
-            <div style={{ padding: 12, color: '#CBD5E1', fontSize: 13 }}>
-              <div style={{ marginBottom: 8 }}><strong>Desglose desde `items.stock_total`:</strong></div>
-              <pre style={{ maxHeight: 160, overflow: 'auto', background: 'rgba(0,0,0,0.25)', padding: 8, borderRadius: 6 }}>{JSON.stringify(groupByCategoryUnitsFromItems(itemsForCategoryCharts), null, 2)}</pre>
-
-              <div style={{ margin: '12px 0 8px 0' }}><strong>Desglose desde `stock_snapshots` (filteredSnapshots):</strong></div>
-              <pre style={{ maxHeight: 160, overflow: 'auto', background: 'rgba(0,0,0,0.25)', padding: 8, borderRadius: 6 }}>{JSON.stringify(groupByCategoryUnits(filteredSnapshots), null, 2)}</pre>
-            </div>
-          )}
         </ChartCard>
 
         <ChartCard title="Top Inventario por Marca (Unids)">
           {loading ? (
             <div style={{ height: 300, background: 'var(--panel)', borderRadius: 4, animation: 'pulse 1.5s infinite' }} />
           ) : (() => {
-            const data = topN(groupByBrandUnitsFromItems(itemsForBrandCharts), 10);
-            return data ? (
+            const data = charts?.brandBreakdown;
+            return data && data.length > 0 ? (
               <HorizontalBarChart data={data.map((d: any, i: number) => ({ ...d, color: generateColors(data.length)[i] }))} height={300} />
             ) : (
               <ReportPlaceholder title="Sin datos" height={300} />
@@ -921,9 +522,8 @@ export default function ReportsPage() {
           {loading ? (
             <div style={{ height: 300, background: 'var(--panel)', borderRadius: 4, animation: 'pulse 1.5s infinite' }} />
           ) : (() => {
-            const resolved = resolveItemQuantities(itemsForCategoryCharts, filteredSnapshots);
-            const data = groupByCategoryUnitsFromItems(resolved.map((i: any) => ({ ...i, stock_total: i.resolved_qty })));
-            return data ? (
+            const data = charts?.categoryBreakdown;
+            return data && data.length > 0 ? (
               <PieChart data={data.map((d: any, i: number) => ({ ...d, color: generateColors(data.length)[i] }))} size={250} />
             ) : (
               <ReportPlaceholder title="Sin datos" height={300} />
@@ -935,8 +535,8 @@ export default function ReportsPage() {
           {loading ? (
             <div style={{ height: 300, background: 'var(--panel)', borderRadius: 4, animation: 'pulse 1.5s infinite' }} />
           ) : (() => {
-            const data = topN(groupByBrandUnitsFromItems(itemsForBrandCharts), 10);
-            return data ? (
+            const data = charts?.brandBreakdown;
+            return data && data.length > 0 ? (
               <PieChart data={data.map((d: any, i: number) => ({ ...d, color: generateColors(data.length)[i] }))} size={250} />
             ) : (
               <ReportPlaceholder title="Sin datos" height={300} />
@@ -945,31 +545,30 @@ export default function ReportsPage() {
         </ChartCard>
       </div>
 
+      {/* WAREHOUSE CHARTS - loaded lazily */}
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 }}>
         <ChartCard title="Inventario por Almacén (Unidades)">
-          {loading ? (
-            <div style={{ height: 300, background: 'var(--panel)', borderRadius: 4, animation: 'pulse 1.5s infinite' }} />
-          ) : (() => {
-            const data = groupByWarehouseUnits(filteredSnapshots);
-            return data ? (
-              <BarChart data={data} height={300} showValues={true} />
-            ) : (
-              <ReportPlaceholder title="Sin datos" height={300} />
-            );
-          })()}
+          {warehouseLoading ? (
+            <div style={{ height: 300, display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--muted)', gap: 8 }}>
+              <Loader size={18} style={{ animation: 'spin 1s linear infinite' }} /> Cargando bodegas...
+            </div>
+          ) : warehouseData && warehouseData.length > 0 ? (
+            <BarChart data={warehouseData} height={300} showValues={true} />
+          ) : (
+            <ReportPlaceholder title={warehouseData ? "Sin datos" : "Cargando..."} height={300} />
+          )}
         </ChartCard>
 
         <ChartCard title="Participación de Inventario - Unids por Almacén">
-          {loading ? (
-            <div style={{ height: 300, background: 'var(--panel)', borderRadius: 4, animation: 'pulse 1.5s infinite' }} />
-          ) : (() => {
-            const data = groupByWarehouseUnits(filteredSnapshots);
-            return data ? (
-              <PieChart data={data.map((d: any, i: number) => ({ ...d, color: generateColors(data.length)[i] }))} size={250} />
-            ) : (
-              <ReportPlaceholder title="Sin datos" height={300} />
-            );
-          })()}
+          {warehouseLoading ? (
+            <div style={{ height: 300, display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--muted)', gap: 8 }}>
+              <Loader size={18} style={{ animation: 'spin 1s linear infinite' }} /> Cargando bodegas...
+            </div>
+          ) : warehouseData && warehouseData.length > 0 ? (
+            <PieChart data={warehouseData.map((d: any, i: number) => ({ ...d, color: generateColors(warehouseData.length)[i] }))} size={250} />
+          ) : (
+            <ReportPlaceholder title={warehouseData ? "Sin datos" : "Cargando..."} height={300} />
+          )}
         </ChartCard>
       </div>
 

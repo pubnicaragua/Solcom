@@ -51,7 +51,18 @@ async function getZohoToken() {
   return null;
 }
 
+// In-memory cache: avoid calling Zoho on every page load
+let kpiCache: { data: any; timestamp: number } | null = null;
+const CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes
+
 export async function GET() {
+  // Return cached data if fresh
+  if (kpiCache && Date.now() - kpiCache.timestamp < CACHE_TTL_MS) {
+    return NextResponse.json(kpiCache.data, {
+      headers: { 'X-Cache': 'HIT', 'Cache-Control': 'no-store' },
+    });
+  }
+
   try {
     const supabase = createServerClient();
 
@@ -140,24 +151,29 @@ export async function GET() {
       ? format(new Date((snapshotsResult.data as any)[0].synced_at), "dd MMM yyyy, HH:mm", { locale: es })
       : 'Nunca';
 
+    const responseData = {
+      totalSKUs: totalProducts,
+      totalProducts,
+      totalStock,
+      totalValue, // Now accurate from Asset Value
+      activeWarehouses: warehousesResult.count || 0,
+      lastSync,
+      source: 'zoho',
+      debug: {
+        tokenOk: true,
+        orgIdOk: !!organizationId,
+        itemsProcessed: totalProducts,
+        pagesFetched: page - 1,
+        sampleItem: sampleItem,
+        mode: 'report_valuation'
+      }
+    };
+
+    // Save to cache
+    kpiCache = { data: responseData, timestamp: Date.now() };
+
     return NextResponse.json(
-      {
-        totalSKUs: totalProducts,
-        totalProducts,
-        totalStock,
-        totalValue, // Now accurate from Asset Value
-        activeWarehouses: warehousesResult.count || 0,
-        lastSync,
-        source: 'zoho',
-        debug: {
-          tokenOk: true,
-          orgIdOk: !!organizationId,
-          itemsProcessed: totalProducts,
-          pagesFetched: page - 1,
-          sampleItem: sampleItem,
-          mode: 'report_valuation'
-        }
-      },
+      responseData,
       {
         headers: {
           'Cache-Control': 'no-store, no-cache, must-revalidate, max-age=0',

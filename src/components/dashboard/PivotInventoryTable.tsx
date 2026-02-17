@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import Card from '@/components/ui/Card';
-import { ChevronRight, ChevronDown, Loader2, Eye, EyeOff, Package } from 'lucide-react';
+import { ChevronRight, ChevronDown, Loader2, Eye, EyeOff, Package, RefreshCw } from 'lucide-react';
 import { supabase } from '@/lib/supabase/client';
 
 
@@ -190,6 +190,7 @@ function ensureTooltipCSS() {
 export default function PivotInventoryTable({ filters }: PivotInventoryTableProps) {
     const [data, setData] = useState<PivotData | null>(null);
     const [loading, setLoading] = useState(true);
+    const [syncing, setSyncing] = useState(false);
     const [collapsedGroups, setCollapsedGroups] = useState<Set<string>>(new Set());
     const [expandedProducts, setExpandedProducts] = useState<Set<string>>(new Set());
     const [copiedSku, setCopiedSku] = useState<string | null>(null);
@@ -208,6 +209,28 @@ export default function PivotInventoryTable({ filters }: PivotInventoryTableProp
         navigator.clipboard.writeText(sku);
         setCopiedSku(sku);
         setTimeout(() => setCopiedSku(null), 2000);
+    };
+
+    const handleSync = async () => {
+        if (syncing) return;
+        setSyncing(true);
+        try {
+            // Default 2 hours to catch immediate changes
+            const res = await fetch('/api/inventory/sync-recent?hours=2');
+            const result = await res.json();
+            if (res.ok) {
+                // Force reload pivot table
+                await fetchPivotData({ force: true });
+                alert(`Sincronización completada: ${result.itemsProcessed} ítems actualizados.`);
+            } else {
+                alert('Error al sincronizar: ' + (result.error || 'Desconocido'));
+            }
+        } catch (error) {
+            console.error('Sync failed', error);
+            alert('Error de conexión al sincronizar');
+        } finally {
+            setSyncing(false);
+        }
     };
 
     const fetchPivotData = useCallback(async (options?: { force?: boolean }) => {
@@ -551,28 +574,53 @@ export default function PivotInventoryTable({ filters }: PivotInventoryTableProp
                         )}
                     </span>
                 </div>
-                <button
-                    onClick={() => setHideZeroStock(!hideZeroStock)}
-                    style={{
-                        display: 'flex',
-                        alignItems: 'center',
-                        gap: 6,
-                        padding: '5px 12px',
-                        background: hideZeroStock
-                            ? 'rgba(251,191,36,0.15)'
-                            : 'rgba(255,255,255,0.05)',
-                        color: hideZeroStock ? '#fbbf24' : '#94a3b8',
-                        border: `1px solid ${hideZeroStock ? 'rgba(251,191,36,0.3)' : 'rgba(255,255,255,0.1)'}`,
-                        borderRadius: 8,
-                        cursor: 'pointer',
-                        fontSize: 12,
-                        fontWeight: 500,
-                        transition: 'all 0.2s ease',
-                    }}
-                >
-                    {hideZeroStock ? <EyeOff size={14} /> : <Eye size={14} />}
-                    {hideZeroStock ? 'Sin stock oculto' : 'Mostrar todo'}
-                </button>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                    <button
+                        onClick={handleSync}
+                        disabled={syncing}
+                        style={{
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: 6,
+                            padding: '5px 12px',
+                            background: 'rgba(59,130,246,0.15)',
+                            color: '#60a5fa',
+                            border: '1px solid rgba(59,130,246,0.3)',
+                            borderRadius: 8,
+                            cursor: syncing ? 'wait' : 'pointer',
+                            fontSize: 12,
+                            fontWeight: 500,
+                            transition: 'all 0.2s ease',
+                            opacity: syncing ? 0.7 : 1,
+                        }}
+                    >
+                        <RefreshCw size={14} className={syncing ? 'animate-spin' : ''} />
+                        {syncing ? 'Sincronizando...' : 'Sincro Reciente'}
+                    </button>
+
+                    <button
+                        onClick={() => setHideZeroStock(!hideZeroStock)}
+                        style={{
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: 6,
+                            padding: '5px 12px',
+                            background: hideZeroStock
+                                ? 'rgba(251,191,36,0.15)'
+                                : 'rgba(255,255,255,0.05)',
+                            color: hideZeroStock ? '#fbbf24' : '#94a3b8',
+                            border: `1px solid ${hideZeroStock ? 'rgba(251,191,36,0.3)' : 'rgba(255,255,255,0.1)'}`,
+                            borderRadius: 8,
+                            cursor: 'pointer',
+                            fontSize: 12,
+                            fontWeight: 500,
+                            transition: 'all 0.2s ease',
+                        }}
+                    >
+                        {hideZeroStock ? <EyeOff size={14} /> : <Eye size={14} />}
+                        {hideZeroStock ? 'Sin stock oculto' : 'Mostrar todo'}
+                    </button>
+                </div>
             </div>
 
             <div style={{ position: 'relative', overflow: 'hidden', width: '100%' }}>
