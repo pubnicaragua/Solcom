@@ -42,9 +42,9 @@ export function useUserRole() {
 
 export function hasPermission(role: UserRole, module: string): boolean {
   const permissions: Record<UserRole, string[]> = {
-    admin: ['inventory', 'reports', 'ai-agents', 'roles', 'settings', 'entregables', 'next-steps', 'transfers'],
-    manager: ['inventory', 'reports', 'ai-agents', 'entregables', 'transfers'],
-    operator: ['inventory', 'reports', 'transfers'],
+    admin: ['inventory', 'ventas', 'reports', 'ai-agents', 'roles', 'settings', 'entregables', 'next-steps', 'transfers'],
+    manager: ['inventory', 'ventas', 'reports', 'ai-agents', 'entregables', 'transfers'],
+    operator: ['inventory', 'ventas', 'reports', 'transfers'],
     auditor: ['reports'],
   };
 
