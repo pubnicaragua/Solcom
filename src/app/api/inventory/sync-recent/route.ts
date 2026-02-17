@@ -23,7 +23,8 @@ export async function GET(request: Request) {
         // Calculate timestamp for last_modified_time
         const now = new Date();
         const past = new Date(now.getTime() - (hours * 60 * 60 * 1000));
-        const timestamp = past.toISOString();
+        // Zoho format: 2024-02-14T10:00:00Z (ISO 8601 without millis preferred)
+        const timestamp = past.toISOString().split('.')[0] + 'Z';
 
         debugLog.push(`Fetching items modified after ${timestamp}`);
 

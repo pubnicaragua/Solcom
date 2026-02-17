@@ -30,7 +30,7 @@ export async function GET(request: NextRequest) {
 
         // Sync items modified in the last 10 minutes (overlap to avoid missing changes)
         const tenMinutesAgo = new Date(Date.now() - 10 * 60 * 1000);
-        const timestamp = tenMinutesAgo.toISOString();
+        const timestamp = tenMinutesAgo.toISOString().split('.')[0] + 'Z';
         debugLog.push(`[cron] Fetching items modified after ${timestamp}`);
 
         const items = await zohoClient.fetchItems(`last_modified_time=${encodeURIComponent(timestamp)}`);
