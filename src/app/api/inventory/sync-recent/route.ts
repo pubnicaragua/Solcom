@@ -26,12 +26,24 @@ export async function GET(request: Request) {
         // Zoho format fallback: YYYY-MM-DD (safest)
         const timestamp = past.toISOString().split('T')[0];
 
-        debugLog.push(`Fetching items modified after ${timestamp}`);
+        // STRATEGY CHANGE: Zoho API rejects last_modified_time filter often.
+        // Instead, fetch most recently modified items (sort_column=last_modified_time&sort_order=desc)
+        // and filter them manually in the loop.
+        debugLog.push(`Fetching items sorted by last_modified_time desc`);
 
-        const items = await zohoClient.fetchItems(`last_modified_time=${encodeURIComponent(timestamp)}`);
-        debugLog.push(`Found ${items.length} items to sync`);
+        // Fetch first page (200 items) sorted by modification time
+        const items = await zohoClient.fetchItems('sort_column=last_modified_time&sort_order=desc');
+        debugLog.push(`fetched ${items.length} items from Zoho`);
 
-        if (items.length === 0) {
+        const cutoffTime = past.getTime();
+        const itemsToSync = items.filter(item => {
+            const itemTime = new Date(item.last_modified_time).getTime();
+            return itemTime >= cutoffTime;
+        });
+
+        debugLog.push(`Found ${itemsToSync.length} items modified after ${past.toISOString()}`);
+
+        if (itemsToSync.length === 0) {
             return NextResponse.json({
                 success: true,
                 message: 'No items modified recently',
@@ -58,7 +70,7 @@ export async function GET(request: Request) {
 
         // Sync each item
         let processedCount = 0;
-        for (const item of items) {
+        for (const item of itemsToSync) {
             const zohoId = item.item_id;
             if (!zohoId) continue;
             await syncItemStock(zohoId, supabase, warehouseMap, debugLog);

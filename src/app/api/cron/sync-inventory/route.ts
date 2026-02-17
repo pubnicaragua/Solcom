@@ -30,11 +30,20 @@ export async function GET(request: NextRequest) {
 
         // Sync items modified today (safest format for Zoho API)
         const tenMinutesAgo = new Date(Date.now() - 10 * 60 * 1000); // Keep variable name but logic is now daily
-        const timestamp = tenMinutesAgo.toISOString().split('T')[0];
-        debugLog.push(`[cron] Fetching items modified after ${timestamp}`);
+        // STRATEGY CHANGE: Zoho API rejects last_modified_time filter often.
+        // Instead, fetch most recently modified items and filter locally.
+        const cutoffTime = tenMinutesAgo.getTime();
 
-        const items = await zohoClient.fetchItems(`last_modified_time=${encodeURIComponent(timestamp)}`);
-        debugLog.push(`[cron] Found ${items.length} recently modified items`);
+        // Fetch first page (200 items) sorted by modification time
+        const allRecentItems = await zohoClient.fetchItems('sort_column=last_modified_time&sort_order=desc');
+
+        const items = allRecentItems.filter(item => {
+            // Zoho returns local time string usually, new Date() handles it well in Vercel
+            const itemTime = new Date(item.last_modified_time).getTime();
+            return itemTime >= cutoffTime;
+        });
+
+        debugLog.push(`[cron] Found ${items.length} recently modified items (out of ${allRecentItems.length} fetched)`);
 
         if (items.length === 0) {
             return NextResponse.json({
@@ -42,6 +51,7 @@ export async function GET(request: NextRequest) {
                 message: 'No recent changes',
                 itemsSynced: 0,
                 durationMs: Date.now() - startTime,
+                log: debugLog
             });
         }
 
