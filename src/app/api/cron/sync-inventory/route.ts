@@ -28,9 +28,9 @@ export async function GET(request: NextRequest) {
             return NextResponse.json({ error: 'Zoho not configured' }, { status: 500 });
         }
 
-        // Sync items modified in the last 10 minutes (overlap to avoid missing changes)
-        const tenMinutesAgo = new Date(Date.now() - 10 * 60 * 1000);
-        const timestamp = tenMinutesAgo.toISOString().split('.')[0] + 'Z';
+        // Sync items modified today (safest format for Zoho API)
+        const tenMinutesAgo = new Date(Date.now() - 10 * 60 * 1000); // Keep variable name but logic is now daily
+        const timestamp = tenMinutesAgo.toISOString().split('T')[0];
         debugLog.push(`[cron] Fetching items modified after ${timestamp}`);
 
         const items = await zohoClient.fetchItems(`last_modified_time=${encodeURIComponent(timestamp)}`);
