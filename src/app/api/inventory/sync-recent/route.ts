@@ -32,7 +32,7 @@ export async function GET(request: Request) {
         debugLog.push(`Fetching items sorted by last_modified_time desc`);
 
         // Fetch first page (200 items) sorted by modification time
-        const items = await zohoClient.fetchItems('sort_column=last_modified_time&sort_order=desc');
+        const items = await zohoClient.fetchItems('sort_column=last_modified_time&sort_order=D');
         debugLog.push(`fetched ${items.length} items from Zoho`);
 
         const cutoffTime = past.getTime();

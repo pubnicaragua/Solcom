@@ -35,7 +35,7 @@ export async function GET(request: NextRequest) {
         const cutoffTime = tenMinutesAgo.getTime();
 
         // Fetch first page (200 items) sorted by modification time
-        const allRecentItems = await zohoClient.fetchItems('sort_column=last_modified_time&sort_order=desc');
+        const allRecentItems = await zohoClient.fetchItems('sort_column=last_modified_time&sort_order=D');
 
         const items = allRecentItems.filter(item => {
             // Zoho returns local time string usually, new Date() handles it well in Vercel
