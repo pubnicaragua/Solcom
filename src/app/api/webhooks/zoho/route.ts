@@ -32,6 +32,18 @@ function normalizeItemId(value: unknown): string | null {
     return itemId.length > 0 ? itemId : null;
 }
 
+function normalizeItemState(value: unknown): string | null {
+    const raw = String(value ?? '').trim();
+    if (!raw) return null;
+    const upper = raw.toUpperCase();
+
+    if (upper === 'ACTIVE' || upper === 'INACTIVE') return null;
+    if (upper === 'NEW' || upper === 'NUEVO') return 'NUEVO';
+    if (upper === 'USED' || upper === 'USADO' || upper === 'SEMINUEVO') return 'USADO';
+
+    return null;
+}
+
 function collectItemIdsFromPayload(payload: any): string[] {
     const ids = new Set<string>();
 
@@ -72,6 +84,37 @@ function collectItemIdsFromTransferOrder(transferOrder: any): string[] {
         if (id) ids.add(id);
     }
     return Array.from(ids);
+}
+
+async function fetchZohoItemDetails(
+    accessToken: string,
+    apiDomain: string,
+    organizationId: string,
+    itemId: string
+): Promise<any | null> {
+    const url = `${apiDomain}/inventory/v1/items/${itemId}?organization_id=${organizationId}`;
+    const response = await fetch(url, {
+        headers: {
+            Authorization: `Zoho-oauthtoken ${accessToken}`,
+        },
+        cache: 'no-store',
+    });
+
+    if (!response.ok) {
+        return null;
+    }
+
+    const rawText = await response.text();
+    if (!rawText) {
+        return null;
+    }
+
+    try {
+        const parsed = JSON.parse(rawText);
+        return parsed?.item ?? null;
+    } catch {
+        return null;
+    }
 }
 
 function isMissingRelationError(error: any): boolean {
@@ -177,12 +220,101 @@ async function syncItemStock(
             .eq('zoho_item_id', zohoItemId)
             .limit(1);
 
-        const supabaseItemId = itemRows?.[0]?.id;
-        const currentStockTotal = Number(itemRows?.[0]?.stock_total ?? 0);
+        let supabaseItemId = itemRows?.[0]?.id as string | undefined;
+        let currentStockTotal = Number(itemRows?.[0]?.stock_total ?? 0);
+
         if (!supabaseItemId) {
-            debugLog.push(`[syncItemStock] WARN: Item ${zohoItemId} not in DB`);
+            const zohoItem = await fetchZohoItemDetails(
+                auth.accessToken,
+                auth.apiDomain,
+                organizationId,
+                zohoItemId
+            );
+
+            const customFields = zohoItem?.custom_field_hash || {};
+            const sku = String(zohoItem?.sku ?? '').trim() || `NO-SKU-${zohoItemId}`;
+            const name = String(zohoItem?.name ?? '').trim() || sku;
+
+            const createPayload: any = {
+                sku,
+                name,
+                zoho_item_id: zohoItemId,
+                color: String(customFields.cf_color ?? zohoItem?.color ?? '').trim() || null,
+                state: normalizeItemState(customFields.cf_estado ?? customFields.cf_state ?? zohoItem?.status),
+                marca: String(customFields.cf_marca ?? customFields.cf_brand ?? zohoItem?.brand ?? '').trim() || null,
+                category: String(customFields.cf_categoria ?? zohoItem?.category_name ?? '').trim() || null,
+                stock_total: 0,
+                price: Number.isFinite(Number(zohoItem?.rate)) ? Number(zohoItem?.rate) : null,
+                updated_at: new Date().toISOString(),
+            };
+
+            let { data: insertedItem, error: insertError } = await supabase
+                .from('items')
+                .insert(createPayload)
+                .select('id, stock_total')
+                .single();
+
+            if (insertError) {
+                // SKU may already exist locally. Try linking by SKU first, then by zoho_item_id.
+                const { data: bySku } = await supabase
+                    .from('items')
+                    .select('id, stock_total')
+                    .eq('sku', sku)
+                    .limit(1);
+
+                if (bySku?.[0]) {
+                    const { error: linkError } = await supabase
+                        .from('items')
+                        .update({
+                            zoho_item_id: zohoItemId,
+                            name: createPayload.name,
+                            color: createPayload.color,
+                            state: createPayload.state,
+                            marca: createPayload.marca,
+                            category: createPayload.category,
+                            price: createPayload.price,
+                            updated_at: createPayload.updated_at,
+                        })
+                        .eq('id', bySku[0].id);
+
+                    if (!linkError) {
+                        insertedItem = bySku[0];
+                        insertError = null;
+                    }
+                }
+
+                if (insertError) {
+                    const fallbackSku = `NO-SKU-${zohoItemId}`;
+                    if (fallbackSku !== sku) {
+                        const { data: fallbackInsert, error: fallbackError } = await supabase
+                            .from('items')
+                            .insert({ ...createPayload, sku: fallbackSku })
+                            .select('id, stock_total')
+                            .single();
+
+                        if (!fallbackError) {
+                            insertedItem = fallbackInsert;
+                            insertError = null;
+                        }
+                    }
+                }
+            }
+
+            if (!insertError && insertedItem?.id) {
+                supabaseItemId = insertedItem.id;
+                currentStockTotal = Number(insertedItem.stock_total ?? 0);
+                debugLog.push(`[syncItemStock] Created local item for Zoho item ${zohoItemId}`);
+            } else {
+                debugLog.push(`[syncItemStock] WARN: Item ${zohoItemId} not in DB and could not be created`);
+                return { snapshotsCreated: 0, stockTotal: 0 };
+            }
+        }
+
+        if (!supabaseItemId) {
+            debugLog.push(`[syncItemStock] WARN: Item ${zohoItemId} could not be resolved locally`);
             return { snapshotsCreated: 0, stockTotal: 0 };
         }
+
         const mappedWarehouseIds = Array.from(
             new Set(Array.from(warehouseMap.values()).map((warehouse) => warehouse.id))
         );
@@ -416,7 +548,7 @@ export async function POST(request: NextRequest) {
                     sku: itemData.sku || `NO-SKU-${zohoItemId}`,
                     name: itemData.name || 'Sin nombre',
                     color: customFields.cf_color || null,
-                    state: customFields.cf_estado || null,
+                    state: normalizeItemState(customFields.cf_estado ?? customFields.cf_state ?? itemData.status),
                     zoho_item_id: zohoItemId,
                     price: itemData.purchase_rate ?? null,
                 };

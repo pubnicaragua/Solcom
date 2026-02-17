@@ -44,6 +44,7 @@ export const inventoryFilterSchema = z.object({
 export const syncRequestSchema = z.object({
   warehouse_codes: z.array(z.string()).optional(),
   force: z.boolean().default(false),
+  onlyNew: z.boolean().optional(),
 });
 
 export type Warehouse = z.infer<typeof warehouseSchema>;

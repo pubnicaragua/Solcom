@@ -40,15 +40,15 @@ interface PivotInventoryTableProps {
 
 interface TreeNode {
     label: string;
-    level: number; // 0=state, 1=brand, 2=product, 3=leaf(sku)
-    items?: PivotItem[]; // only on leaf nodes
+    level: number; // 0=state, 1=brand, 2=product, 3=variant
+    items?: PivotItem[]; // present on variant rows
     children: TreeNode[];
     totals: Record<string, number>; // warehouse code → subtotal
     grandTotal: number;
 }
 
 function buildTree(items: PivotItem[], warehouseCodes: string[]): TreeNode[] {
-    // Group: state → brand → name → sku (no color grouping)
+    // Group: state -> brand -> product -> variants
     const stateGroups = groupBy(items, (i) => (i.state || 'SIN ESTADO').toUpperCase());
     const roots: TreeNode[] = [];
 
@@ -62,25 +62,27 @@ function buildTree(items: PivotItem[], warehouseCodes: string[]): TreeNode[] {
 
             for (const [productName, productItems] of sortedEntries(productGroups)) {
                 const productNode = makeGroupNode(productName, 2, warehouseCodes);
+                const sortedVariants = [...productItems].sort((a, b) =>
+                    a.sku.localeCompare(b.sku) || (a.color || '').localeCompare(b.color || '')
+                );
 
-                // All items shown — no zero-stock filtering here
-                for (const item of productItems) {
-                    const leafNode: TreeNode = {
+                for (const item of sortedVariants) {
+                    const variantTotals: Record<string, number> = {};
+                    for (const code of warehouseCodes) {
+                        variantTotals[code] = item.warehouseQty[code] || 0;
+                    }
+
+                    const variantNode: TreeNode = {
                         label: item.sku,
                         level: 3,
                         items: [item],
                         children: [],
-                        totals: { ...item.warehouseQty },
+                        totals: variantTotals,
                         grandTotal: item.total,
                     };
-                    productNode.children.push(leafNode);
-                    // If item has snapshots, accumulate normally
-                    // If not (fallback), add the fallback total to productNode
-                    if (item.hasSnapshots !== false) {
-                        accumulateTotals(productNode, item, warehouseCodes);
-                    } else {
-                        productNode.grandTotal += item.total;
-                    }
+
+                    productNode.children.push(variantNode);
+                    accumulateFromChild(productNode, variantNode, warehouseCodes);
                 }
 
                 if (productNode.children.length > 0) {
@@ -88,6 +90,7 @@ function buildTree(items: PivotItem[], warehouseCodes: string[]): TreeNode[] {
                     accumulateFromChild(brandNode, productNode, warehouseCodes);
                 }
             }
+
             if (brandNode.children.length > 0) {
                 stateNode.children.push(brandNode);
                 accumulateFromChild(stateNode, brandNode, warehouseCodes);
@@ -104,11 +107,6 @@ function makeGroupNode(label: string, level: number, whCodes: string[]): TreeNod
     const totals: Record<string, number> = {};
     for (const c of whCodes) totals[c] = 0;
     return { label, level, children: [], totals, grandTotal: 0 };
-}
-
-function accumulateTotals(node: TreeNode, item: PivotItem, whCodes: string[]) {
-    for (const c of whCodes) node.totals[c] += item.warehouseQty[c] || 0;
-    node.grandTotal += item.total;
 }
 
 function accumulateFromChild(parent: TreeNode, child: TreeNode, whCodes: string[]) {
@@ -148,6 +146,9 @@ function getCellColor(qty: number): string | undefined {
 
 /* ───── instant tooltip CSS (injected once) ───── */
 const TOOLTIP_CSS_ID = 'pivot-tooltip-css';
+const VIRTUAL_ROW_HEIGHT = 34;
+const VIRTUAL_OVERSCAN = 24;
+
 function ensureTooltipCSS() {
     if (typeof document === 'undefined') return;
     if (document.getElementById(TOOLTIP_CSS_ID)) return;
@@ -189,12 +190,18 @@ function ensureTooltipCSS() {
 export default function PivotInventoryTable({ filters }: PivotInventoryTableProps) {
     const [data, setData] = useState<PivotData | null>(null);
     const [loading, setLoading] = useState(true);
-    const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
+    const [collapsedGroups, setCollapsedGroups] = useState<Set<string>>(new Set());
+    const [expandedProducts, setExpandedProducts] = useState<Set<string>>(new Set());
     const [copiedSku, setCopiedSku] = useState<string | null>(null);
     const [hideZeroStock, setHideZeroStock] = useState(false);
+    const [scrollTop, setScrollTop] = useState(0);
+    const [viewportHeight, setViewportHeight] = useState(0);
     const requestIdRef = useRef(0);
     const abortRef = useRef<AbortController | null>(null);
     const hasLoadedOnceRef = useRef(false);
+    const scrollContainerRef = useRef<HTMLDivElement | null>(null);
+    const realtimeRefreshTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+    const pivotCacheRef = useRef<Map<string, { data: PivotData; ts: number }>>(new Map());
 
     const handleCopySku = (sku: string) => {
         if (!sku) return;
@@ -203,7 +210,7 @@ export default function PivotInventoryTable({ filters }: PivotInventoryTableProp
         setTimeout(() => setCopiedSku(null), 2000);
     };
 
-    const fetchPivotData = useCallback(async () => {
+    const fetchPivotData = useCallback(async (options?: { force?: boolean }) => {
         const requestId = ++requestIdRef.current;
 
         abortRef.current?.abort();
@@ -224,6 +231,21 @@ export default function PivotInventoryTable({ filters }: PivotInventoryTableProp
             if (hideZeroStock) {
                 params.set('showZeroStock', 'false');
             }
+            const queryKey = params.toString();
+            const now = Date.now();
+            const cachedEntry = pivotCacheRef.current.get(queryKey);
+
+            if (!options?.force && cachedEntry) {
+                setData(cachedEntry.data);
+                hasLoadedOnceRef.current = true;
+                setLoading(false);
+
+                const cacheAgeMs = now - cachedEntry.ts;
+                // Fresh cache: avoid heavy refetch (improves "clear search" responsiveness).
+                if (cacheAgeMs < 12_000) {
+                    return;
+                }
+            }
 
             const res = await fetch(`/api/inventory/pivot?${params.toString()}`, {
                 signal: controller.signal,
@@ -236,6 +258,16 @@ export default function PivotInventoryTable({ filters }: PivotInventoryTableProp
                 const result = await res.json();
                 setData(result);
                 hasLoadedOnceRef.current = true;
+
+                // Tiny LRU cache by query string.
+                const existing = pivotCacheRef.current.get(queryKey);
+                if (existing) pivotCacheRef.current.delete(queryKey);
+                pivotCacheRef.current.set(queryKey, { data: result, ts: Date.now() });
+                while (pivotCacheRef.current.size > 10) {
+                    const first = pivotCacheRef.current.keys().next();
+                    if (first.done) break;
+                    pivotCacheRef.current.delete(first.value);
+                }
             } else {
                 console.error('Pivot API error:', res.status);
             }
@@ -254,6 +286,16 @@ export default function PivotInventoryTable({ filters }: PivotInventoryTableProp
         void fetchPivotData();
     }, [fetchPivotData]);
 
+    const scheduleRealtimeRefresh = useCallback(() => {
+        if (realtimeRefreshTimerRef.current) {
+            clearTimeout(realtimeRefreshTimerRef.current);
+        }
+        realtimeRefreshTimerRef.current = setTimeout(() => {
+            void fetchPivotData({ force: true });
+            realtimeRefreshTimerRef.current = null;
+        }, 220);
+    }, [fetchPivotData]);
+
     // Inject tooltip CSS once
     useEffect(() => { ensureTooltipCSS(); }, []);
 
@@ -264,29 +306,33 @@ export default function PivotInventoryTable({ filters }: PivotInventoryTableProp
                 'postgres_changes',
                 { event: '*', schema: 'public', table: 'stock_snapshots' },
                 () => {
-                    void fetchPivotData();
+                    scheduleRealtimeRefresh();
                 }
             )
             .on(
                 'postgres_changes',
                 { event: '*', schema: 'public', table: 'inventory_balance' },
                 () => {
-                    void fetchPivotData();
+                    scheduleRealtimeRefresh();
                 }
             )
             .on(
                 'postgres_changes',
                 { event: '*', schema: 'public', table: 'items' },
                 () => {
-                    void fetchPivotData();
+                    scheduleRealtimeRefresh();
                 }
             )
             .subscribe();
 
         return () => {
             supabase.removeChannel(channel);
+            if (realtimeRefreshTimerRef.current) {
+                clearTimeout(realtimeRefreshTimerRef.current);
+                realtimeRefreshTimerRef.current = null;
+            }
         };
-    }, [fetchPivotData]);
+    }, [scheduleRealtimeRefresh]);
 
     useEffect(() => {
         return () => {
@@ -294,14 +340,62 @@ export default function PivotInventoryTable({ filters }: PivotInventoryTableProp
         };
     }, []);
 
+    useEffect(() => {
+        const container = scrollContainerRef.current;
+        if (!container) return;
+
+        const updateViewport = () => setViewportHeight(container.clientHeight);
+        updateViewport();
+
+        if (typeof ResizeObserver !== 'undefined') {
+            const resizeObserver = new ResizeObserver(() => updateViewport());
+            resizeObserver.observe(container);
+            return () => resizeObserver.disconnect();
+        }
+
+        window.addEventListener('resize', updateViewport);
+        return () => window.removeEventListener('resize', updateViewport);
+    }, [data]);
+
     const warehouseCodes = useMemo(() => data?.warehouses.map(w => w.code) || [], [data]);
     const tree = useMemo(() => {
         if (!data) return [];
         return buildTree(data.items, warehouseCodes);
     }, [data, warehouseCodes]);
 
-    function toggleCollapse(path: string) {
-        setCollapsed((prev) => {
+    const searchValue = typeof filters?.search === 'string' ? filters.search : '';
+    const hasSearchTerm = searchValue.trim().length > 0;
+
+    function isNodeCollapsed(node: TreeNode, path: string): boolean {
+        if (hasSearchTerm) {
+            // While searching, always expand to show product + matching variants.
+            return false;
+        }
+
+        const isProductNode = node.level === 2 && node.children.length > 0;
+        if (isProductNode) {
+            // Default behavior: variants hidden unless user expands that product.
+            return !expandedProducts.has(path);
+        }
+
+        return collapsedGroups.has(path);
+    }
+
+    function toggleCollapse(path: string, node: TreeNode) {
+        if (hasSearchTerm) return;
+
+        const isProductNode = node.level === 2 && node.children.length > 0;
+        if (isProductNode) {
+            setExpandedProducts((prev) => {
+                const next = new Set(prev);
+                if (next.has(path)) next.delete(path);
+                else next.add(path);
+                return next;
+            });
+            return;
+        }
+
+        setCollapsedGroups((prev) => {
             const next = new Set(prev);
             if (next.has(path)) next.delete(path);
             else next.add(path);
@@ -376,12 +470,30 @@ export default function PivotInventoryTable({ filters }: PivotInventoryTableProp
         for (const node of nodes) {
             const path = parentPath ? `${parentPath}/${node.label}` : node.label;
             flatRows.push({ node, path, indent });
-            if (node.children.length > 0 && !collapsed.has(path)) {
+            if (node.children.length > 0 && !isNodeCollapsed(node, path)) {
                 flatten(node.children, path, indent + 1);
             }
         }
     }
     flatten(tree, '', 0);
+
+    const totalFlatRows = flatRows.length;
+    const shouldVirtualize = totalFlatRows > 180;
+    const estimatedVisibleRows = viewportHeight > 0
+        ? Math.ceil(viewportHeight / VIRTUAL_ROW_HEIGHT)
+        : 40;
+    const rawStartIndex = shouldVirtualize
+        ? Math.max(0, Math.floor(scrollTop / VIRTUAL_ROW_HEIGHT) - VIRTUAL_OVERSCAN)
+        : 0;
+    const startIndex = shouldVirtualize
+        ? Math.min(rawStartIndex, Math.max(0, totalFlatRows - 1))
+        : 0;
+    const endIndex = shouldVirtualize
+        ? Math.min(totalFlatRows, startIndex + estimatedVisibleRows + VIRTUAL_OVERSCAN * 2)
+        : totalFlatRows;
+    const visibleRows = shouldVirtualize ? flatRows.slice(startIndex, endIndex) : flatRows;
+    const topSpacerHeight = shouldVirtualize ? startIndex * VIRTUAL_ROW_HEIGHT : 0;
+    const bottomSpacerHeight = shouldVirtualize ? (totalFlatRows - endIndex) * VIRTUAL_ROW_HEIGHT : 0;
 
     const stickyColWidth = 420;
     const skuColWidth = 150;
@@ -390,6 +502,7 @@ export default function PivotInventoryTable({ filters }: PivotInventoryTableProp
     const remanenteColWidth = 110;
     const cellWidth = 100;
     const totalColWidth = 105;
+    const totalColumns = 6 + warehouseCodes.length;
     // All frozen columns widths (sticky)
     const frozenWidth = stickyColWidth + skuColWidth + marcaColWidth + colorColWidth + remanenteColWidth + totalColWidth;
     const extraColsWidth = skuColWidth + marcaColWidth + colorColWidth + remanenteColWidth + totalColWidth;
@@ -463,7 +576,17 @@ export default function PivotInventoryTable({ filters }: PivotInventoryTableProp
             </div>
 
             <div style={{ position: 'relative', overflow: 'hidden', width: '100%' }}>
-                <div style={{ overflowX: 'auto', overflowY: 'auto', maxHeight: '75vh', width: '100%' }}>
+                <div
+                    ref={scrollContainerRef}
+                    onScroll={(e) => {
+                        const nextTop = e.currentTarget.scrollTop;
+                        // Keep updates cheap while scrolling.
+                        if (Math.abs(nextTop - scrollTop) > 2) {
+                            setScrollTop(nextTop);
+                        }
+                    }}
+                    style={{ overflowX: 'auto', overflowY: 'auto', maxHeight: '75vh', width: '100%' }}
+                >
                     <table style={{
                         borderCollapse: 'separate',
                         borderSpacing: 0,
@@ -581,20 +704,44 @@ export default function PivotInventoryTable({ filters }: PivotInventoryTableProp
                         </thead>
                         {/* ─── Body ─── */}
                         <tbody>
-                            {flatRows.map(({ node, path, indent }) => {
-                                const isLeaf = node.level === 3;
-                                const isGroup = !isLeaf;
+                            {topSpacerHeight > 0 && (
+                                <tr aria-hidden="true">
+                                    <td
+                                        colSpan={totalColumns}
+                                        style={{
+                                            height: topSpacerHeight,
+                                            padding: 0,
+                                            border: 'none',
+                                            background: 'transparent',
+                                        }}
+                                    />
+                                </tr>
+                            )}
+
+                            {visibleRows.map(({ node, path, indent }) => {
+                                const rowItem = node.items?.[0] || null;
+                                const isItemRow = !!rowItem;
+                                const isVariantRow = isItemRow && node.level === 3;
+                                const isGroup = !isItemRow;
                                 const style = LEVEL_COLORS[node.level] || LEVEL_COLORS[3];
                                 const hasChildren = node.children.length > 0;
-                                const isCollapsed = collapsed.has(path);
+                                const isCollapsed = isNodeCollapsed(node, path);
                                 const isZeroStock = node.grandTotal === 0;
+                                // Keep variant text aligned with product text for readability.
+                                const nameIndent = isVariantRow ? Math.max(indent - 1, 0) : indent;
 
-                                // For leaf rows, get the item data
-                                const leafItem = isLeaf && node.items?.[0] ? node.items[0] : null;
-                                const skuVal = leafItem ? leafItem.sku : '';
-                                const marcaVal = node.level === 1 ? node.label : (leafItem ? (leafItem.brand || '') : '');
-                                const colorVal = leafItem ? (leafItem.color || '') : '';
-                                const daysInStockVal = leafItem?.daysInStock ?? null;
+                                const skuVal = rowItem?.sku || '';
+                                const variantLabel = rowItem
+                                    ? (
+                                        (rowItem.color && rowItem.color.trim().length > 0)
+                                            ? `Variante ${rowItem.color}`
+                                            : `Variante ${rowItem.sku}`
+                                    )
+                                    : '';
+                                const nameVal = isVariantRow ? variantLabel : node.label;
+                                const marcaVal = node.level === 1 ? node.label : (rowItem ? (rowItem.brand || '') : '');
+                                const colorVal = rowItem ? (rowItem.color || '') : '';
+                                const daysInStockVal = rowItem?.daysInStock ?? null;
 
                                 return (
                                     <tr
@@ -602,7 +749,7 @@ export default function PivotInventoryTable({ filters }: PivotInventoryTableProp
                                         style={{
                                             background: style.bg,
                                             transition: 'background 0.15s',
-                                            opacity: isZeroStock && isLeaf ? 0.5 : 1,
+                                            opacity: isZeroStock && isItemRow ? 0.5 : 1,
                                         }}
                                         onMouseEnter={(e) => {
                                             if (node.level >= 2) e.currentTarget.style.background = 'rgba(255,255,255,0.04)';
@@ -618,7 +765,7 @@ export default function PivotInventoryTable({ filters }: PivotInventoryTableProp
                                                 position: 'sticky', left: 0, zIndex: 2,
                                                 background: style.bg === 'transparent' || style.bg.startsWith('rgba') ? 'var(--card)' : style.bg,
                                                 padding: '7px 10px',
-                                                paddingLeft: 14 + indent * 20,
+                                                paddingLeft: 14 + nameIndent * 20,
                                                 fontWeight: style.fontWeight,
                                                 fontSize: node.level <= 1 ? 13 : 12,
                                                 color: style.text,
@@ -631,13 +778,19 @@ export default function PivotInventoryTable({ filters }: PivotInventoryTableProp
                                                 cursor: hasChildren ? 'pointer' : 'default',
                                                 userSelect: 'none',
                                             }}
-                                            onClick={() => hasChildren && toggleCollapse(path)}
+                                            onClick={() => hasChildren && toggleCollapse(path, node)}
                                         >
                                             <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
                                                 {hasChildren && (
                                                     isCollapsed
                                                         ? <ChevronRight size={14} style={{ opacity: 0.6, flexShrink: 0 }} />
                                                         : <ChevronDown size={14} style={{ opacity: 0.6, flexShrink: 0 }} />
+                                                )}
+                                                {!hasChildren && isVariantRow && (
+                                                    <span style={{ width: 14, display: 'inline-block', flexShrink: 0, opacity: 0.6 }}>-</span>
+                                                )}
+                                                {!hasChildren && !isVariantRow && node.level >= 2 && (
+                                                    <span style={{ width: 14, display: 'inline-block', flexShrink: 0 }} />
                                                 )}
                                                 {node.level <= 1 && <span style={{
                                                     display: 'inline-block',
@@ -650,11 +803,11 @@ export default function PivotInventoryTable({ filters }: PivotInventoryTableProp
                                                     marginRight: 2,
                                                     flexShrink: 0,
                                                 }} />}
-                                                {isLeaf ? '' : node.label}
+                                                {nameVal}
                                             </span>
                                             {/* Instant tooltip for long names */}
-                                            {node.level === 2 && node.label.length > 30 && (
-                                                <span className="pivot-tooltip">{node.label}</span>
+                                            {node.level >= 2 && nameVal.length > 30 && (
+                                                <span className="pivot-tooltip">{nameVal}</span>
                                             )}
                                         </td>
 
@@ -719,7 +872,7 @@ export default function PivotInventoryTable({ filters }: PivotInventoryTableProp
                                             padding: '7px 8px',
                                             fontSize: 11,
                                             textAlign: 'right',
-                                            color: !isLeaf ? '#64748b' : (daysInStockVal == null ? 'rgba(100,116,139,0.5)' : '#fbbf24'),
+                                            color: !isItemRow ? '#64748b' : (daysInStockVal == null ? 'rgba(100,116,139,0.5)' : '#fbbf24'),
                                             whiteSpace: 'nowrap',
                                             overflow: 'hidden',
                                             textOverflow: 'ellipsis',
@@ -729,7 +882,7 @@ export default function PivotInventoryTable({ filters }: PivotInventoryTableProp
                                             minWidth: remanenteColWidth, maxWidth: remanenteColWidth,
                                             fontVariantNumeric: 'tabular-nums',
                                         }}>
-                                            {!isLeaf ? '' : (daysInStockVal == null ? '—' : `${daysInStockVal}d`)}
+                                            {!isItemRow ? '' : (daysInStockVal == null ? '—' : `${daysInStockVal}d`)}
                                         </td>
 
                                         {/* Grand total — before warehouses (sticky) */}
@@ -750,7 +903,7 @@ export default function PivotInventoryTable({ filters }: PivotInventoryTableProp
                                         }}>
                                             <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
                                                 {node.grandTotal !== 0 ? node.grandTotal.toLocaleString() : '0'}
-                                                {isLeaf && leafItem && leafItem.hasSnapshots === false && node.grandTotal > 0 && (
+                                                {isItemRow && rowItem && rowItem.hasSnapshots === false && node.grandTotal > 0 && (
                                                     <span title="Stock total de Zoho (sin desglose por bodega)" style={{
                                                         fontSize: 9,
                                                         color: '#f97316',
@@ -769,7 +922,7 @@ export default function PivotInventoryTable({ filters }: PivotInventoryTableProp
                                             warehouseCodes.map((code) => {
                                                 const qty = node.totals[code] || 0;
                                                 const highlight = getCellColor(qty);
-                                                const noBreakdown = isLeaf && leafItem && leafItem.hasSnapshots === false;
+                                                const noBreakdown = isItemRow && rowItem && rowItem.hasSnapshots === false;
                                                 return (
                                                     <td key={code} style={{
                                                         padding: '7px 12px',
@@ -785,7 +938,7 @@ export default function PivotInventoryTable({ filters }: PivotInventoryTableProp
                                                         transition: 'background 0.15s',
                                                         fontStyle: noBreakdown ? 'italic' : undefined,
                                                     }}>
-                                                        {noBreakdown ? '·' : (qty !== 0 ? qty.toLocaleString() : (isLeaf ? '—' : ''))}
+                                                        {noBreakdown ? '·' : (qty !== 0 ? qty.toLocaleString() : (isItemRow ? '—' : ''))}
                                                     </td>
                                                 );
                                             })
@@ -793,6 +946,20 @@ export default function PivotInventoryTable({ filters }: PivotInventoryTableProp
                                     </tr>
                                 );
                             })}
+
+                            {bottomSpacerHeight > 0 && (
+                                <tr aria-hidden="true">
+                                    <td
+                                        colSpan={totalColumns}
+                                        style={{
+                                            height: bottomSpacerHeight,
+                                            padding: 0,
+                                            border: 'none',
+                                            background: 'transparent',
+                                        }}
+                                    />
+                                </tr>
+                            )}
 
                             {/* ─── Grand Total Footer Row ─── */}
                             <tr>

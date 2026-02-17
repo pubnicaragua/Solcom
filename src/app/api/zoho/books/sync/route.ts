@@ -18,6 +18,53 @@ function normalizeSku(value: unknown): string {
     .toUpperCase();
 }
 
+function buildFallbackSku(zohoItemId: string): string {
+  const normalized = String(zohoItemId || '').trim();
+  return `NO-SKU-${normalized || Date.now()}`;
+}
+
+function toNullableText(value: unknown): string | null {
+  const text = String(value ?? '').trim();
+  return text.length > 0 ? text : null;
+}
+
+function toNullableNumber(value: unknown): number | null {
+  const n = Number(value);
+  return Number.isFinite(n) ? n : null;
+}
+
+function normalizeItemState(value: unknown): string | null {
+  const raw = String(value ?? '').trim();
+  if (!raw) return null;
+  const upper = raw.toUpperCase();
+
+  if (upper === 'ACTIVE' || upper === 'INACTIVE') return null;
+  if (upper === 'NEW' || upper === 'NUEVO') return 'NUEVO';
+  if (upper === 'USED' || upper === 'USADO' || upper === 'SEMINUEVO') return 'USADO';
+
+  return null;
+}
+
+function buildItemPayloadFromZoho(zohoItem: any) {
+  const zohoItemId = String(zohoItem?.item_id ?? '').trim();
+  const customFields = zohoItem?.custom_field_hash || {};
+  const sku = String(zohoItem?.sku ?? '').trim() || buildFallbackSku(zohoItemId);
+  const name = String(zohoItem?.name ?? '').trim() || sku;
+
+  return {
+    sku,
+    name,
+    zoho_item_id: zohoItemId || null,
+    color: toNullableText(customFields.cf_color ?? zohoItem?.color),
+    state: normalizeItemState(customFields.cf_estado ?? customFields.cf_state ?? zohoItem?.status),
+    marca: toNullableText(customFields.cf_marca ?? customFields.cf_brand ?? zohoItem?.brand),
+    category: toNullableText(customFields.cf_categoria ?? zohoItem?.category_name),
+    stock_total: 0,
+    price: toNullableNumber(zohoItem?.rate),
+    updated_at: new Date().toISOString(),
+  };
+}
+
 async function fetchZohoItems(accessToken: string, apiDomain: string, organizationId: string) {
   const items: any[] = [];
   let page = 1;
@@ -81,6 +128,7 @@ export async function POST(request: Request) {
         { status: 500 }
       );
     }
+    const onlyNew = validation.data.onlyNew === true;
 
     const auth = await getZohoAccessToken();
     if ('error' in auth) {
@@ -164,6 +212,8 @@ export async function POST(request: Request) {
     let inventoryBalanceRows = 0;
     let inventoryBalanceSynced = false;
     let itemsSkipped = 0;
+    let existingItemsSkipped = 0;
+    let itemsCreated = 0;
     let itemsMatchedBySku = 0;
     let itemsRelinkedBySku = 0;
     let itemsWithWarehouses = 0;
@@ -180,8 +230,19 @@ export async function POST(request: Request) {
 
     for (const zohoItem of zohoItems) {
       const zohoItemId = String(zohoItem.item_id ?? '').trim();
+      if (!zohoItemId) {
+        itemsSkipped += 1;
+        continue;
+      }
       const skuKey = normalizeSku(zohoItem.sku);
       let itemId = itemMapByZoho.get(zohoItemId);
+      const existingBySku = skuKey && !duplicateSkus.has(skuKey) ? itemMapBySku.get(skuKey) : undefined;
+
+      // Incremental mode: only process genuinely new products.
+      if (onlyNew && (itemId || existingBySku)) {
+        existingItemsSkipped += 1;
+        continue;
+      }
 
       if (!itemId && skuKey && !duplicateSkus.has(skuKey)) {
         itemId = itemMapBySku.get(skuKey);
@@ -202,8 +263,54 @@ export async function POST(request: Request) {
       }
 
       if (!itemId) {
-        itemsSkipped += 1;
-        continue;
+        const itemPayload = buildItemPayloadFromZoho(zohoItem);
+        let insertPayload = itemPayload;
+
+        // Avoid SKU unique conflicts when Zoho SKU already exists locally under a different item.
+        const payloadSkuKey = normalizeSku(insertPayload.sku);
+        if (payloadSkuKey && itemMapBySku.has(payloadSkuKey)) {
+          insertPayload = {
+            ...insertPayload,
+            sku: buildFallbackSku(zohoItemId),
+          };
+        }
+
+        const { data: insertedItem, error: insertError } = await supabase
+          .from('items')
+          .insert(insertPayload)
+          .select('id, sku')
+          .single();
+
+        if (insertError) {
+          // Defensive fallback: if another process inserted it already, recover by zoho_item_id.
+          const { data: existingItem } = await supabase
+            .from('items')
+            .select('id, sku')
+            .eq('zoho_item_id', zohoItemId)
+            .limit(1);
+
+          const recovered = existingItem?.[0];
+          if (!recovered) {
+            console.error(`[SYNC WARN] Could not create local item for Zoho item ${zohoItemId}: ${insertError.message}`);
+            itemsSkipped += 1;
+            continue;
+          }
+
+          itemId = recovered.id;
+          itemMapByZoho.set(zohoItemId, itemId);
+          const recoveredSkuKey = normalizeSku(recovered.sku);
+          if (recoveredSkuKey && !duplicateSkus.has(recoveredSkuKey)) {
+            itemMapBySku.set(recoveredSkuKey, itemId);
+          }
+        } else {
+          itemId = insertedItem.id;
+          itemsCreated += 1;
+          itemMapByZoho.set(zohoItemId, itemId);
+          const insertedSkuKey = normalizeSku(insertedItem.sku);
+          if (insertedSkuKey && !duplicateSkus.has(insertedSkuKey)) {
+            itemMapBySku.set(insertedSkuKey, itemId);
+          }
+        }
       }
 
       let locationsList: any[] = [];
@@ -414,7 +521,9 @@ export async function POST(request: Request) {
     return NextResponse.json({
       success: true,
       snapshotsCreated,
+      itemsCreated,
       itemsSkipped,
+      existingItemsSkipped,
       itemsWithWarehouses,
       itemsWithoutWarehouses,
       missingWarehouseMappings,
@@ -429,6 +538,7 @@ export async function POST(request: Request) {
       sampleZohoWarehouseIds: Array.from(sampleZohoWarehouseIds).slice(0, 10),
       inventoryBalanceSynced,
       inventoryBalanceRows,
+      mode: onlyNew ? 'only_new' : 'full',
       message: `Sincronización de inventario completada: ${snapshotsCreated} snapshots`,
     });
   } catch (error) {

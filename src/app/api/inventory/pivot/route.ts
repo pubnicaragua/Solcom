@@ -9,10 +9,25 @@ function sanitizeSearchTerm(raw: string): string {
         .trim();
 }
 
+function normalizeItemState(value: unknown): 'NUEVO' | 'USADO' | null {
+    const raw = String(value ?? '').trim();
+    if (!raw) return null;
+
+    const upper = raw.toUpperCase();
+    if (upper === 'NUEVO' || upper === 'NEW') return 'NUEVO';
+    if (upper === 'USADO' || upper === 'USED' || upper === 'SEMINUEVO') return 'USADO';
+
+    // Zoho lifecycle status is not a physical condition.
+    if (upper === 'ACTIVE' || upper === 'INACTIVE') return null;
+
+    return null;
+}
+
 export async function GET(request: Request) {
     try {
         const { searchParams } = new URL(request.url);
         const search = sanitizeSearchTerm(searchParams.get('search') || '');
+        const warehouse = (searchParams.get('warehouse') || '').trim();
         const state = searchParams.get('state') || '';
         const category = searchParams.get('category') || '';
         const marca = searchParams.get('marca') || searchParams.get('brand') || '';
@@ -32,6 +47,14 @@ export async function GET(request: Request) {
         if (allWhError) throw allWhError;
         const activeWarehouses = activeWhRaw || [];
         const allWarehouses = allWhRaw || [];
+        const selectedWarehouse =
+            (warehouse
+                ? activeWarehouses.find((w: any) => w.id === warehouse || w.code === warehouse)
+                : null) ||
+            (warehouse
+                ? allWarehouses.find((w: any) => w.id === warehouse || w.code === warehouse)
+                : null) ||
+            null;
 
         // 2) Fetch items with filters (search precision-first)
         const buildItemsQuery = (searchMode: 'prefix' | 'contains' | null) => {
@@ -121,9 +144,92 @@ export async function GET(request: Request) {
                 }
             }
         }
-        const items = Array.from(skuMap.values());
+        let items = Array.from(skuMap.values());
         if (items.length === 0) {
-            return NextResponse.json({ warehouses: activeWarehouses.map(w => ({ code: w.code, name: w.name })), items: [] });
+            return NextResponse.json({
+                warehouses: activeWarehouses.map(w => ({ code: w.code, name: w.name })),
+                items: [],
+                totalBeforeFilter: 0,
+                selectedWarehouse: selectedWarehouse ? { id: selectedWarehouse.id, code: selectedWarehouse.code } : null,
+            });
+        }
+
+        // Fast-path for warehouse filter:
+        // first reduce candidate items before loading the full pivot breakdown.
+        const ITEM_CHUNK = 250;
+        let selectedWarehousePositiveItemIds: Set<string> | null = null;
+        if (selectedWarehouse) {
+            selectedWarehousePositiveItemIds = new Set<string>();
+            const initialItemIds = items.map((i: any) => i.id);
+
+            try {
+                for (let i = 0; i < initialItemIds.length; i += ITEM_CHUNK) {
+                    const itemChunk = initialItemIds.slice(i, i + ITEM_CHUNK);
+                    const { data, error } = await (supabase.from as any)('inventory_balance')
+                        .select('item_id, qty_on_hand')
+                        .eq('warehouse_id', selectedWarehouse.id)
+                        .in('item_id', itemChunk)
+                        .gt('qty_on_hand', 0);
+
+                    if (error) throw error;
+
+                    for (const row of data || []) {
+                        selectedWarehousePositiveItemIds.add(row.item_id);
+                    }
+                }
+            } catch (warehouseFilterError) {
+                // If inventory_balance is not available, fallback to latest snapshots.
+                console.log('Pivot warehouse filter fallback to stock_snapshots:', warehouseFilterError);
+                const SNAP_PAGE = 1000;
+                for (let i = 0; i < initialItemIds.length; i += ITEM_CHUNK) {
+                    const itemChunk = initialItemIds.slice(i, i + ITEM_CHUNK);
+                    let snapPage = 0;
+                    let snapHasMore = true;
+                    const latestSeen = new Set<string>();
+
+                    while (snapHasMore) {
+                        const from = snapPage * SNAP_PAGE;
+                        const to = from + SNAP_PAGE - 1;
+                        const { data, error } = await supabase
+                            .from('stock_snapshots')
+                            .select('item_id, qty, synced_at')
+                            .eq('warehouse_id', selectedWarehouse.id)
+                            .in('item_id', itemChunk)
+                            .order('synced_at', { ascending: false })
+                            .range(from, to);
+
+                        if (error) throw error;
+
+                        const rows = data || [];
+                        for (const snap of rows) {
+                            if (latestSeen.has(snap.item_id)) continue;
+                            latestSeen.add(snap.item_id);
+                            if ((snap.qty ?? 0) > 0) {
+                                selectedWarehousePositiveItemIds.add(snap.item_id);
+                            }
+                        }
+
+                        if (rows.length < SNAP_PAGE) {
+                            snapHasMore = false;
+                        } else {
+                            snapPage += 1;
+                        }
+                        if (snapPage > 50) break;
+                    }
+                }
+            }
+
+            items = items.filter((item: any) => selectedWarehousePositiveItemIds!.has(item.id));
+            if (items.length === 0) {
+                return NextResponse.json({
+                    warehouses: activeWarehouses.map((w: any) => ({ code: w.code, name: w.name })),
+                    items: [],
+                    totalBeforeFilter: 0,
+                    model: 'inventory_balance',
+                    usedSnapshotGapFill: false,
+                    selectedWarehouse: { id: selectedWarehouse.id, code: selectedWarehouse.code },
+                });
+            }
         }
 
         // 3) Resolve stock breakdown.
@@ -137,7 +243,6 @@ export async function GET(request: Request) {
         let usingBalanceModel = false;
         let usedSnapshotGapFill = false;
 
-        const ITEM_CHUNK = 250;
         const BAL_PAGE = 1000;
         const LOT_PAGE = 1000;
 
@@ -341,7 +446,7 @@ export async function GET(request: Request) {
                 sku: item.sku,
                 name: item.name,
                 color: item.color || null,
-                state: item.state || null,
+                state: normalizeItemState(item.state),
                 brand: item.marca || null,
                 category: item.category || null,
                 warehouseQty,
@@ -352,15 +457,21 @@ export async function GET(request: Request) {
             };
         });
 
+        // Warehouse filter: show only products with stock in selected warehouse.
+        const itemsAfterWarehouseFilter = selectedWarehouse && selectedWarehousePositiveItemIds
+            ? resultItems.filter((item) => selectedWarehousePositiveItemIds!.has(item.id))
+            : resultItems;
+
         // Optionally filter out only zero-stock items (keep negatives visible).
-        const finalItems = showZeroStock ? resultItems : resultItems.filter(i => i.total !== 0);
+        const finalItems = showZeroStock ? itemsAfterWarehouseFilter : itemsAfterWarehouseFilter.filter(i => i.total !== 0);
 
         return NextResponse.json({
             warehouses: activeWarehouses.map((w: any) => ({ code: w.code, name: w.name })),
             items: finalItems,
-            totalBeforeFilter: resultItems.length,
+            totalBeforeFilter: itemsAfterWarehouseFilter.length,
             model: usingBalanceModel ? 'inventory_balance' : 'stock_snapshots',
             usedSnapshotGapFill,
+            selectedWarehouse: selectedWarehouse ? { id: selectedWarehouse.id, code: selectedWarehouse.code } : null,
         });
     } catch (error) {
         console.error('Pivot inventory error:', error);

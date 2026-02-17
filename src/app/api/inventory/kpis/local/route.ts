@@ -24,19 +24,39 @@ export async function GET() {
         let totalValue = 0;
         let totalProducts = 0;
 
-        // Avoid expensive exact count. Iterate pages until exhausted.
+        // Keep KPI count aligned with pivot:
+        // - exclude soft-removed items (zoho_removed_at is null)
+        // - deduplicate by SKU, preferring records linked to Zoho.
         const batchSize = 1000;
         let page = 0;
         let hasMore = true;
+        let canFilterRemoved = true;
+        const skuMap = new Map<string, { stock_total: number; price: number; zoho_item_id?: string | null }>();
 
         while (hasMore) {
             const from = page * batchSize;
             const to = from + batchSize - 1;
-            const { data, error } = await supabase
+            let query = supabase
                 .from('items')
-                .select('stock_total, price')
+                .select('sku, stock_total, price, zoho_item_id')
                 .order('id', { ascending: true })
                 .range(from, to);
+
+            if (canFilterRemoved) {
+                query = query.is('zoho_removed_at', null);
+            }
+
+            let { data, error } = await query;
+
+            if (error && canFilterRemoved && String(error.message || '').toLowerCase().includes('zoho_removed_at')) {
+                // Backward compatibility for environments without this column.
+                canFilterRemoved = false;
+                ({ data, error } = await supabase
+                    .from('items')
+                    .select('sku, stock_total, price, zoho_item_id')
+                    .order('id', { ascending: true })
+                    .range(from, to));
+            }
 
             if (error) {
                 console.error('[KPIs local] items page error:', error);
@@ -45,11 +65,26 @@ export async function GET() {
 
             const rows = data || [];
             for (const item of rows) {
-                totalProducts += 1;
-                const stock = Number(item.stock_total || 0);
-                const price = Number(item.price || 0);
-                totalStock += stock;
-                totalValue += (stock * price);
+                const sku = String(item.sku || '').trim();
+                if (!sku) continue;
+                const existing = skuMap.get(sku);
+                if (!existing) {
+                    skuMap.set(sku, {
+                        stock_total: Number(item.stock_total || 0),
+                        price: Number(item.price || 0),
+                        zoho_item_id: item.zoho_item_id || null,
+                    });
+                    continue;
+                }
+
+                // Keep the row linked to Zoho when duplicates exist.
+                if (!existing.zoho_item_id && item.zoho_item_id) {
+                    skuMap.set(sku, {
+                        stock_total: Number(item.stock_total || 0),
+                        price: Number(item.price || 0),
+                        zoho_item_id: item.zoho_item_id || null,
+                    });
+                }
             }
 
             if (rows.length < batchSize) {
@@ -61,6 +96,12 @@ export async function GET() {
                 // Safety cap (200k rows).
                 hasMore = false;
             }
+        }
+
+        for (const item of skuMap.values()) {
+            totalProducts += 1;
+            totalStock += Number(item.stock_total || 0);
+            totalValue += Number(item.stock_total || 0) * Number(item.price || 0);
         }
 
         const balanceUpdatedAt = (balanceSyncResult as any)?.data?.[0]?.updated_at || null;
@@ -84,6 +125,8 @@ export async function GET() {
                     message: 'KPIs calculated from local Supabase DB for performance',
                     itemsCount: totalProducts,
                     pagesRead: page + 1,
+                    deduplicatedBySku: true,
+                    canFilterRemoved,
                     balanceSyncAvailable: !!balanceUpdatedAt,
                     calculationTime: new Date().toISOString()
                 }

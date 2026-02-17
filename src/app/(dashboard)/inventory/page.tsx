@@ -32,9 +32,18 @@ export default function InventoryPage() {
 
   // Debounce search filter
   useEffect(() => {
+    const normalizedSearch = searchTerm.trim();
+
+    // Clear search immediately to restore pivot view faster.
+    if (normalizedSearch === '') {
+      setFilters(prev => (prev.search === '' ? prev : { ...prev, search: '' }));
+      return;
+    }
+
     const timer = setTimeout(() => {
-      setFilters(prev => ({ ...prev, search: searchTerm }));
-    }, 300);
+      setFilters(prev => ({ ...prev, search: normalizedSearch }));
+    }, 220);
+
     return () => clearTimeout(timer);
   }, [searchTerm]);
   const [showAdvancedFilters, setShowAdvancedFilters] = useState(false);
@@ -260,7 +269,7 @@ export default function InventoryPage() {
               <h3 style={{ fontSize: 15, fontWeight: 600, margin: 0 }}>Filtros de Búsqueda</h3>
               {activeFiltersCount > 0 && (
                 <Badge variant="success" size="sm">
-                  {activeFiltersCount} activos
+                  {activeFiltersCount} filtros
                 </Badge>
               )}
             </div>
