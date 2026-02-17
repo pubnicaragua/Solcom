@@ -63,7 +63,7 @@ export class ZohoBooksClient {
                 `${this.apiDomain}/books/v3/items?organization_id=${organizationId}&page=${page}&per_page=200${queryParams ? '&' + queryParams : ''}`,
                 {
                     headers: {
-                        'Authorization': `Bearer ${token}`,
+                        'Authorization': `Zoho-oauthtoken ${token}`,
                     },
                     cache: 'no-store',
                 }
