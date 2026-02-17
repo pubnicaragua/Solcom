@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
-import { getZohoAccessToken } from '@/lib/zoho/inventory-utils';
 import { syncItemStock } from '@/lib/zoho/sync-logic';
 
 export const dynamic = 'force-dynamic';
@@ -22,78 +21,34 @@ export async function GET(request: NextRequest) {
         const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
         const supabase = createClient(supabaseUrl, supabaseKey);
 
-        const organizationId = process.env.ZOHO_BOOKS_ORGANIZATION_ID;
-        if (!organizationId) {
-            return NextResponse.json({ error: 'Missing ZOHO_BOOKS_ORGANIZATION_ID' }, { status: 500 });
-        }
+        // Query items from Supabase (same strategy as sync-recent)
+        const { data: items, error: itemsError } = await supabase
+            .from('items')
+            .select('id, zoho_item_id, name, sku')
+            .not('zoho_item_id', 'is', null)
+            .order('updated_at', { ascending: true, nullsFirst: true })
+            .limit(50);
 
-        // Use the SAME auth as the webhook (multi-domain fallback)
-        const auth = await getZohoAccessToken();
-        if (!auth || 'error' in auth) {
+        if (itemsError) {
             return NextResponse.json({
-                error: 'Zoho auth failed',
-                details: (auth as any)?.error || 'Unknown',
+                error: 'Failed to query items',
+                details: itemsError.message,
+                durationMs: Date.now() - startTime,
                 log: debugLog
             }, { status: 500 });
         }
 
-        debugLog.push(`[cron] Auth OK via ${auth.authDomainUsed}`);
-
-        // Fetch items from Inventory API (same as webhook)
-        const url = `${auth.apiDomain}/inventory/v1/items?organization_id=${organizationId}&page=1&per_page=200&sort_column=last_modified_time&sort_order=D`;
-
-        const response = await fetch(url, {
-            headers: { 'Authorization': `Zoho-oauthtoken ${auth.accessToken}` },
-            cache: 'no-store',
-        });
-
-        let allItems: any[] = [];
-
-        if (!response.ok) {
-            // Fallback: try without sort params
-            debugLog.push(`[cron] Sort failed (${response.status}), retrying without sort...`);
-            const fallbackUrl = `${auth.apiDomain}/inventory/v1/items?organization_id=${organizationId}&page=1&per_page=200`;
-            const fallbackResponse = await fetch(fallbackUrl, {
-                headers: { 'Authorization': `Zoho-oauthtoken ${auth.accessToken}` },
-                cache: 'no-store',
-            });
-
-            if (!fallbackResponse.ok) {
-                const errorText = await fallbackResponse.text();
-                return NextResponse.json({
-                    error: 'Zoho Inventory API error',
-                    details: errorText.substring(0, 300),
-                    durationMs: Date.now() - startTime,
-                    log: debugLog
-                }, { status: 500 });
-            }
-
-            const fallbackResult = await fallbackResponse.json();
-            allItems = fallbackResult.items || [];
-        } else {
-            const result = await response.json();
-            allItems = result.items || [];
-        }
-
-        // Filter to items modified in the last 10 minutes
-        const cutoffTime = Date.now() - 10 * 60 * 1000;
-        const items = allItems.filter((item: any) => {
-            if (!item.last_modified_time) return false;
-            const itemTime = new Date(item.last_modified_time).getTime();
-            return itemTime >= cutoffTime;
-        });
-
-        debugLog.push(`[cron] Found ${items.length} recently modified items (out of ${allItems.length} fetched)`);
-
-        if (items.length === 0) {
+        if (!items || items.length === 0) {
             return NextResponse.json({
                 success: true,
-                message: 'No recent changes',
+                message: 'No items to sync',
                 itemsSynced: 0,
                 durationMs: Date.now() - startTime,
                 log: debugLog
             });
         }
+
+        debugLog.push(`[cron] Found ${items.length} items to sync`);
 
         // Pre-fetch warehouse map
         const { data: warehouses } = await supabase
@@ -113,12 +68,9 @@ export async function GET(request: NextRequest) {
         const errors: string[] = [];
 
         for (const item of items) {
-            const zohoId = item.item_id;
-            if (!zohoId) continue;
-
             try {
                 const itemLog: string[] = [];
-                await syncItemStock(zohoId, supabase, warehouseMap, itemLog);
+                await syncItemStock(item.zoho_item_id, supabase, warehouseMap, itemLog);
                 syncedCount++;
                 for (const line of itemLog) {
                     if (line.includes('ERROR') || line.includes('WARN')) {
@@ -126,9 +78,14 @@ export async function GET(request: NextRequest) {
                     }
                 }
             } catch (err) {
-                const msg = `[cron] Failed to sync item ${zohoId}: ${err instanceof Error ? err.message : 'Unknown'}`;
+                const msg = `[cron] Failed to sync ${item.sku || item.zoho_item_id}: ${err instanceof Error ? err.message : 'Unknown'}`;
                 errors.push(msg);
                 debugLog.push(msg);
+                // Stop on auth errors
+                if (err instanceof Error && err.message.includes('401')) {
+                    debugLog.push('[cron] Auth error, stopping');
+                    break;
+                }
             }
         }
 
