@@ -215,19 +215,19 @@ export default function PivotInventoryTable({ filters }: PivotInventoryTableProp
         if (syncing) return;
         setSyncing(true);
         try {
-            // Default 2 hours to catch immediate changes
             const res = await fetch('/api/inventory/sync-recent?hours=2');
             const result = await res.json();
             if (res.ok) {
-                // Force reload pivot table
                 await fetchPivotData({ force: true });
                 alert(`Sincronización completada: ${result.itemsProcessed} ítems actualizados.`);
             } else {
-                alert('Error al sincronizar: ' + (result.error || 'Desconocido'));
+                const detail = result.details || result.error || 'Desconocido';
+                const log = result.log ? '\n\nLog: ' + result.log.join('\n') : '';
+                alert('Error al sincronizar: ' + detail + log);
             }
-        } catch (error) {
+        } catch (error: any) {
             console.error('Sync failed', error);
-            alert('Error de conexión al sincronizar');
+            alert('Error de conexión al sincronizar: ' + (error?.message || ''));
         } finally {
             setSyncing(false);
         }
