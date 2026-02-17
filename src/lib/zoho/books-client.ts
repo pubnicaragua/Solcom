@@ -55,13 +55,15 @@ export class ZohoBooksClient {
         let allItems: ZohoBooksItem[] = [];
         let page = 1;
         let hasMorePages = true;
+        let loopCount = 0;
 
-        while (hasMorePages) {
+        while (hasMorePages && loopCount < 50) { // Safety break
+            loopCount++;
             const response = await fetch(
                 `${this.apiDomain}/books/v3/items?organization_id=${organizationId}&page=${page}&per_page=200${queryParams ? '&' + queryParams : ''}`,
                 {
                     headers: {
-                        'Authorization': `Zoho-oauthtoken ${token}`,
+                        'Authorization': `Bearer ${token}`,
                     },
                     cache: 'no-store',
                 }
@@ -69,7 +71,7 @@ export class ZohoBooksClient {
 
             if (!response.ok) {
                 const errorText = await response.text();
-                throw new Error(`Zoho Books API error: ${response.status} - ${errorText.substring(0, 200)}`);
+                throw new Error(`Zoho Books API error (${this.apiDomain}): ${response.status} - ${errorText.substring(0, 200)}`);
             }
 
             const result: ZohoBooksApiResponse<ZohoBooksItem> = await response.json();
