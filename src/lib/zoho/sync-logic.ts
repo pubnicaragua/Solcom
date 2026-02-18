@@ -290,7 +290,7 @@ export async function syncItemStock(
         let stockTotal = 0;
         let mappedCount = 0;
         let unmappedCount = 0;
-        const snapshots: any[] = [];
+        const snapshotMap = new Map<string, any>();
 
         for (const loc of locations) {
             const wh = warehouseMap.get(String(loc.location_id));
@@ -302,14 +302,22 @@ export async function syncItemStock(
 
             stockTotal += qty;
             mappedCount += 1;
-            snapshots.push({
-                warehouse_id: wh.id,
-                item_id: supabaseItemId,
-                qty,
-                source_ts: new Date().toISOString(),
-                synced_at: new Date().toISOString(),
-            });
+
+            if (snapshotMap.has(wh.id)) {
+                const existing = snapshotMap.get(wh.id);
+                existing.qty += qty;
+            } else {
+                snapshotMap.set(wh.id, {
+                    warehouse_id: wh.id,
+                    item_id: supabaseItemId,
+                    qty,
+                    source_ts: new Date().toISOString(),
+                    synced_at: new Date().toISOString(),
+                });
+            }
         }
+
+        const snapshots = Array.from(snapshotMap.values());
 
         if (locations.length === 0) {
             debugLog.push(`[syncItemStock] WARN: ${zohoItemId} returned 0 locations; preserving current snapshots`);

@@ -86,7 +86,7 @@ export default function VentasPage() {
 
   const addToCart = (product: Product) => {
     const existingItem = cart.find(item => item.item_id === product.item_id && item.warehouse_id === product.warehouse_id);
-    
+
     if (existingItem) {
       if (existingItem.cartQuantity < product.quantity) {
         setCart(cart.map(item =>
@@ -125,7 +125,7 @@ export default function VentasPage() {
 
   const filteredProducts = products.filter(product => {
     const matchesSearch = product.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                         product.sku.toLowerCase().includes(searchTerm.toLowerCase());
+      product.sku.toLowerCase().includes(searchTerm.toLowerCase());
     const matchesCategory = !selectedCategory || product.category === selectedCategory;
     const matchesWarehouse = !selectedWarehouse || product.warehouse_id === selectedWarehouse;
     return matchesSearch && matchesCategory && matchesWarehouse;
@@ -178,7 +178,7 @@ export default function VentasPage() {
       fetchSales();
     } catch (error) {
       console.error('Error processing sale:', error);
-      alert('❌ Error al procesar la venta');
+      alert(' Error al procesar la venta');
     } finally {
       setProcessingPayment(false);
     }
@@ -194,15 +194,15 @@ export default function VentasPage() {
   const totalRevenue = sales.reduce((sum, sale) => sum + sale.total, 0);
 
   return (
-    <div style={{ padding: '24px', background: '#F9FAFB', minHeight: '100vh' }}>
+    <div style={{ padding: '24px', background: 'var(--background)', minHeight: '100vh', color: 'var(--text)' }}>
       {/* Header con KPIs */}
       <div style={{ marginBottom: '32px' }}>
-        <h1 style={{ fontSize: '32px', fontWeight: 700, color: '#111827', marginBottom: '24px' }}>
-          💰 Punto de Venta
+        <h1 className="h-title" style={{ fontWeight: 700, marginBottom: '24px' }}>
+           Punto de Venta
         </h1>
 
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: '20px', marginBottom: '24px' }}>
-          <div style={{ background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)', padding: '24px', borderRadius: '12px', color: 'white' }}>
+          <div style={{ background: 'var(--card)', padding: '24px', borderRadius: '12px', color: 'var(--text)', boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1)' }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '8px' }}>
               <DollarSign size={24} />
               <span style={{ fontSize: '14px', opacity: 0.9 }}>Ventas Hoy</span>
@@ -211,7 +211,7 @@ export default function VentasPage() {
             <div style={{ fontSize: '12px', opacity: 0.8, marginTop: '4px' }}>{todaySales.length} transacciones</div>
           </div>
 
-          <div style={{ background: 'linear-gradient(135deg, #f093fb 0%, #f5576c 100%)', padding: '24px', borderRadius: '12px', color: 'white' }}>
+          <div style={{ background: 'var(--card)', padding: '24px', borderRadius: '12px', color: 'var(--text)', boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1)' }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '8px' }}>
               <TrendingUp size={24} />
               <span style={{ fontSize: '14px', opacity: 0.9 }}>Total Ventas</span>
@@ -220,7 +220,7 @@ export default function VentasPage() {
             <div style={{ fontSize: '12px', opacity: 0.8, marginTop: '4px' }}>{sales.length} ventas totales</div>
           </div>
 
-          <div style={{ background: 'linear-gradient(135deg, #4facfe 0%, #00f2fe 100%)', padding: '24px', borderRadius: '12px', color: 'white' }}>
+          <div style={{ background: 'var(--card)', padding: '24px', borderRadius: '12px', color: 'var(--text)', boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1)' }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '8px' }}>
               <Package size={24} />
               <span style={{ fontSize: '14px', opacity: 0.9 }}>Productos</span>
@@ -229,7 +229,7 @@ export default function VentasPage() {
             <div style={{ fontSize: '12px', opacity: 0.8, marginTop: '4px' }}>En inventario</div>
           </div>
 
-          <div style={{ background: 'linear-gradient(135deg, #43e97b 0%, #38f9d7 100%)', padding: '24px', borderRadius: '12px', color: 'white' }}>
+          <div style={{ background: 'var(--card)', padding: '24px', borderRadius: '12px', color: 'var(--text)', boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1)' }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '8px' }}>
               <Users size={24} />
               <span style={{ fontSize: '14px', opacity: 0.9 }}>Clientes</span>
@@ -304,10 +304,10 @@ export default function VentasPage() {
       </div>
 
       {/* Filtros */}
-      <div style={{ background: 'white', padding: '20px', borderRadius: '12px', marginBottom: '24px', boxShadow: '0 1px 3px rgba(0,0,0,0.1)' }}>
+      <div style={{ background: 'var(--card)', padding: '20px', borderRadius: '12px', marginBottom: '24px', border: '1px solid var(--border)' }}>
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(250px, 1fr))', gap: '16px' }}>
           <div>
-            <label style={{ display: 'block', fontSize: '14px', fontWeight: 600, color: '#374151', marginBottom: '8px' }}>
+            <label style={{ display: 'block', fontSize: '14px', fontWeight: 600, color: 'var(--muted)', marginBottom: '8px' }}>
               <Search size={16} style={{ display: 'inline', marginRight: '6px' }} />
               Buscar Producto
             </label>
@@ -319,7 +319,9 @@ export default function VentasPage() {
               style={{
                 width: '100%',
                 padding: '10px 12px',
-                border: '1px solid #D1D5DB',
+                background: 'var(--background)',
+                color: 'var(--text)',
+                border: '1px solid var(--border)',
                 borderRadius: '8px',
                 fontSize: '14px'
               }}
@@ -327,7 +329,7 @@ export default function VentasPage() {
           </div>
 
           <div>
-            <label style={{ display: 'block', fontSize: '14px', fontWeight: 600, color: '#374151', marginBottom: '8px' }}>
+            <label style={{ display: 'block', fontSize: '14px', fontWeight: 600, color: 'var(--muted)', marginBottom: '8px' }}>
               <Filter size={16} style={{ display: 'inline', marginRight: '6px' }} />
               Categoría
             </label>
@@ -337,7 +339,9 @@ export default function VentasPage() {
               style={{
                 width: '100%',
                 padding: '10px 12px',
-                border: '1px solid #D1D5DB',
+                background: 'var(--background)',
+                color: 'var(--text)',
+                border: '1px solid var(--border)',
                 borderRadius: '8px',
                 fontSize: '14px'
               }}
@@ -350,7 +354,7 @@ export default function VentasPage() {
           </div>
 
           <div>
-            <label style={{ display: 'block', fontSize: '14px', fontWeight: 600, color: '#374151', marginBottom: '8px' }}>
+            <label style={{ display: 'block', fontSize: '14px', fontWeight: 600, color: 'var(--muted)', marginBottom: '8px' }}>
               <Building2 size={16} style={{ display: 'inline', marginRight: '6px' }} />
               Bodega
             </label>
@@ -360,7 +364,9 @@ export default function VentasPage() {
               style={{
                 width: '100%',
                 padding: '10px 12px',
-                border: '1px solid #D1D5DB',
+                background: 'var(--background)',
+                color: 'var(--text)',
+                border: '1px solid var(--border)',
                 borderRadius: '8px',
                 fontSize: '14px'
               }}
@@ -376,7 +382,7 @@ export default function VentasPage() {
 
       {/* Grid de productos */}
       {loading ? (
-        <div style={{ textAlign: 'center', padding: '60px', color: '#6B7280' }}>
+        <div style={{ textAlign: 'center', padding: '60px', color: 'var(--muted)' }}>
           Cargando productos...
         </div>
       ) : (
@@ -387,59 +393,59 @@ export default function VentasPage() {
               <div
                 key={`${product.item_id}-${product.warehouse_id}`}
                 style={{
-                  background: 'white',
+                  background: 'var(--card)',
                   borderRadius: '12px',
                   padding: '20px',
-                  boxShadow: '0 2px 8px rgba(0,0,0,0.1)',
+                  border: inCart ? '2px solid var(--brand-primary)' : '1px solid var(--border)',
+                  boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1)',
                   transition: 'transform 0.2s, box-shadow 0.2s',
-                  cursor: 'pointer',
-                  border: inCart ? '2px solid #DC2626' : '2px solid transparent'
+                  cursor: 'pointer'
                 }}
                 onMouseEnter={(e) => {
                   e.currentTarget.style.transform = 'translateY(-4px)';
-                  e.currentTarget.style.boxShadow = '0 8px 16px rgba(0,0,0,0.15)';
+                  e.currentTarget.style.boxShadow = '0 10px 15px -3px rgba(0, 0, 0, 0.3)';
                 }}
                 onMouseLeave={(e) => {
                   e.currentTarget.style.transform = 'translateY(0)';
-                  e.currentTarget.style.boxShadow = '0 2px 8px rgba(0,0,0,0.1)';
+                  e.currentTarget.style.boxShadow = '0 4px 6px -1px rgba(0, 0, 0, 0.1)';
                 }}
               >
                 <div style={{ marginBottom: '12px' }}>
-                  <h3 style={{ fontSize: '16px', fontWeight: 700, color: '#111827', marginBottom: '4px' }}>
+                  <h3 style={{ fontSize: '16px', fontWeight: 700, color: 'var(--text)', marginBottom: '4px' }}>
                     {product.name}
                   </h3>
-                  <p style={{ fontSize: '12px', color: '#6B7280' }}>SKU: {product.sku}</p>
+                  <p style={{ fontSize: '12px', color: 'var(--muted)' }}>SKU: {product.sku}</p>
                 </div>
 
                 <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px', marginBottom: '12px' }}>
                   {product.category && (
-                    <span style={{ fontSize: '11px', padding: '4px 8px', background: '#DBEAFE', color: '#1E40AF', borderRadius: '4px', fontWeight: 500 }}>
+                    <span style={{ fontSize: '11px', padding: '4px 8px', background: 'rgba(59, 130, 246, 0.1)', color: '#60a5fa', borderRadius: '4px', fontWeight: 500 }}>
                       {product.category}
                     </span>
                   )}
                   {product.brand && (
-                    <span style={{ fontSize: '11px', padding: '4px 8px', background: '#FEF3C7', color: '#92400E', borderRadius: '4px', fontWeight: 500 }}>
+                    <span style={{ fontSize: '11px', padding: '4px 8px', background: 'rgba(245, 158, 11, 0.1)', color: '#fbbf24', borderRadius: '4px', fontWeight: 500 }}>
                       {product.brand}
                     </span>
                   )}
                   {product.color && (
-                    <span style={{ fontSize: '11px', padding: '4px 8px', background: '#E0E7FF', color: '#3730A3', borderRadius: '4px', fontWeight: 500 }}>
+                    <span style={{ fontSize: '11px', padding: '4px 8px', background: 'rgba(99, 102, 241, 0.1)', color: '#818cf8', borderRadius: '4px', fontWeight: 500 }}>
                       {product.color}
                     </span>
                   )}
                 </div>
 
                 <div style={{ marginBottom: '12px' }}>
-                  <div style={{ fontSize: '12px', color: '#6B7280', marginBottom: '4px' }}>
-                    📦 Stock: <strong style={{ color: product.quantity < 10 ? '#DC2626' : '#059669' }}>{product.quantity}</strong>
+                  <div style={{ fontSize: '12px', color: 'var(--muted)', marginBottom: '4px' }}>
+                    📦 Stock: <strong style={{ color: product.quantity < 10 ? 'var(--brand-primary)' : 'var(--success)' }}>{product.quantity}</strong>
                   </div>
-                  <div style={{ fontSize: '12px', color: '#6B7280' }}>
+                  <div style={{ fontSize: '12px', color: 'var(--muted)' }}>
                     🏢 {product.warehouse_name}
                   </div>
                 </div>
 
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '16px', paddingTop: '16px', borderTop: '1px solid #E5E7EB' }}>
-                  <div style={{ fontSize: '24px', fontWeight: 700, color: '#DC2626' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '16px', paddingTop: '16px', borderTop: '1px solid var(--border)' }}>
+                  <div style={{ fontSize: '24px', fontWeight: 700, color: 'var(--brand-primary)' }}>
                     ${product.unit_price.toFixed(2)}
                   </div>
                   <button
@@ -478,45 +484,47 @@ export default function VentasPage() {
           right: 0,
           bottom: 0,
           width: '450px',
-          background: 'white',
-          boxShadow: '-4px 0 16px rgba(0,0,0,0.2)',
+          background: 'var(--card)',
+          boxShadow: '-4px 0 16px rgba(0,0,0,0.5)',
           zIndex: 1000,
           display: 'flex',
-          flexDirection: 'column'
+          flexDirection: 'column',
+          borderLeft: '1px solid var(--border)'
         }}>
-          <div style={{ padding: '24px', borderBottom: '1px solid #E5E7EB', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-            <h2 style={{ fontSize: '20px', fontWeight: 700, color: '#111827', display: 'flex', alignItems: 'center', gap: '10px' }}>
+          <div style={{ padding: '24px', borderBottom: '1px solid var(--border)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <h2 style={{ fontSize: '20px', fontWeight: 700, color: 'var(--text)', display: 'flex', alignItems: 'center', gap: '10px' }}>
               <ShoppingCart size={24} />
               Carrito de Compras
             </h2>
-            <button onClick={() => setShowCart(false)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#6B7280' }}>
+            <button onClick={() => setShowCart(false)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--muted)' }}>
               <X size={24} />
             </button>
           </div>
 
           <div style={{ flex: 1, overflowY: 'auto', padding: '20px' }}>
             {cart.length === 0 ? (
-              <div style={{ textAlign: 'center', padding: '60px 20px', color: '#6B7280' }}>
+              <div style={{ textAlign: 'center', padding: '60px 20px', color: 'var(--muted)' }}>
                 <ShoppingCart size={48} style={{ margin: '0 auto 16px', opacity: 0.3 }} />
                 <p>El carrito está vacío</p>
               </div>
             ) : (
               cart.map(item => (
                 <div key={`${item.item_id}-${item.warehouse_id}`} style={{
-                  background: '#F9FAFB',
+                  background: 'var(--background)',
                   padding: '16px',
                   borderRadius: '8px',
-                  marginBottom: '12px'
+                  marginBottom: '12px',
+                  border: '1px solid var(--border)'
                 }}>
                   <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px' }}>
                     <div style={{ flex: 1 }}>
-                      <h4 style={{ fontSize: '14px', fontWeight: 600, color: '#111827', marginBottom: '4px' }}>{item.name}</h4>
-                      <p style={{ fontSize: '12px', color: '#6B7280' }}>SKU: {item.sku}</p>
-                      <p style={{ fontSize: '12px', color: '#6B7280' }}>🏢 {item.warehouse_name}</p>
+                      <h4 style={{ fontSize: '14px', fontWeight: 600, color: 'var(--text)', marginBottom: '4px' }}>{item.name}</h4>
+                      <p style={{ fontSize: '12px', color: 'var(--muted)' }}>SKU: {item.sku}</p>
+                      <p style={{ fontSize: '12px', color: 'var(--muted)' }}>🏢 {item.warehouse_name}</p>
                     </div>
                     <button
                       onClick={() => removeFromCart(item.item_id, item.warehouse_id)}
-                      style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#DC2626' }}
+                      style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--brand-primary)' }}
                     >
                       <Trash2 size={18} />
                     </button>
@@ -572,10 +580,10 @@ export default function VentasPage() {
           </div>
 
           {cart.length > 0 && (
-            <div style={{ padding: '20px', borderTop: '2px solid #E5E7EB', background: '#F9FAFB' }}>
+            <div style={{ padding: '20px', borderTop: '2px solid var(--border)', background: 'var(--card)' }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '16px' }}>
-                <span style={{ fontSize: '18px', fontWeight: 600, color: '#111827' }}>Total:</span>
-                <span style={{ fontSize: '28px', fontWeight: 700, color: '#DC2626' }}>
+                <span style={{ fontSize: '18px', fontWeight: 600, color: 'var(--text)' }}>Total:</span>
+                <span style={{ fontSize: '28px', fontWeight: 700, color: 'var(--brand-primary)' }}>
                   ${cartTotal.toFixed(2)}
                 </span>
               </div>
@@ -604,9 +612,9 @@ export default function VentasPage() {
                 style={{
                   width: '100%',
                   padding: '12px',
-                  background: 'white',
-                  color: '#DC2626',
-                  border: '1px solid #DC2626',
+                  background: 'transparent',
+                  color: 'var(--brand-primary)',
+                  border: '1px solid var(--brand-primary)',
                   borderRadius: '8px',
                   fontSize: '14px',
                   fontWeight: 600,
@@ -636,24 +644,25 @@ export default function VentasPage() {
           padding: '20px'
         }}>
           <div style={{
-            background: 'white',
+            background: 'var(--card)',
             borderRadius: '16px',
             maxWidth: '600px',
             width: '100%',
             maxHeight: '90vh',
             overflowY: 'auto',
-            boxShadow: '0 20px 60px rgba(0,0,0,0.3)'
+            boxShadow: '0 20px 60px rgba(0,0,0,0.5)',
+            border: '1px solid var(--border)'
           }}>
-            <div style={{ padding: '24px', borderBottom: '1px solid #E5E7EB', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-              <h2 style={{ fontSize: '24px', fontWeight: 700, color: '#111827' }}>💳 Finalizar Venta</h2>
-              <button onClick={() => setShowCheckout(false)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#6B7280' }}>
+            <div style={{ padding: '24px', borderBottom: '1px solid var(--border)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <h2 style={{ fontSize: '24px', fontWeight: 700, color: 'var(--text)' }}>💳 Finalizar Venta</h2>
+              <button onClick={() => setShowCheckout(false)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--muted)' }}>
                 <X size={24} />
               </button>
             </div>
 
             <div style={{ padding: '24px' }}>
               <div style={{ marginBottom: '20px' }}>
-                <label style={{ display: 'block', fontSize: '14px', fontWeight: 600, color: '#374151', marginBottom: '8px' }}>
+                <label style={{ display: 'block', fontSize: '14px', fontWeight: 600, color: 'var(--muted)', marginBottom: '8px' }}>
                   Nombre del Cliente *
                 </label>
                 <input
@@ -664,7 +673,9 @@ export default function VentasPage() {
                   style={{
                     width: '100%',
                     padding: '12px',
-                    border: '1px solid #D1D5DB',
+                    background: 'var(--background)',
+                    color: 'var(--text)',
+                    border: '1px solid var(--border)',
                     borderRadius: '8px',
                     fontSize: '14px'
                   }}
@@ -672,7 +683,7 @@ export default function VentasPage() {
               </div>
 
               <div style={{ marginBottom: '20px' }}>
-                <label style={{ display: 'block', fontSize: '14px', fontWeight: 600, color: '#374151', marginBottom: '8px' }}>
+                <label style={{ display: 'block', fontSize: '14px', fontWeight: 600, color: 'var(--muted)', marginBottom: '8px' }}>
                   Email *
                 </label>
                 <input
@@ -683,7 +694,9 @@ export default function VentasPage() {
                   style={{
                     width: '100%',
                     padding: '12px',
-                    border: '1px solid #D1D5DB',
+                    background: 'var(--background)',
+                    color: 'var(--text)',
+                    border: '1px solid var(--border)',
                     borderRadius: '8px',
                     fontSize: '14px'
                   }}
@@ -691,7 +704,7 @@ export default function VentasPage() {
               </div>
 
               <div style={{ marginBottom: '20px' }}>
-                <label style={{ display: 'block', fontSize: '14px', fontWeight: 600, color: '#374151', marginBottom: '8px' }}>
+                <label style={{ display: 'block', fontSize: '14px', fontWeight: 600, color: 'var(--muted)', marginBottom: '8px' }}>
                   Teléfono
                 </label>
                 <input
@@ -702,7 +715,9 @@ export default function VentasPage() {
                   style={{
                     width: '100%',
                     padding: '12px',
-                    border: '1px solid #D1D5DB',
+                    background: 'var(--background)',
+                    color: 'var(--text)',
+                    border: '1px solid var(--border)',
                     borderRadius: '8px',
                     fontSize: '14px'
                   }}
@@ -726,8 +741,8 @@ export default function VentasPage() {
                         onClick={() => setPaymentMethod(method.value)}
                         style={{
                           padding: '16px',
-                          border: paymentMethod === method.value ? '2px solid #DC2626' : '2px solid #E5E7EB',
-                          background: paymentMethod === method.value ? '#FEF2F2' : 'white',
+                          border: paymentMethod === method.value ? '2px solid var(--brand-primary)' : '1px solid var(--border)',
+                          background: paymentMethod === method.value ? 'rgba(220, 38, 38, 0.1)' : 'var(--background)',
                           borderRadius: '8px',
                           cursor: 'pointer',
                           display: 'flex',
@@ -737,8 +752,8 @@ export default function VentasPage() {
                           transition: 'all 0.2s'
                         }}
                       >
-                        <Icon size={24} color={paymentMethod === method.value ? '#DC2626' : '#6B7280'} />
-                        <span style={{ fontSize: '13px', fontWeight: 600, color: paymentMethod === method.value ? '#DC2626' : '#374151' }}>
+                        <Icon size={24} color={paymentMethod === method.value ? 'var(--brand-primary)' : 'var(--muted)'} />
+                        <span style={{ fontSize: '13px', fontWeight: 600, color: paymentMethod === method.value ? 'var(--brand-primary)' : 'var(--text)' }}>
                           {method.label}
                         </span>
                       </button>
@@ -747,17 +762,17 @@ export default function VentasPage() {
                 </div>
               </div>
 
-              <div style={{ background: '#F9FAFB', padding: '20px', borderRadius: '8px', marginBottom: '24px' }}>
-                <h3 style={{ fontSize: '16px', fontWeight: 600, color: '#111827', marginBottom: '12px' }}>Resumen de Compra</h3>
+              <div style={{ background: 'var(--background)', padding: '20px', borderRadius: '8px', marginBottom: '24px', border: '1px solid var(--border)' }}>
+                <h3 style={{ fontSize: '16px', fontWeight: 600, color: 'var(--text)', marginBottom: '12px' }}>Resumen de Compra</h3>
                 {cart.map(item => (
                   <div key={`${item.item_id}-${item.warehouse_id}`} style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px', fontSize: '14px' }}>
-                    <span style={{ color: '#6B7280' }}>{item.name} x{item.cartQuantity}</span>
-                    <span style={{ fontWeight: 600, color: '#111827' }}>${(item.unit_price * item.cartQuantity).toFixed(2)}</span>
+                    <span style={{ color: 'var(--muted)' }}>{item.name} x{item.cartQuantity}</span>
+                    <span style={{ fontWeight: 600, color: 'var(--text)' }}>${(item.unit_price * item.cartQuantity).toFixed(2)}</span>
                   </div>
                 ))}
-                <div style={{ borderTop: '2px solid #E5E7EB', marginTop: '12px', paddingTop: '12px', display: 'flex', justifyContent: 'space-between' }}>
-                  <span style={{ fontSize: '18px', fontWeight: 700, color: '#111827' }}>Total:</span>
-                  <span style={{ fontSize: '24px', fontWeight: 700, color: '#DC2626' }}>${cartTotal.toFixed(2)}</span>
+                <div style={{ borderTop: '2px solid var(--border)', marginTop: '12px', paddingTop: '12px', display: 'flex', justifyContent: 'space-between' }}>
+                  <span style={{ fontSize: '18px', fontWeight: 700, color: 'var(--text)' }}>Total:</span>
+                  <span style={{ fontSize: '24px', fontWeight: 700, color: 'var(--brand-primary)' }}>${cartTotal.toFixed(2)}</span>
                 </div>
               </div>
 
@@ -799,17 +814,18 @@ export default function VentasPage() {
           padding: '20px'
         }}>
           <div style={{
-            background: 'white',
+            background: 'var(--card)',
             borderRadius: '16px',
             maxWidth: '1000px',
             width: '100%',
             maxHeight: '90vh',
             overflowY: 'auto',
-            boxShadow: '0 20px 60px rgba(0,0,0,0.3)'
+            boxShadow: '0 20px 60px rgba(0,0,0,0.5)',
+            border: '1px solid var(--border)'
           }}>
-            <div style={{ padding: '24px', borderBottom: '1px solid #E5E7EB', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-              <h2 style={{ fontSize: '24px', fontWeight: 700, color: '#111827' }}>📊 Historial de Ventas</h2>
-              <button onClick={() => setShowSalesHistory(false)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#6B7280' }}>
+            <div style={{ padding: '24px', borderBottom: '1px solid var(--border)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <h2 style={{ fontSize: '24px', fontWeight: 700, color: 'var(--text)' }}>📊 Historial de Ventas</h2>
+              <button onClick={() => setShowSalesHistory(false)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--muted)' }}>
                 <X size={24} />
               </button>
             </div>
@@ -823,24 +839,24 @@ export default function VentasPage() {
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
                   {sales.slice().reverse().map(sale => (
                     <div key={sale.id} style={{
-                      background: '#F9FAFB',
+                      background: 'var(--background)',
                       padding: '20px',
                       borderRadius: '12px',
-                      border: '1px solid #E5E7EB'
+                      border: '1px solid var(--border)'
                     }}>
                       <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '12px' }}>
                         <div>
-                          <h3 style={{ fontSize: '16px', fontWeight: 700, color: '#111827', marginBottom: '4px' }}>
+                          <h3 style={{ fontSize: '16px', fontWeight: 700, color: 'var(--text)', marginBottom: '4px' }}>
                             {sale.customer_name}
                           </h3>
-                          <p style={{ fontSize: '13px', color: '#6B7280' }}>{sale.customer_email}</p>
-                          {sale.customer_phone && <p style={{ fontSize: '13px', color: '#6B7280' }}>📞 {sale.customer_phone}</p>}
+                          <p style={{ fontSize: '13px', color: 'var(--muted)' }}>{sale.customer_email}</p>
+                          {sale.customer_phone && <p style={{ fontSize: '13px', color: 'var(--muted)' }}>📞 {sale.customer_phone}</p>}
                         </div>
                         <div style={{ textAlign: 'right' }}>
-                          <div style={{ fontSize: '24px', fontWeight: 700, color: '#DC2626' }}>
+                          <div style={{ fontSize: '24px', fontWeight: 700, color: 'var(--brand-primary)' }}>
                             ${sale.total.toFixed(2)}
                           </div>
-                          <div style={{ fontSize: '12px', color: '#6B7280', marginTop: '4px' }}>
+                          <div style={{ fontSize: '12px', color: 'var(--muted)', marginTop: '4px' }}>
                             {new Date(sale.created_at).toLocaleString('es-NI')}
                           </div>
                         </div>
@@ -849,8 +865,8 @@ export default function VentasPage() {
                         <span style={{
                           fontSize: '12px',
                           padding: '4px 12px',
-                          background: sale.payment_method === 'efectivo' ? '#DCFCE7' : sale.payment_method === 'tarjeta' ? '#DBEAFE' : '#FEF3C7',
-                          color: sale.payment_method === 'efectivo' ? '#166534' : sale.payment_method === 'tarjeta' ? '#1E40AF' : '#92400E',
+                          background: sale.payment_method === 'efectivo' ? 'rgba(22, 163, 74, 0.1)' : sale.payment_method === 'tarjeta' ? 'rgba(30, 64, 175, 0.1)' : 'rgba(146, 64, 14, 0.1)',
+                          color: sale.payment_method === 'efectivo' ? '#22c55e' : sale.payment_method === 'tarjeta' ? '#60a5fa' : '#fbbf24',
                           borderRadius: '6px',
                           fontWeight: 600
                         }}>
@@ -859,15 +875,15 @@ export default function VentasPage() {
                         <span style={{
                           fontSize: '12px',
                           padding: '4px 12px',
-                          background: '#DCFCE7',
-                          color: '#166534',
+                          background: 'rgba(22, 163, 74, 0.1)',
+                          color: '#22c55e',
                           borderRadius: '6px',
                           fontWeight: 600
                         }}>
                           ✅ {sale.status}
                         </span>
                       </div>
-                      <div style={{ fontSize: '13px', color: '#6B7280' }}>
+                      <div style={{ fontSize: '13px', color: 'var(--muted)' }}>
                         <strong>{sale.items.length}</strong> producto(s)
                       </div>
                     </div>
