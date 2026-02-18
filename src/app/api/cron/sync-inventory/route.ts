@@ -8,6 +8,18 @@ export const maxDuration = 60;
 
 const CRON_SECRET = process.env.CRON_SECRET;
 
+/**
+ * Smart Cron: fetches recently-modified items from Zoho Inventory
+ * and syncs only those that changed since last sync.
+ *
+ * Strategy: query Zoho for items sorted by last_modified_time DESC,
+ * then sync each one. This catches changes from Books sales,
+ * manual adjustments, and anything not covered by webhooks.
+ *
+ * Can be triggered by:
+ * - Vercel cron (1x/day on Hobby)
+ * - External cron service (every 2 min) like cron-job.org
+ */
 export async function GET(request: NextRequest) {
     const authHeader = request.headers.get('authorization');
     if (CRON_SECRET && authHeader !== `Bearer ${CRON_SECRET}`) {
@@ -21,6 +33,7 @@ export async function GET(request: NextRequest) {
         const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
         const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
         const supabase = createClient(supabaseUrl, supabaseKey);
+        const organizationId = process.env.ZOHO_BOOKS_ORGANIZATION_ID;
 
         // 1. Authenticate ONCE
         const auth = await getZohoAccessToken();
@@ -35,37 +48,9 @@ export async function GET(request: NextRequest) {
         }
 
         const authData = { accessToken: auth.accessToken, apiDomain: auth.apiDomain };
+        debugLog.push(`[cron] Auth OK via ${auth.authDomainUsed}`);
 
-        // 2. Scan items
-        const { data: items, error: itemsError } = await supabase
-            .from('items')
-            .select('id, zoho_item_id, name, sku')
-            .not('zoho_item_id', 'is', null)
-            .order('updated_at', { ascending: true, nullsFirst: true })
-            .limit(50); // Cron limits to 50 to run frequently without timeout
-
-        if (itemsError) {
-            return NextResponse.json({
-                error: 'Failed to query items',
-                details: itemsError.message,
-                durationMs: Date.now() - startTime,
-                log: debugLog
-            }, { status: 500 });
-        }
-
-        if (!items || items.length === 0) {
-            return NextResponse.json({
-                success: true,
-                message: 'No items to sync',
-                itemsSynced: 0,
-                durationMs: Date.now() - startTime,
-                log: debugLog
-            });
-        }
-
-        debugLog.push(`[cron] Found ${items.length} items to sync`);
-
-        // 3. Warehouse Map
+        // 2. Warehouse Map
         const { data: warehouses } = await supabase
             .from('warehouses')
             .select('id, code, active, zoho_warehouse_id');
@@ -79,20 +64,87 @@ export async function GET(request: NextRequest) {
             }
         }
 
+        // 3. Fetch recently-modified items from Zoho
+        // Sort by last_modified_time DESC → most recently changed first
+        const zohoUrl = `${auth.apiDomain}/inventory/v1/items?organization_id=${organizationId}&sort_by=last_modified_time&sort_order=descending&per_page=15&page=1`;
+
+        const zohoRes = await fetch(zohoUrl, {
+            headers: { Authorization: `Zoho-oauthtoken ${auth.accessToken}` },
+            cache: 'no-store',
+        });
+
+        if (!zohoRes.ok) {
+            const errText = await zohoRes.text();
+            debugLog.push(`[cron] Zoho items list failed: ${zohoRes.status} ${errText.substring(0, 200)}`);
+            return NextResponse.json({
+                error: 'Zoho API error',
+                details: errText.substring(0, 300),
+                log: debugLog
+            }, { status: 502 });
+        }
+
+        const zohoData = await zohoRes.json();
+        const zohoItems = zohoData.items || [];
+        debugLog.push(`[cron] Fetched ${zohoItems.length} recently-modified items from Zoho`);
+
+        if (zohoItems.length === 0) {
+            return NextResponse.json({
+                success: true,
+                message: 'No items from Zoho',
+                itemsSynced: 0,
+                durationMs: Date.now() - startTime,
+                log: debugLog
+            });
+        }
+
+        // 4. For each Zoho item, check if it needs syncing
+        // Compare Zoho's last_modified_time with our updated_at
+        const zohoItemIds = zohoItems.map((i: any) => String(i.item_id));
+
+        // Fetch our items' updated_at for comparison
+        const { data: localItems } = await supabase
+            .from('items')
+            .select('id, zoho_item_id, updated_at')
+            .in('zoho_item_id', zohoItemIds);
+
+        const localMap = new Map<string, { id: string; updated_at: string | null }>();
+        for (const item of localItems || []) {
+            if (item.zoho_item_id) {
+                localMap.set(item.zoho_item_id, { id: item.id, updated_at: item.updated_at });
+            }
+        }
+
+        // 5. Sync items that changed
         let syncedCount = 0;
+        let skippedCount = 0;
         const errors: string[] = [];
 
-        for (const item of items) {
-            try {
-                // Check time
-                if (Date.now() - startTime > 55000) {
-                    debugLog.push('[cron] Time limit approaching, stopping');
-                    break;
-                }
+        for (const zohoItem of zohoItems) {
+            // Time guard: stop before Vercel timeout
+            if (Date.now() - startTime > 25000) {
+                debugLog.push(`[cron] Time limit (25s), synced ${syncedCount} items`);
+                break;
+            }
 
+            const zohoItemId = String(zohoItem.item_id);
+            const zohoModified = zohoItem.last_modified_time;
+            const local = localMap.get(zohoItemId);
+
+            // Skip if Zoho hasn't changed since our last sync
+            if (local?.updated_at && zohoModified) {
+                const zohoTime = new Date(zohoModified).getTime();
+                const localTime = new Date(local.updated_at).getTime();
+
+                // Only skip if our record is newer (within 60s tolerance)
+                if (localTime > zohoTime - 60000) {
+                    skippedCount++;
+                    continue;
+                }
+            }
+
+            try {
                 const itemLog: string[] = [];
-                // Use existing auth!
-                await syncItemStock(item.zoho_item_id, supabase, warehouseMap, itemLog, authData);
+                await syncItemStock(zohoItemId, supabase, warehouseMap, itemLog, authData);
                 syncedCount++;
                 for (const line of itemLog) {
                     if (line.includes('ERROR') || line.includes('WARN')) {
@@ -100,17 +152,20 @@ export async function GET(request: NextRequest) {
                     }
                 }
             } catch (err) {
-                const msg = `[cron] Falied to sync ${item.sku}: ${err instanceof Error ? err.message : 'Unknown'}`;
+                const msg = `[cron] Failed: ${zohoItem.sku || zohoItemId}: ${err instanceof Error ? err.message : 'Unknown'}`;
                 errors.push(msg);
                 debugLog.push(msg);
             }
         }
 
         const durationMs = Date.now() - startTime;
+        debugLog.push(`[cron] Done: synced=${syncedCount} skipped=${skippedCount} errors=${errors.length} in ${durationMs}ms`);
+
         return NextResponse.json({
             success: true,
             itemsSynced: syncedCount,
-            totalFound: items.length,
+            itemsSkipped: skippedCount,
+            totalChecked: zohoItems.length,
             errors: errors.length,
             durationMs,
             log: debugLog,

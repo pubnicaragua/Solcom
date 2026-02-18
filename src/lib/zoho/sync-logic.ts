@@ -295,14 +295,12 @@ export async function syncItemStock(
         for (const loc of locations) {
             const wh = warehouseMap.get(String(loc.location_id));
             const qty = toQty(loc.location_stock_on_hand ?? loc.location_available_stock);
-            if (wh?.active) {
-                stockTotal += qty;
-            }
             if (!wh) {
                 unmappedCount += 1;
                 continue;
             }
 
+            stockTotal += qty;
             mappedCount += 1;
             snapshots.push({
                 warehouse_id: wh.id,

@@ -252,7 +252,7 @@ async function main() {
 
                 if (!wh) continue;
 
-                if (wh.active) stockTotal += qty;
+                stockTotal += qty;
 
                 snapshots.push({
                     warehouse_id: wh.id,
