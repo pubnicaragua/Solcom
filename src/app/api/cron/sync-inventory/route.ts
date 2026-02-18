@@ -58,6 +58,8 @@ export async function GET(request: NextRequest) {
 
         const authData = { accessToken: auth.accessToken, apiDomain: auth.apiDomain };
         debugLog.push(`[cron] Auth OK via ${auth.authDomainUsed}`);
+        debugLog.push(`[cron] Using Org ID: '${organizationId}'`);
+        debugLog.push(`[cron] API Domain: '${auth.apiDomain}'`);
 
         // 2. Warehouse Map
         const { data: warehouses } = await supabase
@@ -76,6 +78,7 @@ export async function GET(request: NextRequest) {
         // 3. Fetch recently-modified items from Zoho
         // Sort by last_modified_time DESC → most recently changed first
         const zohoUrl = `${auth.apiDomain}/inventory/v1/items?organization_id=${organizationId}&sort_column=last_modified_time&sort_order=D&per_page=15&page=1`;
+        debugLog.push(`[cron] Fetching URL: ${zohoUrl}`);
 
         const zohoRes = await fetch(zohoUrl, {
             headers: { Authorization: `Zoho-oauthtoken ${auth.accessToken}` },
