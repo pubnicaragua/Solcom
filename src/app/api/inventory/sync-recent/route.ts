@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 import { syncItemStock } from '@/lib/zoho/sync-logic';
+import { getZohoAccessToken } from '@/lib/zoho/inventory-utils';
 
 export const dynamic = 'force-dynamic';
 export const maxDuration = 60;
@@ -14,7 +15,30 @@ export async function GET(request: Request) {
         const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
         const supabase = createClient(supabaseUrl, supabaseKey);
 
-        // Get ALL items with zoho_item_id from our database
+        // 1. Authenticate with Zoho ONCE
+        const auth = await getZohoAccessToken();
+        if (!auth || 'error' in auth) {
+            const errorMsg = (auth as any)?.error || 'Unknown auth error';
+            console.error('Zoho Auth Failed:', errorMsg);
+            return NextResponse.json({
+                error: 'Zoho Authentication Failed',
+                details: errorMsg,
+                log: debugLog
+            }, { status: 500 });
+        }
+
+        // Robust check for required properties
+        if (!auth.accessToken || !auth.apiDomain) {
+            console.error('Zoho Auth Invalid Response:', auth);
+            return NextResponse.json({
+                error: 'Zoho Authentication Invalid',
+                log: debugLog
+            }, { status: 500 });
+        }
+
+        debugLog.push(`Zoho Auth OK via ${auth.authDomainUsed}`);
+
+        // 2. Scan items
         const { data: items, error: itemsError } = await supabase
             .from('items')
             .select('id, zoho_item_id, name, sku')
@@ -39,7 +63,7 @@ export async function GET(request: Request) {
 
         debugLog.push(`Found ${items.length} items to sync`);
 
-        // Pre-fetch warehouse map
+        // 3. Warehouse Map
         const { data: warehouses } = await supabase
             .from('warehouses')
             .select('id, code, active, zoho_warehouse_id');
@@ -53,16 +77,16 @@ export async function GET(request: Request) {
             }
         }
 
-        debugLog.push(`Warehouse map entries: ${warehouseMap.size}`);
-
-        // Process items in parallel batches of 5 for speed
+        // 4. Batch Processing with Token Reuse
         const BATCH_SIZE = 5;
         let processedCount = 0;
         let errorCount = 0;
         let authError = false;
 
+        // Simplify auth object to match expected type
+        const authData = { accessToken: auth.accessToken, apiDomain: auth.apiDomain };
+
         for (let i = 0; i < items.length && !authError; i += BATCH_SIZE) {
-            // Check if we're running out of time (leave 5s buffer)
             if (Date.now() - startTime > 55000) {
                 debugLog.push(`Time limit approaching, synced ${processedCount}/${items.length} items`);
                 break;
@@ -72,7 +96,8 @@ export async function GET(request: Request) {
             const results = await Promise.allSettled(
                 batch.map(async (item) => {
                     const itemLog: string[] = [];
-                    await syncItemStock(item.zoho_item_id, supabase, warehouseMap, itemLog);
+                    // Pass existing auth to avoid re-fetching
+                    await syncItemStock(item.zoho_item_id, supabase, warehouseMap, itemLog, authData);
                     return itemLog;
                 })
             );
@@ -81,8 +106,8 @@ export async function GET(request: Request) {
                 const result = results[j];
                 if (result.status === 'fulfilled') {
                     processedCount++;
-                    // Only include errors/warnings
                     for (const line of result.value) {
+                        // Only log errors/warnings to keep log size manageable
                         if (line.includes('ERROR') || line.includes('WARN')) {
                             debugLog.push(line);
                         }
@@ -94,15 +119,12 @@ export async function GET(request: Request) {
                     debugLog.push(`ERROR syncing ${item.sku || item.zoho_item_id}: ${errMsg}`);
                     if (errMsg.includes('expired') || errMsg.includes('unauthorized')) {
                         authError = true;
-                        debugLog.push('Auth error detected, stopping');
                     }
                 }
             }
         }
 
         const durationMs = Date.now() - startTime;
-        debugLog.push(`Completed in ${(durationMs / 1000).toFixed(1)}s: ${processedCount}/${items.length} synced, ${errorCount} errors`);
-
         return NextResponse.json({
             success: true,
             itemsProcessed: processedCount,

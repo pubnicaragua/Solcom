@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 import { syncItemStock } from '@/lib/zoho/sync-logic';
+import { getZohoAccessToken } from '@/lib/zoho/inventory-utils';
 
 export const dynamic = 'force-dynamic';
 export const maxDuration = 60;
@@ -21,13 +22,27 @@ export async function GET(request: NextRequest) {
         const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
         const supabase = createClient(supabaseUrl, supabaseKey);
 
-        // Query items from Supabase (same strategy as sync-recent)
+        // 1. Authenticate ONCE
+        const auth = await getZohoAccessToken();
+        if (!auth || 'error' in auth) {
+            const errorMsg = (auth as any)?.error || 'Unknown auth error';
+            console.error('[cron] Zoho Auth Failed:', errorMsg);
+            return NextResponse.json({
+                error: 'Zoho Authentication Failed',
+                details: errorMsg,
+                log: debugLog
+            }, { status: 500 });
+        }
+
+        const authData = { accessToken: auth.accessToken, apiDomain: auth.apiDomain };
+
+        // 2. Scan items
         const { data: items, error: itemsError } = await supabase
             .from('items')
             .select('id, zoho_item_id, name, sku')
             .not('zoho_item_id', 'is', null)
             .order('updated_at', { ascending: true, nullsFirst: true })
-            .limit(50);
+            .limit(50); // Cron limits to 50 to run frequently without timeout
 
         if (itemsError) {
             return NextResponse.json({
@@ -50,7 +65,7 @@ export async function GET(request: NextRequest) {
 
         debugLog.push(`[cron] Found ${items.length} items to sync`);
 
-        // Pre-fetch warehouse map
+        // 3. Warehouse Map
         const { data: warehouses } = await supabase
             .from('warehouses')
             .select('id, code, active, zoho_warehouse_id');
@@ -69,8 +84,15 @@ export async function GET(request: NextRequest) {
 
         for (const item of items) {
             try {
+                // Check time
+                if (Date.now() - startTime > 55000) {
+                    debugLog.push('[cron] Time limit approaching, stopping');
+                    break;
+                }
+
                 const itemLog: string[] = [];
-                await syncItemStock(item.zoho_item_id, supabase, warehouseMap, itemLog);
+                // Use existing auth!
+                await syncItemStock(item.zoho_item_id, supabase, warehouseMap, itemLog, authData);
                 syncedCount++;
                 for (const line of itemLog) {
                     if (line.includes('ERROR') || line.includes('WARN')) {
@@ -78,20 +100,13 @@ export async function GET(request: NextRequest) {
                     }
                 }
             } catch (err) {
-                const msg = `[cron] Failed to sync ${item.sku || item.zoho_item_id}: ${err instanceof Error ? err.message : 'Unknown'}`;
+                const msg = `[cron] Falied to sync ${item.sku}: ${err instanceof Error ? err.message : 'Unknown'}`;
                 errors.push(msg);
                 debugLog.push(msg);
-                // Stop on auth errors
-                if (err instanceof Error && err.message.includes('401')) {
-                    debugLog.push('[cron] Auth error, stopping');
-                    break;
-                }
             }
         }
 
         const durationMs = Date.now() - startTime;
-        debugLog.push(`[cron] Completed in ${durationMs}ms: ${syncedCount}/${items.length} synced`);
-
         return NextResponse.json({
             success: true,
             itemsSynced: syncedCount,
@@ -100,6 +115,7 @@ export async function GET(request: NextRequest) {
             durationMs,
             log: debugLog,
         });
+
     } catch (error) {
         const durationMs = Date.now() - startTime;
         console.error('[cron] sync-inventory error:', error);

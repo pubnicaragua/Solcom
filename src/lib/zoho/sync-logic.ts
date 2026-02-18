@@ -17,6 +17,7 @@ export function normalizeItemState(value: unknown): string | null {
     if (!raw) return null;
     const upper = raw.toUpperCase();
 
+    // ACTIVE/INACTIVE are Zoho statuses, not our state values
     if (upper === 'ACTIVE' || upper === 'INACTIVE') return null;
     if (upper === 'NEW' || upper === 'NUEVO') return 'NUEVO';
     if (upper === 'USED' || upper === 'USADO' || upper === 'SEMINUEVO') return 'USADO';
@@ -122,6 +123,25 @@ export async function replaceInventoryBalanceForItem(
     }
 }
 
+// Helper: build item metadata payload from Zoho item details
+function buildItemMetadata(zohoItem: any, zohoItemId: string) {
+    const customFields = zohoItem?.custom_field_hash || {};
+    const sku = String(zohoItem?.sku ?? '').trim() || `NO-SKU-${zohoItemId}`;
+    const name = String(zohoItem?.name ?? '').trim() || sku;
+
+    return {
+        sku,
+        name,
+        zoho_item_id: zohoItemId,
+        color: String(customFields.cf_color ?? zohoItem?.color ?? '').trim() || null,
+        state: normalizeItemState(customFields.cf_estado ?? customFields.cf_state ?? zohoItem?.status),
+        marca: String(customFields.cf_marca ?? customFields.cf_brand ?? zohoItem?.brand ?? '').trim() || null,
+        category: String(customFields.cf_categoria ?? zohoItem?.category_name ?? '').trim() || null,
+        price: Number.isFinite(Number(zohoItem?.rate)) ? Number(zohoItem?.rate) : null,
+        updated_at: new Date().toISOString(),
+    };
+}
+
 // =============================================
 // Helper: sincronizar stock de UN item por zoho_item_id
 // =============================================
@@ -129,7 +149,8 @@ export async function syncItemStock(
     zohoItemId: string,
     supabase: any,
     warehouseMap: Map<string, { id: string; active: boolean }>,
-    debugLog: string[]
+    debugLog: string[],
+    existingAuth?: { accessToken: string; apiDomain: string }
 ): Promise<{ snapshotsCreated: number; stockTotal: number }> {
     const organizationId = process.env.ZOHO_BOOKS_ORGANIZATION_ID;
     if (!organizationId) {
@@ -137,21 +158,30 @@ export async function syncItemStock(
         return { snapshotsCreated: 0, stockTotal: 0 };
     }
 
-    const auth = await getZohoAccessToken();
-    if (!auth || 'error' in auth) { // Robust check
+    const auth = existingAuth || await getZohoAccessToken();
+    if (!auth || 'error' in auth) {
         debugLog.push(`[syncItemStock] ERROR auth: ${(auth as any)?.error || 'Unknown'}`);
         return { snapshotsCreated: 0, stockTotal: 0 };
     }
 
     try {
+        // 1. Fetch locations (stock per warehouse) from Zoho
         const locations = await fetchItemLocations(
             auth.accessToken,
             auth.apiDomain,
             organizationId,
             zohoItemId
         );
-        debugLog.push(`[syncItemStock] ${zohoItemId}: ${locations.length} locations`);
 
+        // 2. Fetch item details from Zoho (ALWAYS, for metadata refresh)
+        const zohoItem = await fetchZohoItemDetails(
+            auth.accessToken,
+            auth.apiDomain,
+            organizationId,
+            zohoItemId
+        );
+
+        // 3. Find or create item in Supabase
         const { data: itemRows } = await supabase
             .from('items')
             .select('id, stock_total')
@@ -161,97 +191,90 @@ export async function syncItemStock(
         let supabaseItemId = itemRows?.[0]?.id as string | undefined;
         let currentStockTotal = Number(itemRows?.[0]?.stock_total ?? 0);
 
-        if (!supabaseItemId) {
-            const zohoItem = await fetchZohoItemDetails(
-                auth.accessToken,
-                auth.apiDomain,
-                organizationId,
-                zohoItemId
-            );
+        if (zohoItem) {
+            const metadata = buildItemMetadata(zohoItem, zohoItemId);
 
-            // If item not found in Zoho (e.g. deleted), we can't sync it.
-            if (!zohoItem) {
-                debugLog.push(`[syncItemStock] WARN: Item ${zohoItemId} details not found in Zoho`);
-                return { snapshotsCreated: 0, stockTotal: 0 };
-            }
-
-            const customFields = zohoItem?.custom_field_hash || {};
-            const sku = String(zohoItem?.sku ?? '').trim() || `NO-SKU-${zohoItemId}`;
-            const name = String(zohoItem?.name ?? '').trim() || sku;
-
-            const createPayload: any = {
-                sku,
-                name,
-                zoho_item_id: zohoItemId,
-                color: String(customFields.cf_color ?? zohoItem?.color ?? '').trim() || null,
-                state: normalizeItemState(customFields.cf_estado ?? customFields.cf_state ?? zohoItem?.status),
-                marca: String(customFields.cf_marca ?? customFields.cf_brand ?? zohoItem?.brand ?? '').trim() || null,
-                category: String(customFields.cf_categoria ?? zohoItem?.category_name ?? '').trim() || null,
-                stock_total: 0,
-                price: Number.isFinite(Number(zohoItem?.rate)) ? Number(zohoItem?.rate) : null,
-                updated_at: new Date().toISOString(),
-            };
-
-            let { data: insertedItem, error: insertError } = await supabase
-                .from('items')
-                .insert(createPayload)
-                .select('id, stock_total')
-                .single();
-
-            if (insertError) {
-                // SKU may already exist locally. Try linking by SKU first, then by zoho_item_id.
-                const { data: bySku } = await supabase
+            if (supabaseItemId) {
+                // ALWAYS update metadata for existing items
+                const { error: updateErr } = await supabase
                     .from('items')
+                    .update({
+                        name: metadata.name,
+                        color: metadata.color,
+                        state: metadata.state,
+                        marca: metadata.marca,
+                        category: metadata.category,
+                        price: metadata.price,
+                        updated_at: metadata.updated_at,
+                    })
+                    .eq('id', supabaseItemId);
+
+                if (updateErr) {
+                    debugLog.push(`[syncItemStock] WARN: metadata update failed: ${updateErr.message}`);
+                }
+            } else {
+                // Create new item
+                let { data: insertedItem, error: insertError } = await supabase
+                    .from('items')
+                    .insert({ ...metadata, stock_total: 0 })
                     .select('id, stock_total')
-                    .eq('sku', sku)
-                    .limit(1);
+                    .single();
 
-                if (bySku?.[0]) {
-                    const { error: linkError } = await supabase
+                if (insertError) {
+                    // SKU conflict — try linking by SKU
+                    const { data: bySku } = await supabase
                         .from('items')
-                        .update({
-                            zoho_item_id: zohoItemId,
-                            name: createPayload.name,
-                            color: createPayload.color,
-                            state: createPayload.state,
-                            marca: createPayload.marca,
-                            category: createPayload.category,
-                            price: createPayload.price,
-                            updated_at: createPayload.updated_at,
-                        })
-                        .eq('id', bySku[0].id);
+                        .select('id, stock_total')
+                        .eq('sku', metadata.sku)
+                        .limit(1);
 
-                    if (!linkError) {
+                    if (bySku?.[0]) {
+                        await supabase
+                            .from('items')
+                            .update({
+                                zoho_item_id: zohoItemId,
+                                name: metadata.name,
+                                color: metadata.color,
+                                state: metadata.state,
+                                marca: metadata.marca,
+                                category: metadata.category,
+                                price: metadata.price,
+                                updated_at: metadata.updated_at,
+                            })
+                            .eq('id', bySku[0].id);
                         insertedItem = bySku[0];
                         insertError = null;
                     }
-                }
 
-                if (insertError) {
-                    const fallbackSku = `NO-SKU-${zohoItemId}`;
-                    if (fallbackSku !== sku) {
-                        const { data: fallbackInsert, error: fallbackError } = await supabase
-                            .from('items')
-                            .insert({ ...createPayload, sku: fallbackSku })
-                            .select('id, stock_total')
-                            .single();
-
-                        if (!fallbackError) {
-                            insertedItem = fallbackInsert;
-                            insertError = null;
+                    if (insertError) {
+                        // Last resort: fallback SKU
+                        const fallbackSku = `NO-SKU-${zohoItemId}`;
+                        if (fallbackSku !== metadata.sku) {
+                            const { data: fallbackInsert, error: fallbackError } = await supabase
+                                .from('items')
+                                .insert({ ...metadata, sku: fallbackSku, stock_total: 0 })
+                                .select('id, stock_total')
+                                .single();
+                            if (!fallbackError) {
+                                insertedItem = fallbackInsert;
+                                insertError = null;
+                            }
                         }
                     }
                 }
-            }
 
-            if (!insertError && insertedItem?.id) {
-                supabaseItemId = insertedItem.id;
-                currentStockTotal = Number(insertedItem.stock_total ?? 0);
-                debugLog.push(`[syncItemStock] Created local item for Zoho item ${zohoItemId}`);
-            } else {
-                debugLog.push(`[syncItemStock] WARN: Item ${zohoItemId} not in DB and could not be created`);
-                return { snapshotsCreated: 0, stockTotal: 0 };
+                if (!insertError && insertedItem?.id) {
+                    supabaseItemId = insertedItem.id;
+                    currentStockTotal = Number(insertedItem.stock_total ?? 0);
+                    debugLog.push(`[syncItemStock] Created local item for Zoho item ${zohoItemId}`);
+                } else {
+                    debugLog.push(`[syncItemStock] WARN: Item ${zohoItemId} could not be created`);
+                    return { snapshotsCreated: 0, stockTotal: 0 };
+                }
             }
+        } else if (!supabaseItemId) {
+            debugLog.push(`[syncItemStock] WARN: Item ${zohoItemId} not in Zoho and not in DB`);
+            return { snapshotsCreated: 0, stockTotal: 0 };
         }
 
         if (!supabaseItemId) {
@@ -259,6 +282,7 @@ export async function syncItemStock(
             return { snapshotsCreated: 0, stockTotal: 0 };
         }
 
+        // 4. Process locations → snapshots
         const mappedWarehouseIds = Array.from(
             new Set(Array.from(warehouseMap.values()).map((warehouse) => warehouse.id))
         );
@@ -296,31 +320,23 @@ export async function syncItemStock(
 
         if (unmappedCount > 0) {
             debugLog.push(`[syncItemStock] WARN: ${zohoItemId} has ${unmappedCount} unmapped locations`);
-            // Strict mapping mode:
-            // preserve current snapshots/stock_total to avoid assigning stock to wrong warehouses.
             return { snapshotsCreated: 0, stockTotal: currentStockTotal };
         }
 
-        // Evitar borrar snapshots existentes si no hubo ninguna ubicación mapeada.
         if (locations.length > 0 && mappedCount === 0) {
             const fallbackTotal = locations.reduce(
                 (sum: number, loc: any) => sum + toQty(loc.location_stock_on_hand ?? loc.location_available_stock),
                 0
             );
-            const { error: fallbackUpdateError } = await supabase
+            await supabase
                 .from('items')
                 .update({ stock_total: fallbackTotal })
                 .eq('id', supabaseItemId);
-
-            if (fallbackUpdateError) {
-                debugLog.push(`[syncItemStock] ERROR fallback stock_total update: ${fallbackUpdateError.message}`);
-            } else {
-                debugLog.push(`[syncItemStock] WARN: no mapped locations for ${zohoItemId}; updated stock_total=${fallbackTotal} and preserved snapshots`);
-            }
-
+            debugLog.push(`[syncItemStock] WARN: no mapped locations for ${zohoItemId}; updated stock_total=${fallbackTotal}`);
             return { snapshotsCreated: 0, stockTotal: fallbackTotal };
         }
 
+        // 5. Update stock_total
         const { error: updateError } = await supabase
             .from('items')
             .update({ stock_total: stockTotal })
@@ -330,6 +346,7 @@ export async function syncItemStock(
             return { snapshotsCreated: 0, stockTotal };
         }
 
+        // 6. Replace snapshots
         const { error: deleteError } = await supabase
             .from('stock_snapshots')
             .delete()
@@ -349,12 +366,13 @@ export async function syncItemStock(
             }
         }
 
+        // 7. Replace inventory_balance
         await replaceInventoryBalanceForItem(
             supabase,
             supabaseItemId,
             snapshots,
             mappedWarehouseIds,
-            'webhook',
+            'sync',
             debugLog
         );
 

@@ -215,11 +215,11 @@ export default function PivotInventoryTable({ filters }: PivotInventoryTableProp
         if (syncing) return;
         setSyncing(true);
         try {
-            const res = await fetch('/api/inventory/sync-recent?hours=2');
+            const res = await fetch('/api/inventory/sync-recent');
             const result = await res.json();
             if (res.ok) {
                 await fetchPivotData({ force: true });
-                alert(`Sincronización completada: ${result.itemsProcessed} ítems actualizados.`);
+                alert(`Sincronización completada: ${result.itemsProcessed} ítems actualizados.\n(Si no terminó, vuelve a presionar el botón)`);
             } else {
                 const detail = result.details || result.error || 'Desconocido';
                 const log = result.log ? '\n\nLog: ' + result.log.join('\n') : '';
@@ -595,7 +595,7 @@ export default function PivotInventoryTable({ filters }: PivotInventoryTableProp
                         }}
                     >
                         <RefreshCw size={14} className={syncing ? 'animate-spin' : ''} />
-                        {syncing ? 'Sincronizando...' : 'Sincro Reciente'}
+                        {syncing ? 'Sincronizando...' : 'Sincronizar Todo'}
                     </button>
 
                     <button
