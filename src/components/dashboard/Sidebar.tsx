@@ -3,7 +3,7 @@
 import { useState } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { Package, BarChart3, Settings, Users, HelpCircle, Bot, Menu, X, ClipboardList, Calendar, FolderOpen, ArrowLeftRight, ShoppingCart } from 'lucide-react';
+import { Package, BarChart3, Settings, Users, HelpCircle, Bot, Menu, X, ClipboardList, Calendar, FolderOpen, ArrowLeftRight, ShoppingCart, ChevronLeft, ChevronRight } from 'lucide-react';
 import { useUserRole, hasPermission } from '@/hooks/useUserRole';
 
 const menuItems = [
@@ -23,7 +23,7 @@ import { useSidebar } from '@/contexts/SidebarContext';
 
 export default function Sidebar() {
   const pathname = usePathname();
-  const { isOpen, close } = useSidebar();
+  const { isOpen, close, isCollapsed, toggleCollapse } = useSidebar();
   const { role, loading } = useUserRole();
   console.log('Sidebar Role:', role, 'Loading:', loading);
 
@@ -54,23 +54,42 @@ export default function Sidebar() {
           borderRight: '1px solid #374151',
           display: 'flex',
           flexDirection: 'column',
-          padding: 18,
+          padding: isCollapsed ? '18px 10px' : 18,
           gap: 24,
+          width: isCollapsed ? 80 : 260,
+          transition: 'width 0.3s ease',
+          overflowX: 'hidden',
+          whiteSpace: 'nowrap',
         }}
       >
-        <div style={{ paddingBottom: 18, borderBottom: '1px solid #374151' }}>
-          <div style={{
-            background: '#FFFFFF',
-            padding: '12px',
-            borderRadius: '8px',
-            boxShadow: '0 2px 4px rgba(0,0,0,0.1)'
-          }}>
-            <img
-              src="https://www.soliscomercialni.com/Solis%20Comercial%20Logo.png"
-              alt="Solis Comercial"
-              style={{ width: '100', maxWidth: 180, height: 'auto', display: 'block' }}
-            />
-          </div>
+        <div style={{ paddingBottom: 18, borderBottom: '1px solid #374151', display: 'flex', justifyContent: isCollapsed ? 'center' : 'flex-start' }}>
+          {isCollapsed ? (
+            <div style={{
+              background: '#FFFFFF',
+              width: 40,
+              height: 40,
+              borderRadius: '8px',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              fontWeight: 'bold',
+              color: '#000'
+            }}>SC</div>
+          ) : (
+            <div style={{
+              background: '#FFFFFF',
+              padding: '8px',
+              borderRadius: '8px',
+              boxShadow: '0 2px 4px rgba(0,0,0,0.1)',
+              marginLeft: 20,
+            }}>
+              <img
+                src="https://www.soliscomercialni.com/Solis%20Comercial%20Logo.png"
+                alt="Solis Comercial"
+                style={{ width: '100', maxWidth: 160, height: 'auto', display: 'block' }}
+              />
+            </div>
+          )}
         </div>
 
         <nav style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
@@ -87,17 +106,20 @@ export default function Sidebar() {
               <Link
                 key={item.href}
                 href={item.href}
+                title={isCollapsed ? item.label : ''}
                 style={{
                   display: 'flex',
                   alignItems: 'center',
                   gap: 12,
-                  padding: '10px 14px',
+                  padding: isCollapsed ? '10px 0' : '10px 14px',
+                  justifyContent: isCollapsed ? 'center' : 'flex-start',
                   borderRadius: 8,
                   fontSize: 14,
                   fontWeight: 500,
                   color: isActive ? '#FFFFFF' : '#D1D5DB',
                   background: isActive ? '#DC2626' : 'transparent',
                   border: isActive ? '1px solid #DC2626' : '1px solid transparent',
+                  cursor: 'pointer',
                   transition: 'all 0.2s',
                   textDecoration: 'none',
                 }}
@@ -114,16 +136,50 @@ export default function Sidebar() {
                   }
                 }}
               >
-                <Icon size={18} />
-                {item.label}
+                <Icon size={20} />
+                {!isCollapsed && <span>{item.label}</span>}
               </Link>
             );
           })}
         </nav>
 
-        <div style={{ marginTop: 'auto', padding: 12, background: '#374151', borderRadius: 8, border: '1px solid #4B5563' }}>
-          <div style={{ fontSize: 12, color: '#9CA3AF', marginBottom: 4 }}>Versión</div>
-          <div style={{ fontSize: 14, fontWeight: 600, color: '#F9FAFB' }}>1.0.0</div>
+        {/* Footer with Toggle Button */}
+        <div style={{ borderTop: '1px solid #374151', paddingTop: 18, marginTop: 'auto', marginBottom: 50 }}>
+          <button
+            onClick={toggleCollapse}
+            style={{
+              background: 'transparent',
+              border: 'none',
+              color: '#9CA3AF',
+              cursor: 'pointer',
+              padding: isCollapsed ? '10px 0' : '10px 14px',
+              borderRadius: 8,
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: isCollapsed ? 'center' : 'flex-start',
+              gap: 12,
+              width: '100%',
+              transition: 'all 0.2s',
+            }}
+            onMouseEnter={(e) => {
+              e.currentTarget.style.background = '#374151';
+              e.currentTarget.style.color = '#FFFFFF';
+            }}
+            onMouseLeave={(e) => {
+              e.currentTarget.style.background = 'transparent';
+              e.currentTarget.style.color = '#9CA3AF';
+            }}
+            title={isCollapsed ? "Expandir menú" : "Contraer menú"}
+          >
+            {isCollapsed ? (
+              <ChevronRight size={20} />
+            ) : (
+              <>
+                <ChevronLeft size={20} />
+                <span style={{ fontSize: 14, fontWeight: 500 }}>Contraer menú</span>
+              </>
+            )}
+          </button>
         </div>
       </aside>
 
