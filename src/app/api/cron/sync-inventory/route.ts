@@ -35,6 +35,15 @@ export async function GET(request: NextRequest) {
         const supabase = createClient(supabaseUrl, supabaseKey);
         const organizationId = process.env.ZOHO_BOOKS_ORGANIZATION_ID;
 
+        if (!organizationId) {
+            debugLog.push('[cron] ERROR: ZOHO_BOOKS_ORGANIZATION_ID is missing in environment variables');
+            return NextResponse.json({
+                error: 'Configuration Error',
+                details: 'ZOHO_BOOKS_ORGANIZATION_ID is missing',
+                log: debugLog
+            }, { status: 500 });
+        }
+
         // 1. Authenticate ONCE
         const auth = await getZohoAccessToken();
         if (!auth || 'error' in auth) {
