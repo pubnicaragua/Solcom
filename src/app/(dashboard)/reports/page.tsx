@@ -13,8 +13,11 @@ import { Download, Package, TrendingUp, TrendingDown, Calendar, Warehouse, Alert
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 
+export const dynamic = 'force-dynamic';
+
 export default function ReportsPage() {
   const [period, setPeriod] = useState('30');
+  const [isMobile, setIsMobile] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [reportData, setReportData] = useState<any>(null);
@@ -29,6 +32,13 @@ export default function ReportsPage() {
     state: '',
     color: ''
   });
+
+  useEffect(() => {
+    setIsMobile(window.innerWidth < 640);
+    const handleResize = () => setIsMobile(window.innerWidth < 640);
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, []);
 
   // Phase 1: Load report data (instant, items table only)
   useEffect(() => {
@@ -194,11 +204,11 @@ export default function ReportsPage() {
         <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
           <Button variant="secondary" size="sm" onClick={exportToExcel}>
             <Download size={16} style={{ marginRight: 6 }} />
-            <span style={{ display: window.innerWidth < 640 ? 'none' : 'inline' }}>Excel</span>
+            <span style={{ display: isMobile ? 'none' : 'inline' }}>Excel</span>
           </Button>
           <Button variant="secondary" size="sm" onClick={exportToPDF}>
             <FileText size={16} style={{ marginRight: 6 }} />
-            <span style={{ display: window.innerWidth < 640 ? 'none' : 'inline' }}>PDF</span>
+            <span style={{ display: isMobile ? 'none' : 'inline' }}>PDF</span>
           </Button>
         </div>
       </div>
