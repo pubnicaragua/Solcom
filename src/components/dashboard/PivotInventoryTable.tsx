@@ -2,8 +2,10 @@
 
 import { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import Card from '@/components/ui/Card';
-import { ChevronRight, ChevronDown, ChevronUp, Loader2, Eye, EyeOff, Package, RefreshCw, Search } from 'lucide-react';
+import { ChevronRight, ChevronDown, ChevronUp, Loader2, Eye, EyeOff, Package, RefreshCw, Search, Palette } from 'lucide-react';
 import { supabase } from '@/lib/supabase/client';
+import { useUserRole } from '@/hooks/useUserRole';
+import WarehouseColorModal from '@/components/modals/WarehouseColorModal';
 
 
 /* ───── types ───── */
@@ -212,6 +214,9 @@ export default function PivotInventoryTable({ filters }: PivotInventoryTableProp
     const realtimeRefreshTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
     const pivotCacheRef = useRef<Map<string, { data: PivotData; ts: number }>>(new Map());
     const [isMobile, setIsMobile] = useState(false);
+    const [colorModalOpen, setColorModalOpen] = useState(false);
+    const { role } = useUserRole();
+    const canEditWarehouseColors = role === 'admin';
 
     useEffect(() => {
         const checkMobile = () => setIsMobile(window.innerWidth <= 768);
@@ -571,7 +576,8 @@ export default function PivotInventoryTable({ filters }: PivotInventoryTableProp
     }
 
     return (
-        <Card padding={0} style={{ overflow: 'hidden', maxWidth: '100%' }}>
+        <>
+            <Card padding={0} style={{ overflow: 'hidden', maxWidth: '100%' }}>
             {/* ─── Toolbar ─── */}
             <div style={{
                 padding: '12px 16px',
@@ -630,6 +636,29 @@ export default function PivotInventoryTable({ filters }: PivotInventoryTableProp
                         <RefreshCw size={14} className={syncing ? 'animate-spin' : ''} />
                         {syncing ? 'Sincronizando...' : 'Sincronizar Todo'}
                     </button>
+
+                    {canEditWarehouseColors && (
+                        <button
+                            onClick={() => setColorModalOpen(true)}
+                            style={{
+                                display: 'flex',
+                                alignItems: 'center',
+                                gap: 6,
+                                padding: '5px 12px',
+                                background: 'rgba(168,85,247,0.15)',
+                                color: '#c084fc',
+                                border: '1px solid rgba(168,85,247,0.3)',
+                                borderRadius: 8,
+                                cursor: 'pointer',
+                                fontSize: 12,
+                                fontWeight: 500,
+                                transition: 'all 0.2s ease',
+                            }}
+                        >
+                            <Palette size={14} />
+                            Colores columnas
+                        </button>
+                    )}
 
                     <button
                         onClick={() => setHideZeroStock(!hideZeroStock)}
@@ -1163,7 +1192,16 @@ export default function PivotInventoryTable({ filters }: PivotInventoryTableProp
                     </span>
                 </div>
             </div>
-        </Card >
+            </Card >
+
+            <WarehouseColorModal
+                isOpen={colorModalOpen}
+                onClose={() => setColorModalOpen(false)}
+                onSave={() => {
+                    void fetchWarehouseColors();
+                }}
+            />
+        </>
     );
 }
 

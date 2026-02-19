@@ -26,7 +26,6 @@ export default function Sidebar() {
   const pathname = usePathname();
   const { isOpen, close, isCollapsed, toggleCollapse } = useSidebar();
   const { role, loading } = useUserRole();
-  console.log('Sidebar Role:', role, 'Loading:', loading);
 
   return (
     <>

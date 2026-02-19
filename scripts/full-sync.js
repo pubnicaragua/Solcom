@@ -88,8 +88,25 @@ function normalizeState(value) {
 
 // ── MAIN ──
 async function main() {
-    console.log('\n🚀 FULL ZOHO → SUPABASE SYNC');
+    console.log('\n🚀 FULL ZOHO → SUPABASE SYNC (CLEAN START)');
     console.log('═'.repeat(50));
+
+    // 0. CLEANUP — wipe all inventory tables for a fresh start
+    console.log('\n0️⃣  Cleaning up existing data...');
+    const { error: snapDelErr, count: snapCount } = await supabase.from('stock_snapshots').delete().neq('id', '00000000-0000-0000-0000-000000000000');
+    console.log(`   🗑️  stock_snapshots: ${snapDelErr ? '❌ ' + snapDelErr.message : 'cleared'}`);
+
+    const { error: balDelErr, count: balCount } = await supabase.from('inventory_balance').delete().neq('id', '00000000-0000-0000-0000-000000000000');
+    console.log(`   🗑️  inventory_balance: ${balDelErr ? '❌ ' + balDelErr.message : 'cleared'}`);
+
+    const { error: itemsDelErr, count: itemsCount } = await supabase.from('items').delete().neq('id', '00000000-0000-0000-0000-000000000000');
+    console.log(`   🗑️  items: ${itemsDelErr ? '❌ ' + itemsDelErr.message : 'cleared'}`);
+
+    if (snapDelErr || balDelErr || itemsDelErr) {
+        console.error('\n⚠️  Some cleanup errors occurred. Continuing anyway...');
+    } else {
+        console.log('   ✅ All tables cleaned!');
+    }
 
     // 1. Auth
     console.log('\n1️⃣  Getting Zoho token...');
