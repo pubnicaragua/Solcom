@@ -25,10 +25,14 @@ export async function POST(request: Request) {
     console.log('[API] POST /api/users request received');
     console.log('[API] Service Role Key present:', !!process.env.SUPABASE_SERVICE_ROLE_KEY);
     // Admin operations REQUIRE a service role client
-    const supabaseAdmin = createClient(
-      process.env.NEXT_PUBLIC_SUPABASE_URL!,
-      process.env.SUPABASE_SERVICE_ROLE_KEY!
-    );
+    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+    const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+
+    if (!supabaseUrl || !supabaseKey) {
+      throw new Error('Supabase URL or Key is missing');
+    }
+
+    const supabaseAdmin = createClient(supabaseUrl, supabaseKey);
 
     const { email, full_name, role, password } = await request.json();
 
