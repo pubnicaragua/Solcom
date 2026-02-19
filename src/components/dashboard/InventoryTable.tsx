@@ -61,6 +61,14 @@ export default function InventoryTable({ filters, onSelectionChange, onTransfer,
     warehouses: WarehouseQty[];
     loading: boolean;
   } | null>(null);
+  const [isMobile, setIsMobile] = useState(false);
+
+  useEffect(() => {
+    const checkMobile = () => setIsMobile(window.innerWidth <= 768);
+    checkMobile();
+    window.addEventListener('resize', checkMobile);
+    return () => window.removeEventListener('resize', checkMobile);
+  }, []);
 
   function handleSelectAll() {
     if (selectAll) {
@@ -400,165 +408,310 @@ export default function InventoryTable({ filters, onSelectionChange, onTransfer,
 
   return (
     <>
-      <Card padding={0}>
-        <Table columns={columns} data={data} loading={loading} emptyMessage="No hay inventario disponible" />
-
-        {!loading && data.length > 0 && (
-          <div
-            style={{
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'space-between',
-              padding: 16,
-              borderTop: '1px solid var(--border)',
-            }}
-          >
-            <div style={{ fontSize: 13, color: 'var(--muted)' }}>
-              Página {page} de {totalPages}
-            </div>
-
-            <div style={{ display: 'flex', gap: 8 }}>
-              <Button
-                variant="secondary"
-                size="sm"
-                disabled={page === 1}
-                onClick={() => setPage((p) => Math.max(1, p - 1))}
-              >
-                <ChevronLeft size={16} />
-                Anterior
-              </Button>
-              <Button
-                variant="secondary"
-                size="sm"
-                disabled={page === totalPages}
-                onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
-              >
-                Siguiente
-                <ChevronRight size={16} />
-              </Button>
+      {isMobile ? (
+        /* ─── Mobile Card View ─── */
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 12, paddingBottom: 80 }}>
+          {loading ? (
+            <div style={{ padding: 20, textAlign: 'center', color: 'var(--muted)' }}>Cargando inventario...</div>
+          ) : data.length === 0 ? (
+            <div style={{ padding: 20, textAlign: 'center', color: 'var(--muted)' }}>No hay inventario disponible</div>
+          ) : (
+            data.map(item => (
+              <MobileInventoryCard
+                key={item.id}
+                item={item}
+                onTransfer={onTransfer}
+                onTransferFromWarehouse={onTransferFromWarehouse}
+                openWarehousePopover={openWarehousePopover}
+              />
+            ))
+          )}
+        </div>
+      ) : (
+        /* ─── Desktop Table View ─── */
+        <Card padding={0}>
+          <div style={{ overflowX: 'auto', WebkitOverflowScrolling: 'touch' }}>
+            <div style={{ minWidth: 900 }}>
+              <Table columns={columns} data={data} loading={loading} emptyMessage="No hay inventario disponible" />
             </div>
           </div>
-        )}
-      </Card>
+        </Card>
+      )}
 
-      {/* Popover: stock del producto por bodega */}
-      {warehousePopover && (
+      {!loading && data.length > 0 && (
         <div
           style={{
-            position: 'fixed',
-            inset: 0,
-            zIndex: 1000,
             display: 'flex',
             alignItems: 'center',
-            justifyContent: 'center',
-            background: 'rgba(0,0,0,0.4)',
+            justifyContent: 'space-between',
+            padding: 16,
+            borderTop: '1px solid var(--border)',
           }}
-          onClick={() => setWarehousePopover(null)}
         >
-          <div
-            style={{
-              background: 'var(--card)',
-              borderRadius: 12,
-              padding: 20,
-              maxWidth: 400,
-              width: '90%',
-              maxHeight: '80vh',
-              overflow: 'auto',
-              boxShadow: '0 20px 40px rgba(0,0,0,0.3)',
-            }}
-            onClick={(e) => e.stopPropagation()}
-          >
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 16 }}>
-              <div>
-                <h3 style={{ margin: 0, fontSize: 16, fontWeight: 600 }}>Stock por bodega</h3>
-                <p style={{ margin: '4px 0 0 0', fontSize: 13, color: 'var(--muted)' }}>
-                  {warehousePopover.itemName?.slice(0, 50)}{warehousePopover.itemName && warehousePopover.itemName.length > 50 ? '…' : ''}
-                </p>
-              </div>
-              <button
-                type="button"
-                onClick={() => setWarehousePopover(null)}
-                style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 4, color: 'var(--muted)' }}
-                aria-label="Cerrar"
-              >
-                <X size={20} />
-              </button>
-            </div>
-            {warehousePopover.loading ? (
-              <div style={{ padding: 24, textAlign: 'center', color: 'var(--muted)' }}>Cargando…</div>
-            ) : warehousePopover.warehouses.length === 0 ? (
-              <div style={{ padding: 24, textAlign: 'center', color: 'var(--muted)' }}>Sin datos por bodega</div>
-            ) : (
-              <ul style={{ listStyle: 'none', margin: 0, padding: 0 }}>
-                {warehousePopover.warehouses.map((w) => (
-                  <li
-                    key={w.id}
-                    style={{
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'space-between',
-                      padding: '12px 0',
-                      borderBottom: '1px solid white',
-                      gap: 12,
-                    }}
-                  >
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                      <Warehouse size={16} color="var(--muted)" />
-                      <div>
-                        <div style={{ fontWeight: 600, fontSize: 14, display: 'flex', alignItems: 'center', gap: 6 }}>
-                          {w.name || w.code}
-                          {!w.active && w.active !== undefined && (
-                            <span style={{
-                              fontSize: 10,
-                              background: '#FCA5A5',
-                              color: '#7F1D1D',
-                              padding: '2px 6px',
-                              borderRadius: 4,
-                              fontWeight: 700
-                            }}>
-                              INACTIVA
-                            </span>
-                          )}
-                        </div>
-                        {w.name && w.code !== w.name && (
-                          <div style={{ fontSize: 12, color: 'var(--muted)' }}>{w.code}</div>
-                        )}
-                      </div>
-                    </div>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                      <span style={{
-                        fontWeight: 600,
-                        fontSize: 15,
-                        color: w.qty < 0 ? '#DC2626' : 'var(--text)'
-                      }}>
-                        {w.qty} un.
-                      </span>
-                      {onTransferFromWarehouse && (
-                        <Button
-                          variant="secondary"
-                          size="sm"
-                          onClick={() => {
-                            onTransferFromWarehouse(
-                              warehousePopover.itemId,
-                              warehousePopover.itemName,
-                              w.id,
-                              w.name || w.code
-                            );
-                            setWarehousePopover(null);
-                          }}
-                        >
-                          <ArrowLeftRight size={12} />
-                          Transferir
-                        </Button>
-                      )}
-                    </div>
-                  </li>
-                ))}
-              </ul>
-            )}
+          <div style={{ fontSize: 13, color: 'var(--muted)' }}>
+            Página {page} de {totalPages}
+          </div>
+
+          <div style={{ display: 'flex', gap: 8 }}>
+            <Button
+              variant="secondary"
+              size="sm"
+              disabled={page === 1}
+              onClick={() => setPage((p) => Math.max(1, p - 1))}
+            >
+              <ChevronLeft size={16} />
+              Anterior
+            </Button>
+            <Button
+              variant="secondary"
+              size="sm"
+              disabled={page === totalPages}
+              onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+            >
+              Siguiente
+              <ChevronRight size={16} />
+            </Button>
           </div>
         </div>
       )}
+
+
+      {/* Popover: stock del producto por bodega */}
+      {
+        warehousePopover && (
+          <div
+            style={{
+              position: 'fixed',
+              inset: 0,
+              zIndex: 1000,
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              background: 'rgba(0,0,0,0.4)',
+            }}
+            onClick={() => setWarehousePopover(null)}
+          >
+            <div
+              style={{
+                background: 'var(--card)',
+                borderRadius: 12,
+                padding: 20,
+                maxWidth: 400,
+                width: '90%',
+                maxHeight: '80vh',
+                overflow: 'auto',
+                boxShadow: '0 20px 40px rgba(0,0,0,0.3)',
+              }}
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 16 }}>
+                <div>
+                  <h3 style={{ margin: 0, fontSize: 16, fontWeight: 600 }}>Stock por bodega</h3>
+                  <p style={{ margin: '4px 0 0 0', fontSize: 13, color: 'var(--muted)' }}>
+                    {warehousePopover!.itemName?.slice(0, 50)}{warehousePopover!.itemName && warehousePopover!.itemName.length > 50 ? '…' : ''}
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setWarehousePopover(null)}
+                  style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 4, color: 'var(--muted)' }}
+                  aria-label="Cerrar"
+                >
+                  <X size={20} />
+                </button>
+              </div>
+              {warehousePopover!.loading ? (
+                <div style={{ padding: 24, textAlign: 'center', color: 'var(--muted)' }}>Cargando…</div>
+              ) : warehousePopover!.warehouses.length === 0 ? (
+                <div style={{ padding: 24, textAlign: 'center', color: 'var(--muted)' }}>Sin datos por bodega</div>
+              ) : (
+                <ul style={{ listStyle: 'none', margin: 0, padding: 0 }}>
+                  {warehousePopover!.warehouses.map((w) => (
+                    <li
+                      key={w.id}
+                      style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'space-between',
+                        padding: '12px 0',
+                        borderBottom: '1px solid white',
+                        gap: 12,
+                      }}
+                    >
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                        <Warehouse size={16} color="var(--muted)" />
+                        <div>
+                          <div style={{ fontWeight: 600, fontSize: 14, display: 'flex', alignItems: 'center', gap: 6 }}>
+                            {w.name || w.code}
+                            {!w.active && w.active !== undefined && (
+                              <span style={{
+                                fontSize: 10,
+                                background: '#FCA5A5',
+                                color: '#7F1D1D',
+                                padding: '2px 6px',
+                                borderRadius: 4,
+                                fontWeight: 700
+                              }}>
+                                INACTIVA
+                              </span>
+                            )}
+                          </div>
+                          {w.name && w.code !== w.name && (
+                            <div style={{ fontSize: 12, color: 'var(--muted)' }}>{w.code}</div>
+                          )}
+                        </div>
+                      </div>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                        <span style={{
+                          fontWeight: 600,
+                          fontSize: 15,
+                          color: w.qty < 0 ? '#DC2626' : 'var(--text)'
+                        }}>
+                          {w.qty} un.
+                        </span>
+                        {onTransferFromWarehouse && (
+                          <Button
+                            variant="secondary"
+                            size="sm"
+                            onClick={() => {
+                              onTransferFromWarehouse(
+                                warehousePopover!.itemId,
+                                warehousePopover!.itemName,
+                                w.id,
+                                w.name || w.code
+                              );
+                              setWarehousePopover(null);
+                            }}
+                          >
+                            <ArrowLeftRight size={12} />
+                            Transferir
+                          </Button>
+                        )}
+                      </div>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
+          </div>
+        )}
     </>
+  );
+}
+
+
+function MobileInventoryCard({ item, onTransfer, onTransferFromWarehouse, openWarehousePopover }: {
+  item: InventoryItem;
+  onTransfer?: (row: InventoryItem) => void;
+  onTransferFromWarehouse?: (itemId: string, itemName: string, warehouseId: string, warehouseLabel: string) => void;
+  openWarehousePopover: (row: InventoryItem) => void;
+}) {
+  const isGrouped = item.grouped || item.warehouse_id == null;
+  const isNew = item.state?.toLowerCase() === 'nuevo';
+  const hasTotal = (item.stock_total || 0) > 0;
+
+  return (
+    <div style={{
+      background: 'var(--card-bg)',
+      border: '1px solid var(--border)',
+      borderRadius: 12,
+      overflow: 'hidden',
+      display: 'flex',
+      flexDirection: 'column'
+    }}>
+      {/* Header */}
+      <div style={{ padding: '12px 16px', background: 'rgba(255,255,255,0.02)', borderBottom: '1px solid var(--border)' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 12 }}>
+          <div>
+            <div style={{ fontSize: 15, fontWeight: 600, color: '#fff', marginBottom: 4 }}>{item.item_name}</div>
+            <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+              <Badge variant={isNew ? 'success' : 'warning'} size="sm">
+                {isNew ? 'Nuevo' : (item.state || 'N/A')}
+              </Badge>
+              {item.color && <span style={{ fontSize: 12, color: '#94a3b8' }}>{item.color}</span>}
+            </div>
+          </div>
+          <div style={{ textAlign: 'right' }}>
+            <div style={{ fontSize: 16, fontWeight: 700, color: '#10b981' }}>
+              ${item.price?.toLocaleString() || '0.00'}
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Body */}
+      <div style={{ padding: '12px 16px' }}>
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 16 }}>
+          <div>
+            <div style={{ fontSize: 11, color: '#64748b', marginBottom: 2 }}>SKU</div>
+            <div style={{ fontSize: 13, color: '#e2e8f0', fontFamily: 'monospace' }}>{item.sku}</div>
+          </div>
+          <div>
+            <div style={{ fontSize: 11, color: '#64748b', marginBottom: 2 }}>MARCA</div>
+            <div style={{ fontSize: 13, color: '#e2e8f0' }}>{item.brand || '—'}</div>
+          </div>
+          <div>
+            <div style={{ fontSize: 11, color: '#64748b', marginBottom: 2 }}>CATEGORÍA</div>
+            <div style={{ fontSize: 13, color: '#e2e8f0' }}>{item.category || '—'}</div>
+          </div>
+          <div>
+            <div style={{ fontSize: 11, color: '#64748b', marginBottom: 2 }}>TOTAL STOCK</div>
+            <div style={{ fontSize: 13, fontWeight: 700, color: hasTotal ? '#f1f5f9' : '#ef4444' }}>
+              {item.stock_total || 0}
+            </div>
+          </div>
+        </div>
+
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
+          <div style={{ flex: 1 }}>
+            <div style={{ fontSize: 11, color: '#64748b', marginBottom: 4 }}>DISPONIBILIDAD</div>
+            {isGrouped ? (
+              <button
+                onClick={() => openWarehousePopover(item)}
+                style={{
+                  background: 'rgba(59,130,246,0.1)',
+                  color: '#60a5fa',
+                  border: '1px solid rgba(59,130,246,0.2)',
+                  borderRadius: 6,
+                  padding: '4px 8px',
+                  fontSize: 12,
+                  fontWeight: 500,
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 6,
+                  cursor: 'pointer'
+                }}
+              >
+                <Warehouse size={14} />
+                {item.warehouse_count || 0} bodegas
+                <ChevronDown size={14} />
+              </button>
+            ) : (
+              <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                <div style={{ fontSize: 13, color: '#e2e8f0' }}>{item.warehouse_code}</div>
+                <Badge variant="neutral" size="sm">{item.qty}</Badge>
+              </div>
+            )}
+          </div>
+          <div>
+            <Button
+              variant="secondary"
+              size="sm"
+              onClick={() => {
+                if (isGrouped) {
+                  openWarehousePopover(item);
+                } else {
+                  onTransfer?.(item);
+                }
+              }}
+              disabled={!onTransfer}
+            >
+              <ArrowLeftRight size={16} style={{ marginRight: 6 }} />
+              Transferir
+            </Button>
+          </div>
+        </div>
+      </div>
+    </div>
   );
 }

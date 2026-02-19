@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import Card from '@/components/ui/Card';
-import { ChevronRight, ChevronDown, Loader2, Eye, EyeOff, Package, RefreshCw } from 'lucide-react';
+import { ChevronRight, ChevronDown, ChevronUp, Loader2, Eye, EyeOff, Package, RefreshCw, Search } from 'lucide-react';
 import { supabase } from '@/lib/supabase/client';
 
 
@@ -211,6 +211,14 @@ export default function PivotInventoryTable({ filters }: PivotInventoryTableProp
     const scrollContainerRef = useRef<HTMLDivElement | null>(null);
     const realtimeRefreshTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
     const pivotCacheRef = useRef<Map<string, { data: PivotData; ts: number }>>(new Map());
+    const [isMobile, setIsMobile] = useState(false);
+
+    useEffect(() => {
+        const checkMobile = () => setIsMobile(window.innerWidth <= 768);
+        checkMobile();
+        window.addEventListener('resize', checkMobile);
+        return () => window.removeEventListener('resize', checkMobile);
+    }, []);
 
     const handleCopySku = (sku: string) => {
         if (!sku) return;
@@ -570,6 +578,8 @@ export default function PivotInventoryTable({ filters }: PivotInventoryTableProp
                 display: 'flex',
                 justifyContent: 'space-between',
                 alignItems: 'center',
+                flexWrap: 'wrap',
+                gap: 8,
                 borderBottom: '1px solid rgba(255,255,255,0.08)',
                 background: 'linear-gradient(135deg, rgba(15,27,45,0.8) 0%, rgba(17,31,54,0.6) 100%)',
             }}>
@@ -597,7 +607,7 @@ export default function PivotInventoryTable({ filters }: PivotInventoryTableProp
                         )}
                     </span>
                 </div>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
                     <button
                         onClick={handleSync}
                         disabled={syncing}
@@ -646,363 +656,380 @@ export default function PivotInventoryTable({ filters }: PivotInventoryTableProp
                 </div>
             </div>
 
-            <div style={{ position: 'relative', overflow: 'hidden', width: '100%' }}>
-                <div
-                    ref={scrollContainerRef}
-                    onScroll={(e) => {
-                        const nextTop = e.currentTarget.scrollTop;
-                        // Keep updates cheap while scrolling.
-                        if (Math.abs(nextTop - scrollTop) > 2) {
-                            setScrollTop(nextTop);
-                        }
-                    }}
-                    style={{ overflowX: 'auto', overflowY: 'auto', maxHeight: '75vh', width: '100%' }}
-                >
-                    <table style={{
-                        borderCollapse: 'separate',
-                        borderSpacing: 0,
-                        tableLayout: 'fixed',
-                        width: stickyColWidth + extraColsWidth + warehouseCodes.length * cellWidth,
-                    }}>
-                        {/* ─── Header ─── */}
-                        <thead>
-                            <tr>
-                                <th style={{
-                                    position: 'sticky', left: 0, top: 0, zIndex: 4,
-                                    background: '#080f1d',
-                                    padding: '11px 14px',
-                                    textAlign: 'left',
-                                    fontSize: 10, fontWeight: 700,
-                                    color: '#64748b',
-                                    textTransform: 'uppercase',
-                                    letterSpacing: '0.8px',
-                                    minWidth: stickyColWidth, maxWidth: stickyColWidth, width: stickyColWidth,
-                                    overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
-                                    borderRight: '1px solid rgba(255,255,255,0.06)',
-                                    borderBottom: '2px solid rgba(255,255,255,0.12)',
-                                }}>Producto</th>
-                                <th style={{
-                                    position: 'sticky', left: stickyColWidth, top: 0, zIndex: 4,
-                                    background: '#080f1d',
-                                    padding: '11px 8px',
-                                    textAlign: 'left',
-                                    fontSize: 10, fontWeight: 700,
-                                    color: '#64748b',
-                                    textTransform: 'uppercase',
-                                    letterSpacing: '0.8px',
-                                    minWidth: skuColWidth, width: skuColWidth,
-                                    whiteSpace: 'nowrap',
-                                    borderBottom: '2px solid rgba(255,255,255,0.12)',
-                                    borderRight: '1px solid rgba(255,255,255,0.06)',
-                                }}>SKU</th>
-                                <th style={{
-                                    position: 'sticky', left: stickyColWidth + skuColWidth, top: 0, zIndex: 4,
-                                    background: '#080f1d',
-                                    padding: '11px 8px',
-                                    textAlign: 'left',
-                                    fontSize: 10, fontWeight: 700,
-                                    color: '#64748b',
-                                    textTransform: 'uppercase',
-                                    letterSpacing: '0.8px',
-                                    minWidth: marcaColWidth, width: marcaColWidth,
-                                    whiteSpace: 'nowrap',
-                                    borderBottom: '2px solid rgba(255,255,255,0.12)',
-                                    borderRight: '1px solid rgba(255,255,255,0.06)',
-                                }}>Marca</th>
-                                <th style={{
-                                    position: 'sticky', left: stickyColWidth + skuColWidth + marcaColWidth, top: 0, zIndex: 4,
-                                    background: '#080f1d',
-                                    padding: '11px 8px',
-                                    textAlign: 'left',
-                                    fontSize: 10, fontWeight: 700,
-                                    color: '#64748b',
-                                    textTransform: 'uppercase',
-                                    letterSpacing: '0.8px',
-                                    minWidth: colorColWidth, width: colorColWidth,
-                                    whiteSpace: 'nowrap',
-                                    borderBottom: '2px solid rgba(255,255,255,0.12)',
-                                    borderRight: '1px solid rgba(255,255,255,0.06)',
-                                }}>Color</th>
-                                <th style={{
-                                    position: 'sticky', left: stickyColWidth + skuColWidth + marcaColWidth + colorColWidth, top: 0, zIndex: 4,
-                                    background: '#080f1d',
-                                    padding: '11px 8px',
-                                    textAlign: 'right',
-                                    fontSize: 10, fontWeight: 700,
-                                    color: '#64748b',
-                                    textTransform: 'uppercase',
-                                    letterSpacing: '0.8px',
-                                    minWidth: remanenteColWidth, width: remanenteColWidth,
-                                    whiteSpace: 'nowrap',
-                                    borderBottom: '2px solid rgba(255,255,255,0.12)',
-                                    borderRight: '1px solid rgba(255,255,255,0.06)',
-                                }}>Remanente (d)</th>
-                                {/* Total column — before warehouses (also sticky) */}
-                                <th style={{
-                                    position: 'sticky', left: stickyColWidth + skuColWidth + marcaColWidth + colorColWidth + remanenteColWidth, top: 0, zIndex: 4,
-                                    background: '#080f1d',
-                                    padding: '11px 12px',
-                                    textAlign: 'right',
-                                    fontSize: 10, fontWeight: 700,
-                                    color: '#fbbf24',
-                                    textTransform: 'uppercase',
-                                    letterSpacing: '0.8px',
-                                    minWidth: totalColWidth,
-                                    borderLeft: '2px solid rgba(255,255,255,0.12)',
-                                    borderRight: '2px solid rgba(255,255,255,0.12)',
-                                    borderBottom: '2px solid rgba(255,255,255,0.12)',
-                                }}>
-                                    Total
-                                </th>
-                                {warehouseCodes.map((code) => {
-                                    const whColor = warehouseColors.get(code);
-                                    return (
-                                        <th key={code} style={{
-                                            position: 'sticky', top: 0, zIndex: 2,
-                                            background: whColor ? whColor.color : '#080f1d',
-                                            padding: '11px 12px',
-                                            textAlign: 'right',
-                                            fontSize: 10, fontWeight: 700,
-                                            color: whColor ? whColor.text_color : '#64748b',
-                                            textTransform: 'uppercase',
-                                            letterSpacing: '0.5px',
-                                            minWidth: cellWidth,
-                                            whiteSpace: 'nowrap',
-                                            borderBottom: '2px solid rgba(255,255,255,0.12)',
-                                            borderLeft: '1px solid rgba(255,255,255,0.08)',
-                                            borderRight: '1px solid rgba(255,255,255,0.08)',
-                                        }}>
-                                            {code}
-                                        </th>
-                                    );
-                                })}
-                            </tr>
-                        </thead>
-                        {/* ─── Body ─── */}
-                        <tbody>
-                            {topSpacerHeight > 0 && (
-                                <tr aria-hidden="true">
-                                    <td
-                                        colSpan={totalColumns}
-                                        style={{
-                                            height: topSpacerHeight,
-                                            padding: 0,
-                                            border: 'none',
-                                            background: 'transparent',
-                                        }}
-                                    />
-                                </tr>
-                            )}
-
-                            {visibleRows.map(({ node, path, indent }) => {
-                                const rowItem = node.items?.[0] || null;
-                                const isItemRow = !!rowItem;
-                                const isVariantRow = isItemRow && node.level === 3;
-                                const isGroup = !isItemRow;
-                                const style = LEVEL_COLORS[node.level] || LEVEL_COLORS[3];
-                                const hasChildren = node.children.length > 0;
-                                const isCollapsed = isNodeCollapsed(node, path);
-                                const isZeroStock = node.grandTotal === 0;
-                                // Keep variant text aligned with product text for readability.
-                                const nameIndent = isVariantRow ? Math.max(indent - 1, 0) : indent;
-
-                                const skuVal = rowItem?.sku || '';
-                                const variantLabel = rowItem
-                                    ? (
-                                        (rowItem.color && rowItem.color.trim().length > 0)
-                                            ? `Variante ${rowItem.color}`
-                                            : `Variante ${rowItem.sku}`
-                                    )
-                                    : '';
-                                const nameVal = isVariantRow ? variantLabel : node.label;
-                                const marcaVal = node.level === 1 ? node.label : (rowItem ? (rowItem.brand || '') : '');
-                                const colorVal = rowItem ? (rowItem.color || '') : '';
-                                const daysInStockVal = rowItem?.daysInStock ?? null;
-
-                                return (
-                                    <tr
-                                        key={path}
-                                        style={{
-                                            background: style.bg,
-                                            transition: 'background 0.15s',
-                                            opacity: isZeroStock && isItemRow ? 0.5 : 1,
-                                        }}
-                                        onMouseEnter={(e) => {
-                                            if (node.level >= 2) e.currentTarget.style.background = 'rgba(255,255,255,0.04)';
-                                        }}
-                                        onMouseLeave={(e) => {
-                                            e.currentTarget.style.background = style.bg;
-                                        }}
-                                    >
-                                        {/* Producto (sticky) */}
-                                        <td
-                                            className="pivot-name-cell"
-                                            style={{
-                                                position: 'sticky', left: 0, zIndex: 2,
-                                                background: style.bg === 'transparent' || style.bg.startsWith('rgba') ? 'var(--card)' : style.bg,
-                                                padding: '7px 10px',
-                                                paddingLeft: 14 + nameIndent * 20,
-                                                fontWeight: style.fontWeight,
-                                                fontSize: node.level <= 1 ? 13 : 12,
-                                                color: style.text,
+            {isMobile ? (
+                /* ─── Mobile Card View ─── */
+                <div style={{ padding: 12, display: 'flex', flexDirection: 'column', gap: 12 }}>
+                    {hasSearchTerm ? (
+                        /* Flat list for search results */
+                        flatRows.filter(r => r.node.level === 2 && r.node.children.length > 0).map((row) => {
+                            const productNode = row.node;
+                            if (!productNode.items?.length) return null;
+                            return (
+                                <MobileProductCard
+                                    key={row.path}
+                                    node={productNode}
+                                    warehouseCodes={warehouseCodes}
+                                    data={data!}
+                                />
+                            );
+                        })
+                    ) : (
+                        /* Hierarchical View for navigation */
+                        tree.map((stateNode) => (
+                            <MobileGroupNode
+                                key={stateNode.label}
+                                node={stateNode}
+                                level={0}
+                                warehouseCodes={warehouseCodes}
+                                data={data!}
+                            />
+                        ))
+                    )}
+                </div>
+            ) : (
+                /* ─── Desktop Table View ─── */
+                <div style={{ position: 'relative', overflow: 'hidden', width: '100%' }}>
+                    <div
+                        ref={scrollContainerRef}
+                        onScroll={(e) => {
+                            const nextTop = e.currentTarget.scrollTop;
+                            if (Math.abs(nextTop - scrollTop) > 2) {
+                                setScrollTop(nextTop);
+                            }
+                        }}
+                        style={{ overflowX: 'auto', overflowY: 'auto', maxHeight: '75vh', width: '100%' }}
+                    >
+                        <table style={{
+                            borderCollapse: 'separate',
+                            borderSpacing: 0,
+                            tableLayout: 'fixed',
+                            width: stickyColWidth + extraColsWidth + warehouseCodes.length * cellWidth,
+                        }}>
+                            {/* ─── Header ─── */}
+                            <thead>
+                                <tr>
+                                    <th style={{
+                                        position: 'sticky', left: 0, top: 0, zIndex: 4,
+                                        background: '#080f1d',
+                                        padding: '11px 14px',
+                                        textAlign: 'left',
+                                        fontSize: 10, fontWeight: 700,
+                                        color: '#64748b',
+                                        textTransform: 'uppercase',
+                                        letterSpacing: '0.8px',
+                                        minWidth: stickyColWidth, maxWidth: stickyColWidth, width: stickyColWidth,
+                                        overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+                                        borderRight: '1px solid rgba(255,255,255,0.06)',
+                                        borderBottom: '2px solid rgba(255,255,255,0.12)',
+                                    }}>Producto</th>
+                                    <th style={{
+                                        position: 'sticky', left: stickyColWidth, top: 0, zIndex: 4,
+                                        background: '#080f1d',
+                                        padding: '11px 8px',
+                                        textAlign: 'left',
+                                        fontSize: 10, fontWeight: 700,
+                                        color: '#64748b',
+                                        textTransform: 'uppercase',
+                                        letterSpacing: '0.8px',
+                                        minWidth: skuColWidth, width: skuColWidth,
+                                        whiteSpace: 'nowrap',
+                                        borderBottom: '2px solid rgba(255,255,255,0.12)',
+                                        borderRight: '1px solid rgba(255,255,255,0.06)',
+                                    }}>SKU</th>
+                                    <th style={{
+                                        position: 'sticky', left: stickyColWidth + skuColWidth, top: 0, zIndex: 4,
+                                        background: '#080f1d',
+                                        padding: '11px 8px',
+                                        textAlign: 'left',
+                                        fontSize: 10, fontWeight: 700,
+                                        color: '#64748b',
+                                        textTransform: 'uppercase',
+                                        letterSpacing: '0.8px',
+                                        minWidth: marcaColWidth, width: marcaColWidth,
+                                        whiteSpace: 'nowrap',
+                                        borderBottom: '2px solid rgba(255,255,255,0.12)',
+                                        borderRight: '1px solid rgba(255,255,255,0.06)',
+                                    }}>Marca</th>
+                                    <th style={{
+                                        position: 'sticky', left: stickyColWidth + skuColWidth + marcaColWidth, top: 0, zIndex: 4,
+                                        background: '#080f1d',
+                                        padding: '11px 8px',
+                                        textAlign: 'left',
+                                        fontSize: 10, fontWeight: 700,
+                                        color: '#64748b',
+                                        textTransform: 'uppercase',
+                                        letterSpacing: '0.8px',
+                                        minWidth: colorColWidth, width: colorColWidth,
+                                        whiteSpace: 'nowrap',
+                                        borderBottom: '2px solid rgba(255,255,255,0.12)',
+                                        borderRight: '1px solid rgba(255,255,255,0.06)',
+                                    }}>Color</th>
+                                    <th style={{
+                                        position: 'sticky', left: stickyColWidth + skuColWidth + marcaColWidth + colorColWidth, top: 0, zIndex: 4,
+                                        background: '#080f1d',
+                                        padding: '11px 8px',
+                                        textAlign: 'right',
+                                        fontSize: 10, fontWeight: 700,
+                                        color: '#64748b',
+                                        textTransform: 'uppercase',
+                                        letterSpacing: '0.8px',
+                                        minWidth: remanenteColWidth, width: remanenteColWidth,
+                                        whiteSpace: 'nowrap',
+                                        borderBottom: '2px solid rgba(255,255,255,0.12)',
+                                        borderRight: '1px solid rgba(255,255,255,0.06)',
+                                    }}>Remanente (d)</th>
+                                    <th style={{
+                                        position: 'sticky', left: stickyColWidth + skuColWidth + marcaColWidth + colorColWidth + remanenteColWidth, top: 0, zIndex: 4,
+                                        background: '#080f1d',
+                                        padding: '11px 12px',
+                                        textAlign: 'right',
+                                        fontSize: 10, fontWeight: 700,
+                                        color: '#fbbf24',
+                                        textTransform: 'uppercase',
+                                        letterSpacing: '0.8px',
+                                        minWidth: totalColWidth,
+                                        borderLeft: '2px solid rgba(255,255,255,0.12)',
+                                        borderRight: '2px solid rgba(255,255,255,0.12)',
+                                        borderBottom: '2px solid rgba(255,255,255,0.12)',
+                                    }}>
+                                        Total
+                                    </th>
+                                    {warehouseCodes.map((code) => {
+                                        const whColor = warehouseColors.get(code);
+                                        return (
+                                            <th key={code} style={{
+                                                position: 'sticky', top: 0, zIndex: 2,
+                                                background: whColor ? whColor.color : '#080f1d',
+                                                padding: '11px 12px',
+                                                textAlign: 'right',
+                                                fontSize: 10, fontWeight: 700,
+                                                color: whColor ? whColor.text_color : '#64748b',
+                                                textTransform: 'uppercase',
+                                                letterSpacing: '0.5px',
+                                                minWidth: cellWidth,
                                                 whiteSpace: 'nowrap',
-                                                overflow: 'hidden',
-                                                textOverflow: 'ellipsis',
-                                                maxWidth: stickyColWidth, width: stickyColWidth,
-                                                borderRight: '1px solid rgba(255,255,255,0.06)',
-                                                borderBottom: `1px solid rgba(255,255,255,${node.level <= 1 ? '0.12' : '0.05'})`,
-                                                cursor: hasChildren ? 'pointer' : 'default',
-                                                userSelect: 'none',
-                                            }}
-                                            onClick={() => hasChildren && toggleCollapse(path, node)}
-                                        >
-                                            <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
-                                                {hasChildren && (
-                                                    isCollapsed
-                                                        ? <ChevronRight size={14} style={{ opacity: 0.6, flexShrink: 0 }} />
-                                                        : <ChevronDown size={14} style={{ opacity: 0.6, flexShrink: 0 }} />
-                                                )}
-                                                {!hasChildren && isVariantRow && (
-                                                    <span style={{ width: 14, display: 'inline-block', flexShrink: 0, opacity: 0.6 }}>-</span>
-                                                )}
-                                                {!hasChildren && !isVariantRow && node.level >= 2 && (
-                                                    <span style={{ width: 14, display: 'inline-block', flexShrink: 0 }} />
-                                                )}
-                                                {node.level <= 1 && <span style={{
-                                                    display: 'inline-block',
-                                                    width: 8,
-                                                    height: 8,
-                                                    borderRadius: 3,
-                                                    background: node.level === 0
-                                                        ? 'linear-gradient(135deg, #fbbf24, #f59e0b)'
-                                                        : 'linear-gradient(135deg, #60a5fa, #3b82f6)',
-                                                    marginRight: 2,
-                                                    flexShrink: 0,
-                                                }} />}
-                                                {nameVal}
-                                            </span>
-                                            {/* Instant tooltip for long names */}
-                                            {node.level >= 2 && nameVal.length > 30 && (
-                                                <span className="pivot-tooltip">{nameVal}</span>
-                                            )}
-                                        </td>
-
-                                        {/* SKU — click to copy (sticky) */}
+                                                borderBottom: '2px solid rgba(255,255,255,0.12)',
+                                                borderLeft: '1px solid rgba(255,255,255,0.08)',
+                                                borderRight: '1px solid rgba(255,255,255,0.08)',
+                                            }}>
+                                                {code}
+                                            </th>
+                                        );
+                                    })}
+                                </tr>
+                            </thead>
+                            {/* ─── Body ─── */}
+                            <tbody>
+                                {topSpacerHeight > 0 && (
+                                    <tr aria-hidden="true">
                                         <td
+                                            colSpan={totalColumns}
                                             style={{
-                                                position: 'sticky', left: stickyColWidth, zIndex: 2,
+                                                height: topSpacerHeight,
+                                                padding: 0,
+                                                border: 'none',
+                                                background: 'transparent',
+                                            }}
+                                        />
+                                    </tr>
+                                )}
+
+                                {visibleRows.map(({ node, path, indent }) => {
+                                    const rowItem = node.items?.[0] || null;
+                                    const isItemRow = !!rowItem;
+                                    const isVariantRow = isItemRow && node.level === 3;
+                                    const isGroup = !isItemRow;
+                                    const style = LEVEL_COLORS[node.level] || LEVEL_COLORS[3];
+                                    const hasChildren = node.children.length > 0;
+                                    const isCollapsed = isNodeCollapsed(node, path);
+                                    const isZeroStock = node.grandTotal === 0;
+                                    const nameIndent = isVariantRow ? Math.max(indent - 1, 0) : indent;
+
+                                    const skuVal = rowItem?.sku || '';
+                                    const variantLabel = rowItem
+                                        ? (
+                                            (rowItem.color && rowItem.color.trim().length > 0)
+                                                ? `Variante ${rowItem.color}`
+                                                : `Variante ${rowItem.sku}`
+                                        )
+                                        : '';
+                                    const nameVal = isVariantRow ? variantLabel : node.label;
+                                    const marcaVal = node.level === 1 ? node.label : (rowItem ? (rowItem.brand || '') : '');
+                                    const colorVal = rowItem ? (rowItem.color || '') : '';
+                                    const daysInStockVal = rowItem?.daysInStock ?? null;
+
+                                    return (
+                                        <tr
+                                            key={path}
+                                            style={{
+                                                background: style.bg,
+                                                transition: 'background 0.15s',
+                                                opacity: isZeroStock && isItemRow ? 0.5 : 1,
+                                            }}
+                                            onMouseEnter={(e) => {
+                                                if (node.level >= 2) e.currentTarget.style.background = 'rgba(255,255,255,0.04)';
+                                            }}
+                                            onMouseLeave={(e) => {
+                                                e.currentTarget.style.background = style.bg;
+                                            }}
+                                        >
+                                            {/* Producto (sticky) */}
+                                            <td
+                                                className="pivot-name-cell"
+                                                style={{
+                                                    position: 'sticky', left: 0, zIndex: 2,
+                                                    background: style.bg === 'transparent' || style.bg.startsWith('rgba') ? 'var(--card)' : style.bg,
+                                                    padding: '7px 10px',
+                                                    paddingLeft: 14 + nameIndent * 20,
+                                                    fontWeight: style.fontWeight,
+                                                    fontSize: node.level <= 1 ? 13 : 12,
+                                                    color: style.text,
+                                                    whiteSpace: 'nowrap',
+                                                    overflow: 'hidden',
+                                                    textOverflow: 'ellipsis',
+                                                    maxWidth: stickyColWidth, width: stickyColWidth,
+                                                    borderRight: '1px solid rgba(255,255,255,0.06)',
+                                                    borderBottom: `1px solid rgba(255,255,255,${node.level <= 1 ? '0.12' : '0.05'})`,
+                                                    cursor: hasChildren ? 'pointer' : 'default',
+                                                    userSelect: 'none',
+                                                }}
+                                                onClick={() => hasChildren && toggleCollapse(path, node)}
+                                            >
+                                                <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+                                                    {hasChildren && (
+                                                        isCollapsed
+                                                            ? <ChevronRight size={14} style={{ opacity: 0.6, flexShrink: 0 }} />
+                                                            : <ChevronDown size={14} style={{ opacity: 0.6, flexShrink: 0 }} />
+                                                    )}
+                                                    {!hasChildren && isVariantRow && (
+                                                        <span style={{ width: 14, display: 'inline-block', flexShrink: 0, opacity: 0.6 }}>-</span>
+                                                    )}
+                                                    {!hasChildren && !isVariantRow && node.level >= 2 && (
+                                                        <span style={{ width: 14, display: 'inline-block', flexShrink: 0 }} />
+                                                    )}
+                                                    {node.level <= 1 && <span style={{
+                                                        display: 'inline-block',
+                                                        width: 8,
+                                                        height: 8,
+                                                        borderRadius: 3,
+                                                        background: node.level === 0
+                                                            ? 'linear-gradient(135deg, #fbbf24, #f59e0b)'
+                                                            : 'linear-gradient(135deg, #60a5fa, #3b82f6)',
+                                                        marginRight: 2,
+                                                        flexShrink: 0,
+                                                    }} />}
+                                                    {nameVal}
+                                                </span>
+                                                {node.level >= 2 && nameVal.length > 30 && (
+                                                    <span className="pivot-tooltip">{nameVal}</span>
+                                                )}
+                                            </td>
+
+                                            {/* SKU */}
+                                            <td
+                                                style={{
+                                                    position: 'sticky', left: stickyColWidth, zIndex: 2,
+                                                    padding: '7px 8px',
+                                                    fontSize: 11,
+                                                    color: copiedSku === skuVal && skuVal ? '#4ade80' : '#94a3b8',
+                                                    whiteSpace: 'nowrap',
+                                                    overflow: 'hidden',
+                                                    textOverflow: 'ellipsis',
+                                                    borderBottom: `1px solid rgba(255,255,255,${node.level <= 1 ? '0.12' : '0.05'})`,
+                                                    borderRight: '1px solid rgba(255,255,255,0.06)',
+                                                    background: style.bg === 'transparent' || style.bg.startsWith('rgba') ? 'var(--card)' : style.bg,
+                                                    minWidth: skuColWidth, maxWidth: skuColWidth,
+                                                    cursor: skuVal ? 'pointer' : 'default',
+                                                    transition: 'color 0.2s',
+                                                    fontFamily: skuVal ? 'monospace' : 'inherit',
+                                                    letterSpacing: skuVal ? '0.3px' : undefined,
+                                                }}
+                                                onClick={() => handleCopySku(skuVal)}
+                                                title={skuVal ? 'Click para copiar' : ''}
+                                            >
+                                                {copiedSku === skuVal && skuVal ? '✓ Copiado' : skuVal}
+                                            </td>
+
+                                            {/* Marca, Color, Remanente */}
+                                            <td style={{
+                                                position: 'sticky', left: stickyColWidth + skuColWidth, zIndex: 2,
                                                 padding: '7px 8px',
                                                 fontSize: 11,
-                                                color: copiedSku === skuVal && skuVal ? '#4ade80' : '#94a3b8',
+                                                color: '#94a3b8',
                                                 whiteSpace: 'nowrap',
                                                 overflow: 'hidden',
                                                 textOverflow: 'ellipsis',
                                                 borderBottom: `1px solid rgba(255,255,255,${node.level <= 1 ? '0.12' : '0.05'})`,
                                                 borderRight: '1px solid rgba(255,255,255,0.06)',
                                                 background: style.bg === 'transparent' || style.bg.startsWith('rgba') ? 'var(--card)' : style.bg,
-                                                minWidth: skuColWidth, maxWidth: skuColWidth,
-                                                cursor: skuVal ? 'pointer' : 'default',
-                                                transition: 'color 0.2s',
-                                                fontFamily: skuVal ? 'monospace' : 'inherit',
-                                                letterSpacing: skuVal ? '0.3px' : undefined,
-                                            }}
-                                            onClick={() => handleCopySku(skuVal)}
-                                            title={skuVal ? 'Click para copiar' : ''}
-                                        >
-                                            {copiedSku === skuVal && skuVal ? '✓ Copiado' : skuVal}
-                                        </td>
+                                                minWidth: marcaColWidth, maxWidth: marcaColWidth,
+                                            }}>{marcaVal}</td>
+                                            <td style={{
+                                                position: 'sticky', left: stickyColWidth + skuColWidth + marcaColWidth, zIndex: 2,
+                                                padding: '7px 8px',
+                                                fontSize: 11,
+                                                color: '#94a3b8',
+                                                whiteSpace: 'nowrap',
+                                                overflow: 'hidden',
+                                                textOverflow: 'ellipsis',
+                                                borderBottom: `1px solid rgba(255,255,255,${node.level <= 1 ? '0.12' : '0.05'})`,
+                                                borderRight: '1px solid rgba(255,255,255,0.06)',
+                                                background: style.bg === 'transparent' || style.bg.startsWith('rgba') ? 'var(--card)' : style.bg,
+                                                minWidth: colorColWidth, maxWidth: colorColWidth,
+                                            }}>{colorVal}</td>
+                                            <td style={{
+                                                position: 'sticky', left: stickyColWidth + skuColWidth + marcaColWidth + colorColWidth, zIndex: 2,
+                                                padding: '7px 8px',
+                                                fontSize: 11,
+                                                textAlign: 'right',
+                                                color: !isItemRow ? '#64748b' : (daysInStockVal == null ? 'rgba(100,116,139,0.5)' : '#fbbf24'),
+                                                whiteSpace: 'nowrap',
+                                                overflow: 'hidden',
+                                                textOverflow: 'ellipsis',
+                                                borderBottom: `1px solid rgba(255,255,255,${node.level <= 1 ? '0.12' : '0.05'})`,
+                                                borderRight: '1px solid rgba(255,255,255,0.06)',
+                                                background: style.bg === 'transparent' || style.bg.startsWith('rgba') ? 'var(--card)' : style.bg,
+                                                minWidth: remanenteColWidth, maxWidth: remanenteColWidth,
+                                                fontVariantNumeric: 'tabular-nums',
+                                            }}>
+                                                {!isItemRow ? '' : (daysInStockVal == null ? '—' : `${daysInStockVal}d`)}
+                                            </td>
 
-                                        {/* Marca (sticky) */}
-                                        <td style={{
-                                            position: 'sticky', left: stickyColWidth + skuColWidth, zIndex: 2,
-                                            padding: '7px 8px',
-                                            fontSize: 11,
-                                            color: '#94a3b8',
-                                            whiteSpace: 'nowrap',
-                                            overflow: 'hidden',
-                                            textOverflow: 'ellipsis',
-                                            borderBottom: `1px solid rgba(255,255,255,${node.level <= 1 ? '0.12' : '0.05'})`,
-                                            borderRight: '1px solid rgba(255,255,255,0.06)',
-                                            background: style.bg === 'transparent' || style.bg.startsWith('rgba') ? 'var(--card)' : style.bg,
-                                            minWidth: marcaColWidth, maxWidth: marcaColWidth,
-                                        }}>{marcaVal}</td>
+                                            {/* Grand Total */}
+                                            <td style={{
+                                                position: 'sticky', left: stickyColWidth + skuColWidth + marcaColWidth + colorColWidth + remanenteColWidth, zIndex: 2,
+                                                padding: '7px 12px',
+                                                textAlign: 'right',
+                                                fontSize: node.level <= 1 ? 14 : 12,
+                                                fontWeight: 700,
+                                                color: node.grandTotal === 0 ? 'rgba(251,191,36,0.3)' : '#fbbf24',
+                                                background: style.bg === 'transparent' || style.bg.startsWith('rgba') ? 'var(--card)' : style.bg,
+                                                borderLeft: '2px solid rgba(255,255,255,0.12)',
+                                                borderRight: '2px solid rgba(255,255,255,0.12)',
+                                                borderBottom: `1px solid rgba(255,255,255,${node.level <= 1 ? '0.12' : '0.05'})`,
+                                                fontVariantNumeric: 'tabular-nums',
+                                            }}>
+                                                <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+                                                    {node.grandTotal !== 0 ? node.grandTotal.toLocaleString() : '0'}
+                                                    {isItemRow && rowItem && rowItem.hasSnapshots === false && node.grandTotal > 0 && (
+                                                        <span title="Stock total de Zoho" style={{
+                                                            fontSize: 9, color: '#f97316', background: 'rgba(249,115,22,0.15)',
+                                                            padding: '1px 4px', borderRadius: 3, fontWeight: 600, cursor: 'help',
+                                                        }}>Z</span>
+                                                    )}
+                                                </span>
+                                            </td>
 
-                                        {/* Color (sticky) */}
-                                        <td style={{
-                                            position: 'sticky', left: stickyColWidth + skuColWidth + marcaColWidth, zIndex: 2,
-                                            padding: '7px 8px',
-                                            fontSize: 11,
-                                            color: '#94a3b8',
-                                            whiteSpace: 'nowrap',
-                                            overflow: 'hidden',
-                                            textOverflow: 'ellipsis',
-                                            borderBottom: `1px solid rgba(255,255,255,${node.level <= 1 ? '0.12' : '0.05'})`,
-                                            borderRight: '1px solid rgba(255,255,255,0.06)',
-                                            background: style.bg === 'transparent' || style.bg.startsWith('rgba') ? 'var(--card)' : style.bg,
-                                            minWidth: colorColWidth, maxWidth: colorColWidth,
-                                        }}>{colorVal}</td>
-
-                                        {/* Remanente (dias) (sticky) */}
-                                        <td style={{
-                                            position: 'sticky', left: stickyColWidth + skuColWidth + marcaColWidth + colorColWidth, zIndex: 2,
-                                            padding: '7px 8px',
-                                            fontSize: 11,
-                                            textAlign: 'right',
-                                            color: !isItemRow ? '#64748b' : (daysInStockVal == null ? 'rgba(100,116,139,0.5)' : '#fbbf24'),
-                                            whiteSpace: 'nowrap',
-                                            overflow: 'hidden',
-                                            textOverflow: 'ellipsis',
-                                            borderBottom: `1px solid rgba(255,255,255,${node.level <= 1 ? '0.12' : '0.05'})`,
-                                            borderRight: '1px solid rgba(255,255,255,0.06)',
-                                            background: style.bg === 'transparent' || style.bg.startsWith('rgba') ? 'var(--card)' : style.bg,
-                                            minWidth: remanenteColWidth, maxWidth: remanenteColWidth,
-                                            fontVariantNumeric: 'tabular-nums',
-                                        }}>
-                                            {!isItemRow ? '' : (daysInStockVal == null ? '—' : `${daysInStockVal}d`)}
-                                        </td>
-
-                                        {/* Grand total — before warehouses (sticky) */}
-                                        <td style={{
-                                            position: 'sticky', left: stickyColWidth + skuColWidth + marcaColWidth + colorColWidth + remanenteColWidth, zIndex: 2,
-                                            padding: '7px 12px',
-                                            textAlign: 'right',
-                                            fontSize: node.level <= 1 ? 14 : 12,
-                                            fontWeight: 700,
-                                            color: node.grandTotal === 0
-                                                ? 'rgba(251,191,36,0.3)'
-                                                : '#fbbf24',
-                                            background: style.bg === 'transparent' || style.bg.startsWith('rgba') ? 'var(--card)' : style.bg,
-                                            borderLeft: '2px solid rgba(255,255,255,0.12)',
-                                            borderRight: '2px solid rgba(255,255,255,0.12)',
-                                            borderBottom: `1px solid rgba(255,255,255,${node.level <= 1 ? '0.12' : '0.05'})`,
-                                            fontVariantNumeric: 'tabular-nums',
-                                        }}>
-                                            <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
-                                                {node.grandTotal !== 0 ? node.grandTotal.toLocaleString() : '0'}
-                                                {isItemRow && rowItem && rowItem.hasSnapshots === false && node.grandTotal > 0 && (
-                                                    <span title="Stock total de Zoho (sin desglose por bodega)" style={{
-                                                        fontSize: 9,
-                                                        color: '#f97316',
-                                                        background: 'rgba(249,115,22,0.15)',
-                                                        padding: '1px 4px',
-                                                        borderRadius: 3,
-                                                        fontWeight: 600,
-                                                        cursor: 'help',
-                                                    }}>Z</span>
-                                                )}
-                                            </span>
-                                        </td>
-
-                                        {/* Warehouse qty cells — show "-" if no snapshot breakdown */}
-                                        {
-                                            warehouseCodes.map((code) => {
+                                            {/* Warehouse Columns with Colors */}
+                                            {warehouseCodes.map((code) => {
                                                 const qty = node.totals[code] || 0;
                                                 const highlight = getCellColor(qty);
                                                 const noBreakdown = isItemRow && rowItem && rowItem.hasSnapshots === false;
                                                 const whColor = warehouseColors.get(code);
-                                                const bgColor = whColor 
+                                                const bgColor = whColor
                                                     ? (highlight && !noBreakdown ? `${whColor.color}40` : `${whColor.color}15`)
                                                     : (highlight && !noBreakdown ? `${highlight}15` : undefined);
+
                                                 return (
                                                     <td key={code} style={{
                                                         padding: '7px 12px',
@@ -1023,102 +1050,85 @@ export default function PivotInventoryTable({ filters }: PivotInventoryTableProp
                                                         {noBreakdown ? '·' : (qty !== 0 ? qty.toLocaleString() : (isItemRow ? '—' : ''))}
                                                     </td>
                                                 );
-                                            })
-                                        }
+                                            })}
+                                        </tr>
+                                    );
+                                })}
+
+                                {bottomSpacerHeight > 0 && (
+                                    <tr aria-hidden="true">
+                                        <td
+                                            colSpan={totalColumns}
+                                            style={{
+                                                height: bottomSpacerHeight,
+                                                padding: 0,
+                                                border: 'none',
+                                                background: 'transparent',
+                                            }}
+                                        />
                                     </tr>
-                                );
-                            })}
+                                )}
 
-                            {bottomSpacerHeight > 0 && (
-                                <tr aria-hidden="true">
-                                    <td
-                                        colSpan={totalColumns}
-                                        style={{
-                                            height: bottomSpacerHeight,
-                                            padding: 0,
-                                            border: 'none',
-                                            background: 'transparent',
-                                        }}
-                                    />
-                                </tr>
-                            )}
+                                {/* ─── Grand Total Footer Row ─── */}
+                                <tr>
+                                    <td style={{
+                                        position: 'sticky', left: 0, zIndex: 2,
+                                        background: '#060c18',
+                                        padding: '10px 14px',
+                                        fontWeight: 800,
+                                        fontSize: 13,
+                                        color: '#fbbf24',
+                                        textTransform: 'uppercase',
+                                        letterSpacing: '0.5px',
+                                        borderRight: '1px solid rgba(255,255,255,0.06)',
+                                        borderTop: '2px solid rgba(251,191,36,0.3)',
+                                    }}>
+                                        Gran Total
+                                    </td>
+                                    <td style={{ position: 'sticky', left: stickyColWidth, zIndex: 2, background: '#060c18', borderTop: '2px solid rgba(251,191,36,0.3)', borderRight: '1px solid rgba(255,255,255,0.06)' }} />
+                                    <td style={{ position: 'sticky', left: stickyColWidth + skuColWidth, zIndex: 2, background: '#060c18', borderTop: '2px solid rgba(251,191,36,0.3)', borderRight: '1px solid rgba(255,255,255,0.06)' }} />
+                                    <td style={{ position: 'sticky', left: stickyColWidth + skuColWidth + marcaColWidth, zIndex: 2, background: '#060c18', borderTop: '2px solid rgba(251,191,36,0.3)', borderRight: '1px solid rgba(255,255,255,0.06)' }} />
+                                    <td style={{ position: 'sticky', left: stickyColWidth + skuColWidth + marcaColWidth + colorColWidth, zIndex: 2, background: '#060c18', borderTop: '2px solid rgba(251,191,36,0.3)', borderRight: '1px solid rgba(255,255,255,0.06)' }} />
 
-                            {/* ─── Grand Total Footer Row ─── */}
-                            <tr>
-                                <td style={{
-                                    position: 'sticky', left: 0, zIndex: 2,
-                                    background: '#060c18',
-                                    padding: '10px 14px',
-                                    fontWeight: 800,
-                                    fontSize: 13,
-                                    color: '#fbbf24',
-                                    textTransform: 'uppercase',
-                                    letterSpacing: '0.5px',
-                                    borderRight: '1px solid rgba(255,255,255,0.06)',
-                                    borderTop: '2px solid rgba(251,191,36,0.3)',
-                                }}>
-                                    Gran Total
-                                </td>
-                                <td style={{
-                                    position: 'sticky', left: stickyColWidth, zIndex: 2,
-                                    background: '#060c18',
-                                    borderTop: '2px solid rgba(251,191,36,0.3)',
-                                    borderRight: '1px solid rgba(255,255,255,0.06)',
-                                }} />
-                                <td style={{
-                                    position: 'sticky', left: stickyColWidth + skuColWidth, zIndex: 2,
-                                    background: '#060c18',
-                                    borderTop: '2px solid rgba(251,191,36,0.3)',
-                                    borderRight: '1px solid rgba(255,255,255,0.06)',
-                                }} />
-                                <td style={{
-                                    position: 'sticky', left: stickyColWidth + skuColWidth + marcaColWidth, zIndex: 2,
-                                    background: '#060c18',
-                                    borderTop: '2px solid rgba(251,191,36,0.3)',
-                                    borderRight: '1px solid rgba(255,255,255,0.06)',
-                                }} />
-                                <td style={{
-                                    position: 'sticky', left: stickyColWidth + skuColWidth + marcaColWidth + colorColWidth, zIndex: 2,
-                                    background: '#060c18',
-                                    borderTop: '2px solid rgba(251,191,36,0.3)',
-                                    borderRight: '1px solid rgba(255,255,255,0.06)',
-                                }} />
-                                {/* Grand total — before warehouses (sticky) */}
-                                <td style={{
-                                    position: 'sticky', left: stickyColWidth + skuColWidth + marcaColWidth + colorColWidth + remanenteColWidth, zIndex: 2,
-                                    background: '#060c18',
-                                    padding: '10px 12px',
-                                    textAlign: 'right',
-                                    fontSize: 14,
-                                    fontWeight: 800,
-                                    color: '#fbbf24',
-                                    fontVariantNumeric: 'tabular-nums',
-                                    borderLeft: '2px solid rgba(255,255,255,0.12)',
-                                    borderRight: '2px solid rgba(255,255,255,0.12)',
-                                    borderTop: '2px solid rgba(251,191,36,0.3)',
-                                    textShadow: '0 0 12px rgba(251,191,36,0.4)',
-                                }}>
-                                    {grandGrandTotal.toLocaleString()}
-                                </td>
-                                {warehouseCodes.map((code) => (
-                                    <td key={code} style={{
+                                    <td style={{
+                                        position: 'sticky', left: stickyColWidth + skuColWidth + marcaColWidth + colorColWidth + remanenteColWidth, zIndex: 2,
                                         background: '#060c18',
                                         padding: '10px 12px',
                                         textAlign: 'right',
-                                        fontSize: 13,
+                                        fontSize: 14,
                                         fontWeight: 800,
                                         color: '#fbbf24',
                                         fontVariantNumeric: 'tabular-nums',
+                                        borderLeft: '2px solid rgba(255,255,255,0.12)',
+                                        borderRight: '2px solid rgba(255,255,255,0.12)',
                                         borderTop: '2px solid rgba(251,191,36,0.3)',
+                                        textShadow: '0 0 12px rgba(251,191,36,0.4)',
                                     }}>
-                                        {grandTotals[code] !== 0 ? grandTotals[code].toLocaleString() : ''}
+                                        {grandGrandTotal.toLocaleString()}
                                     </td>
-                                ))}
-                            </tr>
-                        </tbody>
-                    </table>
+                                    {warehouseCodes.map((code) => (
+                                        <td key={code} style={{
+                                            background: '#060c18',
+                                            padding: '10px 12px',
+                                            textAlign: 'right',
+                                            fontSize: 13,
+                                            fontWeight: 800,
+                                            color: '#fbbf24',
+                                            fontVariantNumeric: 'tabular-nums',
+                                            borderTop: '2px solid rgba(251,191,36,0.3)',
+                                        }}>
+                                            {grandTotals[code] !== 0 ? grandTotals[code].toLocaleString() : ''}
+                                        </td>
+                                    ))}
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
                 </div>
-            </div>
+            )}
+
+
+
 
             {/* Footer info */}
             <div style={{
@@ -1154,5 +1164,141 @@ export default function PivotInventoryTable({ filters }: PivotInventoryTableProp
                 </div>
             </div>
         </Card >
+    );
+}
+
+/* ─── Mobile Sub-components ─── */
+
+function MobileGroupNode({ node, level, warehouseCodes, data }: { node: TreeNode; level: number; warehouseCodes: string[]; data: PivotData }) {
+    const [expanded, setExpanded] = useState(false);
+    const isBrand = level === 1;
+
+    return (
+        <div style={{
+            background: level === 0 ? 'var(--card-bg)' : 'rgba(255,255,255,0.03)',
+            borderRadius: 8,
+            overflow: 'hidden',
+            border: '1px solid var(--border)',
+            marginBottom: level === 0 ? 8 : 4
+        }}>
+            <button
+                onClick={() => setExpanded(!expanded)}
+                style={{
+                    width: '100%',
+                    padding: '12px 16px',
+                    display: 'flex',
+                    justifyContent: 'space-between',
+                    alignItems: 'center',
+                    background: level === 0 ? 'rgba(15,27,45,0.4)' : 'transparent',
+                    border: 'none',
+                    color: 'var(--text)',
+                    cursor: 'pointer'
+                }}
+            >
+                <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                    {expanded ? <ChevronDown size={18} /> : <ChevronRight size={18} />}
+                    <span style={{
+                        fontSize: level === 0 ? 15 : 14,
+                        fontWeight: 600,
+                        color: level === 0 ? '#fbbf24' : '#60a5fa'
+                    }}>
+                        {node.label}
+                    </span>
+                    <span style={{ fontSize: 12, color: 'var(--muted)', fontWeight: 400 }}>
+                        ({node.children.length})
+                    </span>
+                </div>
+                <div style={{
+                    fontSize: 13,
+                    fontWeight: 700,
+                    color: node.grandTotal > 0 ? '#e2e8f0' : '#64748b'
+                }}>
+                    {node.grandTotal} un.
+                </div>
+            </button>
+
+            {expanded && (
+                <div style={{ padding: '8px 8px 8px 16px' }}>
+                    {node.children.map(child => (
+                        isBrand ? (
+                            <MobileProductCard key={child.label} node={child} warehouseCodes={warehouseCodes} data={data} />
+                        ) : (
+                            <MobileGroupNode key={child.label} node={child} level={level + 1} warehouseCodes={warehouseCodes} data={data} />
+                        )
+                    ))}
+                </div>
+            )}
+        </div>
+    );
+}
+
+function MobileProductCard({ node, warehouseCodes, data }: { node: TreeNode; warehouseCodes: string[]; data: PivotData }) {
+    const [expanded, setExpanded] = useState(false);
+    // Node level 2 is Product. Included all variants totals.
+    const total = node.grandTotal;
+
+    return (
+        <div style={{
+            background: 'var(--card-bg)',
+            border: '1px solid var(--border)',
+            borderRadius: 8,
+            marginBottom: 8,
+            overflow: 'hidden'
+        }}>
+            <div
+                onClick={() => setExpanded(!expanded)}
+                style={{ padding: 12, cursor: 'pointer' }}
+            >
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 12 }}>
+                    <div>
+                        <div style={{ fontSize: 14, fontWeight: 600, color: '#e2e8f0', marginBottom: 4 }}>
+                            {node.label}
+                        </div>
+                        {/* Only show first variant SKU if available or generic info */}
+                        <div style={{ fontSize: 12, color: '#94a3b8' }}>
+                            {node.children.length} variantes
+                        </div>
+                    </div>
+                    <div style={{ textAlign: 'right' }}>
+                        <div style={{
+                            fontSize: 15,
+                            fontWeight: 700,
+                            color: total > 0 ? '#22c55e' : '#64748b'
+                        }}>
+                            {total}
+                        </div>
+                        <div style={{ fontSize: 11, color: '#64748b' }}>Total</div>
+                    </div>
+                </div>
+            </div>
+
+            {expanded && (
+                <div style={{ background: 'rgba(0,0,0,0.2)', padding: 12, borderTop: '1px solid var(--border)' }}>
+                    {/* Breakdown by warehouse */}
+                    {warehouseCodes.map(code => {
+                        const qty = node.totals[code];
+                        if (!qty) return null;
+                        const whName = data.warehouses.find(w => w.code === code)?.name || code;
+                        return (
+                            <div key={code} style={{ display: 'flex', justifyContent: 'space-between', padding: '6px 0', borderBottom: '1px solid rgba(255,255,255,0.05)' }}>
+                                <div style={{ fontSize: 13, color: '#ecf0f1' }}>{whName}</div>
+                                <div style={{ fontSize: 13, fontWeight: 600, color: '#e2e8f0' }}>{qty}</div>
+                            </div>
+                        );
+                    })}
+                    {node.children.length > 0 && (
+                        <div style={{ marginTop: 12 }}>
+                            <div style={{ fontSize: 11, fontWeight: 700, color: '#64748b', marginBottom: 6, textTransform: 'uppercase' }}>Variantes</div>
+                            {node.children.map(variant => (
+                                <div key={variant.label} style={{ display: 'flex', justifyContent: 'space-between', padding: '4px 0', fontSize: 12 }}>
+                                    <span style={{ color: '#94a3b8' }}>{variant.label}</span>
+                                    <span style={{ color: '#e2e8f0' }}>{variant.grandTotal}</span>
+                                </div>
+                            ))}
+                        </div>
+                    )}
+                </div>
+            )}
+        </div>
     );
 }

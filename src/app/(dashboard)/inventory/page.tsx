@@ -160,14 +160,14 @@ export default function InventoryPage() {
 
   return (
     <div style={{ display: 'grid', gap: 14 }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 12 }}>
         <div>
           <div className="h-title">Inventario Completo</div>
           <div style={{ fontSize: 13, color: 'var(--muted)', marginTop: 4 }}>
             Gestión avanzada de existencias por bodega
           </div>
         </div>
-        <div style={{ display: 'flex', gap: 8 }}>
+        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
           <Button variant="secondary" size="sm" onClick={() => handleExport('excel')}>
             <FileSpreadsheet size={16} />
             Excel
@@ -265,7 +265,7 @@ export default function InventoryPage() {
       {/* Filtros Principales */}
       <Card>
         <div style={{ padding: 16 }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16, flexWrap: 'wrap', gap: 8 }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
               <Filter size={18} color="var(--brand-primary)" />
               <h3 style={{ fontSize: 15, fontWeight: 600, margin: 0 }}>Filtros de Búsqueda</h3>
@@ -292,7 +292,7 @@ export default function InventoryPage() {
           </div>
 
           {/* Fila 1: Filtros Básicos */}
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 200px 200px 200px', gap: 12, marginBottom: showAdvancedFilters ? 12 : 0 }}>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(180px, 1fr))', gap: 12, marginBottom: showAdvancedFilters ? 12 : 0 }}>
             <div style={{ position: 'relative' }}>
               <Search
                 size={16}
@@ -352,7 +352,7 @@ export default function InventoryPage() {
 
           {/* Fila 2: Filtros Avanzados */}
           {showAdvancedFilters && (
-            <div style={{ display: 'grid', gridTemplateColumns: '200px 200px 200px 200px 1fr', gap: 12, paddingTop: 12, borderTop: '1px solid var(--border)' }}>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(180px, 1fr))', gap: 12, paddingTop: 12, borderTop: '1px solid var(--border)' }}>
               <Select
                 options={[
                   { value: '', label: 'Estado Físico' },
@@ -430,7 +430,7 @@ export default function InventoryPage() {
       {/* Acciones Masivas */}
       {selectedItems.length > 0 && (
         <Card>
-          <div style={{ padding: 12, display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: 'var(--brand-primary)10' }}>
+          <div style={{ padding: 12, display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: 'var(--brand-primary)10', flexWrap: 'wrap', gap: 8 }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
               <Badge variant="success" size="sm">
                 {selectedItems.length} seleccionados
@@ -439,7 +439,7 @@ export default function InventoryPage() {
                 Acciones masivas:
               </span>
             </div>
-            <div style={{ display: 'flex', gap: 8 }}>
+            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
               <Button variant="ghost" size="sm" onClick={() => handleBulkAction('Editar')}>
                 <Edit size={16} />
                 Editar
