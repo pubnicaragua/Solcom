@@ -118,11 +118,30 @@ export default function TransferHistory() {
   ];
 
   return (
-    <Table
-      columns={columns}
-      data={data}
-      loading={loading}
-      emptyMessage="No hay transferencias registradas"
-    />
+    <>
+      <div className="transfer-table">
+        <Table
+          columns={columns}
+          data={data}
+          loading={loading}
+          emptyMessage="No hay transferencias registradas"
+        />
+      </div>
+      <style jsx global>{`
+        @media (max-width: 640px) {
+          .transfer-table th:nth-child(5),
+          .transfer-table td:nth-child(5),
+          .transfer-table th:nth-child(6),
+          .transfer-table td:nth-child(6) {
+            display: none;
+          }
+          .transfer-table th,
+          .transfer-table td {
+            padding: 8px 6px !important;
+            font-size: 11px !important;
+          }
+        }
+      `}</style>
+    </>
   );
 }

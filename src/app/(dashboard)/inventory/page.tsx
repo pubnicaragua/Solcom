@@ -129,11 +129,6 @@ export default function InventoryPage() {
   }
 
   function handleExport(format: 'csv' | 'excel' | 'pdf') {
-    if (format === 'pdf') {
-      alert('La exportación a PDF requiere una librería adicional. Por favor usa Excel/CSV por ahora.');
-      return;
-    }
-
     const params = new URLSearchParams(filters);
     params.append('format', format);
     window.open(`/api/inventory/export?${params}`, '_blank');
@@ -157,22 +152,22 @@ export default function InventoryPage() {
   ];
 
   return (
-    <div style={{ display: 'grid', gap: 14 }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 12 }}>
+    <div className="inv-page" style={{ display: 'grid', gap: 14 }}>
+      <div className="inv-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 12 }}>
         <div>
           <div className="h-title">Inventario Completo</div>
-          <div style={{ fontSize: 13, color: 'var(--muted)', marginTop: 4 }}>
+          <div className="inv-subtitle" style={{ fontSize: 13, color: 'var(--muted)', marginTop: 4 }}>
             Gestión avanzada de existencias por bodega
           </div>
         </div>
-        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+        <div className="inv-actions" style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
           <Button variant="secondary" size="sm" onClick={() => handleExport('excel')}>
             <FileSpreadsheet size={16} />
-            Excel
+            <span className="btn-label">Excel</span>
           </Button>
           <Button variant="secondary" size="sm" onClick={() => handleExport('pdf')}>
             <FileText size={16} />
-            PDF
+            <span className="btn-label">PDF</span>
           </Button>
           <Button
             variant="primary"
@@ -206,54 +201,7 @@ export default function InventoryPage() {
             }}
           >
             <Upload size={16} />
-            Importar
-          </Button>
-
-          <Button
-            variant="primary"
-            size="sm"
-            style={{
-              background: 'linear-gradient(135deg, #dc2626 0%, #991b1b 100%)',
-              color: 'white',
-              border: 'none',
-              borderRadius: '8px',
-              fontWeight: 600,
-              boxShadow: '0 2px 8px rgba(220, 38, 38, 0.3)',
-              transition: 'all 0.3s ease',
-              position: 'relative',
-              overflow: 'hidden'
-            }}
-            onMouseEnter={(e) => {
-              e.currentTarget.style.transform = 'translateY(-2px)';
-              e.currentTarget.style.boxShadow = '0 4px 12px rgba(220, 38, 38, 0.4)';
-            }}
-            onMouseLeave={(e) => {
-              e.currentTarget.style.transform = 'translateY(0)';
-              e.currentTarget.style.boxShadow = '0 2px 8px rgba(220, 38, 38, 0.3)';
-            }}
-            onClick={async () => {
-              if (confirm('¿Deseas sincronizar el inventario desde Zoho Inventory?')) {
-                try {
-                  const response = await fetch('/api/zoho/books/sync', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ force: true })
-                  });
-                  const data = await response.json();
-                  if (response.ok) {
-                    alert(`Sincronización exitosa: ${data.snapshotsCreated || 0} snapshots creados.`);
-                    window.location.reload();
-                  } else {
-                    alert(`Error: ${data.error}`);
-                  }
-                } catch (error) {
-                  alert('Error al conectar con el servidor.');
-                }
-              }
-            }}
-          >
-            <RefreshCw size={16} style={{ marginRight: 6 }} />
-            Sincronizar Inventario
+            <span className="btn-label">Importar</span>
           </Button>
         </div>
       </div>
@@ -262,11 +210,11 @@ export default function InventoryPage() {
 
       {/* Filtros Principales */}
       <Card>
-        <div style={{ padding: 16 }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16, flexWrap: 'wrap', gap: 8 }}>
+        <div className="inv-filter-card" style={{ padding: 16 }}>
+          <div className="inv-filter-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16, flexWrap: 'wrap', gap: 8 }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
               <Filter size={18} color="var(--brand-primary)" />
-              <h3 style={{ fontSize: 15, fontWeight: 600, margin: 0 }}>Filtros de Búsqueda</h3>
+              <h3 className="inv-filter-title" style={{ fontSize: 15, fontWeight: 600, margin: 0 }}>Filtros</h3>
               {activeFiltersCount > 0 && (
                 <Badge variant="success" size="sm">
                   {activeFiltersCount} filtros
@@ -290,8 +238,8 @@ export default function InventoryPage() {
           </div>
 
           {/* Fila 1: Filtros Básicos */}
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(180px, 1fr))', gap: 12, marginBottom: showAdvancedFilters ? 12 : 0 }}>
-            <div style={{ position: 'relative' }}>
+          <div className="inv-filters-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(160px, 1fr))', gap: 12, marginBottom: showAdvancedFilters ? 12 : 0 }}>
+            <div className="inv-search-wrapper" style={{ position: 'relative', gridColumn: 'span 2' }}>
               <Search
                 size={16}
                 style={{
@@ -302,7 +250,7 @@ export default function InventoryPage() {
                 }}
               />
               <Input
-                placeholder="Buscar por nombre, SKU, código de barras..."
+                placeholder="Buscar por nombre, SKU..."
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
                 style={{ paddingLeft: 40 }}
@@ -350,7 +298,7 @@ export default function InventoryPage() {
 
           {/* Fila 2: Filtros Avanzados */}
           {showAdvancedFilters && (
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(180px, 1fr))', gap: 12, paddingTop: 12, borderTop: '1px solid var(--border)' }}>
+            <div className="inv-filters-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(160px, 1fr))', gap: 12, paddingTop: 12, borderTop: '1px solid var(--border)' }}>
               <Select
                 options={[
                   { value: '', label: 'Estado Físico' },
@@ -503,6 +451,46 @@ export default function InventoryPage() {
         product={detailsProduct}
       />
 
+      <style jsx>{`
+        @media (max-width: 640px) {
+          .inv-header {
+            flex-direction: column;
+            align-items: flex-start !important;
+          }
+          .inv-actions {
+            width: 100%;
+            justify-content: flex-start;
+          }
+          .inv-subtitle {
+            font-size: 12px !important;
+          }
+          .btn-label {
+            display: none;
+          }
+          .inv-search-wrapper {
+            grid-column: span 1 !important;
+          }
+          .inv-filters-grid {
+            grid-template-columns: 1fr !important;
+          }
+          .inv-filter-card {
+            padding: 10px !important;
+          }
+          .inv-filter-header {
+            flex-direction: column;
+            align-items: flex-start !important;
+            gap: 6px !important;
+          }
+          .inv-filter-title {
+            font-size: 13px !important;
+          }
+        }
+        @media (min-width: 641px) and (max-width: 768px) {
+          .inv-filters-grid {
+            grid-template-columns: repeat(2, 1fr) !important;
+          }
+        }
+      `}</style>
     </div>
   );
 }
