@@ -1,4 +1,5 @@
 import { createRouteHandlerClient } from '@supabase/auth-helpers-nextjs';
+import { createClient } from '@supabase/supabase-js';
 import { cookies } from 'next/headers';
 import { NextResponse } from 'next/server';
 
@@ -21,10 +22,17 @@ export async function GET() {
 
 export async function POST(request: Request) {
   try {
-    const supabase = createRouteHandlerClient({ cookies });
+    console.log('[API] POST /api/users request received');
+    console.log('[API] Service Role Key present:', !!process.env.SUPABASE_SERVICE_ROLE_KEY);
+    // Admin operations REQUIRE a service role client
+    const supabaseAdmin = createClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL!,
+      process.env.SUPABASE_SERVICE_ROLE_KEY!
+    );
+
     const { email, full_name, role, password } = await request.json();
 
-    const { data: authData, error: authError } = await supabase.auth.admin.createUser({
+    const { data: authData, error: authError } = await supabaseAdmin.auth.admin.createUser({
       email,
       password: password || Math.random().toString(36).slice(-8),
       email_confirm: true,
@@ -38,6 +46,17 @@ export async function POST(request: Request) {
 
     return NextResponse.json({ success: true, user: authData.user });
   } catch (error: any) {
-    return NextResponse.json({ error: error.message }, { status: 500 });
+    console.error('API Error:', error);
+    const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
+    return NextResponse.json({
+      error: error.message,
+      debug: {
+        timestamp: new Date().toISOString(),
+        keyPresent: !!key,
+        keyPrefix: key ? key.substring(0, 5) + '...' : 'MISSING',
+        isAnon: key === process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY,
+        env: process.env.NODE_ENV
+      }
+    }, { status: 500 });
   }
 }
