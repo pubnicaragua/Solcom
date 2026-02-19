@@ -6,7 +6,7 @@ import Button from '@/components/ui/Button';
 import Badge from '@/components/ui/Badge';
 import Input from '@/components/ui/Input';
 import Select from '@/components/ui/Select';
-import { Shield, Users, Edit, Trash2, Plus, Check, X, Save, XCircle } from 'lucide-react';
+import { Shield, Users, Edit, Trash2, Plus, Check, X, Save, XCircle, UserPlus, Loader2 } from 'lucide-react';
 import { createBrowserClient } from '@supabase/ssr';
 
 interface UserProfile {
@@ -26,59 +26,56 @@ interface RoleInfo {
   color: string;
 }
 
-const ROLE_DEFINITIONS: RoleInfo[] = [
-  {
-    id: '1',
+interface Permission {
+  id: string;
+  code: string;
+  name: string;
+  description: string;
+  module: string;
+}
+
+interface RolePermission {
+  role: string;
+  permission_code: string;
+}
+
+const ROLE_DEFINITIONS: Record<string, { name: string; description: string; color: string }> = {
+  admin: {
     name: 'Administrador',
     description: 'Acceso completo al sistema',
-    userCount: 2,
-    permissions: ['inventory.read', 'inventory.write', 'reports.read', 'users.manage', 'settings.manage', 'ai.use'],
     color: 'var(--brand-accent)',
   },
-  {
-    id: '2',
-    name: 'Gerente',
-    description: 'Gestión de inventario y reportes',
-    userCount: 5,
-    permissions: ['inventory.read', 'inventory.write', 'reports.read', 'ai.use'],
+  manager: {
+    name: 'Gerente de Bodega',
+    description: 'Gestión de inventario y transferencias',
     color: 'var(--success)',
   },
-  {
-    id: '3',
-    name: 'Operador',
-    description: 'Consulta de inventario',
-    userCount: 12,
-    permissions: ['inventory.read', 'reports.read'],
+  operator: {
+    name: 'Vendedor',
+    description: 'Solo lectura de inventario y ventas',
     color: '#3B82F6',
   },
-  {
-    id: '4',
+  auditor: {
     name: 'Auditor',
     description: 'Solo lectura de reportes',
-    userCount: 3,
-    permissions: ['reports.read'],
     color: 'var(--warning)',
   },
-];
+};
 
-const ALL_PERMISSIONS = [
-  { id: 'inventory.read', label: 'Ver Inventario', module: 'Inventario' },
-  { id: 'inventory.write', label: 'Modificar Inventario', module: 'Inventario' },
-  { id: 'reports.read', label: 'Ver Reportes', module: 'Reportes' },
-  { id: 'users.manage', label: 'Gestionar Usuarios', module: 'Usuarios' },
-  { id: 'settings.manage', label: 'Configuración', module: 'Sistema' },
-  { id: 'ai.use', label: 'Usar Agentes IA', module: 'IA' },
-];
 
 export default function RolesPage() {
   const [users, setUsers] = useState<UserProfile[]>([]);
-  const [selectedRole, setSelectedRole] = useState<RoleInfo | null>(null);
+  const [selectedRole, setSelectedRole] = useState<string | null>(null);
   const [editingUser, setEditingUser] = useState<UserProfile | null>(null);
   const [newUserEmail, setNewUserEmail] = useState('');
   const [newUserName, setNewUserName] = useState('');
+  const [newUserPassword, setNewUserPassword] = useState('');
   const [newUserRole, setNewUserRole] = useState<'admin' | 'manager' | 'operator' | 'auditor'>('operator');
   const [showNewUserForm, setShowNewUserForm] = useState(false);
   const [loading, setLoading] = useState(true);
+  const [permissions, setPermissions] = useState<Permission[]>([]);
+  const [rolePermissions, setRolePermissions] = useState<RolePermission[]>([]);
+  const [savingPermission, setSavingPermission] = useState(false);
   const supabase = createBrowserClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
@@ -86,64 +83,218 @@ export default function RolesPage() {
 
   useEffect(() => {
     loadUsers();
+    loadPermissions();
   }, []);
+
+  useEffect(() => {
+    if (selectedRole) {
+      loadRolePermissions(selectedRole);
+    }
+  }, [selectedRole]);
 
   async function loadUsers() {
     setLoading(true);
-    const { data, error } = await supabase
-      .from('user_profiles')
-      .select('*')
-      .order('created_at', { ascending: false });
-
-    if (!error && data) {
-      setUsers(data);
+    try {
+      const response = await fetch('/api/users');
+      if (response.ok) {
+        const data = await response.json();
+        setUsers(data);
+      }
+    } catch (error) {
+      console.error('Error loading users:', error);
     }
     setLoading(false);
   }
 
-  async function handleUpdateUserRole(userId: string, newRole: 'admin' | 'manager' | 'operator' | 'auditor') {
-    const { error } = await supabase
-      .from('user_profiles')
-      .update({ role: newRole })
-      .eq('id', userId);
+  async function loadPermissions() {
+    try {
+      const response = await fetch('/api/permissions');
+      if (response.ok) {
+        const data = await response.json();
+        setPermissions(data);
+      }
+    } catch (error) {
+      console.error('Error loading permissions:', error);
+    }
+  }
 
-    if (!error) {
-      await loadUsers();
-      setEditingUser(null);
+  async function loadRolePermissions(role: string) {
+    try {
+      const response = await fetch(`/api/role-permissions?role=${role}`);
+      if (response.ok) {
+        const data = await response.json();
+        setRolePermissions(data);
+      }
+    } catch (error) {
+      console.error('Error loading role permissions:', error);
+    }
+  }
+
+  async function handleUpdateUserRole(userId: string, newRole: 'admin' | 'manager' | 'operator' | 'auditor') {
+    try {
+      const response = await fetch(`/api/users/${userId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ role: newRole })
+      });
+
+      if (response.ok) {
+        await loadUsers();
+        setEditingUser(null);
+        alert('Rol actualizado correctamente');
+      } else {
+        alert('Error al actualizar el rol');
+      }
+    } catch (error) {
+      alert('Error al actualizar el rol');
     }
   }
 
   async function handleDeleteUser(userId: string) {
-    if (!confirm('¿Estás seguro de eliminar este usuario?')) return;
+    if (!confirm('¿Estás seguro de eliminar este usuario? Esta acción no se puede deshacer.')) return;
 
-    const { error } = await supabase
-      .from('user_profiles')
-      .delete()
-      .eq('id', userId);
+    try {
+      const response = await fetch(`/api/users/${userId}`, {
+        method: 'DELETE'
+      });
 
-    if (!error) {
-      await loadUsers();
+      if (response.ok) {
+        await loadUsers();
+        alert('Usuario eliminado correctamente');
+      } else {
+        alert('Error al eliminar el usuario');
+      }
+    } catch (error) {
+      alert('Error al eliminar el usuario');
     }
+  }
+
+  async function handleCreateUser() {
+    if (!newUserEmail || !newUserName) {
+      alert('Por favor completa todos los campos');
+      return;
+    }
+
+    try {
+      const response = await fetch('/api/users', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          email: newUserEmail,
+          full_name: newUserName,
+          role: newUserRole,
+          password: newUserPassword || undefined
+        })
+      });
+
+      if (response.ok) {
+        await loadUsers();
+        setShowNewUserForm(false);
+        setNewUserEmail('');
+        setNewUserName('');
+        setNewUserPassword('');
+        setNewUserRole('operator');
+        alert('Usuario creado correctamente');
+      } else {
+        const data = await response.json();
+        alert(`Error: ${data.error}`);
+      }
+    } catch (error) {
+      alert('Error al crear el usuario');
+    }
+  }
+
+  async function togglePermission(permissionCode: string) {
+    if (!selectedRole) return;
+    
+    setSavingPermission(true);
+    const hasPermission = rolePermissions.some(rp => rp.permission_code === permissionCode);
+
+    try {
+      const response = await fetch('/api/role-permissions', {
+        method: hasPermission ? 'DELETE' : 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          role: selectedRole,
+          permission_code: permissionCode
+        })
+      });
+
+      if (response.ok) {
+        await loadRolePermissions(selectedRole);
+      }
+    } catch (error) {
+      console.error('Error toggling permission:', error);
+    }
+    setSavingPermission(false);
   }
 
   function getRoleCount(role: string) {
     return users.filter(u => u.role === role).length;
   }
 
-  const rolesWithCounts = ROLE_DEFINITIONS.map(role => ({
-    ...role,
-    userCount: getRoleCount(role.id)
+  const rolesWithCounts = Object.entries(ROLE_DEFINITIONS).map(([roleKey, roleInfo]) => ({
+    id: roleKey,
+    ...roleInfo,
+    userCount: getRoleCount(roleKey)
   }));
 
   return (
     <div style={{ display: 'grid', gap: 14 }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
         <div className="h-title">Roles y Permisos</div>
-        <Button variant="primary" size="sm">
-          <Plus size={16} style={{ marginRight: 6 }} />
-          Nuevo Rol
+        <Button variant="primary" size="sm" onClick={() => setShowNewUserForm(!showNewUserForm)}>
+          <UserPlus size={16} style={{ marginRight: 6 }} />
+          Nuevo Usuario
         </Button>
       </div>
+
+      {showNewUserForm && (
+        <Card>
+          <div style={{ padding: 16 }}>
+            <div className="h-subtitle" style={{ marginBottom: 12 }}>Crear Nuevo Usuario</div>
+            <div style={{ display: 'grid', gap: 12 }}>
+              <Input
+                placeholder="Nombre completo"
+                value={newUserName}
+                onChange={(e) => setNewUserName(e.target.value)}
+              />
+              <Input
+                type="email"
+                placeholder="Email"
+                value={newUserEmail}
+                onChange={(e) => setNewUserEmail(e.target.value)}
+              />
+              <Input
+                type="password"
+                placeholder="Contraseña (opcional - se generará automáticamente)"
+                value={newUserPassword}
+                onChange={(e) => setNewUserPassword(e.target.value)}
+              />
+              <Select
+                value={newUserRole}
+                onChange={(e) => setNewUserRole(e.target.value as any)}
+                options={[
+                  { value: 'operator', label: 'Vendedor' },
+                  { value: 'manager', label: 'Gerente de Bodega' },
+                  { value: 'auditor', label: 'Auditor' },
+                  { value: 'admin', label: 'Administrador' }
+                ]}
+              />
+              <div style={{ display: 'flex', gap: 8 }}>
+                <Button variant="primary" size="sm" onClick={handleCreateUser}>
+                  <Save size={14} style={{ marginRight: 4 }} />
+                  Crear Usuario
+                </Button>
+                <Button variant="secondary" size="sm" onClick={() => setShowNewUserForm(false)}>
+                  <XCircle size={14} style={{ marginRight: 4 }} />
+                  Cancelar
+                </Button>
+              </div>
+            </div>
+          </div>
+        </Card>
+      )}
 
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 }}>
         <div style={{ display: 'grid', gap: 14, alignContent: 'start' }}>
@@ -156,12 +307,12 @@ export default function RolesPage() {
                 {rolesWithCounts.map((role) => (
                   <div
                     key={role.id}
-                    onClick={() => setSelectedRole(role)}
+                    onClick={() => setSelectedRole(role.id)}
                     style={{
                       padding: 14,
                       borderRadius: 6,
-                      border: `1px solid ${selectedRole?.id === role.id ? role.color : 'var(--border)'}`,
-                      background: selectedRole?.id === role.id ? `${role.color}10` : 'var(--panel)',
+                      border: `1px solid ${selectedRole === role.id ? role.color : 'var(--border)'}`,
+                      background: selectedRole === role.id ? `${role.color}10` : 'var(--panel)',
                       cursor: 'pointer',
                       transition: 'all 0.2s',
                     }}
@@ -257,13 +408,13 @@ export default function RolesPage() {
                             style={{ fontSize: 13 }}
                           />
                           <Select
-                            value={user.role}
+                            value={editingUser.role}
                             onChange={(e) => setEditingUser({ ...editingUser, role: e.target.value as any })}
                             options={[
-                              { value: 'admin', label: 'Administrador' },
-                              { value: 'manager', label: 'Gerente' },
-                              { value: 'operator', label: 'Operador' },
-                              { value: 'auditor', label: 'Auditor' }
+                              { value: 'operator', label: 'Vendedor' },
+                              { value: 'manager', label: 'Gerente de Bodega' },
+                              { value: 'auditor', label: 'Auditor' },
+                              { value: 'admin', label: 'Administrador' }
                             ]}
                           />
                           <div style={{ display: 'flex', gap: 6 }}>
@@ -294,7 +445,7 @@ export default function RolesPage() {
                               variant={user.role === 'admin' ? 'danger' : user.role === 'manager' ? 'warning' : 'neutral'}
                               size="sm"
                             >
-                              {user.role === 'admin' ? 'Administrador' : user.role === 'manager' ? 'Gerente' : user.role === 'operator' ? 'Operador' : 'Auditor'}
+                              {ROLE_DEFINITIONS[user.role]?.name || user.role}
                             </Badge>
                           </div>
                           <div style={{ display: 'flex', gap: 6 }}>
@@ -344,27 +495,34 @@ export default function RolesPage() {
         <Card>
           <div style={{ padding: 8 }}>
             <div className="h-subtitle" style={{ marginBottom: 12 }}>
-              {selectedRole ? `Permisos: ${selectedRole.name}` : 'Selecciona un rol'}
+              {selectedRole ? `Permisos: ${ROLE_DEFINITIONS[selectedRole]?.name}` : 'Selecciona un rol'}
             </div>
             {selectedRole ? (
               <div style={{ display: 'grid', gap: 16 }}>
+                {savingPermission && (
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: 8, background: 'var(--brand-primary)10', borderRadius: 4 }}>
+                    <Loader2 size={16} style={{ animation: 'spin 1s linear infinite' }} />
+                    <span style={{ fontSize: 13 }}>Actualizando permisos...</span>
+                  </div>
+                )}
                 {Object.entries(
-                  ALL_PERMISSIONS.reduce((acc, perm) => {
+                  permissions.reduce((acc, perm) => {
                     if (!acc[perm.module]) acc[perm.module] = [];
                     acc[perm.module].push(perm);
                     return acc;
-                  }, {} as Record<string, typeof ALL_PERMISSIONS>)
+                  }, {} as Record<string, Permission[]>)
                 ).map(([module, perms]) => (
                   <div key={module}>
-                    <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 8, color: 'var(--muted)' }}>
+                    <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 8, color: 'var(--muted)', textTransform: 'uppercase' }}>
                       {module}
                     </div>
                     <div style={{ display: 'grid', gap: 6 }}>
                       {perms.map((perm) => {
-                        const hasPermission = selectedRole.permissions.includes(perm.id);
+                        const hasPermission = rolePermissions.some(rp => rp.permission_code === perm.code);
                         return (
                           <div
-                            key={perm.id}
+                            key={perm.code}
+                            onClick={() => togglePermission(perm.code)}
                             style={{
                               display: 'flex',
                               alignItems: 'center',
@@ -373,6 +531,8 @@ export default function RolesPage() {
                               borderRadius: 4,
                               background: hasPermission ? 'var(--success)10' : 'var(--panel)',
                               border: `1px solid ${hasPermission ? 'var(--success)' : 'var(--border)'}`,
+                              cursor: 'pointer',
+                              transition: 'all 0.2s'
                             }}
                           >
                             <div
@@ -393,7 +553,12 @@ export default function RolesPage() {
                                 <X size={14} color="var(--muted)" />
                               )}
                             </div>
-                            <span style={{ fontSize: 14, flex: 1 }}>{perm.label}</span>
+                            <div style={{ flex: 1 }}>
+                              <div style={{ fontSize: 14, fontWeight: 500 }}>{perm.name}</div>
+                              {perm.description && (
+                                <div style={{ fontSize: 12, color: 'var(--muted)', marginTop: 2 }}>{perm.description}</div>
+                              )}
+                            </div>
                           </div>
                         );
                       })}
@@ -403,7 +568,7 @@ export default function RolesPage() {
               </div>
             ) : (
               <div style={{ padding: 40, textAlign: 'center', color: 'var(--muted)' }}>
-                Selecciona un rol para ver sus permisos
+                Selecciona un rol para ver y modificar sus permisos
               </div>
             )}
           </div>

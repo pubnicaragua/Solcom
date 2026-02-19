@@ -12,6 +12,13 @@ interface WarehouseCol {
     name: string;
 }
 
+interface WarehouseColor {
+    warehouse_code: string;
+    warehouse_name: string;
+    color: string;
+    text_color: string;
+}
+
 interface PivotItem {
     id: string;
     sku: string;
@@ -197,6 +204,7 @@ export default function PivotInventoryTable({ filters }: PivotInventoryTableProp
     const [hideZeroStock, setHideZeroStock] = useState(false);
     const [scrollTop, setScrollTop] = useState(0);
     const [viewportHeight, setViewportHeight] = useState(0);
+    const [warehouseColors, setWarehouseColors] = useState<Map<string, WarehouseColor>>(new Map());
     const requestIdRef = useRef(0);
     const abortRef = useRef<AbortController | null>(null);
     const hasLoadedOnceRef = useRef(false);
@@ -307,7 +315,22 @@ export default function PivotInventoryTable({ filters }: PivotInventoryTableProp
 
     useEffect(() => {
         void fetchPivotData();
+        void fetchWarehouseColors();
     }, [fetchPivotData]);
+
+    async function fetchWarehouseColors() {
+        try {
+            const res = await fetch('/api/warehouse-colors');
+            if (res.ok) {
+                const colors: WarehouseColor[] = await res.json();
+                const colorMap = new Map<string, WarehouseColor>();
+                colors.forEach(c => colorMap.set(c.warehouse_code, c));
+                setWarehouseColors(colorMap);
+            }
+        } catch (error) {
+            console.error('Error loading warehouse colors:', error);
+        }
+    }
 
     const scheduleRealtimeRefresh = useCallback(() => {
         if (realtimeRefreshTimerRef.current) {
@@ -731,23 +754,28 @@ export default function PivotInventoryTable({ filters }: PivotInventoryTableProp
                                 }}>
                                     Total
                                 </th>
-                                {warehouseCodes.map((code) => (
-                                    <th key={code} style={{
-                                        position: 'sticky', top: 0, zIndex: 2,
-                                        background: '#080f1d',
-                                        padding: '11px 12px',
-                                        textAlign: 'right',
-                                        fontSize: 10, fontWeight: 700,
-                                        color: '#64748b',
-                                        textTransform: 'uppercase',
-                                        letterSpacing: '0.5px',
-                                        minWidth: cellWidth,
-                                        whiteSpace: 'nowrap',
-                                        borderBottom: '2px solid rgba(255,255,255,0.12)',
-                                    }}>
-                                        {code}
-                                    </th>
-                                ))}
+                                {warehouseCodes.map((code) => {
+                                    const whColor = warehouseColors.get(code);
+                                    return (
+                                        <th key={code} style={{
+                                            position: 'sticky', top: 0, zIndex: 2,
+                                            background: whColor ? whColor.color : '#080f1d',
+                                            padding: '11px 12px',
+                                            textAlign: 'right',
+                                            fontSize: 10, fontWeight: 700,
+                                            color: whColor ? whColor.text_color : '#64748b',
+                                            textTransform: 'uppercase',
+                                            letterSpacing: '0.5px',
+                                            minWidth: cellWidth,
+                                            whiteSpace: 'nowrap',
+                                            borderBottom: '2px solid rgba(255,255,255,0.12)',
+                                            borderLeft: '1px solid rgba(255,255,255,0.08)',
+                                            borderRight: '1px solid rgba(255,255,255,0.08)',
+                                        }}>
+                                            {code}
+                                        </th>
+                                    );
+                                })}
                             </tr>
                         </thead>
                         {/* ─── Body ─── */}
@@ -971,6 +999,10 @@ export default function PivotInventoryTable({ filters }: PivotInventoryTableProp
                                                 const qty = node.totals[code] || 0;
                                                 const highlight = getCellColor(qty);
                                                 const noBreakdown = isItemRow && rowItem && rowItem.hasSnapshots === false;
+                                                const whColor = warehouseColors.get(code);
+                                                const bgColor = whColor 
+                                                    ? (highlight && !noBreakdown ? `${whColor.color}40` : `${whColor.color}15`)
+                                                    : (highlight && !noBreakdown ? `${highlight}15` : undefined);
                                                 return (
                                                     <td key={code} style={{
                                                         padding: '7px 12px',
@@ -979,10 +1011,12 @@ export default function PivotInventoryTable({ filters }: PivotInventoryTableProp
                                                         fontWeight: isGroup ? 700 : 400,
                                                         color: noBreakdown
                                                             ? 'rgba(100,116,139,0.25)'
-                                                            : highlight || (qty !== 0 ? '#e2e8f0' : 'rgba(100,116,139,0.3)'),
-                                                        background: highlight && !noBreakdown ? `${highlight}15` : undefined,
+                                                            : (whColor && qty !== 0 ? whColor.text_color : (highlight || (qty !== 0 ? '#e2e8f0' : 'rgba(100,116,139,0.3)'))),
+                                                        background: bgColor,
                                                         fontVariantNumeric: 'tabular-nums',
                                                         borderBottom: `1px solid rgba(255,255,255,${node.level <= 1 ? '0.12' : '0.05'})`,
+                                                        borderLeft: '1px solid rgba(255,255,255,0.04)',
+                                                        borderRight: '1px solid rgba(255,255,255,0.04)',
                                                         transition: 'background 0.15s',
                                                         fontStyle: noBreakdown ? 'italic' : undefined,
                                                     }}>

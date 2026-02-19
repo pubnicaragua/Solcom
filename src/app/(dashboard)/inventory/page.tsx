@@ -13,7 +13,8 @@ import EditProductModal from '@/components/modals/EditProductModal';
 import UpdateStockModal from '@/components/modals/UpdateStockModal';
 import TransferModal from '@/components/modals/TransferModal';
 import ProductDetailsModal from '@/components/modals/ProductDetailsModal';
-import { Search, Filter, Download, Upload, Trash2, Edit, RefreshCw, FileSpreadsheet, FileText, BarChart3 } from 'lucide-react';
+import WarehouseColorModal from '@/components/modals/WarehouseColorModal';
+import { Search, Filter, Download, Upload, Trash2, Edit, RefreshCw, FileSpreadsheet, FileText, BarChart3, Palette } from 'lucide-react';
 
 export default function InventoryPage() {
   const [filters, setFilters] = useState({
@@ -51,6 +52,7 @@ export default function InventoryPage() {
   const [stockModalOpen, setStockModalOpen] = useState(false);
   const [transferModalOpen, setTransferModalOpen] = useState(false);
   const [detailsModalOpen, setDetailsModalOpen] = useState(false);
+  const [colorModalOpen, setColorModalOpen] = useState(false);
   const [selectedProduct, setSelectedProduct] = useState<any>(null);
   const [transferProduct, setTransferProduct] = useState<any>(null);
   const [detailsProduct, setDetailsProduct] = useState<any>(null);
@@ -501,6 +503,12 @@ export default function InventoryPage() {
         isOpen={detailsModalOpen}
         onClose={() => setDetailsModalOpen(false)}
         product={detailsProduct}
+      />
+
+      <WarehouseColorModal
+        isOpen={colorModalOpen}
+        onClose={() => setColorModalOpen(false)}
+        onSave={() => window.location.reload()}
       />
     </div>
   );

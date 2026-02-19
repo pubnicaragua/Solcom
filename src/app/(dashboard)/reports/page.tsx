@@ -188,17 +188,17 @@ export default function ReportsPage() {
   const hasFilters = Object.values(globalFilters).some(v => v !== '');
 
   return (
-    <div style={{ display: 'grid', gap: 14 }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-        <div className="h-title">Reportes de Inventario</div>
-        <div style={{ display: 'flex', gap: 8 }}>
+    <div style={{ display: 'grid', gap: 14, maxWidth: '100%', overflowX: 'hidden' }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 12 }}>
+        <div className="h-title" style={{ fontSize: 'clamp(18px, 5vw, 24px)' }}>Reportes de Inventario</div>
+        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
           <Button variant="secondary" size="sm" onClick={exportToExcel}>
             <Download size={16} style={{ marginRight: 6 }} />
-            Excel
+            <span style={{ display: window.innerWidth < 640 ? 'none' : 'inline' }}>Excel</span>
           </Button>
           <Button variant="secondary" size="sm" onClick={exportToPDF}>
             <FileText size={16} style={{ marginRight: 6 }} />
-            PDF
+            <span style={{ display: window.innerWidth < 640 ? 'none' : 'inline' }}>PDF</span>
           </Button>
         </div>
       </div>
@@ -244,7 +244,7 @@ export default function ReportsPage() {
       )}
 
       {/* KPI CARDS */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: 14 }}>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(200px, 100%), 1fr))', gap: 14 }}>
 
 
         <Card>
@@ -356,7 +356,7 @@ export default function ReportsPage() {
             <Filter size={18} color="var(--brand-primary)" />
             <h3 style={{ fontSize: 15, fontWeight: 600, margin: 0 }}>Filtros Globales</h3>
           </div>
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: 12 }}>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(150px, 100%), 1fr))', gap: 12 }}>
             <Select
               value={globalFilters.category}
               onChange={(e) => { setGlobalFilters({ ...globalFilters, category: e.target.value }); }}
@@ -436,8 +436,8 @@ export default function ReportsPage() {
                   <div>No hay productos con stock estancado {'>'}= 90 días</div>
                 </div>
               ) : (
-                <div style={{ maxHeight: 400, overflowY: 'auto', borderRadius: 8, border: '1px solid var(--border)' }}>
-                  <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
+                <div style={{ maxHeight: 400, overflowY: 'auto', overflowX: 'auto', borderRadius: 8, border: '1px solid var(--border)' }}>
+                  <table style={{ width: '100%', minWidth: 600, borderCollapse: 'collapse', fontSize: 13 }}>
                     <thead>
                       <tr style={{ background: 'var(--panel)', position: 'sticky', top: 0, zIndex: 1 }}>
                         <th style={{ padding: '10px 12px', textAlign: 'left', fontWeight: 600, borderBottom: '1px solid var(--border)' }}>SKU</th>
@@ -489,7 +489,7 @@ export default function ReportsPage() {
         <h2 style={{ color: 'white', fontSize: 18, fontWeight: 700, margin: 0 }}>EXISTENCIAS GENERALES</h2>
       </div>
 
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 }}>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(400px, 100%), 1fr))', gap: 14 }}>
         <ChartCard title="Inventario por Categorías (Unids)">
           {loading ? (
             <div style={{ height: 300, background: 'var(--panel)', borderRadius: 4, animation: 'pulse 1.5s infinite' }} />
@@ -517,7 +517,7 @@ export default function ReportsPage() {
         </ChartCard>
       </div>
 
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 }}>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(400px, 100%), 1fr))', gap: 14 }}>
         <ChartCard title="Participación de Inventario - Unids por Categoría">
           {loading ? (
             <div style={{ height: 300, background: 'var(--panel)', borderRadius: 4, animation: 'pulse 1.5s infinite' }} />
@@ -546,7 +546,7 @@ export default function ReportsPage() {
       </div>
 
       {/* WAREHOUSE CHARTS - loaded lazily */}
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 }}>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(400px, 100%), 1fr))', gap: 14 }}>
         <ChartCard title="Inventario por Almacén (Unidades)">
           {warehouseLoading ? (
             <div style={{ height: 300, display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--muted)', gap: 8 }}>
