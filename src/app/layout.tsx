@@ -1,5 +1,6 @@
 import '@/styles/globals.css';
 import type { Metadata } from 'next';
+import ModernAlertBridge from '@/components/ui/ModernAlertBridge';
 
 export const metadata: Metadata = {
   title: {
@@ -88,7 +89,10 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         <link rel="preconnect" href="https://fonts.googleapis.com" />
         <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
       </head>
-      <body>{children}</body>
+      <body>
+        <ModernAlertBridge />
+        {children}
+      </body>
     </html>
   );
 }

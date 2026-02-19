@@ -123,7 +123,7 @@ export default function KPIGrid() {
 
 
   return (
-    <div className="kpi-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: 14 }}>
+    <div className="kpi-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))', gap: 14 }}>
       {kpiItems.map((item, index) => {
         const Icon = item.icon;
         return (
@@ -146,6 +146,7 @@ export default function KPIGrid() {
           >
             <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
               <div
+                className="kpi-icon"
                 style={{
                   width: 48,
                   height: 48,
@@ -156,15 +157,16 @@ export default function KPIGrid() {
                   alignItems: 'center',
                   justifyContent: 'center',
                   transition: 'all 0.3s ease',
+                  flexShrink: 0,
                 }}
               >
                 <Icon size={24} color={item.color} />
               </div>
-              <div style={{ flex: 1 }}>
+              <div style={{ flex: 1, minWidth: 0 }}>
                 <div style={{ fontSize: 12, color: 'var(--muted)', marginBottom: 4, fontWeight: 500 }}>
                   {item.label}
                 </div>
-                <div style={{ fontSize: 22, fontWeight: 700, color: item.color }}>
+                <div className="kpi-value" style={{ fontSize: 22, fontWeight: 700, color: item.color, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                   {item.value}
                 </div>
               </div>
@@ -186,7 +188,19 @@ export default function KPIGrid() {
 
         @media (max-width: 640px) {
           .kpi-grid {
-            grid-template-columns: 1fr !important;
+            grid-template-columns: repeat(2, 1fr) !important;
+            gap: 8px !important;
+          }
+          .kpi-icon {
+            width: 36px !important;
+            height: 36px !important;
+          }
+          .kpi-icon svg {
+            width: 18px !important;
+            height: 18px !important;
+          }
+          .kpi-value {
+            font-size: 16px !important;
           }
         }
       `}</style>
