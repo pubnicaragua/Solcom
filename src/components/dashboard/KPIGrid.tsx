@@ -123,7 +123,7 @@ export default function KPIGrid() {
 
 
   return (
-    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: 14 }}>
+    <div className="kpi-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: 14 }}>
       {kpiItems.map((item, index) => {
         const Icon = item.icon;
         return (
@@ -181,6 +181,12 @@ export default function KPIGrid() {
           to {
             opacity: 1;
             transform: translateY(0);
+          }
+        }
+
+        @media (max-width: 640px) {
+          .kpi-grid {
+            grid-template-columns: 1fr !important;
           }
         }
       `}</style>

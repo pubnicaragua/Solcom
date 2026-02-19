@@ -1,6 +1,5 @@
-import { Menu, X } from 'lucide-react';
+import { X } from 'lucide-react';
 import { useSidebar } from '@/contexts/SidebarContext';
-import NotificationsDropdown from './NotificationsDropdown';
 import UserProfileDropdown from './UserProfileDropdown';
 
 export default function Topbar() {
@@ -61,7 +60,6 @@ export default function Topbar() {
         </div>
 
         <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-          <NotificationsDropdown />
           <UserProfileDropdown />
         </div>
       </div>

@@ -76,6 +76,8 @@ export default function RolesPage() {
   const [permissions, setPermissions] = useState<Permission[]>([]);
   const [rolePermissions, setRolePermissions] = useState<RolePermission[]>([]);
   const [savingPermission, setSavingPermission] = useState(false);
+  const [userQuery, setUserQuery] = useState('');
+  const [permissionQuery, setPermissionQuery] = useState('');
   const supabase = createBrowserClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
@@ -229,6 +231,32 @@ export default function RolesPage() {
     setSavingPermission(false);
   }
 
+  async function setModulePermissions(module: string, enable: boolean) {
+    if (!selectedRole) return;
+
+    const modulePerms = permissions.filter((p) => p.module === module);
+    if (modulePerms.length === 0) return;
+
+    setSavingPermission(true);
+    try {
+      for (const perm of modulePerms) {
+        const hasPerm = rolePermissions.some((rp) => rp.permission_code === perm.code);
+        if ((enable && hasPerm) || (!enable && !hasPerm)) continue;
+
+        await fetch('/api/role-permissions', {
+          method: enable ? 'POST' : 'DELETE',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ role: selectedRole, permission_code: perm.code })
+        });
+      }
+
+      await loadRolePermissions(selectedRole);
+    } catch (error) {
+      console.error('Error bulk updating module permissions:', error);
+    }
+    setSavingPermission(false);
+  }
+
   function getRoleCount(role: string) {
     return users.filter(u => u.role === role).length;
   }
@@ -238,6 +266,21 @@ export default function RolesPage() {
     ...roleInfo,
     userCount: getRoleCount(roleKey)
   }));
+
+  const filteredUsers = users.filter((u) => {
+    const q = userQuery.trim().toLowerCase();
+    if (!q) return true;
+    return [u.full_name, u.email, ROLE_DEFINITIONS[u.role]?.name || u.role]
+      .join(' ')
+      .toLowerCase()
+      .includes(q);
+  });
+
+  const groupedPermissions = permissions.reduce((acc, perm) => {
+    if (!acc[perm.module]) acc[perm.module] = [];
+    acc[perm.module].push(perm);
+    return acc;
+  }, {} as Record<string, Permission[]>);
 
   return (
     <div style={{ display: 'grid', gap: 14 }}>
@@ -386,11 +429,18 @@ export default function RolesPage() {
               <div className="h-subtitle" style={{ marginBottom: 12 }}>
                 Usuarios por Rol
               </div>
+              <div style={{ marginBottom: 10 }}>
+                <Input
+                  placeholder="Buscar usuario por nombre o correo"
+                  value={userQuery}
+                  onChange={(e) => setUserQuery(e.target.value)}
+                />
+              </div>
               <div style={{ display: 'grid', gap: 8 }}>
                 {loading ? (
                   <div style={{ padding: 20, textAlign: 'center', color: 'var(--muted)' }}>Cargando usuarios...</div>
                 ) : (
-                  users.map((user) => (
+                  filteredUsers.map((user) => (
                     <div
                       key={user.id}
                       style={{
@@ -499,25 +549,50 @@ export default function RolesPage() {
             </div>
             {selectedRole ? (
               <div style={{ display: 'grid', gap: 16 }}>
+                <div>
+                  <Input
+                    placeholder="Buscar permiso por nombre, código o módulo"
+                    value={permissionQuery}
+                    onChange={(e) => setPermissionQuery(e.target.value)}
+                  />
+                </div>
                 {savingPermission && (
                   <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: 8, background: 'var(--brand-primary)10', borderRadius: 4 }}>
                     <Loader2 size={16} style={{ animation: 'spin 1s linear infinite' }} />
                     <span style={{ fontSize: 13 }}>Actualizando permisos...</span>
                   </div>
                 )}
-                {Object.entries(
-                  permissions.reduce((acc, perm) => {
-                    if (!acc[perm.module]) acc[perm.module] = [];
-                    acc[perm.module].push(perm);
-                    return acc;
-                  }, {} as Record<string, Permission[]>)
-                ).map(([module, perms]) => (
+                {Object.entries(groupedPermissions).map(([module, perms]) => {
+                  const query = permissionQuery.trim().toLowerCase();
+                  const visiblePerms = query
+                    ? perms.filter((perm) =>
+                        [perm.module, perm.name, perm.code, perm.description || ''].join(' ').toLowerCase().includes(query)
+                      )
+                    : perms;
+
+                  if (visiblePerms.length === 0) return null;
+
+                  const modulePermsEnabled = visiblePerms.filter((perm) =>
+                    rolePermissions.some((rp) => rp.permission_code === perm.code)
+                  ).length;
+
+                  return (
                   <div key={module}>
-                    <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 8, color: 'var(--muted)', textTransform: 'uppercase' }}>
-                      {module}
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8, gap: 8, flexWrap: 'wrap' }}>
+                      <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--muted)', textTransform: 'uppercase' }}>
+                        {module} ({modulePermsEnabled}/{visiblePerms.length})
+                      </div>
+                      <div style={{ display: 'flex', gap: 6 }}>
+                        <Button variant="ghost" size="sm" onClick={() => setModulePermissions(module, true)}>
+                          Activar todo
+                        </Button>
+                        <Button variant="ghost" size="sm" onClick={() => setModulePermissions(module, false)}>
+                          Quitar todo
+                        </Button>
+                      </div>
                     </div>
                     <div style={{ display: 'grid', gap: 6 }}>
-                      {perms.map((perm) => {
+                      {visiblePerms.map((perm) => {
                         const hasPermission = rolePermissions.some(rp => rp.permission_code === perm.code);
                         return (
                           <div
@@ -564,7 +639,7 @@ export default function RolesPage() {
                       })}
                     </div>
                   </div>
-                ))}
+                )})}
               </div>
             ) : (
               <div style={{ padding: 40, textAlign: 'center', color: 'var(--muted)' }}>

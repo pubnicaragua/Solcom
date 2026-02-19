@@ -1,66 +1,85 @@
 import { NextResponse } from 'next/server';
-import { createServerClient } from '@/lib/supabase/server';
 
 export const dynamic = 'force-dynamic';
 
 export async function GET(request: Request) {
   try {
     const { searchParams } = new URL(request.url);
-    const format = searchParams.get('format') || 'csv';
-    const search = searchParams.get('search') || '';
-    const warehouse = searchParams.get('warehouse') || '';
-    const state = searchParams.get('state') || '';
+    const format = (searchParams.get('format') || 'csv').toLowerCase();
 
-    const supabase = createServerClient();
+    const pivotParams = new URLSearchParams();
+    ['search', 'warehouse', 'category', 'state', 'stockLevel', 'priceRange', 'marca', 'color', 'sortBy'].forEach((key) => {
+      const value = searchParams.get(key);
+      if (value) pivotParams.set(key, value);
+    });
+    pivotParams.set('showZeroStock', 'true');
 
-    let query = supabase
-      .from('stock_snapshots')
-      .select(`
-        qty,
-        synced_at,
-        warehouses!inner(code, name),
-        items!inner(sku, name, color, state, category)
-      `);
-
-    if (search) {
-      query = query.or(`items.name.ilike.%${search}%,items.sku.ilike.%${search}%`);
+    const pivotUrl = `${new URL(request.url).origin}/api/inventory/pivot?${pivotParams.toString()}`;
+    const pivotRes = await fetch(pivotUrl, { cache: 'no-store' });
+    if (!pivotRes.ok) {
+      throw new Error(`Pivot export error ${pivotRes.status}`);
     }
 
-    if (warehouse) {
-      query = query.eq('warehouses.code', warehouse);
-    }
+    const pivot = await pivotRes.json();
+    const warehouses: Array<{ code: string; name: string }> = pivot?.warehouses || [];
+    const items: Array<any> = pivot?.items || [];
 
-    if (state) {
-      query = query.eq('items.state', state);
-    }
-
-    const { data, error } = await query.order('synced_at', { ascending: false });
-
-    if (error) throw error;
-
-    const csvRows = [
-      ['SKU', 'Producto', 'Categoría', 'Color', 'Estado', 'Bodega', 'Stock', 'Actualizado'].join(','),
+    const columns = [
+      'SKU',
+      'Producto',
+      'Categoría',
+      'Marca',
+      'Color',
+      'Estado',
+      ...warehouses.map((w) => `Bodega ${w.code}`),
+      'Total',
+      'Remanente (días)',
     ];
 
-    (data || []).forEach((row: any) => {
-      csvRows.push([
-        row.items.sku,
-        `"${row.items.name}"`,
-        `"${row.items.category || 'Sin categoría'}"`,
-        `"${row.items.color || ''}"`,
-        `"${row.items.state || ''}"`,
-        `"${row.warehouses.code} - ${row.warehouses.name}"`,
-        row.qty,
-        new Date(row.synced_at).toLocaleString('es-NI'),
-      ].join(','));
+    const rows = items.map((item: any) => {
+      const row: Record<string, string | number> = {
+        SKU: item.sku || '',
+        Producto: item.name || '',
+        Categoría: item.category || '',
+        Marca: item.brand || '',
+        Color: item.color || '',
+        Estado: item.state || '',
+      };
+
+      warehouses.forEach((w) => {
+        row[`Bodega ${w.code}`] = Number(item.warehouseQty?.[w.code] || 0);
+      });
+
+      row.Total = Number(item.total || 0);
+      row['Remanente (días)'] = item.daysInStock == null ? '' : Number(item.daysInStock);
+      return row;
     });
 
-    const csv = csvRows.join('\n');
+    if (format === 'json') {
+      return NextResponse.json({ columns, rows });
+    }
+
+    const csvRows = [columns.join(',')];
+    rows.forEach((row) => {
+      csvRows.push(
+        columns
+          .map((col) => {
+            const value = row[col] ?? '';
+            const raw = String(value);
+            return `"${raw.replace(/"/g, '""')}"`;
+          })
+          .join(',')
+      );
+    });
+
+    const csv = `\uFEFF${csvRows.join('\n')}`;
+    const filenameBase = `inventario_completo_${new Date().toISOString().split('T')[0]}`;
+    const ext = format === 'excel' ? 'csv' : format;
 
     return new NextResponse(csv, {
       headers: {
         'Content-Type': 'text/csv; charset=utf-8',
-        'Content-Disposition': `attachment; filename="inventario_${new Date().toISOString().split('T')[0]}.csv"`,
+        'Content-Disposition': `attachment; filename="${filenameBase}.${ext}"`,
       },
     });
   } catch (error) {

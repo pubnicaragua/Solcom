@@ -92,7 +92,7 @@ export async function GET(request: Request) {
             const rows: any[] = [];
             let page = 0;
             const PAGE_SIZE = 1000;
-            const maxPages = search ? 6 : 20;
+            const MAX_PAGES = 500;
             let hasMore = true;
 
             while (hasMore) {
@@ -113,7 +113,7 @@ export async function GET(request: Request) {
                 } else {
                     hasMore = false;
                 }
-                if (page > maxPages) break;
+                if (page > MAX_PAGES) break;
             }
 
             return rows;

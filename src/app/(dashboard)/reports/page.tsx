@@ -32,6 +32,7 @@ export default function ReportsPage() {
     state: '',
     color: ''
   });
+  const [exporting, setExporting] = useState<'pdf' | 'excel' | null>(null);
 
   useEffect(() => {
     setIsMobile(window.innerWidth < 640);
@@ -111,80 +112,163 @@ export default function ReportsPage() {
   const agingData = reportData?.aging;
   const sinMarcaCount = reportData?.sinMarcaCount || 0;
 
+  async function loadExportData() {
+    const params = new URLSearchParams();
+    if (globalFilters.category) params.set('category', globalFilters.category);
+    if (globalFilters.marca) params.set('marca', globalFilters.marca);
+    if (globalFilters.warehouse) params.set('warehouse', globalFilters.warehouse);
+    if (globalFilters.state) params.set('state', globalFilters.state);
+    if (globalFilters.color) params.set('color', globalFilters.color);
+
+    const res = await fetch(`/api/reports/data?${params.toString()}`, { cache: 'no-store' });
+    if (!res.ok) throw new Error('No se pudo obtener data de exportación');
+    return res.json();
+  }
+
   async function exportToPDF() {
-    if (!stats) return;
+    setExporting('pdf');
     try {
-      const doc = new jsPDF();
-      doc.setFontSize(18);
-      doc.text('Reporte de Inventario', 14, 20);
+      const freshData = await loadExportData();
+      const exportStats = freshData?.stats || stats;
+      const exportAgingItems = (freshData?.aging?.items || agingData?.items || []) as any[];
+
+      const doc = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' });
+      doc.setFillColor(220, 38, 38);
+      doc.rect(0, 0, 297, 24, 'F');
+      doc.setTextColor(255, 255, 255);
+      doc.setFontSize(16);
+      doc.text('SOLCOM · Reporte Ejecutivo de Inventario', 14, 14);
+      doc.setFontSize(9);
+      doc.text(`Generado: ${new Date().toLocaleString('es-NI')}`, 14, 20);
+
+      doc.setTextColor(31, 41, 55);
       doc.setFontSize(11);
-      doc.text(`Período: Últimos ${period} días`, 14, 28);
-      doc.text(`Generado: ${new Date().toLocaleDateString('es-NI')}`, 14, 34);
+      doc.text(`Período: Últimos ${period} días`, 14, 34);
 
-      doc.setFontSize(14);
-      doc.text('Resumen Ejecutivo', 14, 45);
-      doc.setFontSize(10);
-      doc.text(`Total Productos: ${stats.totalProducts || 0}`, 14, 52);
-      doc.text(`Total Stock: ${stats.totalStock?.toLocaleString('es-NI') || 0} unidades`, 14, 58);
-      doc.text(`Valor Estimado: $${stats.totalValue?.toLocaleString('es-NI') || 0}`, 14, 64);
-      doc.text(`Items Stock Bajo: ${stats.lowStockItems || 0}`, 14, 70);
-      doc.text(`Items Sin Stock: ${stats.outOfStockItems || 0}`, 14, 76);
-      doc.text(`Bodegas Activas: ${stats.activeWarehouses || 0}`, 14, 82);
+      const summaryRows = [
+        ['Total Productos', String(exportStats?.totalProducts || 0)],
+        ['Total Stock', `${(exportStats?.totalStock || 0).toLocaleString('es-NI')} unidades`],
+        ['Valor Estimado', `$${(exportStats?.totalValue || 0).toLocaleString('es-NI', { maximumFractionDigits: 2 })}`],
+        ['Stock Bajo', String(exportStats?.lowStockItems || 0)],
+        ['Sin Stock', String(exportStats?.outOfStockItems || 0)],
+        ['Bodegas Activas', String(exportStats?.activeWarehouses || 0)],
+      ];
 
-      const tableData = (agingData?.items || []).slice(0, 50).map((item: any) => [
+      autoTable(doc, {
+        startY: 38,
+        head: [['Indicador', 'Valor']],
+        body: summaryRows,
+        theme: 'grid',
+        styles: { fontSize: 9, cellPadding: 2.4 },
+        headStyles: { fillColor: [31, 41, 55], textColor: 255 },
+        columnStyles: { 0: { cellWidth: 60 }, 1: { cellWidth: 90 } },
+        margin: { left: 14 },
+        tableWidth: 150,
+      });
+
+      const tableData = exportAgingItems.map((item: any) => [
         item.sku || 'N/A',
         item.name || 'N/A',
         item.category || 'Sin categoría',
-        (item.stock_total || 0).toString(),
-        `$${((item.stock_total || 0) * (item.price || 0)).toLocaleString('es-NI', { minimumFractionDigits: 2 })}`,
-        `${item.daysAgo}d`
+        (item.stock_total || 0).toLocaleString('es-NI'),
+        `$${((item.stock_total || 0) * (item.price || 0)).toLocaleString('es-NI', { maximumFractionDigits: 2 })}`,
+        `${item.daysAgo || 0} días`,
       ]);
 
       autoTable(doc, {
-        startY: 90,
-        head: [['SKU', 'Producto', 'Categoría', 'Stock', 'Valor', 'Días']],
+        startY: 38,
+        head: [['SKU', 'Producto', 'Categoría', 'Stock', 'Valor', 'Días sin movimiento']],
         body: tableData,
-        theme: 'grid',
-        styles: { fontSize: 8 },
-        headStyles: { fillColor: [59, 130, 246] }
+        theme: 'striped',
+        styles: { fontSize: 8, cellPadding: 1.8 },
+        headStyles: { fillColor: [220, 38, 38], textColor: 255 },
+        alternateRowStyles: { fillColor: [248, 250, 252] },
+        margin: { left: 170, right: 12 },
       });
 
       doc.save(`reporte_inventario_${new Date().toISOString().split('T')[0]}.pdf`);
     } catch (err: any) {
       alert(`Error al exportar PDF: ${err.message}`);
+    } finally {
+      setExporting(null);
     }
   }
 
   async function exportToExcel() {
-    if (!agingData?.items) return;
+    setExporting('excel');
     try {
-      const csvRows = [
-        ['SKU', 'Producto', 'Categoría', 'Stock', 'Valor', 'Días sin movimiento'].join(','),
-      ];
+      const freshData = await loadExportData();
+      const exportStats = freshData?.stats || stats;
+      const exportAgingItems = (freshData?.aging?.items || agingData?.items || []) as any[];
 
-      agingData.items.forEach((item: any) => {
-        csvRows.push([
-          item.sku || '',
-          `"${item.name || ''}"`,
-          `"${item.category || 'Sin categoría'}"`,
-          String(item.stock_total ?? 0),
-          String((item.stock_total || 0) * (item.price || 0)),
-          String(item.daysAgo || 0),
-        ].join(','));
-      });
+      const tableRows = exportAgingItems
+        .map((item) => `
+          <tr>
+            <td>${item.sku || ''}</td>
+            <td>${item.name || ''}</td>
+            <td>${item.category || 'Sin categoría'}</td>
+            <td style="text-align:right">${(item.stock_total || 0).toLocaleString('es-NI')}</td>
+            <td style="text-align:right">${((item.stock_total || 0) * (item.price || 0)).toLocaleString('es-NI', { maximumFractionDigits: 2 })}</td>
+            <td style="text-align:center">${item.daysAgo || 0}</td>
+          </tr>
+        `)
+        .join('');
 
-      const csv = csvRows.join('\n');
-      const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+      const excelHtml = `
+        <html>
+          <head>
+            <meta charset="UTF-8" />
+            <style>
+              body { font-family: Arial, sans-serif; }
+              h1 { color: #dc2626; margin: 0 0 8px 0; }
+              .meta { color: #475569; margin-bottom: 12px; font-size: 12px; }
+              .summary { margin-bottom: 12px; border-collapse: collapse; }
+              .summary td { border: 1px solid #cbd5e1; padding: 6px 8px; font-size: 12px; }
+              table { border-collapse: collapse; width: 100%; }
+              th, td { border: 1px solid #cbd5e1; padding: 6px 8px; font-size: 12px; }
+              th { background: #dc2626; color: #fff; text-align: left; }
+              tr:nth-child(even) td { background: #f8fafc; }
+            </style>
+          </head>
+          <body>
+            <h1>SOLCOM · Reporte de Inventario</h1>
+            <div class="meta">Generado: ${new Date().toLocaleString('es-NI')} · Período: últimos ${period} días</div>
+            <table class="summary">
+              <tr><td><strong>Total Productos</strong></td><td>${exportStats?.totalProducts || 0}</td><td><strong>Total Stock</strong></td><td>${(exportStats?.totalStock || 0).toLocaleString('es-NI')}</td></tr>
+              <tr><td><strong>Valor Estimado</strong></td><td>${(exportStats?.totalValue || 0).toLocaleString('es-NI', { maximumFractionDigits: 2 })}</td><td><strong>Stock Bajo</strong></td><td>${exportStats?.lowStockItems || 0}</td></tr>
+            </table>
+            <table>
+              <thead>
+                <tr>
+                  <th>SKU</th>
+                  <th>Producto</th>
+                  <th>Categoría</th>
+                  <th>Stock</th>
+                  <th>Valor</th>
+                  <th>Días sin movimiento</th>
+                </tr>
+              </thead>
+              <tbody>
+                ${tableRows}
+              </tbody>
+            </table>
+          </body>
+        </html>
+      `;
+
+      const blob = new Blob([excelHtml], { type: 'application/vnd.ms-excel;charset=utf-8;' });
       const url = window.URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;
-      a.download = `reporte_inventario_${new Date().toISOString().split('T')[0]}.csv`;
+      a.download = `reporte_inventario_${new Date().toISOString().split('T')[0]}.xls`;
       document.body.appendChild(a);
       a.click();
       window.URL.revokeObjectURL(url);
       document.body.removeChild(a);
     } catch (err: any) {
       alert(`Error al exportar Excel: ${err.message}`);
+    } finally {
+      setExporting(null);
     }
   }
 
@@ -202,13 +286,13 @@ export default function ReportsPage() {
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 12 }}>
         <div className="h-title" style={{ fontSize: 'clamp(18px, 5vw, 24px)' }}>Reportes de Inventario</div>
         <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-          <Button variant="secondary" size="sm" onClick={exportToExcel}>
+          <Button variant="secondary" size="sm" onClick={exportToExcel} disabled={exporting === 'excel'}>
             <Download size={16} style={{ marginRight: 6 }} />
-            <span style={{ display: isMobile ? 'none' : 'inline' }}>Excel</span>
+            <span style={{ display: isMobile ? 'none' : 'inline' }}>{exporting === 'excel' ? 'Exportando...' : 'Excel Pro'}</span>
           </Button>
-          <Button variant="secondary" size="sm" onClick={exportToPDF}>
+          <Button variant="secondary" size="sm" onClick={exportToPDF} disabled={exporting === 'pdf'}>
             <FileText size={16} style={{ marginRight: 6 }} />
-            <span style={{ display: isMobile ? 'none' : 'inline' }}>PDF</span>
+            <span style={{ display: isMobile ? 'none' : 'inline' }}>{exporting === 'pdf' ? 'Exportando...' : 'PDF Pro'}</span>
           </Button>
         </div>
       </div>
@@ -248,59 +332,12 @@ export default function ReportsPage() {
       {error && (
         <Card>
           <div style={{ padding: 16, color: 'var(--danger)' }}>
-            <strong>Error:</strong> {error}
+            Error: {error}
           </div>
         </Card>
       )}
 
-      {/* KPI CARDS */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(200px, 100%), 1fr))', gap: 14 }}>
-
-
-        <Card>
-          <div style={{ padding: 16 }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 12 }}>
-              <div style={{ width: 40, height: 40, borderRadius: 8, background: '#3B82F615', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                <Package size={20} color="#3B82F6" />
-              </div>
-              <div style={{ fontSize: 13, color: 'var(--muted)' }}>Total Stock</div>
-            </div>
-            {loading ? (
-              <div style={{ height: 32, background: 'var(--panel)', borderRadius: 4, animation: 'pulse 1.5s infinite' }} />
-            ) : (
-              <>
-                <div style={{ fontSize: 28, fontWeight: 600 }}>{stats?.totalStock?.toLocaleString('es-NI') || 0}</div>
-                <div style={{ fontSize: 12, color: 'var(--muted)', marginTop: 4 }}>Unidades totales</div>
-              </>
-            )}
-          </div>
-        </Card>
-
-        <Card>
-          <div style={{ padding: 16 }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 12 }}>
-              <div style={{ width: 40, height: 40, borderRadius: 8, background: 'var(--success)15', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                <DollarSign size={20} color="var(--success)" />
-              </div>
-              <div style={{ fontSize: 13, color: 'var(--muted)' }}>Valor Estimado</div>
-            </div>
-            {loading ? (
-              <div style={{ height: 32, background: 'var(--panel)', borderRadius: 4, animation: 'pulse 1.5s infinite' }} />
-            ) : !hasFilters && !zohoKpisLoaded ? (
-              <div style={{ height: 32, background: 'var(--panel)', borderRadius: 4, animation: 'pulse 1.5s infinite', width: '60%' }} />
-            ) : (
-              <>
-                <div style={{ fontSize: 24, fontWeight: 600, display: 'flex', alignItems: 'center', gap: 6 }}>
-                  ${stats?.totalValue?.toLocaleString('es-NI', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) || '0'}
-                </div>
-                <div style={{ fontSize: 12, color: 'var(--muted)', marginTop: 4 }}>
-                  Inventario total
-                </div>
-              </>
-            )}
-          </div>
-        </Card>
-
         <Card>
           <div style={{ padding: 16 }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 12 }}>

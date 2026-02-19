@@ -3,7 +3,7 @@
 import { useState } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { Package, BarChart3, Settings, Users, HelpCircle, Bot, Menu, X, ClipboardList, Calendar, FolderOpen, ArrowLeftRight, ShoppingCart, ChevronLeft, ChevronRight } from 'lucide-react';
+import { Package, BarChart3, Settings, Users, HelpCircle, Bot, Menu, X, ClipboardList, Calendar, FolderOpen, ArrowLeftRight, ShoppingCart, ChevronLeft, ChevronRight, Rocket } from 'lucide-react';
 import { useUserRole, hasPermission } from '@/hooks/useUserRole';
 
 const menuItems = [
@@ -12,6 +12,7 @@ const menuItems = [
   { icon: BarChart3, label: 'Reportes', href: '/reports', module: 'reports' },
   { icon: Bot, label: 'Agentes IA', href: '/ai-agents', module: 'ai-agents' },
   { icon: ArrowLeftRight, label: 'Transferencias', href: '/transfers', module: 'transfers' },
+  { icon: Rocket, label: 'Fase 2', href: '/fase2', module: 'fase2' },
   { icon: Calendar, label: 'Reuniones', href: '/reuniones', module: 'public' },
   { icon: Users, label: 'Roles', href: '/roles', module: 'roles' },
   { icon: Settings, label: 'Configuración', href: '/settings', module: 'settings' },

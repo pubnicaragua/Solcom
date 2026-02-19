@@ -32,6 +32,7 @@ function DashboardContent({ children }: { children: React.ReactNode }) {
           display: grid;
           grid-template-columns: ${isCollapsed ? '80px' : '260px'} 1fr;
           height: 100vh;
+          min-height: 100dvh;
           transition: grid-template-columns 0.3s ease;
         }
 
@@ -39,11 +40,15 @@ function DashboardContent({ children }: { children: React.ReactNode }) {
           display: flex;
           flex-direction: column;
           overflow: hidden;
+          min-height: 0;
         }
 
         .dashboard-main {
           flex: 1;
-          overflow: auto;
+          min-height: 0;
+          overflow-y: auto;
+          overflow-x: hidden;
+          -webkit-overflow-scrolling: touch;
           padding: 24px;
           background: var(--background);
         }
@@ -52,10 +57,19 @@ function DashboardContent({ children }: { children: React.ReactNode }) {
         @media (max-width: 1024px) {
           .dashboard-layout {
             grid-template-columns: 1fr;
+            height: auto;
+            min-height: 100dvh;
+          }
+
+          .dashboard-content {
+            overflow: visible;
+            min-height: 100dvh;
           }
 
           .dashboard-main {
             padding: 16px;
+            overflow-y: visible;
+            min-height: calc(100dvh - 72px);
           }
         }
 
