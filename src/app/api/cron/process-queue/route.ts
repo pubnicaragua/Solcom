@@ -11,6 +11,7 @@ const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.
 export const dynamic = 'force-dynamic';
 export const revalidate = 0;
 export const fetchCache = 'force-no-store';
+export const maxDuration = 60; // Hobby plan allows up to 60s (default was 10s)
 
 // Helper to create response with no-cache headers
 function jsonResponse(data: any, status = 200) {
@@ -38,7 +39,7 @@ export async function GET(request: Request) {
     const debugLog: string[] = [];
     const keyType = process.env.SUPABASE_SERVICE_ROLE_KEY ? 'SERVICE_ROLE' : 'ANON';
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
-    const BATCH_SIZE = 7; // Production confirmed: 2.3-4.0s warm. Cron every 1min keeps Vercel warm, avoiding cold starts
+    const BATCH_SIZE = 30; // With maxDuration=60s: 30 items × ~1.4s = ~42s worst case, safely under 60s
 
     try {
         debugLog.push(`--- Starting Queue Processor (Key: ${keyType}) ---`);
@@ -48,6 +49,19 @@ export async function GET(request: Request) {
         const statusCounts: Record<string, number> = {};
         (allItems || []).forEach((r: any) => { statusCounts[r.status] = (statusCounts[r.status] || 0) + 1; });
         debugLog.push(`Queue status counts: ${JSON.stringify(statusCounts)}`);
+
+        // GHOST RESCUER: Reset items stuck in 'processing' for more than 5 minutes
+        const fiveMinAgo = new Date(Date.now() - 5 * 60 * 1000).toISOString();
+        const { data: stuckItems } = await supabase
+            .from('sync_queue')
+            .update({ status: 'pending', error: 'Rescued from stuck processing (Vercel timeout)', updated_at: new Date().toISOString() })
+            .eq('status', 'processing')
+            .lt('updated_at', fiveMinAgo)
+            .select('id');
+
+        if (stuckItems && stuckItems.length > 0) {
+            debugLog.push(`👻 Rescued ${stuckItems.length} ghost items stuck in 'processing'`);
+        }
 
         // 1. Fetch pending items
         const { data: pendingItems, error: fetchErr } = await supabase
