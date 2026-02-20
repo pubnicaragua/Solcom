@@ -38,7 +38,7 @@ export async function GET(request: Request) {
     const debugLog: string[] = [];
     const keyType = process.env.SUPABASE_SERVICE_ROLE_KEY ? 'SERVICE_ROLE' : 'ANON';
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
-    const BATCH_SIZE = 5; // Reduced: each item makes 2 API calls = 10 calls per batch, well within Zoho's 100/min limit
+    const BATCH_SIZE = 8; // 8 items × ~0.7s = ~5.6s, safely under Vercel's 10s limit with 4.4s margin
 
     try {
         debugLog.push(`--- Starting Queue Processor (Key: ${keyType}) ---`);
