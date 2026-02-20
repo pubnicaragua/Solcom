@@ -96,7 +96,7 @@ async function main() {
     const { error: snapDelErr, count: snapCount } = await supabase.from('stock_snapshots').delete().neq('id', '00000000-0000-0000-0000-000000000000');
     console.log(`   🗑️  stock_snapshots: ${snapDelErr ? '❌ ' + snapDelErr.message : 'cleared'}`);
 
-    const { error: balDelErr, count: balCount } = await supabase.from('inventory_balance').delete().neq('id', '00000000-0000-0000-0000-000000000000');
+    const { error: balDelErr, count: balCount } = await supabase.from('inventory_balance').delete().neq('item_id', '00000000-0000-0000-0000-000000000000');
     console.log(`   🗑️  inventory_balance: ${balDelErr ? '❌ ' + balDelErr.message : 'cleared'}`);
 
     const { error: itemsDelErr, count: itemsCount } = await supabase.from('items').delete().neq('id', '00000000-0000-0000-0000-000000000000');

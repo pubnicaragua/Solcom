@@ -158,10 +158,17 @@ export async function syncItemStock(
         return { snapshotsCreated: 0, stockTotal: 0 };
     }
 
-    const auth = existingAuth || await getZohoAccessToken();
-    if (!auth || 'error' in auth) {
-        debugLog.push(`[syncItemStock] ERROR auth: ${(auth as any)?.error || 'Unknown'}`);
-        return { snapshotsCreated: 0, stockTotal: 0 };
+    let auth = existingAuth;
+    if (!auth) {
+        const fetchedAuth = await getZohoAccessToken();
+        if (!fetchedAuth || 'error' in fetchedAuth) {
+            debugLog.push(`[syncItemStock] ERROR auth: ${(fetchedAuth as any)?.error || 'Unknown'}`);
+            return { snapshotsCreated: 0, stockTotal: 0 };
+        }
+        auth = {
+            accessToken: fetchedAuth.accessToken as string,
+            apiDomain: fetchedAuth.apiDomain as string
+        };
     }
 
     try {
