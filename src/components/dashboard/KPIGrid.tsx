@@ -2,12 +2,13 @@
 
 import { useEffect, useState } from 'react';
 import Card from '@/components/ui/Card';
-import { Package, Boxes, Warehouse, Clock } from 'lucide-react';
+import { Package, Boxes, Warehouse, Clock, DollarSign } from 'lucide-react';
 
 interface KPIData {
   totalSKUs: number;
   totalProducts: number;
   totalStock: number;
+  totalValue: number;
   activeWarehouses: number;
   lastSync: string;
 }
@@ -18,6 +19,7 @@ export default function KPIGrid() {
     totalSKUs: 0,
     totalProducts: 0,
     totalStock: 0,
+    totalValue: 0,
     activeWarehouses: 0,
     lastSync: new Date().toLocaleString('es-NI', {
       day: '2-digit',
@@ -112,6 +114,18 @@ export default function KPIGrid() {
       label: 'Bodegas Activas',
       value: !mounted || loading ? '...' : kpis.activeWarehouses.toString(),
       color: 'var(--brand-accent)',
+    },
+    {
+      icon: Boxes,
+      label: 'Total Stock',
+      value: !mounted || loading ? '...' : kpis.totalStock.toLocaleString('es-NI'),
+      color: '#f59e0b',
+    },
+    {
+      icon: DollarSign,
+      label: 'Valor del Inventario',
+      value: !mounted || loading ? '...' : new Intl.NumberFormat('es-NI', { style: 'currency', currency: 'USD', minimumFractionDigits: 0, maximumFractionDigits: 0 }).format(kpis.totalValue),
+      color: '#10b981',
     },
     {
       icon: Clock,

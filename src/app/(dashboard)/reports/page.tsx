@@ -394,6 +394,34 @@ export default function ReportsPage() {
             )}
           </div>
         </Card>
+
+        <Card>
+          <div style={{ padding: 16 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 12 }}>
+              <div style={{ width: 40, height: 40, borderRadius: 8, background: '#10b98115', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                <DollarSign size={20} color="#10b981" />
+              </div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                <div style={{ fontSize: 13, color: 'var(--muted)' }}>Valor del Inventario</div>
+                {zohoKpis && (
+                  <span style={{ fontSize: 9, background: '#10b98120', color: '#10b981', padding: '1px 5px', borderRadius: 4, fontWeight: 600 }}>Zoho</span>
+                )}
+              </div>
+            </div>
+            {loading && !zohoKpisLoaded ? (
+              <div style={{ height: 32, background: 'var(--panel)', borderRadius: 4, animation: 'pulse 1.5s infinite' }} />
+            ) : (
+              <>
+                <div style={{ fontSize: 24, fontWeight: 700, color: '#10b981' }}>
+                  {new Intl.NumberFormat('es-NI', { style: 'currency', currency: 'USD', minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(stats?.totalValue || 0)}
+                </div>
+                <div style={{ fontSize: 12, color: 'var(--muted)', marginTop: 4 }}>
+                  {zohoKpis ? 'Valoración Zoho Books' : 'Estimación local'}
+                </div>
+              </>
+            )}
+          </div>
+        </Card>
       </div>
 
       {/* FILTROS GLOBALES */}

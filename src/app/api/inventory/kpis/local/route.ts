@@ -71,6 +71,7 @@ export async function GET(request: Request) {
         // This eliminates any possibility of divergence between the two values.
 
         let totalStock = 0;
+        let totalValue = 0;
         let pivotModel = 'unknown';
         try {
             const origin = new URL(request.url).origin;
@@ -86,6 +87,7 @@ export async function GET(request: Request) {
 
                 for (const item of pivotData.items || []) {
                     totalStock += (item.total ?? 0);
+                    totalValue += (item.total ?? 0) * (item.price ?? 0);
                 }
             } else {
                 console.error('[KPIs] Pivot fetch error:', pivotRes.status, await pivotRes.text());
@@ -110,7 +112,7 @@ export async function GET(request: Request) {
                 totalSKUs: totalProducts,
                 totalProducts,
                 totalStock,
-                totalValue: 0,
+                totalValue,
                 activeWarehouses: warehousesResult.count || 0,
                 lastSync,
                 source: pivotModel,

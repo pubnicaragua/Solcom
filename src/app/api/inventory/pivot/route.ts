@@ -449,6 +449,7 @@ export async function GET(request: Request) {
                 state: normalizeItemState(item.state),
                 brand: item.marca || null,
                 category: item.category || null,
+                price: item.price ?? 0,
                 warehouseQty,
                 total,
                 daysInStock: lotAgeByItem.get(item.id) ?? null,
