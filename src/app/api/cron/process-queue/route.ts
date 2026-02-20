@@ -1,4 +1,4 @@
-import { NextResponse } from 'next/server';
+// NextResponse removed — using custom jsonResponse with no-cache headers
 import { createClient } from '@supabase/supabase-js';
 import { getZohoAccessToken } from '@/lib/zoho/inventory-utils';
 import { syncItemStock } from '@/lib/zoho/sync-logic';
@@ -7,8 +7,23 @@ import { syncItemStock } from '@/lib/zoho/sync-logic';
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
 const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
 
-// Force dynamic execution for background worker
+// Force dynamic execution, NEVER cache
 export const dynamic = 'force-dynamic';
+export const revalidate = 0;
+export const fetchCache = 'force-no-store';
+
+// Helper to create response with no-cache headers
+function jsonResponse(data: any, status = 200) {
+    return new Response(JSON.stringify({ ...data, timestamp: new Date().toISOString() }), {
+        status,
+        headers: {
+            'Content-Type': 'application/json',
+            'Cache-Control': 'no-store, no-cache, must-revalidate, max-age=0',
+            'CDN-Cache-Control': 'no-store',
+            'Vercel-CDN-Cache-Control': 'no-store',
+        },
+    });
+}
 
 export async function GET(request: Request) {
     // Optional basic security: Ensure this is only called with a cron job secret
@@ -17,7 +32,7 @@ export async function GET(request: Request) {
     const expectedSecret = process.env.CRON_SECRET || 'solcom-cron-key-123'; // Make sure to set this in Vercel/Env
 
     if (cronSecret !== expectedSecret) {
-        return NextResponse.json({ error: 'Unauthorized cron request' }, { status: 401 });
+        return jsonResponse({ error: 'Unauthorized cron request' }, 401);
     }
 
     const debugLog: string[] = [];
@@ -47,7 +62,7 @@ export async function GET(request: Request) {
         }
 
         if (!pendingItems || pendingItems.length === 0) {
-            return NextResponse.json({ message: 'No pending items in queue', processed: 0, debug: debugLog });
+            return jsonResponse({ message: 'No pending items in queue', processed: 0, debug: debugLog });
         }
 
         const itemIdsToProcess = pendingItems.map(item => item.id);
@@ -146,7 +161,7 @@ export async function GET(request: Request) {
 
         debugLog.push('--- Queue Processor Finished ---');
 
-        return NextResponse.json({
+        return jsonResponse({
             message: 'Batch processing complete',
             total: pendingItems.length,
             success: successCount,
@@ -156,6 +171,6 @@ export async function GET(request: Request) {
 
     } catch (error: any) {
         debugLog.push(`FATAL: ${error.message}`);
-        return NextResponse.json({ error: error.message, debug: debugLog }, { status: 500 });
+        return jsonResponse({ error: error.message, debug: debugLog }, 500);
     }
 }
