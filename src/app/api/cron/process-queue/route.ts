@@ -21,15 +21,20 @@ export async function GET(request: Request) {
     }
 
     const debugLog: string[] = [];
+    const keyType = process.env.SUPABASE_SERVICE_ROLE_KEY ? 'SERVICE_ROLE' : 'ANON';
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
-    const BATCH_SIZE = 15; // Safe threshold for Vercel Hobby 10s limit and Zoho Rate Limits
+    const BATCH_SIZE = 5; // Reduced: each item makes 2 API calls = 10 calls per batch, well within Zoho's 100/min limit
 
     try {
-        debugLog.push('--- Starting Queue Processor ---');
+        debugLog.push(`--- Starting Queue Processor (Key: ${keyType}) ---`);
+
+        // DEBUG: Count all items by status
+        const { data: allItems } = await supabase.from('sync_queue').select('status');
+        const statusCounts: Record<string, number> = {};
+        (allItems || []).forEach((r: any) => { statusCounts[r.status] = (statusCounts[r.status] || 0) + 1; });
+        debugLog.push(`Queue status counts: ${JSON.stringify(statusCounts)}`);
 
         // 1. Fetch pending items
-        // We use lock mechanisms (for update skip locked) conceptually, but Supabase SDK doesn't support it directly in JS.
-        // Instead, we just fetch a batch and immediately mark them as 'processing'.
         const { data: pendingItems, error: fetchErr } = await supabase
             .from('sync_queue')
             .select('id, zoho_item_id, attempts')
@@ -73,6 +78,9 @@ export async function GET(request: Request) {
         const { data: warehouses } = await supabase.from('warehouses').select('id, zoho_warehouse_id, active').not('zoho_warehouse_id', 'is', null);
         const warehouseMap = new Map((warehouses || []).map((w: any) => [String(w.zoho_warehouse_id), { id: w.id, active: w.active }]));
 
+        // Ensure auth object only has the fields syncItemStock expects
+        const cleanAuth = { accessToken: auth.accessToken, apiDomain: auth.apiDomain };
+
         // 5. Process each item reusing the token
         let successCount = 0;
         let failCount = 0;
@@ -81,20 +89,42 @@ export async function GET(request: Request) {
             try {
                 const itemDebug: string[] = [];
                 // CRUCIAL: Pass the existingAuth to prevent syncItemStock from requesting a new token!
-                const result = await syncItemStock(queueItem.zoho_item_id, supabase, warehouseMap, itemDebug, auth);
+                const result = await syncItemStock(queueItem.zoho_item_id, supabase, warehouseMap, itemDebug, cleanAuth);
 
-                // Mark successful
-                await supabase
-                    .from('sync_queue')
-                    .update({
-                        status: 'completed',
-                        updated_at: new Date().toISOString(),
-                        attempts: queueItem.attempts + 1
-                    })
-                    .eq('id', queueItem.id);
+                // Merge item-level debug logs into global debug log for visibility
+                itemDebug.forEach(line => debugLog.push(`  [${queueItem.zoho_item_id}] ${line}`));
 
-                successCount++;
-                debugLog.push(`✅ Processed ${queueItem.zoho_item_id} (Snaps: ${result.snapshotsCreated}, Total: ${result.stockTotal})`);
+                // Check if syncItemStock actually succeeded (it swallows errors internally)
+                const hasErrors = itemDebug.some(line => line.includes('ERROR'));
+
+                if (hasErrors || (result.snapshotsCreated === 0 && result.stockTotal === 0)) {
+                    // syncItemStock failed silently — put back in queue for retry
+                    failCount++;
+                    const isFinalFailure = queueItem.attempts >= 3;
+                    await supabase
+                        .from('sync_queue')
+                        .update({
+                            status: isFinalFailure ? 'failed' : 'pending',
+                            error: itemDebug.filter(l => l.includes('ERROR')).join(' | ') || 'Unknown silent failure',
+                            updated_at: new Date().toISOString(),
+                            attempts: queueItem.attempts + 1
+                        })
+                        .eq('id', queueItem.id);
+                    debugLog.push(`❌ Silent fail ${queueItem.zoho_item_id} (attempt ${queueItem.attempts + 1})`);
+                } else {
+                    // Mark successful
+                    await supabase
+                        .from('sync_queue')
+                        .update({
+                            status: 'completed',
+                            updated_at: new Date().toISOString(),
+                            attempts: queueItem.attempts + 1
+                        })
+                        .eq('id', queueItem.id);
+
+                    successCount++;
+                    debugLog.push(`✅ Processed ${queueItem.zoho_item_id} (Snaps: ${result.snapshotsCreated}, Total: ${result.stockTotal})`);
+                }
 
             } catch (err: any) {
                 failCount++;
