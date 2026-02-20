@@ -207,6 +207,6 @@ Si después de esto sigue sin funcionar, el problema puede ser:
 3. Problema con el proyecto de Supabase (requiere soporte)
 **
 
---------**----****-*--*------*-g--
+--------**----****-*--*------*-g----
 
 **Ejecuta la OPCIÓN 1 y el login debería funcionar.** 🎉
