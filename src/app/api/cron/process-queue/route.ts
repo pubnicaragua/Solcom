@@ -38,7 +38,7 @@ export async function GET(request: Request) {
     const debugLog: string[] = [];
     const keyType = process.env.SUPABASE_SERVICE_ROLE_KEY ? 'SERVICE_ROLE' : 'ANON';
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
-    const BATCH_SIZE = 8; // 8 items × ~0.7s = ~5.6s, safely under Vercel's 10s limit with 4.4s margin
+    const BATCH_SIZE = 7; // Production confirmed: 2.3-4.0s warm. Cron every 1min keeps Vercel warm, avoiding cold starts
 
     try {
         debugLog.push(`--- Starting Queue Processor (Key: ${keyType}) ---`);
