@@ -39,7 +39,7 @@ export async function GET(request: Request) {
     const debugLog: string[] = [];
     const keyType = process.env.SUPABASE_SERVICE_ROLE_KEY ? 'SERVICE_ROLE' : 'ANON';
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
-    const BATCH_SIZE = 25; // 25 × ~1.8s = ~45s, with 15s safety margin under maxDuration=60s
+    const BATCH_SIZE = 30; // 30 × ~1.8s = ~54s con vercel fluid component maxDuration=120s
 
     try {
         debugLog.push(`--- Starting Queue Processor (Key: ${keyType}) ---`);
