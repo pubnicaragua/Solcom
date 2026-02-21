@@ -37,11 +37,36 @@ export default function TransferModal({
   const [error, setError] = useState('');
   const [success, setSuccess] = useState(false);
 
+  const [availableSerials, setAvailableSerials] = useState<any[]>([]);
+  const [loadingSerials, setLoadingSerials] = useState(false);
+
   useEffect(() => {
     if (isOpen) {
       fetchWarehouses();
+      if (itemId && currentWarehouse) {
+        fetchSerials();
+      }
+    } else {
+      // Reset state on close
+      setSerials('');
+      setAvailableSerials([]);
     }
-  }, [isOpen]);
+  }, [isOpen, itemId, currentWarehouse]);
+
+  async function fetchSerials() {
+    setLoadingSerials(true);
+    try {
+      const res = await fetch(`/api/zoho/item-serials?item_id=${itemId}&warehouse_id=${currentWarehouse}`);
+      const data = await res.json();
+      if (data.success && data.serials) {
+        setAvailableSerials(data.serials);
+      }
+    } catch (e) {
+      console.error('Error fetching serials:', e);
+    } finally {
+      setLoadingSerials(false);
+    }
+  }
 
   async function fetchWarehouses() {
     try {
@@ -57,6 +82,15 @@ export default function TransferModal({
   async function handleTransfer() {
     if (!itemId || !selectedWarehouse || quantity <= 0) {
       setError('Por favor complete todos los campos');
+      return;
+    }
+
+    // Convert comma string to array for counting
+    const selectedCount = serials ? serials.split(',').map(s => s.trim()).filter(Boolean).length : 0;
+
+    // If the item has available serials tracked in Zoho, force them to select the exact amount
+    if (availableSerials.length > 0 && selectedCount !== quantity) {
+      setError(`Debes seleccionar exactamente ${quantity} serial(es). Has seleccionado ${selectedCount}.`);
       return;
     }
 
@@ -101,6 +135,23 @@ export default function TransferModal({
 
   const availableWarehouses = warehouses.filter((w: any) => w.id !== currentWarehouse && w.active);
   const originWarehouse = warehouses.find((w) => w.id === currentWarehouse);
+
+  const selectedSerialsArray = serials ? serials.split(',').filter(Boolean) : [];
+
+  function toggleSerial(serialCode: string) {
+    let newSelected = [...selectedSerialsArray];
+    if (newSelected.includes(serialCode)) {
+      newSelected = newSelected.filter(s => s !== serialCode);
+    } else {
+      if (newSelected.length < quantity) {
+        newSelected.push(serialCode);
+      } else {
+        // Optional user feedback or just ignore:
+        // alert(`Ya seleccionaste ${quantity} seriales (la cantidad a transferir).`);
+      }
+    }
+    setSerials(newSelected.join(','));
+  }
 
   return (
     <div style={{
@@ -223,26 +274,83 @@ export default function TransferModal({
               </div>
 
               {/* Seriales */}
-              <div>
-                <label style={{ display: 'block', fontSize: 13, fontWeight: 500, marginBottom: 6 }}>
-                  Seriales (si aplica)
-                </label>
-                <input
-                  type="text"
-                  value={serials}
-                  onChange={(e) => setSerials(e.target.value)}
-                  placeholder="SN1,SN2,..."
-                  style={{
-                    width: '100%',
-                    padding: 12,
+              {availableSerials.length > 0 ? (
+                <div>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', marginBottom: 6 }}>
+                    <label style={{ display: 'block', fontSize: 13, fontWeight: 500 }}>
+                      Seleccionar Seriales <span style={{ color: 'var(--brand-primary)', marginLeft: 4 }}>({selectedSerialsArray.length} / {quantity})</span>
+                    </label>
+                  </div>
+
+                  <div style={{
+                    display: 'grid',
+                    gridTemplateColumns: 'repeat(auto-fill, minmax(140px, 1fr))',
+                    gap: 8,
+                    maxHeight: '150px',
+                    overflowY: 'auto',
+                    padding: 8,
                     border: '1px solid var(--border)',
                     borderRadius: 6,
-                    fontSize: 14,
-                    background: 'var(--card)',
-                    color: 'var(--text)'
-                  }}
-                />
-              </div>
+                    background: 'var(--panel)'
+                  }}>
+                    {availableSerials.map((s) => {
+                      const isSelected = selectedSerialsArray.includes(s.serial_code);
+                      return (
+                        <div
+                          key={s.serial_code}
+                          onClick={() => toggleSerial(s.serial_code)}
+                          style={{
+                            padding: '8px 12px',
+                            borderRadius: 6,
+                            fontSize: 12,
+                            fontFamily: 'monospace',
+                            cursor: 'pointer',
+                            textAlign: 'center',
+                            border: `1px solid ${isSelected ? 'var(--brand-primary)' : 'var(--border)'}`,
+                            background: isSelected ? 'var(--brand-primary)20' : 'var(--card)',
+                            color: isSelected ? 'var(--brand-primary)' : 'var(--text)',
+                            transition: 'all 0.2s'
+                          }}
+                        >
+                          {s.serial_code}
+                        </div>
+                      )
+                    })}
+                  </div>
+                  {selectedSerialsArray.length === quantity && quantity > 0 && (
+                    <p style={{ fontSize: 12, color: 'var(--success)', marginTop: 8, display: 'flex', alignItems: 'center', gap: 4 }}>
+                      <CheckCircle size={14} /> Seriales completos
+                    </p>
+                  )}
+                </div>
+              ) : (
+                <div>
+                  <label style={{ display: 'flex', fontSize: 13, fontWeight: 500, marginBottom: 6, alignItems: 'center', gap: 8 }}>
+                    Seriales (si aplica)
+                    {loadingSerials && <span style={{ fontSize: 11, color: 'var(--muted)' }}>(Buscando seriales...)</span>}
+                  </label>
+                  <input
+                    type="text"
+                    value={serials}
+                    onChange={(e) => setSerials(e.target.value)}
+                    placeholder="SN1,SN2,..."
+                    style={{
+                      width: '100%',
+                      padding: 12,
+                      border: '1px solid var(--border)',
+                      borderRadius: 6,
+                      fontSize: 14,
+                      background: 'var(--card)',
+                      color: 'var(--text)'
+                    }}
+                  />
+                  {loadingSerials === false && itemId && currentWarehouse && (
+                    <p style={{ fontSize: 11, color: 'var(--muted)', marginTop: 4 }}>
+                      Zoho no reporta seriales para este producto.
+                    </p>
+                  )}
+                </div>
+              )}
 
               {/* Razón */}
               <div>

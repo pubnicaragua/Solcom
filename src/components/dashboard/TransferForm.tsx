@@ -31,7 +31,7 @@ export default function TransferForm({ onSuccess }: { onSuccess: () => void }) {
 
     useEffect(() => {
         async function loadWarehouses() {
-            const { data } = await supabase.from('warehouses').select('id, name').eq('active', true).order('name');
+            const { data } = await supabase.from('warehouses').select('id, name, zoho_warehouse_id').eq('active', true).order('name');
             if (data) setWarehouses(data);
         }
         loadWarehouses();
@@ -62,11 +62,39 @@ export default function TransferForm({ onSuccess }: { onSuccess: () => void }) {
         return () => clearTimeout(delay);
     }, [searchTerm, formData.from_warehouse_id]);
 
-    function addItem(item: any) {
+    async function addItem(item: any) {
         if (lineItems.find(i => i.id === item.id)) return;
-        setLineItems([...lineItems, { ...item, quantity: 1, serial_number_value: '' }]);
+
+        // Add item with loading state for serials
+        const newItem = { ...item, quantity: 1, serial_number_value: '', availableSerials: [], loadingSerials: true };
+        setLineItems(prev => [...prev, newItem]);
         setSearchTerm('');
         setSearchResults([]);
+
+        // Fetch serials asynchronously and update just this item
+        try {
+            // Zoho API needs the 19-digit numerical internal ID, which is stored in zoho_item_id
+            const zohoItemId = item.zoho_item_id || item.item_id || item.id;
+            // Also need the Zoho warehouse ID, not the Supabase UUID
+            const originWarehouse = warehouses.find((w: any) => w.id === formData.from_warehouse_id);
+            const zohoWarehouseId = originWarehouse?.zoho_warehouse_id || formData.from_warehouse_id;
+            const res = await fetch(`/api/zoho/item-serials?item_id=${zohoItemId}&warehouse_id=${zohoWarehouseId}`);
+            const data = await res.json();
+
+            setLineItems(currentItems => currentItems.map(i => {
+                if (i.id === item.id) {
+                    return {
+                        ...i,
+                        availableSerials: data.success && data.serials ? data.serials : [],
+                        loadingSerials: false
+                    };
+                }
+                return i;
+            }));
+        } catch (e) {
+            console.error('Error fetching serials for item:', e);
+            setLineItems(currentItems => currentItems.map(i => i.id === item.id ? { ...i, loadingSerials: false } : i));
+        }
     }
 
     function updateQuantity(index: number, qty: number) {
@@ -85,6 +113,22 @@ export default function TransferForm({ onSuccess }: { onSuccess: () => void }) {
         setLineItems(newItems);
     }
 
+    function toggleSerial(itemIndex: number, serialCode: string) {
+        const item = lineItems[itemIndex];
+        const selectedArray = item.serial_number_value ? item.serial_number_value.split(',').filter(Boolean) : [];
+        let newSelected = [...selectedArray];
+
+        if (newSelected.includes(serialCode)) {
+            newSelected = newSelected.filter(s => s !== serialCode);
+        } else {
+            if (newSelected.length < item.quantity) {
+                newSelected.push(serialCode);
+            }
+        }
+
+        updateSerials(itemIndex, newSelected.join(','));
+    }
+
     async function handleSubmit() {
         if (!formData.from_warehouse_id || !formData.to_warehouse_id) {
             alert('Por favor selecciona las bodegas de origen y destino');
@@ -97,6 +141,15 @@ export default function TransferForm({ onSuccess }: { onSuccess: () => void }) {
         if (lineItems.length === 0) {
             alert('Debes agregar al menos un producto a la transferencia');
             return;
+        }
+
+        // Validate serial quantities
+        for (const item of lineItems) {
+            const selectedCount = item.serial_number_value ? item.serial_number_value.split(',').filter(Boolean).length : 0;
+            if (item.availableSerials && item.availableSerials.length > 0 && selectedCount !== item.quantity) {
+                alert(`Debes seleccionar exactamente ${item.quantity} serial(es) para el producto "${item.name}". Has seleccionado ${selectedCount}.`);
+                return;
+            }
         }
 
         setLoading(true);
@@ -311,14 +364,52 @@ export default function TransferForm({ onSuccess }: { onSuccess: () => void }) {
                                                     <span className="absolute -bottom-5 left-0 right-0 text-[10px] text-slate-600 text-center">Max: {item.current_stock}</span>
                                                 </div>
                                             </td>
-                                            <td className="p-4">
-                                                <input
-                                                    type="text"
-                                                    value={item.serial_number_value || ''}
-                                                    onChange={(e) => updateSerials(index, e.target.value)}
-                                                    placeholder="SN1,SN2,..."
-                                                    className="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-xs text-white focus:ring-2 focus:ring-indigo-500/50 outline-none"
-                                                />
+                                            <td className="p-4" style={{ minWidth: "250px" }}>
+                                                {item.loadingSerials ? (
+                                                    <div className="flex items-center gap-2 text-xs text-slate-500 bg-slate-900 border border-slate-700/50 rounded-lg px-3 py-2">
+                                                        <Loader2 className="animate-spin" size={12} />
+                                                        Buscando seriales...
+                                                    </div>
+                                                ) : item.availableSerials && item.availableSerials.length > 0 ? (
+                                                    <div className="flex flex-col gap-2">
+                                                        <div className="flex justify-between items-center text-xs">
+                                                            <span className="text-slate-400">Seleccionar:</span>
+                                                            <span className="font-bold text-red-400">
+                                                                {(item.serial_number_value ? item.serial_number_value.split(',').filter(Boolean).length : 0)} / {item.quantity}
+                                                            </span>
+                                                        </div>
+                                                        <div className="grid grid-cols-2 gap-1.5 max-h-[100px] overflow-y-auto pr-1">
+                                                            {item.availableSerials.map((s: any) => {
+                                                                const isSelected = item.serial_number_value?.includes(s.serial_code);
+                                                                return (
+                                                                    <div
+                                                                        key={s.serial_code}
+                                                                        onClick={() => toggleSerial(index, s.serial_code)}
+                                                                        className={`text-[10px] font-mono p-1.5 rounded cursor-pointer text-center transition-all border ${isSelected
+                                                                            ? 'bg-red-500/20 border-red-500/50 text-red-400'
+                                                                            : 'bg-slate-900 border-slate-700 text-slate-400 hover:border-slate-500'
+                                                                            }`}
+                                                                    >
+                                                                        {s.serial_code}
+                                                                    </div>
+                                                                );
+                                                            })}
+                                                        </div>
+                                                    </div>
+                                                ) : (
+                                                    <div>
+                                                        <input
+                                                            type="text"
+                                                            value={item.serial_number_value || ''}
+                                                            onChange={(e) => updateSerials(index, e.target.value)}
+                                                            placeholder="SN1,SN2,..."
+                                                            className="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-xs text-white focus:ring-2 focus:ring-indigo-500/50 outline-none"
+                                                        />
+                                                        {item.availableSerials && item.availableSerials.length === 0 && (
+                                                            <div className="text-[10px] text-slate-600 mt-1 pl-1">Sin seriales registrados en Zoho.</div>
+                                                        )}
+                                                    </div>
+                                                )}
                                             </td>
                                             <td className="p-4 text-right">
                                                 <button

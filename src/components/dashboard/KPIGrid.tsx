@@ -122,12 +122,6 @@ export default function KPIGrid() {
       color: '#f59e0b',
     },
     {
-      icon: DollarSign,
-      label: 'Valor del Inventario',
-      value: !mounted || loading ? '...' : new Intl.NumberFormat('es-NI', { style: 'currency', currency: 'USD', minimumFractionDigits: 0, maximumFractionDigits: 0 }).format(kpis.totalValue),
-      color: '#10b981',
-    },
-    {
       icon: Clock,
       label: 'Última Sincronización',
       value: !mounted || loading ? '...' : kpis.lastSync,

@@ -46,6 +46,7 @@ export async function getZohoAccessToken() {
     for (const authDomain of domains) {
         const response = await fetch(`${authDomain}/oauth/v2/token`, {
             method: 'POST',
+            cache: 'no-store',
             headers: {
                 'Content-Type': 'application/x-www-form-urlencoded',
             },
