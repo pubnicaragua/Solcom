@@ -70,6 +70,7 @@ export async function GET(request: Request) {
             if (stockLevel) {
                 switch (stockLevel) {
                     case 'out': itemsQuery = itemsQuery.eq('stock_total', 0); break;
+                    case 'positive': itemsQuery = itemsQuery.gt('stock_total', 0); break;
                     case 'critical': itemsQuery = itemsQuery.gte('stock_total', 1).lte('stock_total', 5); break;
                     case 'low': itemsQuery = itemsQuery.gte('stock_total', 6).lte('stock_total', 20); break;
                     case 'medium': itemsQuery = itemsQuery.gte('stock_total', 21).lte('stock_total', 50); break;

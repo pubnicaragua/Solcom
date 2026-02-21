@@ -1,16 +1,20 @@
 interface HorizontalBarChartProps {
-  data: Array<{ label: string; value: number; color?: string }>;
+  data: Array<{ label: string; value: number; color?: string }>; 
   height?: number;
   showValues?: boolean;
+  showPercentage?: boolean;
+  totalValue?: number;
 }
 
-export default function HorizontalBarChart({ data, height = 300, showValues = true }: HorizontalBarChartProps) {
+export default function HorizontalBarChart({ data, height = 300, showValues = true, showPercentage = false, totalValue }: HorizontalBarChartProps) {
   const maxValue = Math.max(...data.map(d => d.value), 1);
+  const total = totalValue || data.reduce((sum, d) => sum + d.value, 0);
   
   return (
     <div style={{ height, display: 'flex', flexDirection: 'column', gap: 12, padding: '16px 0', overflow: 'auto' }}>
       {data.map((item, idx) => {
         const percentage = (item.value / maxValue) * 100;
+        const percentageOfTotal = total > 0 ? (item.value / total) * 100 : 0;
         const color = item.color || `hsl(${(idx * 360) / data.length}, 70%, 60%)`;
         
         return (
@@ -44,15 +48,46 @@ export default function HorizontalBarChart({ data, height = 300, showValues = tr
                   fontSize: 12,
                   fontWeight: 600,
                   color: percentage > 50 ? 'white' : 'var(--text)',
-                  zIndex: 1
+                  zIndex: 1,
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 8
                 }}>
-                  {item.value.toLocaleString()}
+                  <span>{item.value.toLocaleString()}</span>
+                  {showPercentage && (
+                    <span style={{ fontSize: 11, opacity: 0.8 }}>
+                      ({percentageOfTotal.toFixed(1)}%)
+                    </span>
+                  )}
                 </div>
               )}
             </div>
+            {showPercentage && !showValues && (
+              <div style={{ 
+                minWidth: 60, 
+                fontSize: 12, 
+                fontWeight: 600, 
+                color: 'var(--muted)',
+                textAlign: 'right'
+              }}>
+                {percentageOfTotal.toFixed(1)}%
+              </div>
+            )}
           </div>
         );
       })}
+      {showPercentage && (
+        <div style={{ 
+          marginTop: 8, 
+          paddingTop: 8, 
+          borderTop: '1px solid var(--border)',
+          fontSize: 12, 
+          color: 'var(--muted)',
+          textAlign: 'center'
+        }}>
+          Total: {total.toLocaleString()} unidades
+        </div>
+      )}
     </div>
   );
 }

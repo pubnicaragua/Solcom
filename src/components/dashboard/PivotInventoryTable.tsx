@@ -561,13 +561,13 @@ export default function PivotInventoryTable({ filters }: PivotInventoryTableProp
     const skuColWidth = 150;
     const marcaColWidth = 110;
     const colorColWidth = 95;
-    const remanenteColWidth = 110;
+    // const remanenteColWidth = 110; // Eliminada - columna remanente
     const cellWidth = 100;
     const totalColWidth = 105;
-    const totalColumns = 6 + warehouseCodes.length;
+    const totalColumns = 5 + warehouseCodes.length; // Reducido de 6 a 5
     // All frozen columns widths (sticky)
-    const frozenWidth = stickyColWidth + skuColWidth + marcaColWidth + colorColWidth + remanenteColWidth + totalColWidth;
-    const extraColsWidth = skuColWidth + marcaColWidth + colorColWidth + remanenteColWidth + totalColWidth;
+    const frozenWidth = stickyColWidth + skuColWidth + marcaColWidth + colorColWidth + totalColWidth;
+    const extraColsWidth = skuColWidth + marcaColWidth + colorColWidth + totalColWidth;
 
     /* ─── Grand totals row ─── */
     const grandTotals: Record<string, number> = {};
@@ -784,6 +784,7 @@ export default function PivotInventoryTable({ filters }: PivotInventoryTableProp
                                             borderBottom: '2px solid rgba(255,255,255,0.12)',
                                             borderRight: '1px solid rgba(255,255,255,0.06)',
                                         }}>Marca</th>
+                                        {/* Marca, Color - Sin columna remanente */}
                                         <th style={{
                                             position: 'sticky', left: stickyColWidth + skuColWidth + marcaColWidth, top: 0, zIndex: 4,
                                             background: '#080f1d',
@@ -800,20 +801,6 @@ export default function PivotInventoryTable({ filters }: PivotInventoryTableProp
                                         }}>Color</th>
                                         <th style={{
                                             position: 'sticky', left: stickyColWidth + skuColWidth + marcaColWidth + colorColWidth, top: 0, zIndex: 4,
-                                            background: '#080f1d',
-                                            padding: '11px 8px',
-                                            textAlign: 'right',
-                                            fontSize: 10, fontWeight: 700,
-                                            color: '#64748b',
-                                            textTransform: 'uppercase',
-                                            letterSpacing: '0.8px',
-                                            minWidth: remanenteColWidth, width: remanenteColWidth,
-                                            whiteSpace: 'nowrap',
-                                            borderBottom: '2px solid rgba(255,255,255,0.12)',
-                                            borderRight: '1px solid rgba(255,255,255,0.06)',
-                                        }}>Remanente (d)</th>
-                                        <th style={{
-                                            position: 'sticky', left: stickyColWidth + skuColWidth + marcaColWidth + colorColWidth + remanenteColWidth, top: 0, zIndex: 4,
                                             background: '#080f1d',
                                             padding: '11px 12px',
                                             textAlign: 'right',
@@ -984,54 +971,36 @@ export default function PivotInventoryTable({ filters }: PivotInventoryTableProp
                                                     {copiedSku === skuVal && skuVal ? '✓ Copiado' : skuVal}
                                                 </td>
 
-                                                {/* Marca, Color, Remanente */}
+                                                {/* Marca, Color - Sin columna remanente */}
                                                 <td style={{
                                                     position: 'sticky', left: stickyColWidth + skuColWidth, zIndex: 2,
                                                     padding: '7px 8px',
-                                                    fontSize: 11,
-                                                    color: '#94a3b8',
-                                                    whiteSpace: 'nowrap',
-                                                    overflow: 'hidden',
-                                                    textOverflow: 'ellipsis',
+                                                    fontSize: 12,
+                                                    color: 'var(--text)',
                                                     borderBottom: `1px solid rgba(255,255,255,${node.level <= 1 ? '0.12' : '0.05'})`,
                                                     borderRight: '1px solid rgba(255,255,255,0.06)',
                                                     background: style.bg === 'transparent' || style.bg.startsWith('rgba') ? 'var(--card)' : style.bg,
                                                     minWidth: marcaColWidth, maxWidth: marcaColWidth,
-                                                }}>{marcaVal}</td>
+                                                }}>
+                                                    {!isItemRow ? '' : (rowItem?.brand || '—')}
+                                                </td>
+
                                                 <td style={{
                                                     position: 'sticky', left: stickyColWidth + skuColWidth + marcaColWidth, zIndex: 2,
                                                     padding: '7px 8px',
-                                                    fontSize: 11,
-                                                    color: '#94a3b8',
-                                                    whiteSpace: 'nowrap',
-                                                    overflow: 'hidden',
-                                                    textOverflow: 'ellipsis',
+                                                    fontSize: 12,
+                                                    color: 'var(--text)',
                                                     borderBottom: `1px solid rgba(255,255,255,${node.level <= 1 ? '0.12' : '0.05'})`,
                                                     borderRight: '1px solid rgba(255,255,255,0.06)',
                                                     background: style.bg === 'transparent' || style.bg.startsWith('rgba') ? 'var(--card)' : style.bg,
                                                     minWidth: colorColWidth, maxWidth: colorColWidth,
-                                                }}>{colorVal}</td>
-                                                <td style={{
-                                                    position: 'sticky', left: stickyColWidth + skuColWidth + marcaColWidth + colorColWidth, zIndex: 2,
-                                                    padding: '7px 8px',
-                                                    fontSize: 11,
-                                                    textAlign: 'right',
-                                                    color: !isItemRow ? '#64748b' : (daysInStockVal == null ? 'rgba(100,116,139,0.5)' : '#fbbf24'),
-                                                    whiteSpace: 'nowrap',
-                                                    overflow: 'hidden',
-                                                    textOverflow: 'ellipsis',
-                                                    borderBottom: `1px solid rgba(255,255,255,${node.level <= 1 ? '0.12' : '0.05'})`,
-                                                    borderRight: '1px solid rgba(255,255,255,0.06)',
-                                                    background: style.bg === 'transparent' || style.bg.startsWith('rgba') ? 'var(--card)' : style.bg,
-                                                    minWidth: remanenteColWidth, maxWidth: remanenteColWidth,
-                                                    fontVariantNumeric: 'tabular-nums',
                                                 }}>
-                                                    {!isItemRow ? '' : (daysInStockVal == null ? '—' : `${daysInStockVal}d`)}
+                                                    {!isItemRow ? '' : (rowItem?.color || '—')}
                                                 </td>
 
                                                 {/* Grand Total */}
                                                 <td style={{
-                                                    position: 'sticky', left: stickyColWidth + skuColWidth + marcaColWidth + colorColWidth + remanenteColWidth, zIndex: 2,
+                                                    position: 'sticky', left: stickyColWidth + skuColWidth + marcaColWidth + colorColWidth, zIndex: 2,
                                                     padding: '7px 12px',
                                                     textAlign: 'right',
                                                     fontSize: node.level <= 1 ? 14 : 12,
@@ -1125,7 +1094,7 @@ export default function PivotInventoryTable({ filters }: PivotInventoryTableProp
                                         <td style={{ position: 'sticky', left: stickyColWidth + skuColWidth + marcaColWidth + colorColWidth, zIndex: 2, background: '#060c18', borderTop: '2px solid rgba(251,191,36,0.3)', borderRight: '1px solid rgba(255,255,255,0.06)' }} />
 
                                         <td style={{
-                                            position: 'sticky', left: stickyColWidth + skuColWidth + marcaColWidth + colorColWidth + remanenteColWidth, zIndex: 2,
+                                            position: 'sticky', left: stickyColWidth + skuColWidth + marcaColWidth + colorColWidth, zIndex: 2,
                                             background: '#060c18',
                                             padding: '10px 12px',
                                             textAlign: 'right',

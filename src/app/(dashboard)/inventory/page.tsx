@@ -286,6 +286,7 @@ export default function InventoryPage() {
               options={[
                 { value: '', label: 'Nivel de stock' },
                 { value: 'out', label: 'Sin stock (0)' },
+                { value: 'positive', label: 'Con stock (> 0)' },
                 { value: 'critical', label: 'Crítico (1-5)' },
                 { value: 'low', label: 'Bajo (6-20)' },
                 { value: 'medium', label: 'Medio (21-50)' },

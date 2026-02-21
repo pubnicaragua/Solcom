@@ -18,6 +18,185 @@ export default function ReunionesPage() {
           </p>
         </div>
 
+        {/* Reunión del 21 de Febrero */}
+        <Card style={{ marginBottom: 32, background: 'white', borderRadius: 16, overflow: 'hidden' }}>
+          {/* Header de la Reunión */}
+          <div style={{ background: 'linear-gradient(135deg, #f59e0b 0%, #dc2626 100%)', padding: 32, color: 'white' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 16 }}>
+              <Calendar size={32} />
+              <div>
+                <h2 style={{ fontSize: 32, fontWeight: 700, margin: 0 }}>
+                  Revisión de Inventario y Reportes
+                </h2>
+                <div style={{ display: 'flex', gap: 16, marginTop: 8, fontSize: 16, opacity: 0.95 }}>
+                  <span style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                    <Calendar size={16} />
+                    21 de Febrero, 2026
+                  </span>
+                  <span style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                    <Clock size={16} />
+                    2:20 PM - 3:50 PM (1h 30min)
+                  </span>
+                </div>
+              </div>
+            </div>
+            <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
+              <Badge style={{ background: 'rgba(255,255,255,0.2)', color: 'white', padding: '6px 12px' }}>
+                ✅ Completada
+              </Badge>
+              <Badge style={{ background: 'rgba(255,255,255,0.2)', color: 'white', padding: '6px 12px' }}>
+                🎯 Mejoras Identificadas
+              </Badge>
+            </div>
+          </div>
+
+          <div style={{ padding: 32 }}>
+            {/* Participantes */}
+            <div style={{ marginBottom: 32 }}>
+              <h3 style={{ fontSize: 20, fontWeight: 600, marginBottom: 16, display: 'flex', alignItems: 'center', gap: 8 }}>
+                <Users size={24} color="#f59e0b" />
+                Participantes
+              </h3>
+              <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
+                <Badge variant="neutral">👤 Ulises Olivas (Solis Comercial)</Badge>
+                <Badge variant="neutral">👤 Equipo de Desarrollo</Badge>
+              </div>
+            </div>
+
+            {/* Resumen Ejecutivo */}
+            <div style={{ marginBottom: 32, padding: 24, background: '#fffbeb', borderRadius: 12, borderLeft: '4px solid #f59e0b' }}>
+              <h3 style={{ fontSize: 20, fontWeight: 600, marginBottom: 16, color: '#f59e0b' }}>
+                📋 Resumen Ejecutivo
+              </h3>
+              <p style={{ fontSize: 16, lineHeight: 1.6, color: '#4a5568', marginBottom: 12 }}>
+                Se revisó el <strong>módulo de inventario</strong> y <strong>reportes</strong> para identificar mejoras de UX y funcionalidades pendientes. 
+                Se detectaron varios puntos críticos que necesitan ajuste para mejorar la experiencia del usuario.
+              </p>
+              <p style={{ fontSize: 16, lineHeight: 1.6, color: '#4a5568' }}>
+                Se definieron <strong>acciones específicas</strong> para corregir el comportamiento de filtros, agregar totales en reportes, 
+                y mejorar la visualización de porcentajes en análisis por marcas.
+              </p>
+            </div>
+
+            {/* Puntos Clave Discutidos */}
+            <div style={{ marginBottom: 32 }}>
+              <h3 style={{ fontSize: 20, fontWeight: 600, marginBottom: 16, display: 'flex', alignItems: 'center', gap: 8 }}>
+                <FileText size={24} color="#f59e0b" />
+                Puntos Clave Discutidos
+              </h3>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+                {[
+                  {
+                    title: '1. Filtro de Existencias Mayores a 0',
+                    content: 'El filtro de stock debe funcionar de forma viceversa. Actualmente filtra productos CON stock, pero debería permitir filtrar productos SIN stock (existencias = 0).',
+                    status: 'pending'
+                  },
+                  {
+                    title: '2. Columna Remanente',
+                    content: 'Se identificó que la columna "remanente" no tiene un propósito claro en el módulo de inventario. Se necesita definir su sentido o eliminar si no es necesaria.',
+                    status: 'pending'
+                  },
+                  {
+                    title: '3. Total en Reportes',
+                    content: 'Agregar un resumen total en la parte inferior del módulo de reportes que muestre valores consolidados de todo el inventario.',
+                    status: 'approved'
+                  },
+                  {
+                    title: '4. Porcentajes en Marcas',
+                    content: 'En el reporte de marcas, agregar una columna de representación porcentual para visualizar mejor la distribución de productos por marca.',
+                    status: 'approved'
+                  },
+                  {
+                    title: '5. Representación Visual de Porcentajes',
+                    content: 'Implementar barras de progreso o gráficos circulares para mostrar los porcentajes de forma visual en los reportes.',
+                    status: 'in-progress'
+                  }
+                ].map((punto, idx) => (
+                  <div key={idx} style={{ padding: 20, background: 'white', border: '1px solid #e2e8f0', borderRadius: 8 }}>
+                    <div style={{ display: 'flex', alignItems: 'flex-start', gap: 12 }}>
+                      {punto.status === 'approved' && <CheckCircle2 size={20} color="#10b981" />}
+                      {punto.status === 'action-required' && <AlertCircle size={20} color="#f59e0b" />}
+                      {punto.status === 'pending' && <Clock size={20} color="#6b7280" />}
+                      {punto.status === 'in-progress' && <ArrowRight size={20} color="#f59e0b" />}
+                      <div style={{ flex: 1 }}>
+                        <h4 style={{ fontSize: 16, fontWeight: 600, marginBottom: 8, color: '#1a202c' }}>
+                          {punto.title}
+                        </h4>
+                        <p style={{ fontSize: 14, lineHeight: 1.6, color: '#4a5568', margin: 0 }}>
+                          {punto.content}
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            {/* Decisiones Tomadas */}
+            <div style={{ marginBottom: 32, padding: 24, background: '#f0fdf4', borderRadius: 12, borderLeft: '4px solid #10b981' }}>
+              <h3 style={{ fontSize: 20, fontWeight: 600, marginBottom: 16, color: '#10b981', display: 'flex', alignItems: 'center', gap: 8 }}>
+                <CheckCircle2 size={24} />
+                Decisiones Tomadas
+              </h3>
+              <ul style={{ fontSize: 16, lineHeight: 1.8, color: '#4a5568', paddingLeft: 20 }}>
+                <li><strong>Corregir Filtro de Stock:</strong> Implementar lógica viceversa para mostrar productos sin existencia</li>
+                <li><strong>Eliminar Columna Remanente:</strong> Quitar columna si no tiene propósito claro o documentar su función</li>
+                <li><strong>Agregar Totales en Reportes:</strong> Incluir resumen consolidado en parte inferior de la vista</li>
+                <li><strong>Porcentajes en Marcas:</strong> Añadir columna con representación porcentual y visual</li>
+                <li><strong>Mejoras Visuales:</strong> Implementar barras de progreso para mejor UX</li>
+              </ul>
+            </div>
+
+            {/* Acciones Pendientes */}
+            <div style={{ marginBottom: 32 }}>
+              <h3 style={{ fontSize: 20, fontWeight: 600, marginBottom: 16, display: 'flex', alignItems: 'center', gap: 8 }}>
+                <AlertCircle size={24} color="#f59e0b" />
+                Acciones Pendientes
+              </h3>
+              
+              {/* Para Equipo de Desarrollo */}
+              <Card style={{ marginBottom: 16, padding: 20, background: '#eff6ff', border: '1px solid #3b82f6' }}>
+                <h4 style={{ fontSize: 18, fontWeight: 600, marginBottom: 12, color: '#1e40af', display: 'flex', alignItems: 'center', gap: 8 }}>
+                  🔧 Para Equipo: Mejoras en Inventario y Reportes
+                </h4>
+                <p style={{ fontSize: 14, color: '#1e3a8a', marginBottom: 16 }}>
+                  Implementar las mejoras identificadas en la reunión para optimizar la experiencia del usuario.
+                </p>
+                <div style={{ background: 'white', padding: 16, borderRadius: 8, marginBottom: 12 }}>
+                  <h5 style={{ fontSize: 14, fontWeight: 600, marginBottom: 8, color: '#1a202c' }}>
+                    📝 Tareas Específicas:
+                  </h5>
+                  <ol style={{ fontSize: 14, lineHeight: 1.8, color: '#4a5568', paddingLeft: 20, margin: 0 }}>
+                    <li><strong>Módulo de Inventario:</strong> Corregir filtro de existencias para funcionar de forma viceversa</li>
+                    <li><strong>Columna Remanente:</strong> Evaluar y eliminar si no es necesaria</li>
+                    <li><strong>Reportes - Totales:</strong> Agregar sección de totales en parte inferior</li>
+                    <li><strong>Reportes - Marcas:</strong> Añadir columna de porcentajes y representación visual</li>
+                    <li><strong>UX General:</strong> Implementar barras de progreso y mejoras visuales</li>
+                  </ol>
+                </div>
+                <div style={{ padding: 12, background: '#dbeafe', borderRadius: 6, fontSize: 13, color: '#1e3a8a' }}>
+                  <strong>💡 Prioridad:</strong> Alta - Estas mejoras impactan directamente el uso diario del sistema.
+                </div>
+              </Card>
+            </div>
+
+            {/* Próximos Pasos */}
+            <div style={{ padding: 24, background: '#f8f9ff', borderRadius: 12, borderLeft: '4px solid #f59e0b' }}>
+              <h3 style={{ fontSize: 20, fontWeight: 600, marginBottom: 16, color: '#f59e0b' }}>
+                🚀 Próximos Pasos
+              </h3>
+              <ol style={{ fontSize: 16, lineHeight: 1.8, color: '#4a5568', paddingLeft: 20, margin: 0 }}>
+                <li>Implementar corrección del filtro de existencias (función viceversa)</li>
+                <li>Evaluar y eliminar columna remanente del módulo de inventario</li>
+                <li>Agregar sección de totales en módulo de reportes</li>
+                <li>Implementar porcentajes y representación visual en reportes de marcas</li>
+                <li>Pruebas y validación de las mejoras implementadas</li>
+                <li>Despliegue de cambios a producción</li>
+              </ol>
+            </div>
+          </div>
+        </Card>
+
         {/* Reunión Principal */}
         <Card style={{ marginBottom: 32, background: 'white', borderRadius: 16, overflow: 'hidden' }}>
           {/* Header de la Reunión */}
