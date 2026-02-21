@@ -54,11 +54,11 @@ export default function ReunionesPage() {
             {/* Participantes */}
             <div style={{ marginBottom: 32 }}>
               <h3 style={{ fontSize: 20, fontWeight: 600, marginBottom: 16, display: 'flex', alignItems: 'center', gap: 8 }}>
-                <Users size={24} color="#f59e0b" />
+                <Users size={24} color="#000000ff" />
                 Participantes
               </h3>
               <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
-                <Badge variant="neutral">👤 Ulises Olivas (Solis Comercial)</Badge>
+                <Badge variant="neutral">👤 Luis Solis (Solis Comercial)</Badge>
                 <Badge variant="neutral">👤 Equipo de Desarrollo</Badge>
               </div>
             </div>
