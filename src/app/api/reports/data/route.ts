@@ -108,28 +108,53 @@ export async function GET(request: Request) {
         let totalValue = 0;
         let lowStockItems = 0;
         let outOfStockItems = 0;
+        const lowStockList: any[] = [];
 
         allItems.forEach((item: any) => {
             const stock = item.stock_total || 0;
             totalStock += stock;
             totalValue += stock * (item.price || 0);
-            if (stock > 0 && stock < 10) lowStockItems++;
+            if (stock > 0 && stock < 10) {
+                lowStockItems++;
+                lowStockList.push({
+                    id: item.id,
+                    sku: item.sku,
+                    name: item.name,
+                    marca: item.marca,
+                    category: item.category,
+                    stock_total: stock,
+                    price: item.price
+                });
+            }
             if (stock === 0) outOfStockItems++;
         });
 
+        lowStockList.sort((a, b) => a.stock_total - b.stock_total);
+
         // 5) Chart breakdowns from items (instant)
-        const categoryBreakdown: Record<string, number> = {};
-        const brandBreakdown: Record<string, { value: number; label: string }> = {};
+        const categoryBreakdown: Record<string, { stock: number; capital: number; skus: Set<string> }> = {};
+        const brandBreakdown: Record<string, { stock: number; capital: number; skus: Set<string>; label: string }> = {};
 
         allItems.forEach((item: any) => {
             const cat = item.category || 'Sin categoría';
             const brandRaw = (item.marca || '').trim() || 'Sin marca';
             const brandKey = brandRaw.toUpperCase();
             const stock = item.stock_total || 0;
+            const price = item.price || 0;
 
-            categoryBreakdown[cat] = (categoryBreakdown[cat] || 0) + stock;
-            if (!brandBreakdown[brandKey]) brandBreakdown[brandKey] = { value: 0, label: brandRaw };
-            brandBreakdown[brandKey].value += stock;
+            if (!categoryBreakdown[cat]) {
+                categoryBreakdown[cat] = { stock: 0, capital: 0, skus: new Set() };
+            }
+            categoryBreakdown[cat].stock += stock;
+            categoryBreakdown[cat].capital += (stock * price);
+            if (stock > 0) categoryBreakdown[cat].skus.add(item.sku || String(item.id));
+
+            if (!brandBreakdown[brandKey]) {
+                brandBreakdown[brandKey] = { stock: 0, capital: 0, skus: new Set(), label: brandRaw };
+            }
+            brandBreakdown[brandKey].stock += stock;
+            brandBreakdown[brandKey].capital += (stock * price);
+            if (stock > 0) brandBreakdown[brandKey].skus.add(item.sku || String(item.id));
         });
 
         // 6) Aging data (items with stock > 0 updated > 90 days ago)
@@ -156,12 +181,35 @@ export async function GET(request: Request) {
 
         // Format chart data
         const categoryChartData = Object.entries(categoryBreakdown)
-            .map(([label, value]) => ({ label, value }))
+            .map(([label, data]) => ({ label, value: data.stock }))
             .sort((a, b) => b.value - a.value);
 
         const brandChartData = Object.values(brandBreakdown)
+            .map(b => ({ label: b.label, value: b.stock }))
             .sort((a, b) => b.value - a.value)
             .slice(0, 10);
+
+        // Format Money Maker Categories
+        const moneyMakerCategories = Object.entries(categoryBreakdown)
+            .map(([label, data]) => ({
+                label,
+                stock: data.stock,
+                capital: data.capital,
+                uniqueSkus: data.skus.size
+            }))
+            .filter(c => c.stock > 0 || c.capital > 0)
+            .sort((a, b) => b.capital - a.capital); // Sort by capital invested
+
+        // Format Money Maker Brands
+        const moneyMakerBrands = Object.values(brandBreakdown)
+            .map(b => ({
+                label: b.label,
+                stock: b.stock,
+                capital: b.capital,
+                uniqueSkus: b.skus.size
+            }))
+            .filter(b => b.stock > 0 || b.capital > 0)
+            .sort((a, b) => b.capital - a.capital); // Sort by capital invested
 
         return NextResponse.json({
             stats: {
@@ -176,12 +224,15 @@ export async function GET(request: Request) {
                 categoryBreakdown: categoryChartData,
                 brandBreakdown: brandChartData,
             },
+            moneyMakerCategories,
+            moneyMakerBrands,
             filterOptions,
             aging: {
                 items: agingItems,
                 totalUnits: agingTotalUnits,
                 totalValue: agingTotalValue,
             },
+            lowStockList,
             sinMarcaCount: allItems.filter((i: any) => !(i.marca || '').trim()).length,
         });
     } catch (error) {
