@@ -403,20 +403,26 @@ export default function ReportsPage() {
               </div>
               <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
                 <div style={{ fontSize: 13, color: 'var(--muted)' }}>Valor del Inventario</div>
-                {zohoKpis && (
-                  <span style={{ fontSize: 9, background: '#10b98120', color: '#10b981', padding: '1px 5px', borderRadius: 4, fontWeight: 600 }}>Zoho</span>
-                )}
+                <span style={{ fontSize: 9, background: '#10b98120', color: '#10b981', padding: '1px 5px', borderRadius: 4, fontWeight: 600 }}>Zoho</span>
               </div>
             </div>
-            {loading && !zohoKpisLoaded ? (
-              <div style={{ height: 32, background: 'var(--panel)', borderRadius: 4, animation: 'pulse 1.5s infinite' }} />
+            {!zohoKpisLoaded ? (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 6, paddingBottom: 4 }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <Loader size={16} color="#10b981" style={{ animation: 'spin 1.5s linear infinite' }} />
+                  <span style={{ fontSize: 16, fontWeight: 600, color: 'var(--muted)' }}>Cargando...</span>
+                </div>
+                <div style={{ fontSize: 12, color: 'var(--muted)' }}>
+                  Calculando inventario...
+                </div>
+              </div>
             ) : (
               <>
                 <div style={{ fontSize: 24, fontWeight: 700, color: '#10b981' }}>
-                  {new Intl.NumberFormat('es-NI', { style: 'currency', currency: 'USD', minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(stats?.totalValue || 0)}
+                  {new Intl.NumberFormat('es-NI', { style: 'currency', currency: 'USD', minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(zohoKpis?.totalValue || 0)}
                 </div>
                 <div style={{ fontSize: 12, color: 'var(--muted)', marginTop: 4 }}>
-                  {zohoKpis ? 'Valoración Zoho Books' : 'Estimación local'}
+                  Valoración exitosa
                 </div>
               </>
             )}

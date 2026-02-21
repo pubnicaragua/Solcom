@@ -58,7 +58,10 @@ interface TreeNode {
 
 function buildTree(items: PivotItem[], warehouseCodes: string[]): TreeNode[] {
     // Group: state -> brand -> product -> variants
-    const stateGroups = groupBy(items, (i) => (i.state || 'SIN ESTADO').toUpperCase());
+    const stateGroups = groupBy(items, (i) => {
+        if (!i.state) return 'SIN ESTADO';
+        return i.state.toUpperCase();
+    });
     const roots: TreeNode[] = [];
 
     for (const [stateName, stateItems] of sortedEntries(stateGroups)) {

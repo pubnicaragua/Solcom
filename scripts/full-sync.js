@@ -178,7 +178,11 @@ async function main() {
             const state = normalizeState(zi.cf_estado || zi.cf_estado_unformatted);
             const marca = String(zi.cf_marca || zi.brand || zi.manufacturer || '').trim() || null;
             const categoria = String(zi.cf_categor_a || zi.category_name || '').trim() || 'Sin categoría';
-            const price = Number.isFinite(Number(zi.rate)) ? Number(zi.rate) : null;
+            const purchaseRate = Number(zi.purchase_rate);
+            const salesRate = Number(zi.rate);
+            const price = Number.isFinite(purchaseRate) && purchaseRate > 0
+                ? purchaseRate
+                : (Number.isFinite(salesRate) ? salesRate : null);
 
             const metadata = {
                 sku,

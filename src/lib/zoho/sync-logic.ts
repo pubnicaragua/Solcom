@@ -137,7 +137,13 @@ function buildItemMetadata(zohoItem: any, zohoItemId: string) {
         state: normalizeItemState(customFields.cf_estado ?? customFields.cf_state ?? zohoItem?.status),
         marca: String(customFields.cf_marca ?? customFields.cf_brand ?? zohoItem?.brand ?? '').trim() || null,
         category: String(customFields.cf_categoria ?? zohoItem?.category_name ?? '').trim() || null,
-        price: Number.isFinite(Number(zohoItem?.rate)) ? Number(zohoItem?.rate) : null,
+        price: (() => {
+            const purchaseRate = Number(zohoItem?.purchase_rate);
+            const salesRate = Number(zohoItem?.rate);
+            return Number.isFinite(purchaseRate) && purchaseRate > 0
+                ? purchaseRate
+                : (Number.isFinite(salesRate) ? salesRate : null);
+        })(),
         updated_at: new Date().toISOString(),
     };
 }
