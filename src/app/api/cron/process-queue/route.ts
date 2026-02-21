@@ -11,7 +11,7 @@ const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.
 export const dynamic = 'force-dynamic';
 export const revalidate = 0;
 export const fetchCache = 'force-no-store';
-export const maxDuration = 60; // Hobby plan allows up to 60s (default was 10s)
+export const maxDuration = 120; // Fluid Compute enabled: up to 300s allowed on Hobby. 120s gives plenty of margin
 
 // Helper to create response with no-cache headers
 function jsonResponse(data: any, status = 200) {
@@ -39,7 +39,7 @@ export async function GET(request: Request) {
     const debugLog: string[] = [];
     const keyType = process.env.SUPABASE_SERVICE_ROLE_KEY ? 'SERVICE_ROLE' : 'ANON';
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
-    const BATCH_SIZE = 30; // With maxDuration=60s: 30 items × ~1.4s = ~42s worst case, safely under 60s
+    const BATCH_SIZE = 25; // 25 × ~1.8s = ~45s, with 15s safety margin under maxDuration=60s
 
     try {
         debugLog.push(`--- Starting Queue Processor (Key: ${keyType}) ---`);
