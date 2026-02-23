@@ -206,7 +206,7 @@ export default function PivotInventoryTable({ filters }: PivotInventoryTableProp
     const [collapsedGroups, setCollapsedGroups] = useState<Set<string>>(new Set());
     const [expandedProducts, setExpandedProducts] = useState<Set<string>>(new Set());
     const [copiedSku, setCopiedSku] = useState<string | null>(null);
-    const [hideZeroStock, setHideZeroStock] = useState(false);
+    const [hideZeroStock, setHideZeroStock] = useState(true);
     const [scrollTop, setScrollTop] = useState(0);
     const [viewportHeight, setViewportHeight] = useState(0);
     const [warehouseColors, setWarehouseColors] = useState<Map<string, WarehouseColor>>(new Map());
