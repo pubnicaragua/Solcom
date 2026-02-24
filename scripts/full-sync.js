@@ -44,15 +44,15 @@ async function getToken() {
 }
 
 // ── Fetch ALL items from Zoho listing (paginated) ──
-// The listing already includes: sku, name, rate, category_name, brand, manufacturer,
-// cf_estado, cf_marca, cf_color, cf_categor_a, cf_precio_minimo, stock_on_hand, etc.
+// We use /books/v3/items because it includes ALL products (even non-inventory), 
+// which should total around 12,000 for this user.
 async function fetchAllZohoItems(token, apiDomain) {
     const allItems = [];
     let page = 1;
     let hasMore = true;
 
     while (hasMore) {
-        const url = `${apiDomain}/inventory/v1/items?organization_id=${ORG_ID}&page=${page}&per_page=200`;
+        const url = `${apiDomain}/books/v3/items?organization_id=${ORG_ID}&page=${page}&per_page=200`;
         const res = await fetch(url, { headers: { Authorization: `Zoho-oauthtoken ${token}` } });
         if (!res.ok) { console.error(`\n❌ List page ${page} failed: ${res.status}`); break; }
 
@@ -65,7 +65,7 @@ async function fetchAllZohoItems(token, apiDomain) {
         await sleep(300);
     }
 
-    console.log(`\n   ✅ Total: ${allItems.length} items`);
+    console.log(`\n   ✅ Total: ${allItems.length} items fetched via Zoho Books`);
     return allItems;
 }
 
@@ -233,12 +233,18 @@ async function main() {
             }
 
             // ─── Fetch stock per warehouse ───
-            const locations = await fetchLocationDetails(token, api, zohoItemId);
-
             let stockTotal = 0;
             const snapshots = [];
             const balanceRows = [];
             const nowIso = new Date().toISOString();
+
+            const globalStock = Number(zi.stock_on_hand || 0);
+            const isService = zi.is_combo_product || zi.product_type === 'service'; // Just in case
+
+            let locations = [];
+            if (globalStock > 0 && !isService) {
+                locations = await fetchLocationDetails(token, api, zohoItemId);
+            }
 
             for (const loc of locations) {
                 const locId = String(loc.location_id || '');
