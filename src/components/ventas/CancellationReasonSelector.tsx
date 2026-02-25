@@ -22,6 +22,7 @@ export default function CancellationReasonSelector({ value, onChange, disabled }
     const [showCreate, setShowCreate] = useState(false);
     const [newLabel, setNewLabel] = useState('');
     const [creating, setCreating] = useState(false);
+    const [createError, setCreateError] = useState('');
     const [selectedReason, setSelectedReason] = useState<CancellationReason | null>(null);
     const [highlightIndex, setHighlightIndex] = useState(-1);
 
@@ -56,6 +57,9 @@ export default function CancellationReasonSelector({ value, onChange, disabled }
         try {
             const res = await fetch('/api/ventas/cancellation-reasons');
             const data = await res.json();
+            if (!res.ok) {
+                throw new Error(data?.error || 'No se pudieron cargar los motivos');
+            }
             setReasons(data.reasons || []);
         } catch (err) {
             console.error('Error fetching cancellation reasons:', err);
@@ -77,6 +81,7 @@ export default function CancellationReasonSelector({ value, onChange, disabled }
     const handleCreate = async () => {
         if (!newLabel.trim()) return;
         setCreating(true);
+        setCreateError('');
         try {
             const res = await fetch('/api/ventas/cancellation-reasons', {
                 method: 'POST',
@@ -84,6 +89,9 @@ export default function CancellationReasonSelector({ value, onChange, disabled }
                 body: JSON.stringify({ label: newLabel.trim() }),
             });
             const data = await res.json();
+            if (!res.ok) {
+                throw new Error(data?.error || 'No se pudo crear el motivo');
+            }
             if (data.reason) {
                 await fetchReasons();
                 handleSelect(data.reason);
@@ -92,6 +100,7 @@ export default function CancellationReasonSelector({ value, onChange, disabled }
             }
         } catch (err) {
             console.error('Error creating reason:', err);
+            setCreateError(err instanceof Error ? err.message : 'No se pudo crear el motivo');
         } finally {
             setCreating(false);
         }
@@ -228,6 +237,19 @@ export default function CancellationReasonSelector({ value, onChange, disabled }
                             <div style={{ fontSize: '12px', fontWeight: 700, color: 'var(--muted)', marginBottom: '8px', textTransform: 'uppercase' }}>
                                 Nuevo Motivo
                             </div>
+                            {createError && (
+                                <div style={{
+                                    marginBottom: '10px',
+                                    padding: '8px 10px',
+                                    borderRadius: '6px',
+                                    fontSize: '12px',
+                                    color: '#F87171',
+                                    border: '1px solid rgba(248,113,113,0.35)',
+                                    background: 'rgba(239,68,68,0.08)',
+                                }}>
+                                    {createError}
+                                </div>
+                            )}
                             <input
                                 type="text" value={newLabel}
                                 onChange={(e) => setNewLabel(e.target.value)}

@@ -11,10 +11,14 @@ import CancellationReasonSelector from './CancellationReasonSelector';
 
 interface InvoiceFormItem {
     item_id: string | null;
+    zoho_item_id: string | null;
     description: string;
     quantity: number;
     unit_price: number;
     discount_percent: number;
+    serial_number_value: string;
+    available_serials: Array<{ serial_id: string; serial_code: string }>;
+    loading_serials: boolean;
 }
 
 interface Customer {
@@ -29,10 +33,12 @@ interface Customer {
 interface Product {
     id: string;
     item_id: string;
+    zoho_item_id?: string | null;
     name: string;
     sku: string;
     unit_price: number;
     quantity: number;
+    warehouse_id: string;
     warehouse_name: string;
 }
 
@@ -40,10 +46,13 @@ interface Warehouse {
     id: string;
     code: string;
     name: string;
+    zoho_warehouse_id?: string | null;
 }
 
 interface Salesperson {
     id: string;
+    zoho_user_id?: string;
+    zoho_salesperson_id?: string;
     name: string;
     email: string;
     role: string;
@@ -109,7 +118,17 @@ export default function InvoiceForm({ isOpen, onClose, onSaved, editInvoice }: I
 
     // Line items
     const [lineItems, setLineItems] = useState<InvoiceFormItem[]>([
-        { item_id: null, description: '', quantity: 1, unit_price: 0, discount_percent: 0 },
+        {
+            item_id: null,
+            zoho_item_id: null,
+            description: '',
+            quantity: 1,
+            unit_price: 0,
+            discount_percent: 0,
+            serial_number_value: '',
+            available_serials: [],
+            loading_serials: false,
+        },
     ]);
 
     // Products for autocomplete
@@ -127,7 +146,6 @@ export default function InvoiceForm({ isOpen, onClose, onSaved, editInvoice }: I
     useEffect(() => {
         if (isOpen) {
             fetchCustomers();
-            fetchProducts();
             fetchWarehouses();
             fetchSalespeople();
         }
@@ -190,15 +208,83 @@ export default function InvoiceForm({ isOpen, onClose, onSaved, editInvoice }: I
         customerSearchTimeout.current = setTimeout(() => fetchCustomers(text), 300);
     };
 
-    const fetchProducts = async () => {
+    const fetchProducts = async (searchText: string = '', selectedWarehouseId: string = warehouseId) => {
+        if (!selectedWarehouseId) {
+            setProducts([]);
+            return;
+        }
+
         try {
-            const res = await fetch('/api/cliente/inventario');
+            const params = new URLSearchParams();
+            params.set('warehouseId', selectedWarehouseId);
+            if (searchText.trim()) {
+                params.set('search', searchText.trim());
+            }
+
+            const res = await fetch(`/api/transfers/items?${params.toString()}`);
             const data = await res.json();
-            if (data.items) setProducts(data.items.filter((p: Product) => p.quantity > 0));
+            if (!res.ok) {
+                throw new Error(data?.error || 'No se pudo cargar inventario');
+            }
+
+            const selectedWarehouse = warehouses.find((w) => w.id === selectedWarehouseId);
+            const normalizedProducts: Product[] = (data || [])
+                .map((row: any) => {
+                    const itemId = String(row?.id || '').trim();
+                    if (!itemId) return null;
+
+                    const quantity = Number(row?.current_stock ?? 0);
+                    if (!Number.isFinite(quantity)) return null;
+
+                    return {
+                        id: itemId,
+                        item_id: itemId,
+                        zoho_item_id: String(row?.zoho_item_id || '').trim() || null,
+                        name: String(row?.name || row?.sku || '').trim() || `Producto ${itemId}`,
+                        sku: String(row?.sku || '').trim() || `NO-SKU-${itemId}`,
+                        unit_price: Number(row?.unit_price ?? 0) || 0,
+                        quantity,
+                        warehouse_id: selectedWarehouseId,
+                        warehouse_name: selectedWarehouse?.name || selectedWarehouse?.code || 'Bodega',
+                    } as Product;
+                })
+                .filter(Boolean) as Product[];
+
+            setProducts(normalizedProducts);
         } catch (err) {
             console.error('Error fetching products:', err);
+            setProducts([]);
         }
     };
+
+    useEffect(() => {
+        if (!isOpen) return;
+        if (!warehouseId) {
+            setProducts([]);
+            setLineItems((current) => current.map((line) => ({
+                ...line,
+                available_serials: [],
+                loading_serials: false,
+                serial_number_value: '',
+            })));
+            return;
+        }
+
+        fetchProducts(productSearch, warehouseId);
+        setLineItems((current) => current.map((line) => ({
+            ...line,
+            available_serials: [],
+            loading_serials: false,
+            serial_number_value: '',
+        })));
+
+        lineItems.forEach((line, idx) => {
+            if (line.zoho_item_id) {
+                fetchLineSerials(idx, line.zoho_item_id);
+            }
+        });
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [warehouseId, isOpen]);
 
     const fetchWarehouses = async () => {
         try {
@@ -212,7 +298,7 @@ export default function InvoiceForm({ isOpen, onClose, onSaved, editInvoice }: I
 
     const fetchSalespeople = async () => {
         try {
-            const res = await fetch('/api/ventas/salespeople');
+            const res = await fetch('/api/ventas/salespeople', { cache: 'no-store' });
             const data = await res.json();
             setSalespeople(data.salespeople || []);
         } catch (err) {
@@ -222,10 +308,40 @@ export default function InvoiceForm({ isOpen, onClose, onSaved, editInvoice }: I
 
     const filteredCustomers = customers;
 
-    const filteredProducts = products.filter(p =>
-        p.name.toLowerCase().includes(productSearch.toLowerCase()) ||
-        p.sku.toLowerCase().includes(productSearch.toLowerCase())
-    );
+    const serialArray = (value?: string): string[] => {
+        if (!value) return [];
+        return value
+            .split(',')
+            .map((entry) => entry.trim())
+            .filter(Boolean);
+    };
+
+    const normalizeSerialInput = (value: unknown): string => {
+        if (Array.isArray(value)) {
+            return value
+                .map((entry) => String(entry ?? '').trim())
+                .filter(Boolean)
+                .join(',');
+        }
+        return String(value ?? '')
+            .replace(/[\n;]/g, ',')
+            .split(',')
+            .map((entry) => entry.trim())
+            .filter(Boolean)
+            .join(',');
+    };
+
+    const normalizedProductSearch = productSearch.toLowerCase().trim();
+    const filteredProducts = products
+        .filter((p) => p.quantity > 0)
+        .filter((p) => !warehouseId || p.warehouse_id === warehouseId)
+        .filter((p) => {
+            if (!normalizedProductSearch) return true;
+            return (
+                p.name.toLowerCase().includes(normalizedProductSearch) ||
+                p.sku.toLowerCase().includes(normalizedProductSearch)
+            );
+        });
 
     const selectCustomer = (customer: Customer) => {
         setSelectedCustomer(customer);
@@ -233,33 +349,160 @@ export default function InvoiceForm({ isOpen, onClose, onSaved, editInvoice }: I
         setShowCustomerDropdown(false);
     };
 
+    const fetchLineSerials = async (rowIndex: number, zohoItemId: string | null) => {
+        if (!zohoItemId || !warehouseId) {
+            setLineItems((current) => current.map((line, idx) => (
+                idx === rowIndex
+                    ? { ...line, loading_serials: false, available_serials: [] }
+                    : line
+            )));
+            return;
+        }
+
+        const selectedWarehouse = warehouses.find((w) => w.id === warehouseId);
+        const zohoWarehouseId = String(selectedWarehouse?.zoho_warehouse_id || '').trim();
+        if (!zohoWarehouseId) {
+            setLineItems((current) => current.map((line, idx) => (
+                idx === rowIndex
+                    ? { ...line, loading_serials: false, available_serials: [] }
+                    : line
+            )));
+            return;
+        }
+
+        setLineItems((current) => current.map((line, idx) => (
+            idx === rowIndex
+                ? { ...line, loading_serials: true, available_serials: [] }
+                : line
+        )));
+
+        try {
+            const params = new URLSearchParams();
+            params.set('item_id', zohoItemId);
+            params.set('warehouse_id', zohoWarehouseId);
+
+            const res = await fetch(`/api/zoho/item-serials?${params.toString()}`);
+            const data = await res.json();
+            const serials = (data?.success && Array.isArray(data?.serials))
+                ? data.serials
+                    .map((row: any) => ({
+                        serial_id: String(row?.serial_id || ''),
+                        serial_code: String(row?.serial_code || '').trim(),
+                    }))
+                    .filter((row: any) => row.serial_code.length > 0)
+                : [];
+
+            setLineItems((current) => current.map((line, idx) => {
+                if (idx !== rowIndex) return line;
+                const selected = serialArray(line.serial_number_value);
+                const allowed = new Set(serials.map((s: any) => s.serial_code));
+                const normalizedSelected = serials.length > 0
+                    ? selected.filter((code) => allowed.has(code))
+                    : selected;
+                const limitedSelected = normalizedSelected.slice(0, Math.max(1, line.quantity));
+
+                return {
+                    ...line,
+                    loading_serials: false,
+                    available_serials: serials,
+                    serial_number_value: limitedSelected.join(','),
+                };
+            }));
+        } catch (serialError) {
+            console.error('Error fetching line serials:', serialError);
+            setLineItems((current) => current.map((line, idx) => (
+                idx === rowIndex
+                    ? { ...line, loading_serials: false, available_serials: [] }
+                    : line
+            )));
+        }
+    };
+
     const selectProduct = (product: Product, rowIndex: number) => {
-        const updated = [...lineItems];
-        updated[rowIndex] = {
-            ...updated[rowIndex],
-            item_id: product.item_id,
-            description: product.name,
-            unit_price: product.unit_price || 0,
-        };
-        setLineItems(updated);
+        const zohoItemId = String(product.zoho_item_id || '').trim() || null;
+
+        setLineItems((current) => current.map((line, idx) => {
+            if (idx !== rowIndex) return line;
+            return {
+                ...line,
+                item_id: product.item_id,
+                zoho_item_id: zohoItemId,
+                description: product.name,
+                unit_price: product.unit_price || 0,
+                serial_number_value: '',
+                available_serials: [],
+                loading_serials: false,
+            };
+        }));
+
         setShowProductDropdown(false);
         setActiveProductRow(null);
         setProductSearch('');
+        setProducts([]);
+        fetchLineSerials(rowIndex, zohoItemId);
     };
 
     const updateLineItem = (index: number, field: keyof InvoiceFormItem, value: any) => {
         const updated = [...lineItems];
+        if (!updated[index]) return;
         updated[index] = { ...updated[index], [field]: value };
+
+        if (field === 'quantity') {
+            const qty = Math.max(1, Number(value) || 1);
+            const selected = serialArray(updated[index].serial_number_value);
+            if (selected.length > qty) {
+                updated[index].serial_number_value = selected.slice(0, qty).join(',');
+            }
+        }
+
         setLineItems(updated);
     };
 
+    const toggleLineSerial = (rowIndex: number, serialCode: string) => {
+        setLineItems((current) => current.map((line, idx) => {
+            if (idx !== rowIndex) return line;
+
+            const selected = serialArray(line.serial_number_value);
+            let nextSelected = [...selected];
+            if (nextSelected.includes(serialCode)) {
+                nextSelected = nextSelected.filter((code) => code !== serialCode);
+            } else if (nextSelected.length < line.quantity) {
+                nextSelected.push(serialCode);
+            }
+
+            return { ...line, serial_number_value: nextSelected.join(',') };
+        }));
+    };
+
     const addLineItem = () => {
-        setLineItems([...lineItems, { item_id: null, description: '', quantity: 1, unit_price: 0, discount_percent: 0 }]);
+        setLineItems([
+            ...lineItems,
+            {
+                item_id: null,
+                zoho_item_id: null,
+                description: '',
+                quantity: 1,
+                unit_price: 0,
+                discount_percent: 0,
+                serial_number_value: '',
+                available_serials: [],
+                loading_serials: false,
+            },
+        ]);
     };
 
     const removeLineItem = (index: number) => {
         if (lineItems.length <= 1) return;
         setLineItems(lineItems.filter((_, i) => i !== index));
+    };
+
+    const productSearchTimeout = useRef<NodeJS.Timeout | null>(null);
+    const triggerProductSearch = (text: string) => {
+        setProductSearch(text);
+        if (productSearchTimeout.current) clearTimeout(productSearchTimeout.current);
+        productSearchTimeout.current = setTimeout(() => {
+            fetchProducts(text);
+        }, 250);
     };
 
     // Calculations
@@ -275,10 +518,23 @@ export default function InvoiceForm({ isOpen, onClose, onSaved, editInvoice }: I
         if (lineItems.every(item => !item.description.trim())) { setError('Agrega al menos un artículo'); return; }
         if (status === 'cancelada' && !cancellationReasonId) { setError('Selecciona un motivo de anulación'); return; }
 
+        for (const line of lineItems.filter((item) => item.description.trim())) {
+            const selectedSerials = serialArray(line.serial_number_value);
+            if (line.available_serials.length > 0 && selectedSerials.length !== line.quantity) {
+                setError(`El artículo "${line.description}" requiere exactamente ${line.quantity} serial(es).`);
+                return;
+            }
+            if (selectedSerials.length > 0 && selectedSerials.length !== line.quantity) {
+                setError(`Seriales inválidos para "${line.description}": cantidad ${line.quantity}, seriales ${selectedSerials.length}.`);
+                return;
+            }
+        }
+
         setSaving(true);
         setError('');
 
         try {
+            const selectedSalesperson = salespeople.find((s) => s.id === salespersonId) || null;
             const payload = {
                 customer_id: selectedCustomer?.id || null,
                 date: invoiceDate,
@@ -292,6 +548,8 @@ export default function InvoiceForm({ isOpen, onClose, onSaved, editInvoice }: I
                 order_number: orderNumber || null,
                 terms: terms || null,
                 salesperson_id: salespersonId || null,
+                salesperson_zoho_id: selectedSalesperson?.zoho_salesperson_id || selectedSalesperson?.zoho_user_id || null,
+                salesperson_name: selectedSalesperson?.name || null,
                 delivery_requested: deliveryRequested,
                 delivery_id: deliveryId || null,
                 credit_detail: creditDetail || null,
@@ -303,6 +561,8 @@ export default function InvoiceForm({ isOpen, onClose, onSaved, editInvoice }: I
                     quantity: item.quantity,
                     unit_price: item.unit_price,
                     discount_percent: item.discount_percent,
+                    serial_number_value: normalizeSerialInput(item.serial_number_value) || null,
+                    serial_numbers: serialArray(item.serial_number_value),
                 })),
             };
 
@@ -344,7 +604,19 @@ export default function InvoiceForm({ isOpen, onClose, onSaved, editInvoice }: I
         setTaxRate(15);
         setDiscountAmount(0);
         setShippingCharge(0);
-        setLineItems([{ item_id: null, description: '', quantity: 1, unit_price: 0, discount_percent: 0 }]);
+        setLineItems([{
+            item_id: null,
+            zoho_item_id: null,
+            description: '',
+            quantity: 1,
+            unit_price: 0,
+            discount_percent: 0,
+            serial_number_value: '',
+            available_serials: [],
+            loading_serials: false,
+        }]);
+        setProducts([]);
+        setProductSearch('');
         setError('');
     };
 
@@ -566,7 +838,9 @@ export default function InvoiceForm({ isOpen, onClose, onSaved, editInvoice }: I
                         {/* ===== LINE ITEMS TABLE ===== */}
                         <div style={{
                             border: '1px solid var(--border)', borderRadius: '12px',
-                            overflow: 'hidden', marginBottom: '20px',
+                            overflow: 'visible', marginBottom: '20px',
+                            position: 'relative',
+                            zIndex: 5,
                         }}>
                             <div style={{
                                 display: 'grid', gridTemplateColumns: '2fr 80px 120px 80px 120px 40px',
@@ -584,11 +858,23 @@ export default function InvoiceForm({ isOpen, onClose, onSaved, editInvoice }: I
                                     gap: '8px', padding: '12px 16px',
                                     borderBottom: index < lineItems.length - 1 ? '1px solid var(--border)' : 'none',
                                     alignItems: 'center',
+                                    position: 'relative',
+                                    zIndex: activeProductRow === index && showProductDropdown ? 20 : 1,
                                 }}>
                                     <div ref={activeProductRow === index ? productRef : null} style={{ position: 'relative' }}>
                                         <input type="text" value={item.description}
-                                            onChange={(e) => { updateLineItem(index, 'description', e.target.value); setProductSearch(e.target.value); setActiveProductRow(index); setShowProductDropdown(true); }}
-                                            onFocus={() => { setActiveProductRow(index); setProductSearch(item.description); setShowProductDropdown(true); }}
+                                            onChange={(e) => {
+                                                const text = e.target.value;
+                                                updateLineItem(index, 'description', text);
+                                                setActiveProductRow(index);
+                                                setShowProductDropdown(true);
+                                                triggerProductSearch(text);
+                                            }}
+                                            onFocus={() => {
+                                                setActiveProductRow(index);
+                                                setShowProductDropdown(true);
+                                                triggerProductSearch(item.description || '');
+                                            }}
                                             placeholder="Buscar producto..." style={{ ...inputStyle, fontSize: '13px' }}
                                         />
                                         {showProductDropdown && activeProductRow === index && (
@@ -614,6 +900,82 @@ export default function InvoiceForm({ isOpen, onClose, onSaved, editInvoice }: I
                                                     <div style={{ padding: '12px', fontSize: '13px', color: 'var(--muted)', textAlign: 'center' }}>Sin resultados</div>
                                                 )}
                                             </div>
+                                        )}
+
+                                        {item.loading_serials && (
+                                            <div style={{
+                                                marginTop: '6px',
+                                                padding: '6px 8px',
+                                                borderRadius: '6px',
+                                                border: '1px solid var(--border)',
+                                                background: 'rgba(255,255,255,0.03)',
+                                                fontSize: '11px',
+                                                color: 'var(--muted)',
+                                            }}>
+                                                Buscando seriales...
+                                            </div>
+                                        )}
+
+                                        {!item.loading_serials && item.available_serials.length > 0 && (
+                                            <div style={{
+                                                marginTop: '6px',
+                                                border: '1px solid var(--border)',
+                                                borderRadius: '8px',
+                                                padding: '8px',
+                                                background: 'rgba(255,255,255,0.02)',
+                                            }}>
+                                                <div style={{
+                                                    display: 'flex',
+                                                    justifyContent: 'space-between',
+                                                    fontSize: '11px',
+                                                    color: 'var(--muted)',
+                                                    marginBottom: '6px',
+                                                }}>
+                                                    <span>Seriales</span>
+                                                    <span>{serialArray(item.serial_number_value).length} / {item.quantity}</span>
+                                                </div>
+                                                <div style={{
+                                                    display: 'grid',
+                                                    gridTemplateColumns: 'repeat(2, minmax(0, 1fr))',
+                                                    gap: '4px',
+                                                    maxHeight: '86px',
+                                                    overflowY: 'auto',
+                                                    paddingRight: '2px',
+                                                }}>
+                                                    {item.available_serials.map((serial) => {
+                                                        const isSelected = serialArray(item.serial_number_value).includes(serial.serial_code);
+                                                        return (
+                                                            <button
+                                                                key={serial.serial_code}
+                                                                type="button"
+                                                                onClick={() => toggleLineSerial(index, serial.serial_code)}
+                                                                style={{
+                                                                    border: `1px solid ${isSelected ? 'rgba(220,38,38,0.65)' : 'var(--border)'}`,
+                                                                    borderRadius: '6px',
+                                                                    padding: '5px 6px',
+                                                                    fontSize: '10px',
+                                                                    fontFamily: 'monospace',
+                                                                    cursor: 'pointer',
+                                                                    background: isSelected ? 'rgba(220,38,38,0.16)' : 'rgba(255,255,255,0.02)',
+                                                                    color: isSelected ? '#FCA5A5' : 'var(--muted)',
+                                                                }}
+                                                            >
+                                                                {serial.serial_code}
+                                                            </button>
+                                                        );
+                                                    })}
+                                                </div>
+                                            </div>
+                                        )}
+
+                                        {!item.loading_serials && item.available_serials.length === 0 && item.item_id && (
+                                            <input
+                                                type="text"
+                                                value={item.serial_number_value}
+                                                onChange={(e) => updateLineItem(index, 'serial_number_value', normalizeSerialInput(e.target.value))}
+                                                placeholder="Seriales (SN1,SN2,...)"
+                                                style={{ ...inputStyle, marginTop: '6px', fontSize: '11px', padding: '6px 8px' }}
+                                            />
                                         )}
                                     </div>
                                     <input type="number" min="1" step="1" value={item.quantity}

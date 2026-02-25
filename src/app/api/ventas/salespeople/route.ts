@@ -1,60 +1,58 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { createRouteHandlerClient } from '@supabase/auth-helpers-nextjs';
+import { cookies } from 'next/headers';
+import { deterministicUuidFromExternalId } from '@/lib/identifiers';
+import { getZohoAccessToken } from '@/lib/zoho/inventory-utils';
+import { fetchZohoSalespeople } from '@/lib/zoho/salespeople';
+
+export const dynamic = 'force-dynamic';
 
 // GET /api/ventas/salespeople — Fetch active users from Zoho Books
 export async function GET(req: NextRequest) {
     try {
+        const supabase = createRouteHandlerClient({ cookies });
+        const { data: { user } } = await supabase.auth.getUser();
+        if (!user) {
+            return NextResponse.json({ error: 'No autorizado' }, { status: 401 });
+        }
+
         const { searchParams } = new URL(req.url);
         const search = searchParams.get('search') || '';
 
-        // Get Zoho access token
-        const tokenRes = await fetch('https://accounts.zoho.com/oauth/v2/token', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-            body: new URLSearchParams({
-                refresh_token: process.env.ZOHO_BOOKS_REFRESH_TOKEN || '',
-                client_id: process.env.ZOHO_BOOKS_CLIENT_ID || '',
-                client_secret: process.env.ZOHO_BOOKS_CLIENT_SECRET || '',
-                grant_type: 'refresh_token',
-            }),
-        });
+        const organizationId = (process.env.ZOHO_BOOKS_ORGANIZATION_ID || '').trim();
+        if (!organizationId) {
+            return NextResponse.json({ error: 'Falta ZOHO_BOOKS_ORGANIZATION_ID' }, { status: 500 });
+        }
 
-        const tokenData = await tokenRes.json();
-        if (!tokenData.access_token) {
+        const auth: any = await getZohoAccessToken();
+        if (!auth || auth.error || !auth.accessToken || !auth.apiDomain) {
             return NextResponse.json({ error: 'No se pudo autenticar con Zoho' }, { status: 500 });
         }
 
-        const apiDomain = tokenData.api_domain || 'https://www.zohoapis.com';
-        const orgId = process.env.ZOHO_BOOKS_ORGANIZATION_ID || '';
-
-        // Fetch users from Zoho Books
-        const usersRes = await fetch(
-            `${apiDomain}/books/v3/users?organization_id=${orgId}`,
-            {
-                headers: { 'Authorization': `Zoho-oauthtoken ${tokenData.access_token}` },
-                cache: 'no-store',
-            }
+        const rows = await fetchZohoSalespeople(
+            { accessToken: auth.accessToken, apiDomain: auth.apiDomain },
+            organizationId
         );
 
-        const usersData = await usersRes.json();
-
-        if (usersData.code !== 0) {
-            return NextResponse.json({ error: usersData.message || 'Error al obtener usuarios' }, { status: 500 });
-        }
-
         // Filter active users only and apply search
-        let users = (usersData.users || [])
-            .filter((u: any) => u.status === 'active')
-            .map((u: any) => ({
-                id: u.user_id,
-                name: u.name,
-                email: u.email,
-                role: u.user_role,
-                photo_url: u.photo_url || null,
-            }));
+        let users = rows
+            .filter((u) => u.active)
+            .map((u) => {
+                const key = u.salespersonId || u.userId;
+                return {
+                    id: deterministicUuidFromExternalId('zoho_salesperson', String(key || '')),
+                    zoho_user_id: String(u.userId || u.salespersonId || ''),
+                    zoho_salesperson_id: String(u.salespersonId || ''),
+                    name: u.name,
+                    email: u.email || '',
+                    role: u.role || 'Salesperson',
+                    photo_url: null,
+                };
+            });
 
         if (search) {
             const s = search.toLowerCase();
-            users = users.filter((u: any) =>
+            users = users.filter((u) =>
                 u.name.toLowerCase().includes(s) || u.email.toLowerCase().includes(s)
             );
         }

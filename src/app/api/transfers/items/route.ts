@@ -1,6 +1,7 @@
 
 import { NextResponse } from 'next/server';
-import { createServerClient } from '@/lib/supabase/server';
+import { createRouteHandlerClient } from '@supabase/auth-helpers-nextjs';
+import { cookies } from 'next/headers';
 
 export const dynamic = 'force-dynamic';
 
@@ -9,6 +10,8 @@ const NO_STORE_HEADERS = {
     Pragma: 'no-cache',
     Expires: '0',
 };
+const SEARCH_ITEM_LIMIT = 500;
+const DEFAULT_ITEM_LIMIT = 120;
 
 function isMissingRelationError(error: any): boolean {
     return String(error?.code || '') === '42P01';
@@ -43,16 +46,22 @@ export async function GET(request: Request) {
             return NextResponse.json({ error: 'Warehouse ID required' }, { status: 400, headers: NO_STORE_HEADERS });
         }
 
-        const supabase = createServerClient();
+        const supabase = createRouteHandlerClient({ cookies });
+        const { data: { user } } = await supabase.auth.getUser();
+        if (!user) {
+            return NextResponse.json({ error: 'No autorizado' }, { status: 401, headers: NO_STORE_HEADERS });
+        }
 
         // 1) Buscar primero items por término (evita consultas gigantes con .in de miles de IDs).
         let itemQuery = supabase
             .from('items')
-            .select('id, name, sku, zoho_item_id')
-            .limit(120);
+            .select('id, name, sku, zoho_item_id, price')
+            .limit(DEFAULT_ITEM_LIMIT);
 
         if (search) {
-            itemQuery = itemQuery.or(`name.ilike.%${search}%,sku.ilike.%${search}%`);
+            itemQuery = itemQuery
+                .or(`name.ilike.%${search}%,sku.ilike.%${search}%`)
+                .limit(SEARCH_ITEM_LIMIT);
         } else {
             itemQuery = itemQuery.order('updated_at', { ascending: false });
         }
@@ -143,6 +152,7 @@ export async function GET(request: Request) {
                     zoho_item_id: item.zoho_item_id,
                     name: item.name,
                     sku: item.sku,
+                    unit_price: Number(item.price ?? 0),
                     current_stock: currentStock,
                 };
             })
