@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { createServerClient } from '@/lib/supabase/server';
+import { createRouteHandlerClient } from '@supabase/auth-helpers-nextjs';
+import { cookies } from 'next/headers';
+import { normalizeSalespersonId } from '@/lib/identifiers';
 
 // GET /api/ventas/invoices/[id] — Get invoice detail with items + customer
 export async function GET(
@@ -7,7 +9,11 @@ export async function GET(
     { params }: { params: { id: string } }
 ) {
     try {
-        const supabase = createServerClient();
+        const supabase = createRouteHandlerClient({ cookies });
+        const { data: { user } } = await supabase.auth.getUser();
+        if (!user) {
+            return NextResponse.json({ error: 'No autorizado' }, { status: 401 });
+        }
         const { id } = params;
 
         const { data: invoice, error } = await supabase
@@ -37,7 +43,11 @@ export async function PUT(
     { params }: { params: { id: string } }
 ) {
     try {
-        const supabase = createServerClient();
+        const supabase = createRouteHandlerClient({ cookies });
+        const { data: { user } } = await supabase.auth.getUser();
+        if (!user) {
+            return NextResponse.json({ error: 'No autorizado' }, { status: 401 });
+        }
         const { id } = params;
         const body = await req.json();
 
@@ -66,6 +76,7 @@ export async function PUT(
             discount_amount,
             payment_method,
             notes,
+            salesperson_id,
             items,
         } = body;
 
@@ -78,6 +89,7 @@ export async function PUT(
         if (discount_amount !== undefined) updateData.discount_amount = discount_amount;
         if (payment_method !== undefined) updateData.payment_method = payment_method || null;
         if (notes !== undefined) updateData.notes = notes || null;
+        if (salesperson_id !== undefined) updateData.salesperson_id = normalizeSalespersonId(salesperson_id);
 
         // Recalculate totals if items provided
         if (items && items.length > 0) {
@@ -138,7 +150,11 @@ export async function DELETE(
     { params }: { params: { id: string } }
 ) {
     try {
-        const supabase = createServerClient();
+        const supabase = createRouteHandlerClient({ cookies });
+        const { data: { user } } = await supabase.auth.getUser();
+        if (!user) {
+            return NextResponse.json({ error: 'No autorizado' }, { status: 401 });
+        }
         const { id } = params;
 
         // Verify it's a draft
