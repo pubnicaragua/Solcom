@@ -17,6 +17,7 @@ export default function InvoicePreview({ isOpen, invoiceId, onClose, onStatusCha
     const [invoice, setInvoice] = useState<any>(null);
     const [loading, setLoading] = useState(false);
     const [updatingStatus, setUpdatingStatus] = useState(false);
+    const [statusError, setStatusError] = useState<string | null>(null);
 
     useEffect(() => {
         if (isOpen && invoiceId) {
@@ -39,17 +40,24 @@ export default function InvoicePreview({ isOpen, invoiceId, onClose, onStatusCha
 
     const updateStatus = async (status: string) => {
         setUpdatingStatus(true);
+        setStatusError(null);
         try {
             const res = await fetch(`/api/ventas/invoices/${invoiceId}`, {
                 method: 'PUT',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ status }),
             });
-            if (res.ok) {
-                fetchInvoice();
-                onStatusChange();
+
+            const payload = await res.json().catch(() => ({}));
+            if (!res.ok) {
+                throw new Error(payload?.error || 'No se pudo actualizar el estado de la factura.');
             }
+
+            fetchInvoice();
+            onStatusChange();
         } catch (err) {
+            const message = err instanceof Error ? err.message : 'No se pudo actualizar el estado de la factura.';
+            setStatusError(message);
             console.error('Error updating status:', err);
         } finally {
             setUpdatingStatus(false);
@@ -255,6 +263,21 @@ export default function InvoicePreview({ isOpen, invoiceId, onClose, onStatusCha
                     </div>
                 ) : invoice ? (
                     <div style={{ padding: '24px' }}>
+                        {statusError && (
+                            <div style={{
+                                marginBottom: '16px',
+                                padding: '10px 12px',
+                                borderRadius: '10px',
+                                border: '1px solid rgba(239, 68, 68, 0.5)',
+                                background: 'rgba(127, 29, 29, 0.28)',
+                                color: '#FCA5A5',
+                                fontSize: '13px',
+                                fontWeight: 600,
+                            }}>
+                                {statusError}
+                            </div>
+                        )}
+
                         {/* Invoice header info */}
                         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '24px', marginBottom: '28px' }}>
                             {/* Customer */}

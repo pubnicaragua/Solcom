@@ -99,6 +99,7 @@ function isSerialTracked(detail: any): boolean {
 async function createZohoInvoiceFromPayload(params: {
     supabase: any;
     invoiceId: string;
+    invoiceNumber?: string | null;
     customerId: string | null;
     warehouseId: string | null | undefined;
     orderNumber: string | null | undefined;
@@ -116,6 +117,7 @@ async function createZohoInvoiceFromPayload(params: {
     const {
         supabase,
         invoiceId,
+        invoiceNumber,
         customerId,
         warehouseId,
         orderNumber,
@@ -358,7 +360,8 @@ async function createZohoInvoiceFromPayload(params: {
         line_items: zohoLineItems,
     };
     if (resolvedDueDate) basePayload.due_date = resolvedDueDate;
-    if (orderNumber && orderNumber.trim()) basePayload.reference_number = orderNumber.trim();
+    const normalizedReferenceNumber = (orderNumber && orderNumber.trim()) || (invoiceNumber && invoiceNumber.trim()) || '';
+    if (normalizedReferenceNumber) basePayload.reference_number = normalizedReferenceNumber;
     if (notes && notes.trim()) basePayload.notes = notes.trim();
     if (discountAmount > 0) {
         basePayload.discount = Number(discountAmount.toFixed(2));
@@ -670,6 +673,7 @@ export async function POST(req: NextRequest) {
                 zohoSync = await createZohoInvoiceFromPayload({
                     supabase,
                     invoiceId: invoice.id,
+                    invoiceNumber: invoice_number,
                     customerId: customer_id || null,
                     warehouseId: warehouse_id || null,
                     orderNumber: order_number || null,
