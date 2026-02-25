@@ -752,45 +752,6 @@ export default function ReportsPage() {
       </div>
 
       {/* SECCIÓN TOTALES */}
-      <div style={{ marginTop: 32 }}>
-        <Card style={{ background: 'linear-gradient(135deg, #10b981 0%, #059669 100%)', color: 'white' }}>
-          <div style={{ padding: 24 }}>
-            <h3 style={{ fontSize: 20, fontWeight: 700, marginBottom: 20, display: 'flex', alignItems: 'center', gap: 8 }}>
-              <TrendingUp size={24} />
-              Resumen Total del Inventario
-            </h3>
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: 20 }}>
-              <div style={{ textAlign: 'center' }}>
-                <div style={{ fontSize: 32, fontWeight: 700, marginBottom: 4 }}>
-                  {(stats?.totalProducts || 0).toLocaleString()}
-                </div>
-                <div style={{ fontSize: 14, opacity: 0.9 }}>Productos Únicos</div>
-              </div>
-              <div style={{ textAlign: 'center' }}>
-                <div style={{ fontSize: 32, fontWeight: 700, marginBottom: 4 }}>
-                  {(stats?.totalStock || 0).toLocaleString()}
-                </div>
-                <div style={{ fontSize: 14, opacity: 0.9 }}>Unidades Totales</div>
-              </div>
-              <div style={{ textAlign: 'center' }}>
-                <div style={{ fontSize: 32, fontWeight: 700, marginBottom: 4 }}>
-                  ${new Intl.NumberFormat('es-NI', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(stats?.totalValue || 0)}
-                </div>
-                <div style={{ fontSize: 14, opacity: 0.9 }}>Valor Estimado</div>
-              </div>
-              <div style={{ textAlign: 'center' }}>
-                <div style={{ fontSize: 32, fontWeight: 700, marginBottom: 4 }}>
-                  {stats?.activeWarehouses || 0}
-                </div>
-                <div style={{ fontSize: 14, opacity: 0.9 }}>Bodegas Activas</div>
-              </div>
-            </div>
-            <div style={{ marginTop: 20, paddingTop: 20, borderTop: '1px solid rgba(255,255,255,0.2)', fontSize: 12, opacity: 0.8, textAlign: 'center' }}>
-              Actualizado: {new Date().toLocaleString('es-NI')}
-            </div>
-          </div>
-        </Card>
-      </div>
 
       {/* WAREHOUSE CHARTS - loaded lazily */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(400px, 100%), 1fr))', gap: 14 }}>
