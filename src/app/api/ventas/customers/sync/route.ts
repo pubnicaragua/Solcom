@@ -41,6 +41,12 @@ function toNullableText(value: any): string | null {
   return text.length > 0 ? text : null;
 }
 
+function toCleanText(value: any): string | null {
+  const text = toNullableText(value);
+  if (!text) return null;
+  return text.replace(/\s+/g, ' ').trim();
+}
+
 function normalizeAddress(contact: any): string | null {
   const directBilling = typeof contact?.billing_address === 'string'
     ? toNullableText(contact.billing_address)
@@ -74,9 +80,19 @@ function buildCustomerPayload(contact: any, includeLastModified: boolean) {
   const zohoContactId = toNullableText(contact?.contact_id);
   if (!zohoContactId) return null;
 
+  const preferredName =
+    toCleanText(contact?.contact_name) ||
+    toCleanText(contact?.company_name) ||
+    toCleanText(contact?.first_name) ||
+    toCleanText(contact?.email) ||
+    toCleanText(contact?.phone) ||
+    toCleanText(contact?.mobile) ||
+    toCleanText(contact?.contact_number) ||
+    `Cliente ${zohoContactId}`;
+
   const payload: any = {
     zoho_contact_id: zohoContactId,
-    name: toNullableText(contact?.contact_name) || `Cliente ${zohoContactId}`,
+    name: preferredName,
     email: toNullableText(contact?.email),
     phone: toNullableText(contact?.phone) || toNullableText(contact?.mobile),
     ruc: toNullableText(contact?.contact_number),

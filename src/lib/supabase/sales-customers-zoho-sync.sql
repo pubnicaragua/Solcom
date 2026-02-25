@@ -26,3 +26,17 @@ CREATE UNIQUE INDEX IF NOT EXISTS idx_customers_zoho_contact_id_unique
 CREATE INDEX IF NOT EXISTS idx_customers_name ON customers(name);
 CREATE INDEX IF NOT EXISTS idx_customers_email ON customers(email);
 CREATE INDEX IF NOT EXISTS idx_customers_phone ON customers(phone);
+
+-- Backfill defensivo para evitar clientes "vacíos" en el dropdown:
+UPDATE customers
+SET name = COALESCE(
+  NULLIF(BTRIM(name), ''),
+  NULLIF(BTRIM(email), ''),
+  NULLIF(BTRIM(phone), ''),
+  NULLIF(BTRIM(ruc), ''),
+  CASE
+    WHEN zoho_contact_id IS NOT NULL THEN 'Cliente ' || zoho_contact_id
+    ELSE 'Cliente ' || id::text
+  END
+)
+WHERE name IS NULL OR BTRIM(name) = '';
