@@ -3,8 +3,14 @@ import { createServerClient } from '@/lib/supabase/server';
 
 export const dynamic = 'force-dynamic';
 
-export async function GET() {
+export async function GET(request: Request) {
     try {
+        const { searchParams } = new URL(request.url);
+        const category = searchParams.get('category') || '';
+        const marca = searchParams.get('marca') || '';
+        const state = searchParams.get('state') || '';
+        const color = searchParams.get('color') || '';
+
         const supabase = createServerClient();
 
         const { data: warehouses } = await supabase
@@ -26,11 +32,22 @@ export async function GET() {
                 let hasMore = true;
 
                 while (hasMore) {
-                    const { data: snapsPage, error: snapsErr } = await supabase
+                    let query = supabase
                         .from('stock_snapshots')
-                        .select('item_id, qty, items(price)')
+                        .select(
+                            category || marca || state || color
+                                ? 'item_id, qty, items!inner(price, category, marca, state, color)'
+                                : 'item_id, qty, items(price)'
+                        )
                         .eq('warehouse_id', wh.id)
-                        .gt('qty', 0)
+                        .gt('qty', 0);
+
+                    if (category) query = query.ilike('items.category', `%${category}%`);
+                    if (marca) query = query.eq('items.marca', marca);
+                    if (state) query = query.eq('items.state', state);
+                    if (color) query = query.ilike('items.color', `%${color}%`);
+
+                    const { data: snapsPage, error: snapsErr } = await query
                         .range(page * PAGE_SIZE, (page + 1) * PAGE_SIZE - 1);
 
                     if (snapsErr) {

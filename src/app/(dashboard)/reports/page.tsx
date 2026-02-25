@@ -81,7 +81,13 @@ export default function ReportsPage() {
         }
 
         setWarehouseLoading(true);
-        fetch('/api/reports/warehouses')
+        const whParams = new URLSearchParams();
+        if (globalFilters.category) whParams.set('category', globalFilters.category);
+        if (globalFilters.marca) whParams.set('marca', globalFilters.marca);
+        if (globalFilters.state) whParams.set('state', globalFilters.state);
+        if (globalFilters.color) whParams.set('color', globalFilters.color);
+
+        fetch(`/api/reports/warehouses?${whParams.toString()}`)
           .then(r => r.ok ? r.json() : null)
           .then(data => { if (!cancelled && data) setWarehouseData(data.warehouseBreakdown || []); })
           .catch(() => { })
@@ -128,9 +134,23 @@ export default function ReportsPage() {
   async function exportToPDF() {
     setExporting('pdf');
     try {
-      const freshData = await loadExportData();
+      const whParams = new URLSearchParams();
+      if (globalFilters.category) whParams.set('category', globalFilters.category);
+      if (globalFilters.marca) whParams.set('marca', globalFilters.marca);
+      if (globalFilters.state) whParams.set('state', globalFilters.state);
+      if (globalFilters.color) whParams.set('color', globalFilters.color);
+
+      const [freshData, whRes] = await Promise.all([
+        loadExportData(),
+        fetch(`/api/reports/warehouses?${whParams.toString()}`, { cache: 'no-store' })
+      ]);
+      const whDataJson = whRes.ok ? await whRes.json() : { warehouseBreakdown: [] };
+
       const exportStats = freshData?.stats || stats;
-      const exportAgingItems = (freshData?.aging?.items || agingData?.items || []) as any[];
+      const exportWarehouses = whDataJson.warehouseBreakdown || [];
+      const exportLowStock = freshData?.lowStockList || [];
+      const exportMoneyCats = freshData?.moneyMakerCategories || [];
+      const exportMoneyBrands = freshData?.moneyMakerBrands || [];
 
       const doc = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' });
       doc.setFillColor(220, 38, 38);
@@ -145,6 +165,7 @@ export default function ReportsPage() {
       doc.setFontSize(11);
       doc.text(`Período: Últimos ${period} días`, 14, 34);
 
+      // 1. Resumen General
       const summaryRows = [
         ['Total Productos', String(exportStats?.totalProducts || 0)],
         ['Total Stock', `${(exportStats?.totalStock || 0).toLocaleString('es-NI')} unidades`],
@@ -161,30 +182,189 @@ export default function ReportsPage() {
         theme: 'grid',
         styles: { fontSize: 9, cellPadding: 2.4 },
         headStyles: { fillColor: [31, 41, 55], textColor: 255 },
-        columnStyles: { 0: { cellWidth: 60 }, 1: { cellWidth: 90 } },
+        columnStyles: { 0: { cellWidth: 50 }, 1: { cellWidth: 70 } },
         margin: { left: 14 },
-        tableWidth: 150,
+        tableWidth: 120,
       });
 
-      const tableData = exportAgingItems.map((item: any) => [
-        item.sku || 'N/A',
-        item.name || 'N/A',
-        item.category || 'Sin categoría',
-        (item.stock_total || 0).toLocaleString('es-NI'),
-        `$${((item.stock_total || 0) * (item.price || 0)).toLocaleString('es-NI', { maximumFractionDigits: 2 })}`,
-        `${item.daysAgo || 0} días`,
-      ]);
+      let nextY = (doc as any).lastAutoTable.finalY + 12;
 
-      autoTable(doc, {
-        startY: 38,
-        head: [['SKU', 'Producto', 'Categoría', 'Stock', 'Valor', 'Días sin movimiento']],
-        body: tableData,
-        theme: 'striped',
-        styles: { fontSize: 8, cellPadding: 1.8 },
-        headStyles: { fillColor: [220, 38, 38], textColor: 255 },
-        alternateRowStyles: { fillColor: [248, 250, 252] },
-        margin: { left: 170, right: 12 },
-      });
+      // 1b. Existencias Generales: Categorías y Marcas
+      const catChartData = freshData?.charts?.categoryBreakdown || [];
+      const totalUnitsCats = catChartData.reduce((acc: number, c: any) => acc + (c.value || 0), 0);
+      const brandChartData = freshData?.charts?.brandBreakdown || [];
+      const totalUnitsBrands = brandChartData.reduce((acc: number, b: any) => acc + (b.value || 0), 0);
+
+      if (catChartData.length > 0) {
+        if (nextY > 170) { doc.addPage(); nextY = 20; }
+        doc.setFontSize(14);
+        doc.setTextColor(139, 92, 246); // purple
+        doc.text('Inventario por Categorías (Existencias Generales)', 14, nextY);
+
+        const catRowsPDF = catChartData.map((cat: any) => {
+          const percentageUnits = totalUnitsCats > 0 ? ((cat.value || 0) / totalUnitsCats) * 100 : 0;
+          return [cat.label, (cat.value || 0).toLocaleString('es-NI'), `${percentageUnits.toFixed(1)}%`];
+        });
+
+        autoTable(doc, {
+          startY: nextY + 4,
+          head: [['Categoría', 'Unidades Totales', '% del Inventario']],
+          body: catRowsPDF,
+          theme: 'striped',
+          styles: { fontSize: 8, cellPadding: 1.8 },
+          headStyles: { fillColor: [139, 92, 246], textColor: 255 },
+          alternateRowStyles: { fillColor: [248, 250, 252] },
+          margin: { left: 14, right: 14 },
+        });
+        nextY = (doc as any).lastAutoTable.finalY + 12;
+      }
+
+      if (brandChartData.length > 0) {
+        if (nextY > 170) { doc.addPage(); nextY = 20; }
+        doc.setFontSize(14);
+        doc.setTextColor(245, 158, 11); // orange
+        doc.text('Inventario por Marcas (Existencias Generales)', 14, nextY);
+
+        const brandRowsPDF = brandChartData.map((brand: any) => {
+          const percentageUnits = totalUnitsBrands > 0 ? ((brand.value || 0) / totalUnitsBrands) * 100 : 0;
+          return [brand.label, (brand.value || 0).toLocaleString('es-NI'), `${percentageUnits.toFixed(1)}%`];
+        });
+
+        autoTable(doc, {
+          startY: nextY + 4,
+          head: [['Marca', 'Unidades Totales', '% del Inventario']],
+          body: brandRowsPDF,
+          theme: 'striped',
+          styles: { fontSize: 8, cellPadding: 1.8 },
+          headStyles: { fillColor: [245, 158, 11], textColor: 255 },
+          alternateRowStyles: { fillColor: [248, 250, 252] },
+          margin: { left: 14, right: 14 },
+        });
+        nextY = (doc as any).lastAutoTable.finalY + 12;
+      }
+
+      // 2. Bodegas
+      if (exportWarehouses.length > 0) {
+        if (nextY > 170) { doc.addPage(); nextY = 20; }
+        doc.setFontSize(14);
+        doc.setTextColor(14, 165, 233); // #0ea5e9
+        doc.text('Inventario y Distribución por Almacén', 14, nextY);
+
+        const whRowsPDF = exportWarehouses.map((wh: any) => {
+          const totalUnitsAll = exportWarehouses.reduce((acc: number, w: any) => acc + (w.value || 0), 0);
+          const totalCapitalAll = exportWarehouses.reduce((acc: number, w: any) => acc + (w.capital || 0), 0);
+          const percentageUnits = totalUnitsAll > 0 ? ((wh.value || 0) / totalUnitsAll) * 100 : 0;
+          const percentageCapital = totalCapitalAll > 0 ? ((wh.capital || 0) / totalCapitalAll) * 100 : 0;
+          return [
+            wh.label || wh.code,
+            (wh.value || 0).toLocaleString('es-NI'),
+            `${percentageUnits.toFixed(1)}%`,
+            `$${(wh.capital || 0).toLocaleString('es-NI', { maximumFractionDigits: 2 })}`,
+            `${percentageCapital.toFixed(1)}%`
+          ];
+        });
+
+        autoTable(doc, {
+          startY: nextY + 4,
+          head: [['Bodega/Almacén', 'Unidades Totales', '% de Unidades', 'Capital Invertido', '% del Capital']],
+          body: whRowsPDF,
+          theme: 'striped',
+          styles: { fontSize: 8, cellPadding: 1.8 },
+          headStyles: { fillColor: [14, 165, 233], textColor: 255 },
+          alternateRowStyles: { fillColor: [248, 250, 252] },
+          margin: { left: 14, right: 14 },
+        });
+        nextY = (doc as any).lastAutoTable.finalY + 12;
+      }
+
+      // 3. Alertas Quiebre Stock
+      if (exportLowStock.length > 0) {
+        if (nextY > 170) { doc.addPage(); nextY = 20; }
+        doc.setFontSize(14);
+        doc.setTextColor(245, 158, 11); // #f59e0b
+        doc.text('Alerta Crítica: Quiebre de Stock', 14, nextY);
+
+        const alertRowsPDF = exportLowStock.map((item: any) => [
+          item.stock_total <= 3 ? 'Crítico' : 'Bajo',
+          item.sku || '',
+          item.name || '',
+          item.marca || '—',
+          String(item.stock_total || 0)
+        ]);
+
+        autoTable(doc, {
+          startY: nextY + 4,
+          head: [['Estado', 'SKU', 'Producto', 'Marca', 'Stock Actual']],
+          body: alertRowsPDF,
+          theme: 'striped',
+          styles: { fontSize: 8, cellPadding: 1.8 },
+          headStyles: { fillColor: [245, 158, 11], textColor: 255 },
+          alternateRowStyles: { fillColor: [248, 250, 252] },
+          margin: { left: 14, right: 14 },
+        });
+        nextY = (doc as any).lastAutoTable.finalY + 12;
+      }
+
+      // 4. Money Maker Categorías
+      if (exportMoneyCats.length > 0) {
+        if (nextY > 170) { doc.addPage(); nextY = 20; }
+        doc.setFontSize(14);
+        doc.setTextColor(139, 92, 246); // #8b5cf6
+        doc.text('El "Money Maker" de Categorías', 14, nextY);
+
+        const catRowsPDF = exportMoneyCats.map((cat: any) => {
+          const avgTicket = cat.stock > 0 ? (cat.capital / cat.stock) : 0;
+          return [
+            cat.label,
+            String(cat.uniqueSkus || 0),
+            (cat.stock || 0).toLocaleString('es-NI'),
+            `$${(cat.capital || 0).toLocaleString('es-NI', { maximumFractionDigits: 2 })}`,
+            `$${avgTicket.toLocaleString('es-NI', { maximumFractionDigits: 2 })}`
+          ];
+        });
+
+        autoTable(doc, {
+          startY: nextY + 4,
+          head: [['Categoría', 'SKUs Diferentes', 'Stock Físico (Unids)', 'Capital Invertido', 'Ticket Promedio']],
+          body: catRowsPDF,
+          theme: 'striped',
+          styles: { fontSize: 8, cellPadding: 1.8 },
+          headStyles: { fillColor: [139, 92, 246], textColor: 255 },
+          alternateRowStyles: { fillColor: [248, 250, 252] },
+          margin: { left: 14, right: 14 },
+        });
+        nextY = (doc as any).lastAutoTable.finalY + 12;
+      }
+
+      // 5. Money Maker Marcas
+      if (exportMoneyBrands.length > 0) {
+        if (nextY > 170) { doc.addPage(); nextY = 20; }
+        doc.setFontSize(14);
+        doc.setTextColor(245, 158, 11); // #f59e0b
+        doc.text('El "Money Maker" de Marcas', 14, nextY);
+
+        const brandRowsPDF = exportMoneyBrands.map((brand: any) => {
+          const avgTicket = brand.stock > 0 ? (brand.capital / brand.stock) : 0;
+          return [
+            brand.label,
+            String(brand.uniqueSkus || 0),
+            (brand.stock || 0).toLocaleString('es-NI'),
+            `$${(brand.capital || 0).toLocaleString('es-NI', { maximumFractionDigits: 2 })}`,
+            `$${avgTicket.toLocaleString('es-NI', { maximumFractionDigits: 2 })}`
+          ];
+        });
+
+        autoTable(doc, {
+          startY: nextY + 4,
+          head: [['Marca', 'SKUs Diferentes', 'Stock Físico (Unids)', 'Capital Invertido', 'Ticket Promedio']],
+          body: brandRowsPDF,
+          theme: 'striped',
+          styles: { fontSize: 8, cellPadding: 1.8 },
+          headStyles: { fillColor: [245, 158, 11], textColor: 255 },
+          alternateRowStyles: { fillColor: [248, 250, 252] },
+          margin: { left: 14, right: 14 },
+        });
+      }
 
       doc.save(`reporte_inventario_${new Date().toISOString().split('T')[0]}.pdf`);
     } catch (err: any) {
@@ -197,22 +377,97 @@ export default function ReportsPage() {
   async function exportToExcel() {
     setExporting('excel');
     try {
-      const freshData = await loadExportData();
-      const exportStats = freshData?.stats || stats;
-      const exportAgingItems = (freshData?.aging?.items || agingData?.items || []) as any[];
+      const whParams = new URLSearchParams();
+      if (globalFilters.category) whParams.set('category', globalFilters.category);
+      if (globalFilters.marca) whParams.set('marca', globalFilters.marca);
+      if (globalFilters.state) whParams.set('state', globalFilters.state);
+      if (globalFilters.color) whParams.set('color', globalFilters.color);
 
-      const tableRows = exportAgingItems
-        .map((item) => `
-          <tr>
-            <td>${item.sku || ''}</td>
-            <td>${item.name || ''}</td>
-            <td>${item.category || 'Sin categoría'}</td>
-            <td style="text-align:right">${(item.stock_total || 0).toLocaleString('es-NI')}</td>
-            <td style="text-align:right">${((item.stock_total || 0) * (item.price || 0)).toLocaleString('es-NI', { maximumFractionDigits: 2 })}</td>
-            <td style="text-align:center">${item.daysAgo || 0}</td>
-          </tr>
-        `)
-        .join('');
+      const [freshData, whRes] = await Promise.all([
+        loadExportData(),
+        fetch(`/api/reports/warehouses?${whParams.toString()}`, { cache: 'no-store' })
+      ]);
+      const whDataJson = whRes.ok ? await whRes.json() : { warehouseBreakdown: [] };
+
+      const exportStats = freshData?.stats || stats;
+      const exportWarehouses = whDataJson.warehouseBreakdown || [];
+      const exportLowStock = freshData?.lowStockList || [];
+      const exportMoneyCats = freshData?.moneyMakerCategories || [];
+      const exportMoneyBrands = freshData?.moneyMakerBrands || [];
+
+      // 1. Inventario por Bodegas (Unids y %) - Covers Bar and Pie chart
+      const whRows = exportWarehouses.map((wh: any) => {
+        const totalUnitsAll = exportWarehouses.reduce((acc: number, w: any) => acc + (w.value || 0), 0);
+        const totalCapitalAll = exportWarehouses.reduce((acc: number, w: any) => acc + (w.capital || 0), 0);
+        const percentageUnits = totalUnitsAll > 0 ? ((wh.value || 0) / totalUnitsAll) * 100 : 0;
+        const percentageCapital = totalCapitalAll > 0 ? ((wh.capital || 0) / totalCapitalAll) * 100 : 0;
+        return `<tr>
+          <td>${wh.label || wh.code}</td>
+          <td style="text-align:right">${(wh.value || 0).toLocaleString('es-NI')}</td>
+          <td style="text-align:center">${percentageUnits.toFixed(1)}%</td>
+          <td style="text-align:right">${(wh.capital || 0).toLocaleString('es-NI', { maximumFractionDigits: 2 })}</td>
+          <td style="text-align:center">${percentageCapital.toFixed(1)}%</td>
+        </tr>`;
+      }).join('');
+
+      // 1b. Existencias Generales: Inventario por Categorías (Unids y %) - Covers Bar and Pie chart
+      const catChartData = freshData?.charts?.categoryBreakdown || [];
+      const totalUnitsCats = catChartData.reduce((acc: number, c: any) => acc + (c.value || 0), 0);
+      const catRows = catChartData.map((cat: any) => {
+        const percentageUnits = totalUnitsCats > 0 ? ((cat.value || 0) / totalUnitsCats) * 100 : 0;
+        return `<tr>
+          <td>${cat.label}</td>
+          <td style="text-align:right">${(cat.value || 0).toLocaleString('es-NI')}</td>
+          <td style="text-align:center">${percentageUnits.toFixed(1)}%</td>
+        </tr>`;
+      }).join('');
+
+      // 1c. Existencias Generales: Inventario por Marca (Unids y %) - Covers Bar and Pie chart
+      const brandChartData = freshData?.charts?.brandBreakdown || [];
+      const totalUnitsBrands = brandChartData.reduce((acc: number, b: any) => acc + (b.value || 0), 0);
+      const brandRows = brandChartData.map((brand: any) => {
+        const percentageUnits = totalUnitsBrands > 0 ? ((brand.value || 0) / totalUnitsBrands) * 100 : 0;
+        return `<tr>
+          <td>${brand.label}</td>
+          <td style="text-align:right">${(brand.value || 0).toLocaleString('es-NI')}</td>
+          <td style="text-align:center">${percentageUnits.toFixed(1)}%</td>
+        </tr>`;
+      }).join('');
+
+      // 2. Alertas
+      const alertRows = exportLowStock.map((item: any) => `
+        <tr>
+          <td style="text-align:center">${item.stock_total <= 3 ? 'Critico' : 'Bajo'}</td>
+          <td style="mso-number-format:'\\@'">${item.sku || ''}</td>
+          <td>${item.name || ''}</td>
+          <td>${item.marca || '—'}</td>
+          <td style="text-align:right;color:#ef4444;font-weight:bold">${item.stock_total || 0}</td>
+        </tr>
+      `).join('');
+
+      // 3. Money Maker Categorías
+      const mmCatsRows = exportMoneyCats.map((cat: any) => {
+        const avgTicket = cat.stock > 0 ? (cat.capital / cat.stock) : 0;
+        return `<tr>
+          <td>${cat.label}</td>
+          <td style="text-align:center">${cat.uniqueSkus || 0}</td>
+          <td style="text-align:right">${(cat.stock || 0).toLocaleString('es-NI')}</td>
+          <td style="text-align:right">${(cat.capital || 0).toLocaleString('es-NI', { maximumFractionDigits: 2 })}</td>
+          <td style="text-align:right">${avgTicket.toLocaleString('es-NI', { maximumFractionDigits: 2 })}</td>
+        </tr>`;
+      }).join('');
+
+      // 4. Money Maker Marcas
+      const mmBrandsRows = exportMoneyBrands.map((brand: any) => {
+        const avgTicket = brand.stock > 0 ? (brand.capital / brand.stock) : 0;
+        return `<tr>
+          <td>${brand.label}</td>
+          <td style="text-align:center">${brand.uniqueSkus || 0}</td>
+          <td style="text-align:right">${(brand.stock || 0).toLocaleString('es-NI')}</td>
+          <td style="text-align:right">${(brand.capital || 0).toLocaleString('es-NI', { maximumFractionDigits: 2 })}</td>
+          <td style="text-align:right">${avgTicket.toLocaleString('es-NI', { maximumFractionDigits: 2 })}</td>
+        </tr>`;
+      }).join('');
 
       const excelHtml = `
         <html>
@@ -220,37 +475,73 @@ export default function ReportsPage() {
             <meta charset="UTF-8" />
             <style>
               body { font-family: Arial, sans-serif; }
-              h1 { color: #dc2626; margin: 0 0 8px 0; }
+              h1, h2 { color: #dc2626; margin: 16px 0 8px 0; }
               .meta { color: #475569; margin-bottom: 12px; font-size: 12px; }
               .summary { margin-bottom: 12px; border-collapse: collapse; }
               .summary td { border: 1px solid #cbd5e1; padding: 6px 8px; font-size: 12px; }
-              table { border-collapse: collapse; width: 100%; }
+              table { border-collapse: collapse; width: 100%; margin-bottom: 24px; }
               th, td { border: 1px solid #cbd5e1; padding: 6px 8px; font-size: 12px; }
               th { background: #dc2626; color: #fff; text-align: left; }
+              h2.blue { color: #0ea5e9; } th.blue { background: #0ea5e9; }
+              h2.orange { color: #f59e0b; } th.orange { background: #f59e0b; }
+              h2.purple { color: #8b5cf6; } th.purple { background: #8b5cf6; }
               tr:nth-child(even) td { background: #f8fafc; }
             </style>
           </head>
           <body>
-            <h1>SOLCOM · Reporte de Inventario</h1>
+            <h1>SOLCOM · Reporte Ejecutivo de Inventario</h1>
             <div class="meta">Generado: ${new Date().toLocaleString('es-NI')} · Período: últimos ${period} días</div>
             <table class="summary">
               <tr><td><strong>Total Productos</strong></td><td>${exportStats?.totalProducts || 0}</td><td><strong>Total Stock</strong></td><td>${(exportStats?.totalStock || 0).toLocaleString('es-NI')}</td></tr>
               <tr><td><strong>Valor Estimado</strong></td><td>${(exportStats?.totalValue || 0).toLocaleString('es-NI', { maximumFractionDigits: 2 })}</td><td><strong>Stock Bajo</strong></td><td>${exportStats?.lowStockItems || 0}</td></tr>
             </table>
+
+            <h2 class="blue">Inventario y Distribución por Almacén</h2>
             <table>
               <thead>
-                <tr>
-                  <th>SKU</th>
-                  <th>Producto</th>
-                  <th>Categoría</th>
-                  <th>Stock</th>
-                  <th>Valor</th>
-                  <th>Días sin movimiento</th>
-                </tr>
+                <tr><th class="blue">Bodega/Almacén</th><th class="blue">Unidades Totales</th><th class="blue">% de Unidades</th><th class="blue">Capital Invertido</th><th class="blue">% del Capital</th></tr>
               </thead>
-              <tbody>
-                ${tableRows}
-              </tbody>
+              <tbody>${whRows}</tbody>
+            </table>
+
+            <h2 class="purple">Inventario por Categorías (Existencias Generales)</h2>
+            <table>
+              <thead>
+                <tr><th class="purple">Categoría</th><th class="purple">Unidades Totales</th><th class="purple">% del Inventario</th></tr>
+              </thead>
+              <tbody>${catRows}</tbody>
+            </table>
+
+            <h2 class="orange">Inventario por Marca (Existencias Generales)</h2>
+            <table>
+              <thead>
+                <tr><th class="orange">Marca</th><th class="orange">Unidades Totales</th><th class="orange">% del Inventario</th></tr>
+              </thead>
+              <tbody>${brandRows}</tbody>
+            </table>
+
+            <h2 class="orange">Alerta Crítica: Quiebre de Stock</h2>
+            <table>
+              <thead>
+                <tr><th class="orange">Estado</th><th class="orange">SKU</th><th class="orange">Producto</th><th class="orange">Marca</th><th class="orange">Stock Actual</th></tr>
+              </thead>
+              <tbody>${alertRows}</tbody>
+            </table>
+
+            <h2 class="purple">El "Money Maker" de Categorías</h2>
+            <table>
+              <thead>
+                <tr><th class="purple">Categoría</th><th class="purple">SKUs Diferentes</th><th class="purple">Stock Físico (Unids)</th><th class="purple">Capital Invertido</th><th class="purple">Ticket Promedio</th></tr>
+              </thead>
+              <tbody>${mmCatsRows}</tbody>
+            </table>
+
+            <h2 class="orange">El "Money Maker" de Marcas</h2>
+            <table>
+              <thead>
+                <tr><th class="orange">Marca</th><th class="orange">SKUs Diferentes</th><th class="orange">Stock Físico (Unids)</th><th class="orange">Capital Invertido</th><th class="orange">Ticket Promedio</th></tr>
+              </thead>
+              <tbody>${mmBrandsRows}</tbody>
             </table>
           </body>
         </html>
@@ -522,7 +813,7 @@ export default function ReportsPage() {
                           <div style={{ display: 'flex', alignItems: 'center', gap: 8, justifyContent: 'flex-end' }}>
                             <div style={{ fontSize: 12 }}>{percentage.toFixed(1)}%</div>
                             <div style={{ width: 60, height: 6, background: 'var(--border)', borderRadius: 3, overflow: 'hidden' }}>
-                              <div style={{ width: `${percentage}%`, height: '100%', background: '#0ea5e9' }} />
+                              <div style={{ width: `${percentage}% `, height: '100%', background: '#0ea5e9' }} />
                             </div>
                           </div>
                         </td>
@@ -567,7 +858,7 @@ export default function ReportsPage() {
                     return (
                       <tr key={item.id} style={{ borderBottom: '1px solid var(--border)', background: idx % 2 === 0 ? 'transparent' : 'var(--panel)' }}>
                         <td style={{ padding: '8px 12px', textAlign: 'center', width: 40 }}>
-                          <div style={{ width: 10, height: 10, borderRadius: '50%', background: isCritical ? '#ef4444' : '#f59e0b', margin: '0 auto', boxShadow: `0 0 8px ${isCritical ? '#ef4444' : '#f59e0b'}` }} title={isCritical ? 'Estado Crítico (<= 3)' : 'Bajo Stock (< 10)'} />
+                          <div style={{ width: 10, height: 10, borderRadius: '50%', background: isCritical ? '#ef4444' : '#f59e0b', margin: '0 auto', boxShadow: `0 0 8px ${isCritical ? '#ef4444' : '#f59e0b'} ` }} title={isCritical ? 'Estado Crítico (<= 3)' : 'Bajo Stock (< 10)'} />
                         </td>
                         <td style={{ padding: '8px 12px', fontFamily: 'monospace', fontSize: 12 }}>{item.sku}</td>
                         <td style={{ padding: '8px 12px', maxWidth: 220, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{item.name}</td>
@@ -681,7 +972,7 @@ export default function ReportsPage() {
         </div>
       </Card>
 
-      
+
 
       {/* SECCIÓN 2: EXISTENCIAS GENERALES */}
       <div style={{ background: 'linear-gradient(135deg, #dc2626 0%, #991b1b 100%)', padding: '12px 20px', borderRadius: 8 }}>
@@ -709,9 +1000,9 @@ export default function ReportsPage() {
             const data = charts?.brandBreakdown;
             const total = data?.reduce((sum: number, d: any) => sum + d.value, 0) || 0;
             return data && data.length > 0 ? (
-              <HorizontalBarChart 
-                data={data.map((d: any, i: number) => ({ ...d, color: generateColors(data.length)[i] }))} 
-                height={300} 
+              <HorizontalBarChart
+                data={data.map((d: any, i: number) => ({ ...d, color: generateColors(data.length)[i] }))}
+                height={300}
                 showValues={true}
                 showPercentage={true}
                 totalValue={total}
