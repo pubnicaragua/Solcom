@@ -1,10 +1,15 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { createServerClient } from '@/lib/supabase/server';
+import { createRouteHandlerClient } from '@supabase/auth-helpers-nextjs';
+import { cookies } from 'next/headers';
 
 // GET /api/ventas/cancellation-reasons — List active reasons
 export async function GET() {
     try {
-        const supabase = createServerClient();
+        const supabase = createRouteHandlerClient({ cookies });
+        const { data: { user } } = await supabase.auth.getUser();
+        if (!user) {
+            return NextResponse.json({ error: 'No autorizado' }, { status: 401 });
+        }
 
         const { data, error } = await (supabase as any)
             .from('cancellation_reasons')
@@ -13,7 +18,10 @@ export async function GET() {
             .order('sort_order', { ascending: true });
 
         if (error) {
-            // Fallback local if table doesn't exist yet
+            // Fallback local only if table does not exist yet.
+            if (String(error.code || '') !== '42P01') {
+                return NextResponse.json({ error: error.message }, { status: 500 });
+            }
             return NextResponse.json({
                 reasons: [
                     { id: 'local-1', label: 'Error en datos del cliente', sort_order: 1 },
@@ -35,7 +43,11 @@ export async function GET() {
 // POST /api/ventas/cancellation-reasons — Create a new reason
 export async function POST(req: NextRequest) {
     try {
-        const supabase = createServerClient();
+        const supabase = createRouteHandlerClient({ cookies });
+        const { data: { user } } = await supabase.auth.getUser();
+        if (!user) {
+            return NextResponse.json({ error: 'No autorizado' }, { status: 401 });
+        }
         const body = await req.json();
         const { label } = body;
 

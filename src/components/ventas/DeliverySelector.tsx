@@ -23,6 +23,7 @@ export default function DeliverySelector({ value, onChange }: DeliverySelectorPr
     const [newName, setNewName] = useState('');
     const [newPhone, setNewPhone] = useState('');
     const [creating, setCreating] = useState(false);
+    const [createError, setCreateError] = useState('');
     const [selectedDelivery, setSelectedDelivery] = useState<Delivery | null>(null);
     const [highlightIndex, setHighlightIndex] = useState(-1);
 
@@ -58,6 +59,9 @@ export default function DeliverySelector({ value, onChange }: DeliverySelectorPr
         try {
             const res = await fetch('/api/ventas/deliveries');
             const data = await res.json();
+            if (!res.ok) {
+                throw new Error(data?.error || 'No se pudieron cargar los deliveries');
+            }
             setDeliveries(data.deliveries || []);
         } catch (err) {
             console.error('Error fetching deliveries:', err);
@@ -80,6 +84,7 @@ export default function DeliverySelector({ value, onChange }: DeliverySelectorPr
     const handleCreate = async () => {
         if (!newName.trim()) return;
         setCreating(true);
+        setCreateError('');
         try {
             const res = await fetch('/api/ventas/deliveries', {
                 method: 'POST',
@@ -87,6 +92,9 @@ export default function DeliverySelector({ value, onChange }: DeliverySelectorPr
                 body: JSON.stringify({ name: newName.trim(), phone: newPhone.trim() || null }),
             });
             const data = await res.json();
+            if (!res.ok) {
+                throw new Error(data?.error || 'No se pudo crear el delivery');
+            }
             if (data.delivery) {
                 await fetchDeliveries();
                 handleSelect(data.delivery);
@@ -96,6 +104,7 @@ export default function DeliverySelector({ value, onChange }: DeliverySelectorPr
             }
         } catch (err) {
             console.error('Error creating delivery:', err);
+            setCreateError(err instanceof Error ? err.message : 'No se pudo crear el delivery');
         } finally {
             setCreating(false);
         }
@@ -299,6 +308,19 @@ export default function DeliverySelector({ value, onChange }: DeliverySelectorPr
                             <div style={{ fontSize: '12px', fontWeight: 700, color: 'var(--muted)', marginBottom: '10px', textTransform: 'uppercase' }}>
                                 Nuevo Delivery
                             </div>
+                            {createError && (
+                                <div style={{
+                                    marginBottom: '10px',
+                                    padding: '8px 10px',
+                                    borderRadius: '6px',
+                                    fontSize: '12px',
+                                    color: '#F87171',
+                                    border: '1px solid rgba(248,113,113,0.35)',
+                                    background: 'rgba(239,68,68,0.08)',
+                                }}>
+                                    {createError}
+                                </div>
+                            )}
                             <div style={{ display: 'flex', gap: '8px', marginBottom: '10px' }}>
                                 <div style={{ position: 'relative', flex: 1 }}>
                                     <User size={12} style={{ position: 'absolute', left: '10px', top: '11px', color: 'var(--muted)' }} />

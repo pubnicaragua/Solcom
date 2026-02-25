@@ -1,10 +1,15 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { createServerClient } from '@/lib/supabase/server';
+import { createRouteHandlerClient } from '@supabase/auth-helpers-nextjs';
+import { cookies } from 'next/headers';
 
 // GET /api/ventas/deliveries — List deliveries with optional search
 export async function GET(req: NextRequest) {
     try {
-        const supabase = createServerClient();
+        const supabase = createRouteHandlerClient({ cookies });
+        const { data: { user } } = await supabase.auth.getUser();
+        if (!user) {
+            return NextResponse.json({ error: 'No autorizado' }, { status: 401 });
+        }
         const { searchParams } = new URL(req.url);
         const search = searchParams.get('search') || '';
 
@@ -33,7 +38,11 @@ export async function GET(req: NextRequest) {
 // POST /api/ventas/deliveries — Create a new delivery
 export async function POST(req: NextRequest) {
     try {
-        const supabase = createServerClient();
+        const supabase = createRouteHandlerClient({ cookies });
+        const { data: { user } } = await supabase.auth.getUser();
+        if (!user) {
+            return NextResponse.json({ error: 'No autorizado' }, { status: 401 });
+        }
         const body = await req.json();
         const { name, phone } = body;
 
