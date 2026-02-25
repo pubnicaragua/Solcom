@@ -1,133 +1,90 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { createServerClient } from '@/lib/supabase/server';
+import { createRouteHandlerClient } from '@supabase/auth-helpers-nextjs';
+import { cookies } from 'next/headers';
 
-// GET /api/ventas/customers — Search customers from Zoho Contacts + Supabase
+const CUSTOMER_SEARCH_SELECT = 'id, name, email, phone, ruc, zoho_contact_id';
+const CUSTOMER_SEARCH_FALLBACK_SELECT = 'id, name, email, phone, ruc';
+
+function toCustomerResponse(customer: any) {
+    return {
+        id: customer.id,
+        name: customer.name,
+        email: customer.email || '',
+        phone: customer.phone || '',
+        ruc: customer.ruc || '',
+        payment_terms: '',
+        source: customer.zoho_contact_id ? ('zoho' as const) : ('supabase' as const),
+    };
+}
+
+async function fetchSupabaseCustomers(supabase: any, search: string) {
+    const applySearch = (query: any) => {
+        if (!search) return query;
+        return query.or(`name.ilike.%${search}%,email.ilike.%${search}%,ruc.ilike.%${search}%,phone.ilike.%${search}%`);
+    };
+
+    let query = supabase
+        .from('customers')
+        .select(CUSTOMER_SEARCH_SELECT)
+        .order('name', { ascending: true })
+        .limit(25);
+    query = applySearch(query);
+
+    const firstTry = await query;
+
+    if (firstTry.error) {
+        const missingZohoColumn = String(firstTry.error.message || '').includes('zoho_contact_id');
+        if (!missingZohoColumn) {
+            throw firstTry.error;
+        }
+
+        let fallbackQuery = supabase
+            .from('customers')
+            .select(CUSTOMER_SEARCH_FALLBACK_SELECT)
+            .order('name', { ascending: true })
+            .limit(25);
+        fallbackQuery = applySearch(fallbackQuery);
+
+        const fallback = await fallbackQuery;
+        if (fallback.error) throw fallback.error;
+
+        return (fallback.data || []).map((c: any) => ({
+            ...c,
+            zoho_contact_id: null,
+        }));
+    }
+
+    return firstTry.data || [];
+}
+
+// GET /api/ventas/customers — Search customers from local Supabase
 export async function GET(req: NextRequest) {
     try {
+        const supabase = createRouteHandlerClient({ cookies });
+        const { data: { user } } = await supabase.auth.getUser();
+        if (!user) {
+            return NextResponse.json({ error: 'No autorizado' }, { status: 401 });
+        }
+
         const { searchParams } = new URL(req.url);
-        const search = searchParams.get('search') || '';
-
-        // Fetch from both sources in parallel
-        const [zohoCustomers, supabaseCustomers] = await Promise.all([
-            fetchZohoContacts(search),
-            fetchSupabaseCustomers(search),
-        ]);
-
-        // Merge: Zoho first, then Supabase (deduplicated by name+phone)
-        const seen = new Set<string>();
-        const merged: any[] = [];
-
-        for (const c of zohoCustomers) {
-            const key = `${c.name.toLowerCase()}-${c.phone || ''}`;
-            if (!seen.has(key)) {
-                seen.add(key);
-                merged.push(c);
-            }
-        }
-
-        for (const c of supabaseCustomers) {
-            const key = `${c.name.toLowerCase()}-${c.phone || ''}`;
-            if (!seen.has(key)) {
-                seen.add(key);
-                merged.push(c);
-            }
-        }
-
-        return NextResponse.json({ customers: merged });
+        const search = (searchParams.get('search') || '').trim();
+        const customers = await fetchSupabaseCustomers(supabase, search);
+        return NextResponse.json({ customers: customers.map(toCustomerResponse) });
     } catch (error: any) {
         console.error('Customers API error:', error);
         return NextResponse.json({ error: error.message }, { status: 500 });
     }
 }
 
-// Fetch from Zoho Inventory contacts
-async function fetchZohoContacts(search: string) {
-    try {
-        const tokenRes = await fetch('https://accounts.zoho.com/oauth/v2/token', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-            body: new URLSearchParams({
-                refresh_token: process.env.ZOHO_BOOKS_REFRESH_TOKEN || '',
-                client_id: process.env.ZOHO_BOOKS_CLIENT_ID || '',
-                client_secret: process.env.ZOHO_BOOKS_CLIENT_SECRET || '',
-                grant_type: 'refresh_token',
-            }),
-        });
-
-        const tokenData = await tokenRes.json();
-        if (!tokenData.access_token) return [];
-
-        const apiDomain = tokenData.api_domain || 'https://www.zohoapis.com';
-        const orgId = process.env.ZOHO_BOOKS_ORGANIZATION_ID || '';
-
-        // Build search param: Zoho supports contact_name_contains for search
-        let url = `${apiDomain}/inventory/v1/contacts?organization_id=${orgId}&contact_type=customer&per_page=25&status=active`;
-        if (search) {
-            url += `&contact_name_contains=${encodeURIComponent(search)}`;
-        }
-
-        const res = await fetch(url, {
-            headers: { 'Authorization': `Zoho-oauthtoken ${tokenData.access_token}` },
-            cache: 'no-store',
-        });
-
-        const data = await res.json();
-
-        if (data.code !== 0) return [];
-
-        return (data.contacts || []).map((c: any) => ({
-            id: c.contact_id,
-            name: c.contact_name || '',
-            email: c.email || '',
-            phone: c.phone || c.mobile || '',
-            ruc: c.contact_number || '',
-            payment_terms: c.payment_terms_label || '',
-            source: 'zoho' as const,
-        }));
-    } catch (err) {
-        console.error('Zoho contacts fetch error:', err);
-        return [];
-    }
-}
-
-// Fetch from Supabase customers table
-async function fetchSupabaseCustomers(search: string) {
-    try {
-        const supabase = createServerClient();
-
-        let query = supabase
-            .from('customers')
-            .select('*')
-            .order('name', { ascending: true })
-            .limit(25);
-
-        if (search) {
-            query = query.or(`name.ilike.%${search}%,email.ilike.%${search}%,ruc.ilike.%${search}%,phone.ilike.%${search}%`);
-        }
-
-        const { data, error } = await query;
-
-        if (error) return [];
-
-        return (data || []).map((c: any) => ({
-            id: c.id,
-            name: c.name,
-            email: c.email || '',
-            phone: c.phone || '',
-            ruc: c.ruc || '',
-            payment_terms: '',
-            source: 'supabase' as const,
-        }));
-    } catch (err) {
-        console.error('Supabase customers fetch error:', err);
-        return [];
-    }
-}
-
 // POST /api/ventas/customers — Create a new customer in Supabase
 export async function POST(req: NextRequest) {
     try {
-        const supabase = createServerClient();
+        const supabase = createRouteHandlerClient({ cookies });
+        const { data: { user } } = await supabase.auth.getUser();
+        if (!user) {
+            return NextResponse.json({ error: 'No autorizado' }, { status: 401 });
+        }
+
         const body = await req.json();
 
         const { name, email, phone, ruc, address, notes } = body;

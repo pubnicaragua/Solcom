@@ -162,12 +162,21 @@ export default function InvoiceForm({ isOpen, onClose, onSaved, editInvoice }: I
     }, []);
 
     const fetchCustomers = async (searchText: string = '') => {
+        const customerFetchError = 'No se pudieron cargar clientes. Verifica sesión/permisos e intenta de nuevo.';
         try {
             const res = await fetch(`/api/ventas/customers${searchText ? `?search=${encodeURIComponent(searchText)}` : ''}`);
             const data = await res.json();
+            if (!res.ok) {
+                throw new Error(data?.error || 'No se pudieron cargar clientes');
+            }
             setCustomers(data.customers || []);
+            if (error === customerFetchError) {
+                setError('');
+            }
         } catch (err) {
             console.error('Error fetching customers:', err);
+            setCustomers([]);
+            setError(customerFetchError);
         }
     };
 

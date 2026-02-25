@@ -21,9 +21,8 @@ async function wipeTable(name) {
 }
 
 async function main() {
-    console.log('🗑️  INVENTORY RESET - Wiping all stock data...\n');
+    console.log('INVENTORY RESET - Wiping all stock data...\n');
 
-    // 1. Wipe stock-related tables (order matters for FK)
     const tablesToWipe = [
         'stock_snapshots',
         'inventory_balance',
