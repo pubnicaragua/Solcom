@@ -1,899 +1,519 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { ShoppingCart, Plus, Minus, Trash2, Search, Filter, DollarSign, Package, TrendingUp, Users, X, Check, CreditCard, Banknote, Building2 } from 'lucide-react';
+import {
+  FileText, Plus, Search, Filter, DollarSign, Clock,
+  CheckCircle, AlertTriangle, XCircle, Eye, Trash2,
+  ChevronLeft, ChevronRight, Calendar, RefreshCw,
+} from 'lucide-react';
+import InvoiceForm from '@/components/ventas/InvoiceForm';
+import InvoicePreview from '@/components/ventas/InvoicePreview';
 
-interface Product {
+interface Invoice {
   id: string;
-  item_id: string;
-  name: string;
-  sku: string;
-  category: string;
-  brand: string;
-  color: string;
-  physical_state: string;
-  warehouse_id: string;
-  warehouse_name: string;
-  quantity: number;
-  unit_price: number;
-  total_value: number;
-}
-
-interface CartItem extends Product {
-  cartQuantity: number;
-}
-
-interface Sale {
-  id: string;
-  customer_name: string;
-  customer_email: string;
-  customer_phone: string;
-  payment_method: string;
-  total: number;
-  items: CartItem[];
-  created_at: string;
+  invoice_number: string;
+  customer_id: string | null;
+  customer: { id: string; name: string; email: string | null; phone: string | null; ruc: string | null } | null;
+  date: string;
+  due_date: string | null;
   status: string;
+  subtotal: number;
+  tax_rate: number;
+  tax_amount: number;
+  discount_amount: number;
+  total: number;
+  payment_method: string | null;
+  notes: string | null;
+  created_at: string;
 }
 
-export default function VentasPage() {
-  const [products, setProducts] = useState<Product[]>([]);
-  const [cart, setCart] = useState<CartItem[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [searchTerm, setSearchTerm] = useState('');
-  const [selectedCategory, setSelectedCategory] = useState('');
-  const [selectedWarehouse, setSelectedWarehouse] = useState('');
-  const [showCart, setShowCart] = useState(false);
-  const [showCheckout, setShowCheckout] = useState(false);
-  const [sales, setSales] = useState<Sale[]>([]);
-  const [showSalesHistory, setShowSalesHistory] = useState(false);
+const STATUS_TABS = [
+  { key: 'todas', label: 'Todas', icon: FileText },
+  { key: 'borrador', label: 'Borrador', icon: FileText },
+  { key: 'enviada', label: 'Enviadas', icon: Clock },
+  { key: 'pagada', label: 'Pagadas', icon: CheckCircle },
+  { key: 'vencida', label: 'Vencidas', icon: AlertTriangle },
+  { key: 'cancelada', label: 'Canceladas', icon: XCircle },
+];
 
-  // Formulario de checkout
-  const [customerName, setCustomerName] = useState('');
-  const [customerEmail, setCustomerEmail] = useState('');
-  const [customerPhone, setCustomerPhone] = useState('');
-  const [paymentMethod, setPaymentMethod] = useState('efectivo');
-  const [processingPayment, setProcessingPayment] = useState(false);
+const statusConfig: Record<string, { bg: string; text: string; label: string }> = {
+  borrador: { bg: 'rgba(107,114,128,0.15)', text: '#9CA3AF', label: 'Borrador' },
+  enviada: { bg: 'rgba(59,130,246,0.15)', text: '#60A5FA', label: 'Enviada' },
+  pagada: { bg: 'rgba(16,185,129,0.15)', text: '#34D399', label: 'Pagada' },
+  vencida: { bg: 'rgba(245,158,11,0.15)', text: '#FBBF24', label: 'Vencida' },
+  cancelada: { bg: 'rgba(239,68,68,0.15)', text: '#F87171', label: 'Cancelada' },
+};
+
+export default function FacturacionPage() {
+  const [invoices, setInvoices] = useState<Invoice[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [activeTab, setActiveTab] = useState('todas');
+  const [searchTerm, setSearchTerm] = useState('');
+  const [fromDate, setFromDate] = useState('');
+  const [toDate, setToDate] = useState('');
+  const [page, setPage] = useState(1);
+  const [totalPages, setTotalPages] = useState(1);
+  const [totalCount, setTotalCount] = useState(0);
+
+  // KPIs
+  const [kpis, setKpis] = useState({ total: 0, pagadas: 0, pendientes: 0, vencidas: 0 });
+
+  // Modals
+  const [showInvoiceForm, setShowInvoiceForm] = useState(false);
+  const [previewInvoiceId, setPreviewInvoiceId] = useState<string | null>(null);
+  const [showPreview, setShowPreview] = useState(false);
 
   useEffect(() => {
-    fetchProducts();
-    fetchSales();
+    fetchInvoices();
+  }, [activeTab, searchTerm, fromDate, toDate, page]);
+
+  useEffect(() => {
+    fetchKpis();
   }, []);
 
-  const fetchProducts = async () => {
+  const fetchInvoices = async () => {
+    setLoading(true);
     try {
-      const response = await fetch('/api/cliente/inventario');
-      const data = await response.json();
-      if (data.items) {
-        setProducts(data.items.filter((p: Product) => p.quantity > 0));
-      }
-    } catch (error) {
-      console.error('Error fetching products:', error);
+      const params = new URLSearchParams();
+      if (activeTab !== 'todas') params.set('status', activeTab);
+      if (searchTerm) params.set('search', searchTerm);
+      if (fromDate) params.set('from_date', fromDate);
+      if (toDate) params.set('to_date', toDate);
+      params.set('page', String(page));
+      params.set('per_page', '15');
+
+      const res = await fetch(`/api/ventas/invoices?${params.toString()}`);
+      const data = await res.json();
+
+      setInvoices(data.invoices || []);
+      setTotalPages(data.total_pages || 1);
+      setTotalCount(data.total || 0);
+    } catch (err) {
+      console.error('Error fetching invoices:', err);
     } finally {
       setLoading(false);
     }
   };
 
-  const fetchSales = () => {
+  const fetchKpis = async () => {
     try {
-      const stored = localStorage.getItem('solis_comercial_sales');
-      if (stored) {
-        setSales(JSON.parse(stored));
-      }
-    } catch (error) {
-      console.error('Error fetching sales:', error);
+      // Fetch all to compute KPIs
+      const res = await fetch('/api/ventas/invoices?per_page=999');
+      const data = await res.json();
+      const all: Invoice[] = data.invoices || [];
+
+      setKpis({
+        total: all.reduce((s, inv) => s + Number(inv.total), 0),
+        pagadas: all.filter(inv => inv.status === 'pagada').reduce((s, inv) => s + Number(inv.total), 0),
+        pendientes: all.filter(inv => inv.status === 'enviada').reduce((s, inv) => s + Number(inv.total), 0),
+        vencidas: all.filter(inv => inv.status === 'vencida').length,
+      });
+    } catch (err) {
+      console.error('Error fetching KPIs:', err);
     }
   };
 
-  const addToCart = (product: Product) => {
-    const existingItem = cart.find(item => item.item_id === product.item_id && item.warehouse_id === product.warehouse_id);
-
-    if (existingItem) {
-      if (existingItem.cartQuantity < product.quantity) {
-        setCart(cart.map(item =>
-          item.item_id === product.item_id && item.warehouse_id === product.warehouse_id
-            ? { ...item, cartQuantity: item.cartQuantity + 1 }
-            : item
-        ));
-      }
-    } else {
-      setCart([...cart, { ...product, cartQuantity: 1 }]);
-    }
-  };
-
-  const updateCartQuantity = (itemId: string, warehouseId: string, newQuantity: number) => {
-    const product = products.find(p => p.item_id === itemId && p.warehouse_id === warehouseId);
-    if (product && newQuantity <= product.quantity && newQuantity > 0) {
-      setCart(cart.map(item =>
-        item.item_id === itemId && item.warehouse_id === warehouseId
-          ? { ...item, cartQuantity: newQuantity }
-          : item
-      ));
-    }
-  };
-
-  const removeFromCart = (itemId: string, warehouseId: string) => {
-    setCart(cart.filter(item => !(item.item_id === itemId && item.warehouse_id === warehouseId)));
-  };
-
-  const clearCart = () => {
-    setCart([]);
-    setShowCart(false);
-  };
-
-  const cartTotal = cart.reduce((sum, item) => sum + (item.unit_price * item.cartQuantity), 0);
-  const cartItemsCount = cart.reduce((sum, item) => sum + item.cartQuantity, 0);
-
-  const filteredProducts = products.filter(product => {
-    const matchesSearch = product.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      product.sku.toLowerCase().includes(searchTerm.toLowerCase());
-    const matchesCategory = !selectedCategory || product.category === selectedCategory;
-    const matchesWarehouse = !selectedWarehouse || product.warehouse_id === selectedWarehouse;
-    return matchesSearch && matchesCategory && matchesWarehouse;
-  });
-
-  const categories = Array.from(new Set(products.map(p => p.category))).filter(Boolean);
-  const warehouses = Array.from(new Set(products.map(p => ({ id: p.warehouse_id, name: p.warehouse_name }))
-    .map(w => JSON.stringify(w))))
-    .map(w => JSON.parse(w));
-
-  const handleCheckout = async () => {
-    if (!customerName || !customerEmail || cart.length === 0) {
-      alert('Por favor complete todos los campos requeridos');
-      return;
-    }
-
-    setProcessingPayment(true);
+  const handleDeleteInvoice = async (id: string) => {
+    if (!confirm('¿Eliminar esta factura en borrador?')) return;
     try {
-      const sale = {
-        id: `sale_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
-        customer_name: customerName,
-        customer_email: customerEmail,
-        customer_phone: customerPhone || null,
-        payment_method: paymentMethod,
-        total: cartTotal,
-        items: cart.map(item => ({
-          item_id: item.item_id,
-          warehouse_id: item.warehouse_id,
-          quantity: item.cartQuantity,
-          unit_price: item.unit_price,
-          name: item.name,
-          sku: item.sku
-        })),
-        status: 'completada',
-        created_at: new Date().toISOString()
-      };
-
-      const currentSales = JSON.parse(localStorage.getItem('solis_comercial_sales') || '[]');
-      currentSales.push(sale);
-      localStorage.setItem('solis_comercial_sales', JSON.stringify(currentSales));
-
-      alert('✅ Venta registrada exitosamente!');
-      clearCart();
-      setShowCheckout(false);
-      setCustomerName('');
-      setCustomerEmail('');
-      setCustomerPhone('');
-      setPaymentMethod('efectivo');
-      fetchProducts();
-      fetchSales();
-    } catch (error) {
-      console.error('Error processing sale:', error);
-      alert(' Error al procesar la venta');
-    } finally {
-      setProcessingPayment(false);
+      const res = await fetch(`/api/ventas/invoices/${id}`, { method: 'DELETE' });
+      if (res.ok) {
+        fetchInvoices();
+        fetchKpis();
+      } else {
+        const data = await res.json();
+        alert(data.error || 'Error al eliminar');
+      }
+    } catch (err) {
+      alert('Error al eliminar');
     }
   };
 
-  const todaySales = sales.filter(sale => {
-    const saleDate = new Date(sale.created_at);
-    const today = new Date();
-    return saleDate.toDateString() === today.toDateString();
-  });
+  const refreshAll = () => {
+    fetchInvoices();
+    fetchKpis();
+  };
 
-  const todayRevenue = todaySales.reduce((sum, sale) => sum + sale.total, 0);
-  const totalRevenue = sales.reduce((sum, sale) => sum + sale.total, 0);
+  const kpiCards = [
+    {
+      label: 'Facturado Total',
+      value: `$${kpis.total.toLocaleString('en-US', { minimumFractionDigits: 2 })}`,
+      icon: DollarSign,
+      color: '#DC2626',
+      bg: 'rgba(220,38,38,0.08)',
+    },
+    {
+      label: 'Cobrado',
+      value: `$${kpis.pagadas.toLocaleString('en-US', { minimumFractionDigits: 2 })}`,
+      icon: CheckCircle,
+      color: '#10B981',
+      bg: 'rgba(16,185,129,0.08)',
+    },
+    {
+      label: 'Pendiente Cobro',
+      value: `$${kpis.pendientes.toLocaleString('en-US', { minimumFractionDigits: 2 })}`,
+      icon: Clock,
+      color: '#3B82F6',
+      bg: 'rgba(59,130,246,0.08)',
+    },
+    {
+      label: 'Vencidas',
+      value: String(kpis.vencidas),
+      icon: AlertTriangle,
+      color: '#F59E0B',
+      bg: 'rgba(245,158,11,0.08)',
+    },
+  ];
 
   return (
-    <div style={{ padding: '24px', background: 'var(--background)', minHeight: '100vh', color: 'var(--text)' }}>
-      {/* Header con KPIs */}
-      <div style={{ marginBottom: '32px' }}>
-        <h1 className="h-title" style={{ fontWeight: 700, marginBottom: '24px' }}>
-           Punto de Venta
-        </h1>
-
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: '20px', marginBottom: '24px' }}>
-          <div style={{ background: 'var(--card)', padding: '24px', borderRadius: '12px', color: 'var(--text)', boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1)' }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '8px' }}>
-              <DollarSign size={24} />
-              <span style={{ fontSize: '14px', opacity: 0.9 }}>Ventas Hoy</span>
-            </div>
-            <div style={{ fontSize: '32px', fontWeight: 700 }}>${todayRevenue.toLocaleString('en-US', { minimumFractionDigits: 2 })}</div>
-            <div style={{ fontSize: '12px', opacity: 0.8, marginTop: '4px' }}>{todaySales.length} transacciones</div>
-          </div>
-
-          <div style={{ background: 'var(--card)', padding: '24px', borderRadius: '12px', color: 'var(--text)', boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1)' }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '8px' }}>
-              <TrendingUp size={24} />
-              <span style={{ fontSize: '14px', opacity: 0.9 }}>Total Ventas</span>
-            </div>
-            <div style={{ fontSize: '32px', fontWeight: 700 }}>${totalRevenue.toLocaleString('en-US', { minimumFractionDigits: 2 })}</div>
-            <div style={{ fontSize: '12px', opacity: 0.8, marginTop: '4px' }}>{sales.length} ventas totales</div>
-          </div>
-
-          <div style={{ background: 'var(--card)', padding: '24px', borderRadius: '12px', color: 'var(--text)', boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1)' }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '8px' }}>
-              <Package size={24} />
-              <span style={{ fontSize: '14px', opacity: 0.9 }}>Productos</span>
-            </div>
-            <div style={{ fontSize: '32px', fontWeight: 700 }}>{products.length}</div>
-            <div style={{ fontSize: '12px', opacity: 0.8, marginTop: '4px' }}>En inventario</div>
-          </div>
-
-          <div style={{ background: 'var(--card)', padding: '24px', borderRadius: '12px', color: 'var(--text)', boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1)' }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '8px' }}>
-              <Users size={24} />
-              <span style={{ fontSize: '14px', opacity: 0.9 }}>Clientes</span>
-            </div>
-            <div style={{ fontSize: '32px', fontWeight: 700 }}>{new Set(sales.map(s => s.customer_email)).size}</div>
-            <div style={{ fontSize: '12px', opacity: 0.8, marginTop: '4px' }}>Únicos</div>
-          </div>
+    <div style={{ color: 'var(--text)' }}>
+      {/* Header */}
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '28px', flexWrap: 'wrap', gap: '16px' }}>
+        <div>
+          <h1 className="h-title" style={{ fontWeight: 700, marginBottom: '4px', display: 'flex', alignItems: 'center', gap: '10px' }}>
+            <FileText size={24} style={{ color: 'var(--brand-primary)' }} />
+            Facturación
+          </h1>
+          <p style={{ fontSize: '14px', color: 'var(--muted)' }}>
+            Gestiona tus facturas y cobros
+          </p>
         </div>
-
-        {/* Botones de acción */}
-        <div style={{ display: 'flex', gap: '12px', flexWrap: 'wrap' }}>
-          <button
-            onClick={() => setShowCart(!showCart)}
-            style={{
-              display: 'flex',
-              alignItems: 'center',
-              gap: '8px',
-              padding: '12px 24px',
-              background: '#DC2626',
-              color: 'white',
-              border: 'none',
-              borderRadius: '8px',
-              fontSize: '14px',
-              fontWeight: 600,
-              cursor: 'pointer',
-              position: 'relative'
-            }}
-          >
-            <ShoppingCart size={20} />
-            Carrito
-            {cartItemsCount > 0 && (
-              <span style={{
-                position: 'absolute',
-                top: '-8px',
-                right: '-8px',
-                background: '#FBBF24',
-                color: '#111827',
-                borderRadius: '50%',
-                width: '24px',
-                height: '24px',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                fontSize: '12px',
-                fontWeight: 700
-              }}>
-                {cartItemsCount}
-              </span>
-            )}
-          </button>
-
-          <button
-            onClick={() => setShowSalesHistory(!showSalesHistory)}
-            style={{
-              display: 'flex',
-              alignItems: 'center',
-              gap: '8px',
-              padding: '12px 24px',
-              background: '#059669',
-              color: 'white',
-              border: 'none',
-              borderRadius: '8px',
-              fontSize: '14px',
-              fontWeight: 600,
-              cursor: 'pointer'
-            }}
-          >
-            <TrendingUp size={20} />
-            Historial de Ventas
-          </button>
-        </div>
+        <button
+          onClick={() => setShowInvoiceForm(true)}
+          style={{
+            display: 'flex', alignItems: 'center', gap: '8px',
+            padding: '12px 24px', background: 'var(--brand-primary)', color: 'white',
+            border: 'none', borderRadius: '10px', fontSize: '14px', fontWeight: 700,
+            cursor: 'pointer', boxShadow: '0 4px 14px rgba(220,38,38,0.3)',
+            transition: 'transform 0.15s, box-shadow 0.15s',
+          }}
+          onMouseEnter={(e) => {
+            e.currentTarget.style.transform = 'translateY(-2px)';
+            e.currentTarget.style.boxShadow = '0 6px 20px rgba(220,38,38,0.4)';
+          }}
+          onMouseLeave={(e) => {
+            e.currentTarget.style.transform = 'translateY(0)';
+            e.currentTarget.style.boxShadow = '0 4px 14px rgba(220,38,38,0.3)';
+          }}
+        >
+          <Plus size={18} />
+          Nueva Factura
+        </button>
       </div>
 
-      {/* Filtros */}
-      <div style={{ background: 'var(--card)', padding: '20px', borderRadius: '12px', marginBottom: '24px', border: '1px solid var(--border)' }}>
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(250px, 1fr))', gap: '16px' }}>
-          <div>
-            <label style={{ display: 'block', fontSize: '14px', fontWeight: 600, color: 'var(--muted)', marginBottom: '8px' }}>
-              <Search size={16} style={{ display: 'inline', marginRight: '6px' }} />
-              Buscar Producto
-            </label>
-            <input
-              type="text"
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-              placeholder="Nombre o SKU..."
+      {/* KPI Cards */}
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '16px', marginBottom: '28px' }}>
+        {kpiCards.map((kpi, i) => {
+          const Icon = kpi.icon;
+          return (
+            <div key={i} style={{
+              background: 'var(--card)', padding: '20px', borderRadius: '12px',
+              border: '1px solid var(--border)', boxShadow: '0 2px 8px rgba(0,0,0,0.1)',
+              transition: 'transform 0.2s, box-shadow 0.2s',
+            }}
+              onMouseEnter={(e) => {
+                e.currentTarget.style.transform = 'translateY(-2px)';
+                e.currentTarget.style.boxShadow = '0 8px 20px rgba(0,0,0,0.2)';
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.transform = 'translateY(0)';
+                e.currentTarget.style.boxShadow = '0 2px 8px rgba(0,0,0,0.1)';
+              }}
+            >
+              <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '12px' }}>
+                <div style={{
+                  width: '36px', height: '36px', borderRadius: '10px',
+                  background: kpi.bg, display: 'flex', alignItems: 'center', justifyContent: 'center',
+                }}>
+                  <Icon size={18} style={{ color: kpi.color }} />
+                </div>
+                <span style={{ fontSize: '13px', color: 'var(--muted)', fontWeight: 500 }}>{kpi.label}</span>
+              </div>
+              <div style={{ fontSize: '26px', fontWeight: 800, color: 'var(--text)' }}>{kpi.value}</div>
+            </div>
+          );
+        })}
+      </div>
+
+      {/* Status Tabs */}
+      <div style={{
+        display: 'flex', gap: '4px', marginBottom: '20px',
+        background: 'var(--card)', padding: '4px', borderRadius: '12px',
+        border: '1px solid var(--border)', overflowX: 'auto',
+      }}>
+        {STATUS_TABS.map(tab => {
+          const isActive = activeTab === tab.key;
+          const Icon = tab.icon;
+          return (
+            <button
+              key={tab.key}
+              onClick={() => { setActiveTab(tab.key); setPage(1); }}
               style={{
-                width: '100%',
-                padding: '10px 12px',
-                background: 'var(--background)',
-                color: 'var(--text)',
-                border: '1px solid var(--border)',
-                borderRadius: '8px',
-                fontSize: '14px'
+                display: 'flex', alignItems: 'center', gap: '6px',
+                padding: '10px 18px', border: 'none', borderRadius: '8px',
+                background: isActive ? 'var(--brand-primary)' : 'transparent',
+                color: isActive ? 'white' : 'var(--muted)',
+                fontSize: '13px', fontWeight: isActive ? 700 : 500,
+                cursor: 'pointer', transition: 'all 0.2s', whiteSpace: 'nowrap',
+              }}
+            >
+              <Icon size={14} />
+              {tab.label}
+            </button>
+          );
+        })}
+      </div>
+
+      {/* Filters Bar */}
+      <div style={{
+        background: 'var(--card)', padding: '16px 20px', borderRadius: '12px',
+        marginBottom: '20px', border: '1px solid var(--border)',
+        display: 'flex', gap: '12px', alignItems: 'flex-end', flexWrap: 'wrap',
+      }}>
+        <div style={{ flex: '1 1 250px' }}>
+          <label style={{ display: 'block', fontSize: '12px', fontWeight: 600, color: 'var(--muted)', marginBottom: '6px' }}>
+            Buscar
+          </label>
+          <div style={{ position: 'relative' }}>
+            <Search size={14} style={{ position: 'absolute', left: '10px', top: '11px', color: 'var(--muted)' }} />
+            <input
+              type="text" value={searchTerm}
+              onChange={(e) => { setSearchTerm(e.target.value); setPage(1); }}
+              placeholder="Número de factura..."
+              style={{
+                width: '100%', padding: '9px 12px 9px 32px',
+                background: 'var(--background)', color: 'var(--text)',
+                border: '1px solid var(--border)', borderRadius: '8px', fontSize: '13px',
               }}
             />
           </div>
-
-          <div>
-            <label style={{ display: 'block', fontSize: '14px', fontWeight: 600, color: 'var(--muted)', marginBottom: '8px' }}>
-              <Filter size={16} style={{ display: 'inline', marginRight: '6px' }} />
-              Categoría
-            </label>
-            <select
-              value={selectedCategory}
-              onChange={(e) => setSelectedCategory(e.target.value)}
-              style={{
-                width: '100%',
-                padding: '10px 12px',
-                background: 'var(--background)',
-                color: 'var(--text)',
-                border: '1px solid var(--border)',
-                borderRadius: '8px',
-                fontSize: '14px'
-              }}
-            >
-              <option value="">Todas las categorías</option>
-              {categories.map(cat => (
-                <option key={cat} value={cat}>{cat}</option>
-              ))}
-            </select>
-          </div>
-
-          <div>
-            <label style={{ display: 'block', fontSize: '14px', fontWeight: 600, color: 'var(--muted)', marginBottom: '8px' }}>
-              <Building2 size={16} style={{ display: 'inline', marginRight: '6px' }} />
-              Bodega
-            </label>
-            <select
-              value={selectedWarehouse}
-              onChange={(e) => setSelectedWarehouse(e.target.value)}
-              style={{
-                width: '100%',
-                padding: '10px 12px',
-                background: 'var(--background)',
-                color: 'var(--text)',
-                border: '1px solid var(--border)',
-                borderRadius: '8px',
-                fontSize: '14px'
-              }}
-            >
-              <option value="">Todas las bodegas</option>
-              {warehouses.map(wh => (
-                <option key={wh.id} value={wh.id}>{wh.name}</option>
-              ))}
-            </select>
-          </div>
         </div>
+        <div style={{ flex: '0 0 160px' }}>
+          <label style={{ display: 'block', fontSize: '12px', fontWeight: 600, color: 'var(--muted)', marginBottom: '6px' }}>
+            Desde
+          </label>
+          <input
+            type="date" value={fromDate}
+            onChange={(e) => { setFromDate(e.target.value); setPage(1); }}
+            style={{
+              width: '100%', padding: '9px 12px',
+              background: 'var(--background)', color: 'var(--text)',
+              border: '1px solid var(--border)', borderRadius: '8px', fontSize: '13px',
+            }}
+          />
+        </div>
+        <div style={{ flex: '0 0 160px' }}>
+          <label style={{ display: 'block', fontSize: '12px', fontWeight: 600, color: 'var(--muted)', marginBottom: '6px' }}>
+            Hasta
+          </label>
+          <input
+            type="date" value={toDate}
+            onChange={(e) => { setToDate(e.target.value); setPage(1); }}
+            style={{
+              width: '100%', padding: '9px 12px',
+              background: 'var(--background)', color: 'var(--text)',
+              border: '1px solid var(--border)', borderRadius: '8px', fontSize: '13px',
+            }}
+          />
+        </div>
+        <button
+          onClick={refreshAll}
+          title="Actualizar"
+          style={{
+            padding: '9px 12px', background: 'var(--background)',
+            border: '1px solid var(--border)', borderRadius: '8px',
+            cursor: 'pointer', color: 'var(--muted)', display: 'flex',
+            alignItems: 'center', justifyContent: 'center',
+          }}
+        >
+          <RefreshCw size={16} />
+        </button>
       </div>
 
-      {/* Grid de productos */}
-      {loading ? (
-        <div style={{ textAlign: 'center', padding: '60px', color: 'var(--muted)' }}>
-          Cargando productos...
+      {/* Invoices Table */}
+      <div style={{
+        background: 'var(--card)', borderRadius: '12px', border: '1px solid var(--border)',
+        overflow: 'hidden',
+      }}>
+        {/* Table header */}
+        <div style={{
+          display: 'grid',
+          gridTemplateColumns: '100px 1.2fr 130px 100px 130px 80px',
+          padding: '14px 20px', borderBottom: '1px solid var(--border)',
+          background: 'rgba(255,255,255,0.02)',
+        }}>
+          {['Fecha', 'Cliente', 'Número', 'Estado', 'Total', ''].map((h, i) => (
+            <div key={i} style={{
+              fontSize: '11px', fontWeight: 700, color: 'var(--muted)',
+              textTransform: 'uppercase', letterSpacing: '0.5px',
+              textAlign: i === 4 ? 'right' : 'left',
+            }}>
+              {h}
+            </div>
+          ))}
         </div>
-      ) : (
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: '20px' }}>
-          {filteredProducts.map(product => {
-            const inCart = cart.find(item => item.item_id === product.item_id && item.warehouse_id === product.warehouse_id);
+
+        {/* Table body */}
+        {loading ? (
+          <div style={{ padding: '60px', textAlign: 'center', color: 'var(--muted)' }}>
+            <RefreshCw size={24} style={{ animation: 'spin 1s linear infinite', marginBottom: '12px' }} />
+            <div>Cargando facturas...</div>
+          </div>
+        ) : invoices.length === 0 ? (
+          <div style={{ padding: '60px', textAlign: 'center' }}>
+            <FileText size={48} style={{ color: 'var(--border)', marginBottom: '16px' }} />
+            <div style={{ fontSize: '16px', fontWeight: 600, color: 'var(--muted)', marginBottom: '8px' }}>
+              No hay facturas
+            </div>
+            <div style={{ fontSize: '13px', color: 'var(--muted)', marginBottom: '20px' }}>
+              Crea tu primera factura para comenzar
+            </div>
+            <button
+              onClick={() => setShowInvoiceForm(true)}
+              style={{
+                display: 'inline-flex', alignItems: 'center', gap: '6px',
+                padding: '10px 20px', background: 'var(--brand-primary)', color: 'white',
+                border: 'none', borderRadius: '8px', fontSize: '13px', fontWeight: 600,
+                cursor: 'pointer',
+              }}
+            >
+              <Plus size={16} />
+              Nueva Factura
+            </button>
+          </div>
+        ) : (
+          invoices.map((inv, i) => {
+            const sc = statusConfig[inv.status] || statusConfig.borrador;
             return (
               <div
-                key={`${product.item_id}-${product.warehouse_id}`}
+                key={inv.id}
+                onClick={() => { setPreviewInvoiceId(inv.id); setShowPreview(true); }}
                 style={{
-                  background: 'var(--card)',
-                  borderRadius: '12px',
-                  padding: '20px',
-                  border: inCart ? '2px solid var(--brand-primary)' : '1px solid var(--border)',
-                  boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1)',
-                  transition: 'transform 0.2s, box-shadow 0.2s',
-                  cursor: 'pointer'
+                  display: 'grid',
+                  gridTemplateColumns: '100px 1.2fr 130px 100px 130px 80px',
+                  padding: '14px 20px',
+                  borderBottom: i < invoices.length - 1 ? '1px solid var(--border)' : 'none',
+                  cursor: 'pointer',
+                  transition: 'background 0.15s',
+                  alignItems: 'center',
                 }}
-                onMouseEnter={(e) => {
-                  e.currentTarget.style.transform = 'translateY(-4px)';
-                  e.currentTarget.style.boxShadow = '0 10px 15px -3px rgba(0, 0, 0, 0.3)';
-                }}
-                onMouseLeave={(e) => {
-                  e.currentTarget.style.transform = 'translateY(0)';
-                  e.currentTarget.style.boxShadow = '0 4px 6px -1px rgba(0, 0, 0, 0.1)';
-                }}
+                onMouseEnter={(e) => e.currentTarget.style.background = 'rgba(255,255,255,0.03)'}
+                onMouseLeave={(e) => e.currentTarget.style.background = 'transparent'}
               >
-                <div style={{ marginBottom: '12px' }}>
-                  <h3 style={{ fontSize: '16px', fontWeight: 700, color: 'var(--text)', marginBottom: '4px' }}>
-                    {product.name}
-                  </h3>
-                  <p style={{ fontSize: '12px', color: 'var(--muted)' }}>SKU: {product.sku}</p>
+                <div style={{ fontSize: '13px', color: 'var(--muted)' }}>
+                  {new Date(inv.date).toLocaleDateString('es-NI', { month: 'short', day: 'numeric', year: '2-digit' })}
                 </div>
-
-                <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px', marginBottom: '12px' }}>
-                  {product.category && (
-                    <span style={{ fontSize: '11px', padding: '4px 8px', background: 'rgba(59, 130, 246, 0.1)', color: '#60a5fa', borderRadius: '4px', fontWeight: 500 }}>
-                      {product.category}
-                    </span>
-                  )}
-                  {product.brand && (
-                    <span style={{ fontSize: '11px', padding: '4px 8px', background: 'rgba(245, 158, 11, 0.1)', color: '#fbbf24', borderRadius: '4px', fontWeight: 500 }}>
-                      {product.brand}
-                    </span>
-                  )}
-                  {product.color && (
-                    <span style={{ fontSize: '11px', padding: '4px 8px', background: 'rgba(99, 102, 241, 0.1)', color: '#818cf8', borderRadius: '4px', fontWeight: 500 }}>
-                      {product.color}
-                    </span>
+                <div>
+                  <div style={{ fontSize: '14px', fontWeight: 600, color: 'var(--text)' }}>
+                    {inv.customer?.name || 'Sin cliente'}
+                  </div>
+                  {inv.customer?.email && (
+                    <div style={{ fontSize: '12px', color: 'var(--muted)' }}>{inv.customer.email}</div>
                   )}
                 </div>
-
-                <div style={{ marginBottom: '12px' }}>
-                  <div style={{ fontSize: '12px', color: 'var(--muted)', marginBottom: '4px' }}>
-                    📦 Stock: <strong style={{ color: product.quantity < 10 ? 'var(--brand-primary)' : 'var(--success)' }}>{product.quantity}</strong>
-                  </div>
-                  <div style={{ fontSize: '12px', color: 'var(--muted)' }}>
-                    🏢 {product.warehouse_name}
-                  </div>
+                <div style={{ fontSize: '13px', fontWeight: 600, color: 'var(--brand-primary)' }}>
+                  {inv.invoice_number}
                 </div>
-
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '16px', paddingTop: '16px', borderTop: '1px solid var(--border)' }}>
-                  <div style={{ fontSize: '24px', fontWeight: 700, color: 'var(--brand-primary)' }}>
-                    ${product.unit_price.toFixed(2)}
-                  </div>
+                <div>
+                  <span style={{
+                    fontSize: '11px', padding: '4px 10px', borderRadius: '20px',
+                    fontWeight: 700, background: sc.bg, color: sc.text,
+                    textTransform: 'capitalize',
+                  }}>
+                    {sc.label}
+                  </span>
+                </div>
+                <div style={{ fontSize: '16px', fontWeight: 700, color: 'var(--text)', textAlign: 'right' }}>
+                  ${Number(inv.total).toLocaleString('en-US', { minimumFractionDigits: 2 })}
+                </div>
+                <div style={{ display: 'flex', gap: '6px', justifyContent: 'flex-end' }}>
                   <button
-                    onClick={() => addToCart(product)}
-                    disabled={inCart && inCart.cartQuantity >= product.quantity}
+                    onClick={(e) => { e.stopPropagation(); setPreviewInvoiceId(inv.id); setShowPreview(true); }}
+                    title="Ver"
                     style={{
-                      display: 'flex',
-                      alignItems: 'center',
-                      gap: '6px',
-                      padding: '10px 16px',
-                      background: inCart ? '#059669' : '#DC2626',
-                      color: 'white',
-                      border: 'none',
-                      borderRadius: '8px',
-                      fontSize: '13px',
-                      fontWeight: 600,
-                      cursor: inCart && inCart.cartQuantity >= product.quantity ? 'not-allowed' : 'pointer',
-                      opacity: inCart && inCart.cartQuantity >= product.quantity ? 0.5 : 1
+                      padding: '6px', background: 'rgba(255,255,255,0.05)', border: '1px solid var(--border)',
+                      borderRadius: '6px', cursor: 'pointer', color: 'var(--muted)',
+                      display: 'flex', alignItems: 'center', justifyContent: 'center',
                     }}
                   >
-                    {inCart ? <Check size={16} /> : <Plus size={16} />}
-                    {inCart ? 'En carrito' : 'Agregar'}
+                    <Eye size={14} />
                   </button>
+                  {inv.status === 'borrador' && (
+                    <button
+                      onClick={(e) => { e.stopPropagation(); handleDeleteInvoice(inv.id); }}
+                      title="Eliminar"
+                      style={{
+                        padding: '6px', background: 'rgba(239,68,68,0.08)', border: '1px solid rgba(239,68,68,0.2)',
+                        borderRadius: '6px', cursor: 'pointer', color: '#F87171',
+                        display: 'flex', alignItems: 'center', justifyContent: 'center',
+                      }}
+                    >
+                      <Trash2 size={14} />
+                    </button>
+                  )}
                 </div>
               </div>
             );
-          })}
-        </div>
-      )}
+          })
+        )}
+      </div>
 
-      {/* Panel del Carrito */}
-      {showCart && (
+      {/* Pagination */}
+      {totalPages > 1 && (
         <div style={{
-          position: 'fixed',
-          top: 0,
-          right: 0,
-          bottom: 0,
-          width: '450px',
-          background: 'var(--card)',
-          boxShadow: '-4px 0 16px rgba(0,0,0,0.5)',
-          zIndex: 1000,
-          display: 'flex',
-          flexDirection: 'column',
-          borderLeft: '1px solid var(--border)'
+          display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+          marginTop: '16px', padding: '0 4px',
         }}>
-          <div style={{ padding: '24px', borderBottom: '1px solid var(--border)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-            <h2 style={{ fontSize: '20px', fontWeight: 700, color: 'var(--text)', display: 'flex', alignItems: 'center', gap: '10px' }}>
-              <ShoppingCart size={24} />
-              Carrito de Compras
-            </h2>
-            <button onClick={() => setShowCart(false)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--muted)' }}>
-              <X size={24} />
+          <div style={{ fontSize: '13px', color: 'var(--muted)' }}>
+            Mostrando {invoices.length} de {totalCount} facturas
+          </div>
+          <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+            <button
+              onClick={() => setPage(Math.max(1, page - 1))}
+              disabled={page === 1}
+              style={{
+                padding: '8px 12px', background: 'var(--card)', border: '1px solid var(--border)',
+                borderRadius: '8px', cursor: page === 1 ? 'default' : 'pointer',
+                color: page === 1 ? 'var(--border)' : 'var(--text)',
+                display: 'flex', alignItems: 'center', gap: '4px', fontSize: '13px',
+              }}
+            >
+              <ChevronLeft size={16} />
+              Anterior
+            </button>
+            <span style={{ fontSize: '13px', color: 'var(--muted)', padding: '0 8px' }}>
+              {page} / {totalPages}
+            </span>
+            <button
+              onClick={() => setPage(Math.min(totalPages, page + 1))}
+              disabled={page === totalPages}
+              style={{
+                padding: '8px 12px', background: 'var(--card)', border: '1px solid var(--border)',
+                borderRadius: '8px', cursor: page === totalPages ? 'default' : 'pointer',
+                color: page === totalPages ? 'var(--border)' : 'var(--text)',
+                display: 'flex', alignItems: 'center', gap: '4px', fontSize: '13px',
+              }}
+            >
+              Siguiente
+              <ChevronRight size={16} />
             </button>
           </div>
-
-          <div style={{ flex: 1, overflowY: 'auto', padding: '20px' }}>
-            {cart.length === 0 ? (
-              <div style={{ textAlign: 'center', padding: '60px 20px', color: 'var(--muted)' }}>
-                <ShoppingCart size={48} style={{ margin: '0 auto 16px', opacity: 0.3 }} />
-                <p>El carrito está vacío</p>
-              </div>
-            ) : (
-              cart.map(item => (
-                <div key={`${item.item_id}-${item.warehouse_id}`} style={{
-                  background: 'var(--background)',
-                  padding: '16px',
-                  borderRadius: '8px',
-                  marginBottom: '12px',
-                  border: '1px solid var(--border)'
-                }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px' }}>
-                    <div style={{ flex: 1 }}>
-                      <h4 style={{ fontSize: '14px', fontWeight: 600, color: 'var(--text)', marginBottom: '4px' }}>{item.name}</h4>
-                      <p style={{ fontSize: '12px', color: 'var(--muted)' }}>SKU: {item.sku}</p>
-                      <p style={{ fontSize: '12px', color: 'var(--muted)' }}>🏢 {item.warehouse_name}</p>
-                    </div>
-                    <button
-                      onClick={() => removeFromCart(item.item_id, item.warehouse_id)}
-                      style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--brand-primary)' }}
-                    >
-                      <Trash2 size={18} />
-                    </button>
-                  </div>
-
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                      <button
-                        onClick={() => updateCartQuantity(item.item_id, item.warehouse_id, item.cartQuantity - 1)}
-                        style={{
-                          width: '32px',
-                          height: '32px',
-                          background: '#E5E7EB',
-                          border: 'none',
-                          borderRadius: '6px',
-                          cursor: 'pointer',
-                          display: 'flex',
-                          alignItems: 'center',
-                          justifyContent: 'center'
-                        }}
-                      >
-                        <Minus size={16} />
-                      </button>
-                      <span style={{ fontSize: '16px', fontWeight: 600, minWidth: '40px', textAlign: 'center' }}>
-                        {item.cartQuantity}
-                      </span>
-                      <button
-                        onClick={() => updateCartQuantity(item.item_id, item.warehouse_id, item.cartQuantity + 1)}
-                        disabled={item.cartQuantity >= item.quantity}
-                        style={{
-                          width: '32px',
-                          height: '32px',
-                          background: item.cartQuantity >= item.quantity ? '#E5E7EB' : '#DC2626',
-                          color: item.cartQuantity >= item.quantity ? '#6B7280' : 'white',
-                          border: 'none',
-                          borderRadius: '6px',
-                          cursor: item.cartQuantity >= item.quantity ? 'not-allowed' : 'pointer',
-                          display: 'flex',
-                          alignItems: 'center',
-                          justifyContent: 'center'
-                        }}
-                      >
-                        <Plus size={16} />
-                      </button>
-                    </div>
-                    <div style={{ fontSize: '18px', fontWeight: 700, color: '#DC2626' }}>
-                      ${(item.unit_price * item.cartQuantity).toFixed(2)}
-                    </div>
-                  </div>
-                </div>
-              ))
-            )}
-          </div>
-
-          {cart.length > 0 && (
-            <div style={{ padding: '20px', borderTop: '2px solid var(--border)', background: 'var(--card)' }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '16px' }}>
-                <span style={{ fontSize: '18px', fontWeight: 600, color: 'var(--text)' }}>Total:</span>
-                <span style={{ fontSize: '28px', fontWeight: 700, color: 'var(--brand-primary)' }}>
-                  ${cartTotal.toFixed(2)}
-                </span>
-              </div>
-              <button
-                onClick={() => {
-                  setShowCart(false);
-                  setShowCheckout(true);
-                }}
-                style={{
-                  width: '100%',
-                  padding: '14px',
-                  background: '#DC2626',
-                  color: 'white',
-                  border: 'none',
-                  borderRadius: '8px',
-                  fontSize: '16px',
-                  fontWeight: 700,
-                  cursor: 'pointer',
-                  marginBottom: '8px'
-                }}
-              >
-                Proceder al Pago
-              </button>
-              <button
-                onClick={clearCart}
-                style={{
-                  width: '100%',
-                  padding: '12px',
-                  background: 'transparent',
-                  color: 'var(--brand-primary)',
-                  border: '1px solid var(--brand-primary)',
-                  borderRadius: '8px',
-                  fontSize: '14px',
-                  fontWeight: 600,
-                  cursor: 'pointer'
-                }}
-              >
-                Vaciar Carrito
-              </button>
-            </div>
-          )}
         </div>
       )}
 
-      {/* Modal de Checkout */}
-      {showCheckout && (
-        <div style={{
-          position: 'fixed',
-          top: 0,
-          left: 0,
-          right: 0,
-          bottom: 0,
-          background: 'rgba(0,0,0,0.5)',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          zIndex: 2000,
-          padding: '20px'
-        }}>
-          <div style={{
-            background: 'var(--card)',
-            borderRadius: '16px',
-            maxWidth: '600px',
-            width: '100%',
-            maxHeight: '90vh',
-            overflowY: 'auto',
-            boxShadow: '0 20px 60px rgba(0,0,0,0.5)',
-            border: '1px solid var(--border)'
-          }}>
-            <div style={{ padding: '24px', borderBottom: '1px solid var(--border)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-              <h2 style={{ fontSize: '24px', fontWeight: 700, color: 'var(--text)' }}>💳 Finalizar Venta</h2>
-              <button onClick={() => setShowCheckout(false)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--muted)' }}>
-                <X size={24} />
-              </button>
-            </div>
+      {/* Modals */}
+      <InvoiceForm
+        isOpen={showInvoiceForm}
+        onClose={() => setShowInvoiceForm(false)}
+        onSaved={refreshAll}
+      />
 
-            <div style={{ padding: '24px' }}>
-              <div style={{ marginBottom: '20px' }}>
-                <label style={{ display: 'block', fontSize: '14px', fontWeight: 600, color: 'var(--muted)', marginBottom: '8px' }}>
-                  Nombre del Cliente *
-                </label>
-                <input
-                  type="text"
-                  value={customerName}
-                  onChange={(e) => setCustomerName(e.target.value)}
-                  placeholder="Juan Pérez"
-                  style={{
-                    width: '100%',
-                    padding: '12px',
-                    background: 'var(--background)',
-                    color: 'var(--text)',
-                    border: '1px solid var(--border)',
-                    borderRadius: '8px',
-                    fontSize: '14px'
-                  }}
-                />
-              </div>
-
-              <div style={{ marginBottom: '20px' }}>
-                <label style={{ display: 'block', fontSize: '14px', fontWeight: 600, color: 'var(--muted)', marginBottom: '8px' }}>
-                  Email *
-                </label>
-                <input
-                  type="email"
-                  value={customerEmail}
-                  onChange={(e) => setCustomerEmail(e.target.value)}
-                  placeholder="juan@example.com"
-                  style={{
-                    width: '100%',
-                    padding: '12px',
-                    background: 'var(--background)',
-                    color: 'var(--text)',
-                    border: '1px solid var(--border)',
-                    borderRadius: '8px',
-                    fontSize: '14px'
-                  }}
-                />
-              </div>
-
-              <div style={{ marginBottom: '20px' }}>
-                <label style={{ display: 'block', fontSize: '14px', fontWeight: 600, color: 'var(--muted)', marginBottom: '8px' }}>
-                  Teléfono
-                </label>
-                <input
-                  type="tel"
-                  value={customerPhone}
-                  onChange={(e) => setCustomerPhone(e.target.value)}
-                  placeholder="+505 8888-8888"
-                  style={{
-                    width: '100%',
-                    padding: '12px',
-                    background: 'var(--background)',
-                    color: 'var(--text)',
-                    border: '1px solid var(--border)',
-                    borderRadius: '8px',
-                    fontSize: '14px'
-                  }}
-                />
-              </div>
-
-              <div style={{ marginBottom: '24px' }}>
-                <label style={{ display: 'block', fontSize: '14px', fontWeight: 600, color: '#374151', marginBottom: '12px' }}>
-                  Método de Pago
-                </label>
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '12px' }}>
-                  {[
-                    { value: 'efectivo', label: 'Efectivo', icon: Banknote },
-                    { value: 'tarjeta', label: 'Tarjeta', icon: CreditCard },
-                    { value: 'transferencia', label: 'Transferencia', icon: Building2 }
-                  ].map(method => {
-                    const Icon = method.icon;
-                    return (
-                      <button
-                        key={method.value}
-                        onClick={() => setPaymentMethod(method.value)}
-                        style={{
-                          padding: '16px',
-                          border: paymentMethod === method.value ? '2px solid var(--brand-primary)' : '1px solid var(--border)',
-                          background: paymentMethod === method.value ? 'rgba(220, 38, 38, 0.1)' : 'var(--background)',
-                          borderRadius: '8px',
-                          cursor: 'pointer',
-                          display: 'flex',
-                          flexDirection: 'column',
-                          alignItems: 'center',
-                          gap: '8px',
-                          transition: 'all 0.2s'
-                        }}
-                      >
-                        <Icon size={24} color={paymentMethod === method.value ? 'var(--brand-primary)' : 'var(--muted)'} />
-                        <span style={{ fontSize: '13px', fontWeight: 600, color: paymentMethod === method.value ? 'var(--brand-primary)' : 'var(--text)' }}>
-                          {method.label}
-                        </span>
-                      </button>
-                    );
-                  })}
-                </div>
-              </div>
-
-              <div style={{ background: 'var(--background)', padding: '20px', borderRadius: '8px', marginBottom: '24px', border: '1px solid var(--border)' }}>
-                <h3 style={{ fontSize: '16px', fontWeight: 600, color: 'var(--text)', marginBottom: '12px' }}>Resumen de Compra</h3>
-                {cart.map(item => (
-                  <div key={`${item.item_id}-${item.warehouse_id}`} style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px', fontSize: '14px' }}>
-                    <span style={{ color: 'var(--muted)' }}>{item.name} x{item.cartQuantity}</span>
-                    <span style={{ fontWeight: 600, color: 'var(--text)' }}>${(item.unit_price * item.cartQuantity).toFixed(2)}</span>
-                  </div>
-                ))}
-                <div style={{ borderTop: '2px solid var(--border)', marginTop: '12px', paddingTop: '12px', display: 'flex', justifyContent: 'space-between' }}>
-                  <span style={{ fontSize: '18px', fontWeight: 700, color: 'var(--text)' }}>Total:</span>
-                  <span style={{ fontSize: '24px', fontWeight: 700, color: 'var(--brand-primary)' }}>${cartTotal.toFixed(2)}</span>
-                </div>
-              </div>
-
-              <button
-                onClick={handleCheckout}
-                disabled={processingPayment}
-                style={{
-                  width: '100%',
-                  padding: '16px',
-                  background: processingPayment ? '#9CA3AF' : '#DC2626',
-                  color: 'white',
-                  border: 'none',
-                  borderRadius: '8px',
-                  fontSize: '16px',
-                  fontWeight: 700,
-                  cursor: processingPayment ? 'not-allowed' : 'pointer'
-                }}
-              >
-                {processingPayment ? 'Procesando...' : '✅ Confirmar Venta'}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Modal de Historial de Ventas */}
-      {showSalesHistory && (
-        <div style={{
-          position: 'fixed',
-          top: 0,
-          left: 0,
-          right: 0,
-          bottom: 0,
-          background: 'rgba(0,0,0,0.5)',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          zIndex: 2000,
-          padding: '20px'
-        }}>
-          <div style={{
-            background: 'var(--card)',
-            borderRadius: '16px',
-            maxWidth: '1000px',
-            width: '100%',
-            maxHeight: '90vh',
-            overflowY: 'auto',
-            boxShadow: '0 20px 60px rgba(0,0,0,0.5)',
-            border: '1px solid var(--border)'
-          }}>
-            <div style={{ padding: '24px', borderBottom: '1px solid var(--border)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-              <h2 style={{ fontSize: '24px', fontWeight: 700, color: 'var(--text)' }}>📊 Historial de Ventas</h2>
-              <button onClick={() => setShowSalesHistory(false)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--muted)' }}>
-                <X size={24} />
-              </button>
-            </div>
-
-            <div style={{ padding: '24px' }}>
-              {sales.length === 0 ? (
-                <div style={{ textAlign: 'center', padding: '60px', color: '#6B7280' }}>
-                  No hay ventas registradas
-                </div>
-              ) : (
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-                  {sales.slice().reverse().map(sale => (
-                    <div key={sale.id} style={{
-                      background: 'var(--background)',
-                      padding: '20px',
-                      borderRadius: '12px',
-                      border: '1px solid var(--border)'
-                    }}>
-                      <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '12px' }}>
-                        <div>
-                          <h3 style={{ fontSize: '16px', fontWeight: 700, color: 'var(--text)', marginBottom: '4px' }}>
-                            {sale.customer_name}
-                          </h3>
-                          <p style={{ fontSize: '13px', color: 'var(--muted)' }}>{sale.customer_email}</p>
-                          {sale.customer_phone && <p style={{ fontSize: '13px', color: 'var(--muted)' }}>📞 {sale.customer_phone}</p>}
-                        </div>
-                        <div style={{ textAlign: 'right' }}>
-                          <div style={{ fontSize: '24px', fontWeight: 700, color: 'var(--brand-primary)' }}>
-                            ${sale.total.toFixed(2)}
-                          </div>
-                          <div style={{ fontSize: '12px', color: 'var(--muted)', marginTop: '4px' }}>
-                            {new Date(sale.created_at).toLocaleString('es-NI')}
-                          </div>
-                        </div>
-                      </div>
-                      <div style={{ display: 'flex', gap: '8px', marginBottom: '12px' }}>
-                        <span style={{
-                          fontSize: '12px',
-                          padding: '4px 12px',
-                          background: sale.payment_method === 'efectivo' ? 'rgba(22, 163, 74, 0.1)' : sale.payment_method === 'tarjeta' ? 'rgba(30, 64, 175, 0.1)' : 'rgba(146, 64, 14, 0.1)',
-                          color: sale.payment_method === 'efectivo' ? '#22c55e' : sale.payment_method === 'tarjeta' ? '#60a5fa' : '#fbbf24',
-                          borderRadius: '6px',
-                          fontWeight: 600
-                        }}>
-                          {sale.payment_method === 'efectivo' ? '💵 Efectivo' : sale.payment_method === 'tarjeta' ? '💳 Tarjeta' : '🏦 Transferencia'}
-                        </span>
-                        <span style={{
-                          fontSize: '12px',
-                          padding: '4px 12px',
-                          background: 'rgba(22, 163, 74, 0.1)',
-                          color: '#22c55e',
-                          borderRadius: '6px',
-                          fontWeight: 600
-                        }}>
-                          ✅ {sale.status}
-                        </span>
-                      </div>
-                      <div style={{ fontSize: '13px', color: 'var(--muted)' }}>
-                        <strong>{sale.items.length}</strong> producto(s)
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
-          </div>
-        </div>
-      )}
+      <InvoicePreview
+        isOpen={showPreview}
+        invoiceId={previewInvoiceId}
+        onClose={() => { setShowPreview(false); setPreviewInvoiceId(null); }}
+        onStatusChange={refreshAll}
+      />
     </div>
   );
 }

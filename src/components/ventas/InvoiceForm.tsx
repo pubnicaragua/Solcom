@@ -1,0 +1,773 @@
+'use client';
+
+import { useState, useEffect, useRef } from 'react';
+import {
+    X, Plus, Trash2, Search, UserPlus, FileText,
+    MapPin, Hash, User, Truck, ChevronDown,
+} from 'lucide-react';
+import CustomerModal from './CustomerModal';
+import DeliverySelector from './DeliverySelector';
+import CancellationReasonSelector from './CancellationReasonSelector';
+
+interface InvoiceFormItem {
+    item_id: string | null;
+    description: string;
+    quantity: number;
+    unit_price: number;
+    discount_percent: number;
+}
+
+interface Customer {
+    id: string;
+    name: string;
+    email: string | null;
+    phone: string | null;
+    ruc: string | null;
+    source?: 'supabase' | 'zoho';
+}
+
+interface Product {
+    id: string;
+    item_id: string;
+    name: string;
+    sku: string;
+    unit_price: number;
+    quantity: number;
+    warehouse_name: string;
+}
+
+interface Warehouse {
+    id: string;
+    code: string;
+    name: string;
+}
+
+interface Salesperson {
+    id: string;
+    name: string;
+    email: string;
+    role: string;
+    photo_url?: string | null;
+}
+
+interface InvoiceFormProps {
+    isOpen: boolean;
+    onClose: () => void;
+    onSaved: () => void;
+    editInvoice?: any;
+}
+
+const TERMS_OPTIONS = [
+    { value: '', label: 'Sin términos' },
+    { value: '1_dia', label: '1 Día' },
+    { value: '7_dias', label: '7 Días' },
+    { value: '15_dias', label: '15 Días' },
+    { value: '30_dias', label: '30 Días' },
+    { value: '45_dias', label: '45 Días' },
+    { value: '60_dias', label: '60 Días' },
+    { value: '90_dias', label: '90 Días' },
+    { value: 'contado', label: 'Contado' },
+];
+
+export default function InvoiceForm({ isOpen, onClose, onSaved, editInvoice }: InvoiceFormProps) {
+    // Customer
+    const [customers, setCustomers] = useState<Customer[]>([]);
+    const [selectedCustomer, setSelectedCustomer] = useState<Customer | null>(null);
+    const [customerSearch, setCustomerSearch] = useState('');
+    const [showCustomerDropdown, setShowCustomerDropdown] = useState(false);
+    const [showCustomerModal, setShowCustomerModal] = useState(false);
+
+    // Core fields
+    const [invoiceDate, setInvoiceDate] = useState(new Date().toISOString().slice(0, 10));
+    const [dueDate, setDueDate] = useState('');
+    const [orderNumber, setOrderNumber] = useState('');
+    const [terms, setTerms] = useState('');
+    const [notes, setNotes] = useState('');
+    const [creditDetail, setCreditDetail] = useState('');
+
+    // Warehouse (Ubicación)
+    const [warehouses, setWarehouses] = useState<Warehouse[]>([]);
+    const [warehouseId, setWarehouseId] = useState('');
+
+    // Salesperson (Vendedor)
+    const [salespeople, setSalespeople] = useState<Salesperson[]>([]);
+    const [salespersonId, setSalespersonId] = useState('');
+
+    // Delivery
+    const [deliveryRequested, setDeliveryRequested] = useState(false);
+    const [deliveryId, setDeliveryId] = useState<string | null>(null);
+
+    // Cancellation (only visible if status changes)
+    const [cancellationReasonId, setCancellationReasonId] = useState<string | null>(null);
+    const [cancellationComments, setCancellationComments] = useState('');
+    const [showCancellation, setShowCancellation] = useState(false);
+
+    // Financials
+    const [taxRate, setTaxRate] = useState(15);
+    const [discountAmount, setDiscountAmount] = useState(0);
+    const [shippingCharge, setShippingCharge] = useState(0);
+
+    // Line items
+    const [lineItems, setLineItems] = useState<InvoiceFormItem[]>([
+        { item_id: null, description: '', quantity: 1, unit_price: 0, discount_percent: 0 },
+    ]);
+
+    // Products for autocomplete
+    const [products, setProducts] = useState<Product[]>([]);
+    const [productSearch, setProductSearch] = useState('');
+    const [activeProductRow, setActiveProductRow] = useState<number | null>(null);
+    const [showProductDropdown, setShowProductDropdown] = useState(false);
+
+    const [saving, setSaving] = useState(false);
+    const [error, setError] = useState('');
+
+    const customerRef = useRef<HTMLDivElement>(null);
+    const productRef = useRef<HTMLDivElement>(null);
+
+    useEffect(() => {
+        if (isOpen) {
+            fetchCustomers();
+            fetchProducts();
+            fetchWarehouses();
+            fetchSalespeople();
+        }
+    }, [isOpen]);
+
+    // Auto-calc due date from terms
+    useEffect(() => {
+        if (terms && invoiceDate) {
+            const daysMap: Record<string, number> = {
+                '1_dia': 1, '7_dias': 7, '15_dias': 15, '30_dias': 30,
+                '45_dias': 45, '60_dias': 60, '90_dias': 90, 'contado': 0,
+            };
+            const days = daysMap[terms];
+            if (days !== undefined) {
+                const d = new Date(invoiceDate);
+                d.setDate(d.getDate() + days);
+                setDueDate(d.toISOString().slice(0, 10));
+            }
+        }
+    }, [terms, invoiceDate]);
+
+    useEffect(() => {
+        const handleClick = (e: MouseEvent) => {
+            if (customerRef.current && !customerRef.current.contains(e.target as Node)) setShowCustomerDropdown(false);
+            if (productRef.current && !productRef.current.contains(e.target as Node)) {
+                setShowProductDropdown(false);
+                setActiveProductRow(null);
+            }
+        };
+        document.addEventListener('mousedown', handleClick);
+        return () => document.removeEventListener('mousedown', handleClick);
+    }, []);
+
+    const fetchCustomers = async (searchText: string = '') => {
+        try {
+            const res = await fetch(`/api/ventas/customers${searchText ? `?search=${encodeURIComponent(searchText)}` : ''}`);
+            const data = await res.json();
+            setCustomers(data.customers || []);
+        } catch (err) {
+            console.error('Error fetching customers:', err);
+        }
+    };
+
+    // Debounced customer search
+    const customerSearchTimeout = useRef<NodeJS.Timeout | null>(null);
+    const handleCustomerSearch = (text: string) => {
+        setCustomerSearch(text);
+        setShowCustomerDropdown(true);
+        if (!text) { setSelectedCustomer(null); fetchCustomers(); return; }
+        if (customerSearchTimeout.current) clearTimeout(customerSearchTimeout.current);
+        customerSearchTimeout.current = setTimeout(() => fetchCustomers(text), 300);
+    };
+
+    const fetchProducts = async () => {
+        try {
+            const res = await fetch('/api/cliente/inventario');
+            const data = await res.json();
+            if (data.items) setProducts(data.items.filter((p: Product) => p.quantity > 0));
+        } catch (err) {
+            console.error('Error fetching products:', err);
+        }
+    };
+
+    const fetchWarehouses = async () => {
+        try {
+            const res = await fetch('/api/warehouses');
+            const data = await res.json();
+            setWarehouses(data || []);
+        } catch (err) {
+            console.error('Error fetching warehouses:', err);
+        }
+    };
+
+    const fetchSalespeople = async () => {
+        try {
+            const res = await fetch('/api/ventas/salespeople');
+            const data = await res.json();
+            setSalespeople(data.salespeople || []);
+        } catch (err) {
+            console.error('Error fetching salespeople:', err);
+        }
+    };
+
+    const filteredCustomers = customers;
+
+    const filteredProducts = products.filter(p =>
+        p.name.toLowerCase().includes(productSearch.toLowerCase()) ||
+        p.sku.toLowerCase().includes(productSearch.toLowerCase())
+    );
+
+    const selectCustomer = (customer: Customer) => {
+        setSelectedCustomer(customer);
+        setCustomerSearch(customer.name);
+        setShowCustomerDropdown(false);
+    };
+
+    const selectProduct = (product: Product, rowIndex: number) => {
+        const updated = [...lineItems];
+        updated[rowIndex] = {
+            ...updated[rowIndex],
+            item_id: product.item_id,
+            description: product.name,
+            unit_price: product.unit_price || 0,
+        };
+        setLineItems(updated);
+        setShowProductDropdown(false);
+        setActiveProductRow(null);
+        setProductSearch('');
+    };
+
+    const updateLineItem = (index: number, field: keyof InvoiceFormItem, value: any) => {
+        const updated = [...lineItems];
+        updated[index] = { ...updated[index], [field]: value };
+        setLineItems(updated);
+    };
+
+    const addLineItem = () => {
+        setLineItems([...lineItems, { item_id: null, description: '', quantity: 1, unit_price: 0, discount_percent: 0 }]);
+    };
+
+    const removeLineItem = (index: number) => {
+        if (lineItems.length <= 1) return;
+        setLineItems(lineItems.filter((_, i) => i !== index));
+    };
+
+    // Calculations
+    const getLineSubtotal = (item: InvoiceFormItem) => item.quantity * item.unit_price * (1 - item.discount_percent / 100);
+    const subtotal = lineItems.reduce((sum, item) => sum + getLineSubtotal(item), 0);
+    const taxAmount = subtotal * (taxRate / 100);
+    const total = subtotal + taxAmount + shippingCharge - discountAmount;
+
+    const handleSave = async (status: string = 'borrador') => {
+        // Validations
+        if (!warehouseId) { setError('Selecciona una ubicación (bodega)'); return; }
+        if (!salespersonId) { setError('Selecciona un vendedor'); return; }
+        if (lineItems.every(item => !item.description.trim())) { setError('Agrega al menos un artículo'); return; }
+        if (status === 'cancelada' && !cancellationReasonId) { setError('Selecciona un motivo de anulación'); return; }
+
+        setSaving(true);
+        setError('');
+
+        try {
+            const payload = {
+                customer_id: selectedCustomer?.id || null,
+                date: invoiceDate,
+                due_date: dueDate || null,
+                status,
+                tax_rate: taxRate,
+                discount_amount: discountAmount,
+                shipping_charge: shippingCharge,
+                notes: notes || null,
+                warehouse_id: warehouseId || null,
+                order_number: orderNumber || null,
+                terms: terms || null,
+                salesperson_id: salespersonId || null,
+                delivery_requested: deliveryRequested,
+                delivery_id: deliveryId || null,
+                credit_detail: creditDetail || null,
+                cancellation_reason_id: cancellationReasonId || null,
+                cancellation_comments: cancellationComments || null,
+                items: lineItems.filter(item => item.description.trim()).map(item => ({
+                    item_id: item.item_id,
+                    description: item.description,
+                    quantity: item.quantity,
+                    unit_price: item.unit_price,
+                    discount_percent: item.discount_percent,
+                })),
+            };
+
+            const res = await fetch('/api/ventas/invoices', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(payload),
+            });
+
+            const data = await res.json();
+            if (!res.ok) throw new Error(data.error);
+
+            onSaved();
+            onClose();
+            resetForm();
+        } catch (err: any) {
+            setError(err.message || 'Error al guardar');
+        } finally {
+            setSaving(false);
+        }
+    };
+
+    const resetForm = () => {
+        setSelectedCustomer(null);
+        setCustomerSearch('');
+        setInvoiceDate(new Date().toISOString().slice(0, 10));
+        setDueDate('');
+        setOrderNumber('');
+        setTerms('');
+        setNotes('');
+        setCreditDetail('');
+        setWarehouseId('');
+        setSalespersonId('');
+        setDeliveryRequested(false);
+        setDeliveryId(null);
+        setCancellationReasonId(null);
+        setCancellationComments('');
+        setShowCancellation(false);
+        setTaxRate(15);
+        setDiscountAmount(0);
+        setShippingCharge(0);
+        setLineItems([{ item_id: null, description: '', quantity: 1, unit_price: 0, discount_percent: 0 }]);
+        setError('');
+    };
+
+    if (!isOpen) return null;
+
+    const inputStyle: React.CSSProperties = {
+        width: '100%', padding: '9px 12px', background: 'var(--background)',
+        color: 'var(--text)', border: '1px solid var(--border)', borderRadius: '8px',
+        fontSize: '13px', transition: 'border-color 0.2s',
+    };
+
+    const labelStyle: React.CSSProperties = {
+        display: 'block', fontSize: '13px', fontWeight: 600,
+        color: 'var(--muted)', marginBottom: '6px',
+    };
+
+    const requiredStar = <span style={{ color: 'var(--brand-primary)', marginLeft: '2px' }}>*</span>;
+
+    return (
+        <>
+            <div style={{
+                position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
+                background: 'rgba(0,0,0,0.6)', display: 'flex', alignItems: 'flex-start',
+                justifyContent: 'center', zIndex: 2000, padding: '20px',
+                overflowY: 'auto', backdropFilter: 'blur(4px)',
+            }}>
+                <div style={{
+                    background: 'var(--card)', borderRadius: '16px', maxWidth: '960px',
+                    width: '100%', boxShadow: '0 25px 60px rgba(0,0,0,0.5)',
+                    border: '1px solid var(--border)',
+                }}>
+                    {/* Header */}
+                    <div style={{
+                        padding: '18px 24px', borderBottom: '1px solid var(--border)',
+                        display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+                    }}>
+                        <h2 style={{ fontSize: '20px', fontWeight: 700, color: 'var(--text)', display: 'flex', alignItems: 'center', gap: '10px' }}>
+                            <FileText size={22} style={{ color: 'var(--brand-primary)' }} />
+                            Nueva Factura
+                        </h2>
+                        <button onClick={onClose} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--muted)', padding: '4px' }}>
+                            <X size={22} />
+                        </button>
+                    </div>
+
+                    <div style={{ padding: '24px', maxHeight: 'calc(100vh - 140px)', overflowY: 'auto' }}>
+                        {error && (
+                            <div style={{
+                                padding: '10px 14px', background: 'rgba(239,68,68,0.1)', color: '#EF4444',
+                                borderRadius: '8px', fontSize: '13px', marginBottom: '20px',
+                                border: '1px solid rgba(239,68,68,0.2)',
+                            }}>
+                                {error}
+                            </div>
+                        )}
+
+                        {/* ===== ROW 1: Cliente + Ubicación ===== */}
+                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px', marginBottom: '20px' }}>
+                            {/* Customer */}
+                            <div ref={customerRef} style={{ position: 'relative' }}>
+                                <label style={labelStyle}>Cliente</label>
+                                <div style={{ display: 'flex', gap: '8px' }}>
+                                    <div style={{ flex: 1, position: 'relative' }}>
+                                        <Search size={14} style={{ position: 'absolute', left: '10px', top: '11px', color: 'var(--muted)' }} />
+                                        <input
+                                            type="text" value={customerSearch}
+                                            onChange={(e) => handleCustomerSearch(e.target.value)}
+                                            onFocus={() => setShowCustomerDropdown(true)}
+                                            placeholder="Buscar cliente..."
+                                            style={{ ...inputStyle, paddingLeft: '32px' }}
+                                        />
+                                        {showCustomerDropdown && (
+                                            <div style={{
+                                                position: 'absolute', top: '100%', left: 0, right: 0,
+                                                background: 'var(--card)', border: '1px solid var(--border)',
+                                                borderRadius: '8px', marginTop: '4px', maxHeight: '200px',
+                                                overflowY: 'auto', zIndex: 100, boxShadow: '0 8px 24px rgba(0,0,0,0.3)',
+                                            }}>
+                                                {filteredCustomers.length === 0 ? (
+                                                    <div style={{ padding: '12px', fontSize: '13px', color: 'var(--muted)', textAlign: 'center' }}>Sin resultados</div>
+                                                ) : (
+                                                    filteredCustomers.map(c => (
+                                                        <div key={c.id} onClick={() => selectCustomer(c)}
+                                                            style={{ padding: '10px 14px', cursor: 'pointer', fontSize: '13px', color: 'var(--text)', borderBottom: '1px solid var(--border)', transition: 'background 0.15s' }}
+                                                            onMouseEnter={(e) => e.currentTarget.style.background = 'rgba(255,255,255,0.05)'}
+                                                            onMouseLeave={(e) => e.currentTarget.style.background = 'transparent'}
+                                                        >
+                                                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                                                <div style={{ fontWeight: 600 }}>{c.name}</div>
+                                                                {c.source === 'zoho' && <span style={{ fontSize: '10px', padding: '2px 6px', background: 'rgba(59,130,246,0.15)', color: '#60A5FA', borderRadius: '4px' }}>Zoho</span>}
+                                                            </div>
+                                                            {c.email && <div style={{ fontSize: '12px', color: 'var(--muted)' }}>{c.email}</div>}
+                                                        </div>
+                                                    ))
+                                                )}
+                                            </div>
+                                        )}
+                                    </div>
+                                    <button onClick={() => setShowCustomerModal(true)} title="Nuevo Cliente"
+                                        style={{ padding: '9px', background: 'var(--brand-primary)', color: 'white', border: 'none', borderRadius: '8px', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                                        <UserPlus size={18} />
+                                    </button>
+                                </div>
+                            </div>
+
+                            {/* Ubicación (Warehouse) */}
+                            <div>
+                                <label style={labelStyle}>Ubicación (Bodega){requiredStar}</label>
+                                <div style={{ position: 'relative' }}>
+                                    <MapPin size={14} style={{ position: 'absolute', left: '10px', top: '11px', color: 'var(--muted)' }} />
+                                    <select
+                                        value={warehouseId}
+                                        onChange={(e) => setWarehouseId(e.target.value)}
+                                        style={{ ...inputStyle, paddingLeft: '32px', appearance: 'none', cursor: 'pointer' }}
+                                    >
+                                        <option value="">Seleccionar bodega...</option>
+                                        {warehouses.map(w => (
+                                            <option key={w.id} value={w.id}>{w.code} — {w.name}</option>
+                                        ))}
+                                    </select>
+                                    <ChevronDown size={14} style={{ position: 'absolute', right: '10px', top: '12px', color: 'var(--muted)', pointerEvents: 'none' }} />
+                                </div>
+                            </div>
+                        </div>
+
+                        {/* ===== ROW 2: Orden, Fecha, Términos, Vencimiento ===== */}
+                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr 1fr', gap: '16px', marginBottom: '20px' }}>
+                            <div>
+                                <label style={labelStyle}>Número de Orden</label>
+                                <input type="text" value={orderNumber} onChange={(e) => setOrderNumber(e.target.value)}
+                                    placeholder="Ej: ORD-001" style={inputStyle} />
+                            </div>
+                            <div>
+                                <label style={labelStyle}>Fecha{requiredStar}</label>
+                                <input type="date" value={invoiceDate} onChange={(e) => setInvoiceDate(e.target.value)} style={inputStyle} />
+                            </div>
+                            <div>
+                                <label style={labelStyle}>Términos</label>
+                                <div style={{ position: 'relative' }}>
+                                    <select value={terms} onChange={(e) => setTerms(e.target.value)}
+                                        style={{ ...inputStyle, appearance: 'none', cursor: 'pointer' }}>
+                                        {TERMS_OPTIONS.map(t => (
+                                            <option key={t.value} value={t.value}>{t.label}</option>
+                                        ))}
+                                    </select>
+                                    <ChevronDown size={14} style={{ position: 'absolute', right: '10px', top: '12px', color: 'var(--muted)', pointerEvents: 'none' }} />
+                                </div>
+                            </div>
+                            <div>
+                                <label style={labelStyle}>Vencimiento</label>
+                                <input type="date" value={dueDate} onChange={(e) => setDueDate(e.target.value)} style={inputStyle} />
+                            </div>
+                        </div>
+
+                        {/* ===== ROW 3: Vendedor + Solicitud Delivery ===== */}
+                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px', marginBottom: '20px' }}>
+                            {/* Vendedor */}
+                            <div>
+                                <label style={labelStyle}>Vendedor{requiredStar}</label>
+                                <div style={{ position: 'relative' }}>
+                                    <User size={14} style={{ position: 'absolute', left: '10px', top: '11px', color: 'var(--muted)' }} />
+                                    <select value={salespersonId} onChange={(e) => setSalespersonId(e.target.value)}
+                                        style={{ ...inputStyle, paddingLeft: '32px', appearance: 'none', cursor: 'pointer' }}>
+                                        <option value="">Seleccionar vendedor...</option>
+                                        {salespeople.map(s => (
+                                            <option key={s.id} value={s.id}>{s.name} — {s.role}</option>
+                                        ))}
+                                    </select>
+                                    <ChevronDown size={14} style={{ position: 'absolute', right: '10px', top: '12px', color: 'var(--muted)', pointerEvents: 'none' }} />
+                                </div>
+                            </div>
+
+                            {/* Solicitud de Delivery */}
+                            <div>
+                                <label style={labelStyle}>Solicitud de Delivery{requiredStar}</label>
+                                <div style={{
+                                    display: 'flex', gap: '8px', padding: '4px',
+                                    background: 'var(--background)', borderRadius: '8px',
+                                    border: '1px solid var(--border)',
+                                }}>
+                                    {[{ val: false, label: 'No' }, { val: true, label: 'Sí' }].map(opt => (
+                                        <button
+                                            key={String(opt.val)}
+                                            onClick={() => setDeliveryRequested(opt.val)}
+                                            style={{
+                                                flex: 1, padding: '7px 16px', border: 'none', borderRadius: '6px',
+                                                fontSize: '13px', fontWeight: 600, cursor: 'pointer',
+                                                transition: 'all 0.2s',
+                                                background: deliveryRequested === opt.val ? (opt.val ? '#059669' : '#374151') : 'transparent',
+                                                color: deliveryRequested === opt.val ? 'white' : 'var(--muted)',
+                                            }}
+                                        >
+                                            {opt.val && <Truck size={13} style={{ marginRight: '4px', display: 'inline', verticalAlign: 'middle' }} />}
+                                            {opt.label}
+                                        </button>
+                                    ))}
+                                </div>
+                            </div>
+                        </div>
+
+                        {/* ===== ROW 4: Asignación Delivery + Detalle de crédito ===== */}
+                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px', marginBottom: '24px' }}>
+                            <DeliverySelector
+                                value={deliveryId}
+                                onChange={(id) => setDeliveryId(id)}
+                            />
+                            <div>
+                                <label style={labelStyle}>Detalle de Crédito</label>
+                                <textarea
+                                    value={creditDetail}
+                                    onChange={(e) => setCreditDetail(e.target.value)}
+                                    placeholder="Detalles de crédito..."
+                                    rows={2}
+                                    style={{ ...inputStyle, resize: 'vertical', minHeight: '60px' }}
+                                />
+                            </div>
+                        </div>
+
+                        {/* ===== LINE ITEMS TABLE ===== */}
+                        <div style={{
+                            border: '1px solid var(--border)', borderRadius: '12px',
+                            overflow: 'hidden', marginBottom: '20px',
+                        }}>
+                            <div style={{
+                                display: 'grid', gridTemplateColumns: '2fr 80px 120px 80px 120px 40px',
+                                gap: '1px', background: 'rgba(255,255,255,0.03)', padding: '12px 16px',
+                                borderBottom: '1px solid var(--border)',
+                            }}>
+                                {['Artículo', 'Cant.', 'Precio Unit.', 'Desc. %', 'Subtotal', ''].map((h, i) => (
+                                    <div key={i} style={{ fontSize: '12px', fontWeight: 700, color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>{h}</div>
+                                ))}
+                            </div>
+
+                            {lineItems.map((item, index) => (
+                                <div key={index} style={{
+                                    display: 'grid', gridTemplateColumns: '2fr 80px 120px 80px 120px 40px',
+                                    gap: '8px', padding: '12px 16px',
+                                    borderBottom: index < lineItems.length - 1 ? '1px solid var(--border)' : 'none',
+                                    alignItems: 'center',
+                                }}>
+                                    <div ref={activeProductRow === index ? productRef : null} style={{ position: 'relative' }}>
+                                        <input type="text" value={item.description}
+                                            onChange={(e) => { updateLineItem(index, 'description', e.target.value); setProductSearch(e.target.value); setActiveProductRow(index); setShowProductDropdown(true); }}
+                                            onFocus={() => { setActiveProductRow(index); setProductSearch(item.description); setShowProductDropdown(true); }}
+                                            placeholder="Buscar producto..." style={{ ...inputStyle, fontSize: '13px' }}
+                                        />
+                                        {showProductDropdown && activeProductRow === index && (
+                                            <div style={{
+                                                position: 'absolute', top: '100%', left: 0, right: 0,
+                                                background: 'var(--card)', border: '1px solid var(--border)',
+                                                borderRadius: '8px', marginTop: '4px', maxHeight: '180px',
+                                                overflowY: 'auto', zIndex: 100, boxShadow: '0 8px 24px rgba(0,0,0,0.3)',
+                                            }}>
+                                                {filteredProducts.slice(0, 10).map(p => (
+                                                    <div key={`${p.item_id}-${p.warehouse_name}`} onClick={() => selectProduct(p, index)}
+                                                        style={{ padding: '10px 14px', cursor: 'pointer', fontSize: '13px', color: 'var(--text)', borderBottom: '1px solid var(--border)', transition: 'background 0.15s' }}
+                                                        onMouseEnter={(e) => e.currentTarget.style.background = 'rgba(255,255,255,0.05)'}
+                                                        onMouseLeave={(e) => e.currentTarget.style.background = 'transparent'}
+                                                    >
+                                                        <div style={{ fontWeight: 600 }}>{p.name}</div>
+                                                        <div style={{ fontSize: '11px', color: 'var(--muted)', display: 'flex', gap: '8px' }}>
+                                                            <span>SKU: {p.sku}</span><span>•</span><span>${p.unit_price?.toFixed(2)}</span><span>•</span><span>Stock: {p.quantity}</span>
+                                                        </div>
+                                                    </div>
+                                                ))}
+                                                {filteredProducts.length === 0 && (
+                                                    <div style={{ padding: '12px', fontSize: '13px', color: 'var(--muted)', textAlign: 'center' }}>Sin resultados</div>
+                                                )}
+                                            </div>
+                                        )}
+                                    </div>
+                                    <input type="number" min="1" step="1" value={item.quantity}
+                                        onChange={(e) => updateLineItem(index, 'quantity', Math.max(1, parseInt(e.target.value) || 1))}
+                                        style={{ ...inputStyle, textAlign: 'center' }} />
+                                    <input type="number" min="0" step="0.01" value={item.unit_price}
+                                        onChange={(e) => updateLineItem(index, 'unit_price', parseFloat(e.target.value) || 0)}
+                                        style={{ ...inputStyle, textAlign: 'right' }} />
+                                    <input type="number" min="0" max="100" step="0.5" value={item.discount_percent}
+                                        onChange={(e) => updateLineItem(index, 'discount_percent', Math.min(100, parseFloat(e.target.value) || 0))}
+                                        style={{ ...inputStyle, textAlign: 'center' }} />
+                                    <div style={{ fontSize: '14px', fontWeight: 700, color: 'var(--text)', textAlign: 'right', paddingRight: '4px' }}>
+                                        ${getLineSubtotal(item).toFixed(2)}
+                                    </div>
+                                    <button onClick={() => removeLineItem(index)} disabled={lineItems.length <= 1}
+                                        style={{ background: 'none', border: 'none', cursor: lineItems.length <= 1 ? 'default' : 'pointer', color: lineItems.length <= 1 ? 'var(--border)' : '#EF4444', padding: '4px', display: 'flex', alignItems: 'center', justifyContent: 'center', opacity: lineItems.length <= 1 ? 0.3 : 1 }}>
+                                        <Trash2 size={16} />
+                                    </button>
+                                </div>
+                            ))}
+
+                            <div style={{ padding: '12px 16px', borderTop: '1px solid var(--border)' }}>
+                                <button onClick={addLineItem}
+                                    style={{ display: 'flex', alignItems: 'center', gap: '6px', padding: '8px 16px', background: 'transparent', color: 'var(--brand-primary)', border: '1px dashed var(--brand-primary)', borderRadius: '8px', fontSize: '13px', fontWeight: 600, cursor: 'pointer', transition: 'background 0.2s' }}
+                                    onMouseEnter={(e) => e.currentTarget.style.background = 'rgba(220,38,38,0.05)'}
+                                    onMouseLeave={(e) => e.currentTarget.style.background = 'transparent'}
+                                >
+                                    <Plus size={16} /> Agregar Línea
+                                </button>
+                            </div>
+                        </div>
+
+                        {/* ===== NOTES + TOTALS ===== */}
+                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 340px', gap: '24px', marginBottom: '24px' }}>
+                            <div>
+                                <label style={labelStyle}>Notas / Observaciones</label>
+                                <textarea value={notes} onChange={(e) => setNotes(e.target.value)}
+                                    placeholder="Notas internas o para el cliente..." rows={4}
+                                    style={{ ...inputStyle, resize: 'vertical', minHeight: '80px' }}
+                                />
+                            </div>
+
+                            <div style={{ background: 'var(--background)', borderRadius: '12px', padding: '20px', border: '1px solid var(--border)' }}>
+                                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '12px', fontSize: '14px' }}>
+                                    <span style={{ color: 'var(--muted)' }}>Subtotal</span>
+                                    <span style={{ fontWeight: 600, color: 'var(--text)' }}>${subtotal.toFixed(2)}</span>
+                                </div>
+
+                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px', fontSize: '14px' }}>
+                                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                                        <span style={{ color: 'var(--muted)' }}>IVA</span>
+                                        <input type="number" min="0" max="100" step="0.5" value={taxRate}
+                                            onChange={(e) => setTaxRate(parseFloat(e.target.value) || 0)}
+                                            style={{ width: '60px', padding: '4px 8px', background: 'var(--card)', color: 'var(--text)', border: '1px solid var(--border)', borderRadius: '6px', fontSize: '13px', textAlign: 'center' }}
+                                        />
+                                        <span style={{ color: 'var(--muted)', fontSize: '13px' }}>%</span>
+                                    </div>
+                                    <span style={{ fontWeight: 600, color: 'var(--text)' }}>${taxAmount.toFixed(2)}</span>
+                                </div>
+
+                                {/* Shipping Charge */}
+                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px', fontSize: '14px' }}>
+                                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                                        <Truck size={14} style={{ color: 'var(--muted)' }} />
+                                        <span style={{ color: 'var(--muted)' }}>Envío</span>
+                                    </div>
+                                    <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                                        <span style={{ color: 'var(--muted)', fontSize: '13px' }}>$</span>
+                                        <input type="number" min="0" step="0.01" value={shippingCharge}
+                                            onChange={(e) => setShippingCharge(parseFloat(e.target.value) || 0)}
+                                            style={{ width: '80px', padding: '4px 8px', background: 'var(--card)', color: 'var(--text)', border: '1px solid var(--border)', borderRadius: '6px', fontSize: '13px', textAlign: 'right' }}
+                                        />
+                                    </div>
+                                </div>
+
+                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px', fontSize: '14px' }}>
+                                    <span style={{ color: 'var(--muted)' }}>Descuento</span>
+                                    <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                                        <span style={{ color: 'var(--muted)', fontSize: '13px' }}>$</span>
+                                        <input type="number" min="0" step="0.01" value={discountAmount}
+                                            onChange={(e) => setDiscountAmount(parseFloat(e.target.value) || 0)}
+                                            style={{ width: '80px', padding: '4px 8px', background: 'var(--card)', color: 'var(--text)', border: '1px solid var(--border)', borderRadius: '6px', fontSize: '13px', textAlign: 'right' }}
+                                        />
+                                    </div>
+                                </div>
+
+                                <div style={{ borderTop: '2px solid var(--border)', paddingTop: '16px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                    <span style={{ fontSize: '18px', fontWeight: 700, color: 'var(--text)' }}>Total</span>
+                                    <span style={{ fontSize: '24px', fontWeight: 800, color: 'var(--brand-primary)' }}>${total.toFixed(2)}</span>
+                                </div>
+                            </div>
+                        </div>
+
+                        {/* ===== CANCELLATION SECTION (toggle) ===== */}
+                        <div style={{ marginBottom: '24px' }}>
+                            <button
+                                onClick={() => setShowCancellation(!showCancellation)}
+                                style={{
+                                    display: 'flex', alignItems: 'center', gap: '6px',
+                                    padding: '8px 14px', background: showCancellation ? 'rgba(251,191,36,0.08)' : 'transparent',
+                                    border: '1px solid var(--border)', borderRadius: '8px',
+                                    fontSize: '13px', color: showCancellation ? '#FBBF24' : 'var(--muted)',
+                                    cursor: 'pointer', fontWeight: 600, transition: 'all 0.2s',
+                                }}
+                            >
+                                <ChevronDown size={14} style={{ transform: showCancellation ? 'rotate(180deg)' : 'rotate(0)', transition: 'transform 0.2s' }} />
+                                Motivo de Anulación
+                            </button>
+
+                            {showCancellation && (
+                                <div style={{
+                                    marginTop: '12px', padding: '20px',
+                                    background: 'rgba(251,191,36,0.03)', border: '1px solid rgba(251,191,36,0.15)',
+                                    borderRadius: '12px',
+                                }}>
+                                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px' }}>
+                                        <CancellationReasonSelector
+                                            value={cancellationReasonId}
+                                            onChange={(id) => setCancellationReasonId(id)}
+                                        />
+                                        <div>
+                                            <label style={labelStyle}>Comentarios de Anulación</label>
+                                            <textarea
+                                                value={cancellationComments}
+                                                onChange={(e) => setCancellationComments(e.target.value)}
+                                                placeholder="Solo puede escribir un máximo de 36000 caracteres"
+                                                rows={3}
+                                                style={{ ...inputStyle, resize: 'vertical', minHeight: '70px' }}
+                                                maxLength={36000}
+                                            />
+                                        </div>
+                                    </div>
+                                </div>
+                            )}
+                        </div>
+
+                        {/* ===== ACTION BUTTONS ===== */}
+                        <div style={{
+                            display: 'flex', justifyContent: 'flex-end', gap: '12px',
+                            paddingTop: '16px', borderTop: '1px solid var(--border)',
+                        }}>
+                            <button onClick={onClose}
+                                style={{ padding: '12px 24px', background: 'transparent', color: 'var(--muted)', border: '1px solid var(--border)', borderRadius: '8px', fontSize: '14px', fontWeight: 600, cursor: 'pointer' }}>
+                                Cancelar
+                            </button>
+                            <button onClick={() => handleSave('borrador')} disabled={saving}
+                                style={{ padding: '12px 24px', background: '#374151', color: 'white', border: 'none', borderRadius: '8px', fontSize: '14px', fontWeight: 600, cursor: saving ? 'not-allowed' : 'pointer', opacity: saving ? 0.6 : 1 }}>
+                                Guardar Borrador
+                            </button>
+                            <button onClick={() => handleSave('enviada')} disabled={saving}
+                                style={{ padding: '12px 24px', background: saving ? '#6B7280' : 'var(--brand-primary)', color: 'white', border: 'none', borderRadius: '8px', fontSize: '14px', fontWeight: 700, cursor: saving ? 'not-allowed' : 'pointer', transition: 'background 0.2s', boxShadow: '0 4px 12px rgba(220,38,38,0.3)' }}>
+                                {saving ? 'Guardando...' : 'Guardar y Enviar'}
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <CustomerModal
+                isOpen={showCustomerModal}
+                onClose={() => setShowCustomerModal(false)}
+                onSave={(customer) => { setShowCustomerModal(false); selectCustomer(customer); fetchCustomers(); }}
+            />
+        </>
+    );
+}

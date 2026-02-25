@@ -3,12 +3,12 @@
 import { useState } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { Package, BarChart3, Settings, Users, HelpCircle, Bot, Menu, X, ClipboardList, Calendar, FolderOpen, ArrowLeftRight, ShoppingCart, ChevronLeft, ChevronRight, Rocket } from 'lucide-react';
+import { Package, BarChart3, Settings, Users, HelpCircle, Bot, Menu, X, ClipboardList, Calendar, FolderOpen, ArrowLeftRight, FileText, ChevronLeft, ChevronRight, Rocket } from 'lucide-react';
 import { useUserRole, hasPermission } from '@/hooks/useUserRole';
 
 const menuItems = [
   { icon: Package, label: 'Inventario', href: '/inventory', module: 'inventory' },
-  { icon: ShoppingCart, label: 'Ventas', href: '/ventas', module: 'ventas' },
+  { icon: FileText, label: 'Facturación', href: '/ventas', module: 'ventas' },
   { icon: BarChart3, label: 'Reportes', href: '/reports', module: 'reports' },
   { icon: Bot, label: 'Agentes IA', href: '/ai-agents', module: 'ai-agents' },
   { icon: ArrowLeftRight, label: 'Transferencias', href: '/transfers', module: 'transfers' },
