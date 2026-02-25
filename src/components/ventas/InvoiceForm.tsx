@@ -33,6 +33,7 @@ interface Product {
     sku: string;
     unit_price: number;
     quantity: number;
+    warehouse_id: string;
     warehouse_name: string;
 }
 
@@ -127,7 +128,6 @@ export default function InvoiceForm({ isOpen, onClose, onSaved, editInvoice }: I
     useEffect(() => {
         if (isOpen) {
             fetchCustomers();
-            fetchProducts();
             fetchWarehouses();
             fetchSalespeople();
         }
@@ -190,15 +190,64 @@ export default function InvoiceForm({ isOpen, onClose, onSaved, editInvoice }: I
         customerSearchTimeout.current = setTimeout(() => fetchCustomers(text), 300);
     };
 
-    const fetchProducts = async () => {
+    const fetchProducts = async (searchText: string = '', selectedWarehouseId: string = warehouseId) => {
+        if (!selectedWarehouseId) {
+            setProducts([]);
+            return;
+        }
+
         try {
-            const res = await fetch('/api/cliente/inventario');
+            const params = new URLSearchParams();
+            params.set('warehouseId', selectedWarehouseId);
+            if (searchText.trim()) {
+                params.set('search', searchText.trim());
+            }
+
+            const res = await fetch(`/api/transfers/items?${params.toString()}`);
             const data = await res.json();
-            if (data.items) setProducts(data.items.filter((p: Product) => p.quantity > 0));
+            if (!res.ok) {
+                throw new Error(data?.error || 'No se pudo cargar inventario');
+            }
+
+            const selectedWarehouse = warehouses.find((w) => w.id === selectedWarehouseId);
+            const normalizedProducts: Product[] = (data || [])
+                .map((row: any) => {
+                    const itemId = String(row?.id || '').trim();
+                    if (!itemId) return null;
+
+                    const quantity = Number(row?.current_stock ?? 0);
+                    if (!Number.isFinite(quantity)) return null;
+
+                    return {
+                        id: itemId,
+                        item_id: itemId,
+                        name: String(row?.name || row?.sku || '').trim() || `Producto ${itemId}`,
+                        sku: String(row?.sku || '').trim() || `NO-SKU-${itemId}`,
+                        unit_price: Number(row?.unit_price ?? 0) || 0,
+                        quantity,
+                        warehouse_id: selectedWarehouseId,
+                        warehouse_name: selectedWarehouse?.name || selectedWarehouse?.code || 'Bodega',
+                    } as Product;
+                })
+                .filter(Boolean) as Product[];
+
+            setProducts(normalizedProducts);
         } catch (err) {
             console.error('Error fetching products:', err);
+            setProducts([]);
         }
     };
+
+    useEffect(() => {
+        if (!isOpen) return;
+        if (!warehouseId) {
+            setProducts([]);
+            return;
+        }
+
+        fetchProducts(productSearch, warehouseId);
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [warehouseId, isOpen]);
 
     const fetchWarehouses = async () => {
         try {
@@ -222,10 +271,17 @@ export default function InvoiceForm({ isOpen, onClose, onSaved, editInvoice }: I
 
     const filteredCustomers = customers;
 
-    const filteredProducts = products.filter(p =>
-        p.name.toLowerCase().includes(productSearch.toLowerCase()) ||
-        p.sku.toLowerCase().includes(productSearch.toLowerCase())
-    );
+    const normalizedProductSearch = productSearch.toLowerCase().trim();
+    const filteredProducts = products
+        .filter((p) => p.quantity > 0)
+        .filter((p) => !warehouseId || p.warehouse_id === warehouseId)
+        .filter((p) => {
+            if (!normalizedProductSearch) return true;
+            return (
+                p.name.toLowerCase().includes(normalizedProductSearch) ||
+                p.sku.toLowerCase().includes(normalizedProductSearch)
+            );
+        });
 
     const selectCustomer = (customer: Customer) => {
         setSelectedCustomer(customer);
@@ -245,6 +301,7 @@ export default function InvoiceForm({ isOpen, onClose, onSaved, editInvoice }: I
         setShowProductDropdown(false);
         setActiveProductRow(null);
         setProductSearch('');
+        setProducts([]);
     };
 
     const updateLineItem = (index: number, field: keyof InvoiceFormItem, value: any) => {
@@ -260,6 +317,15 @@ export default function InvoiceForm({ isOpen, onClose, onSaved, editInvoice }: I
     const removeLineItem = (index: number) => {
         if (lineItems.length <= 1) return;
         setLineItems(lineItems.filter((_, i) => i !== index));
+    };
+
+    const productSearchTimeout = useRef<NodeJS.Timeout | null>(null);
+    const triggerProductSearch = (text: string) => {
+        setProductSearch(text);
+        if (productSearchTimeout.current) clearTimeout(productSearchTimeout.current);
+        productSearchTimeout.current = setTimeout(() => {
+            fetchProducts(text);
+        }, 250);
     };
 
     // Calculations
@@ -345,6 +411,8 @@ export default function InvoiceForm({ isOpen, onClose, onSaved, editInvoice }: I
         setDiscountAmount(0);
         setShippingCharge(0);
         setLineItems([{ item_id: null, description: '', quantity: 1, unit_price: 0, discount_percent: 0 }]);
+        setProducts([]);
+        setProductSearch('');
         setError('');
     };
 
@@ -587,8 +655,18 @@ export default function InvoiceForm({ isOpen, onClose, onSaved, editInvoice }: I
                                 }}>
                                     <div ref={activeProductRow === index ? productRef : null} style={{ position: 'relative' }}>
                                         <input type="text" value={item.description}
-                                            onChange={(e) => { updateLineItem(index, 'description', e.target.value); setProductSearch(e.target.value); setActiveProductRow(index); setShowProductDropdown(true); }}
-                                            onFocus={() => { setActiveProductRow(index); setProductSearch(item.description); setShowProductDropdown(true); }}
+                                            onChange={(e) => {
+                                                const text = e.target.value;
+                                                updateLineItem(index, 'description', text);
+                                                setActiveProductRow(index);
+                                                setShowProductDropdown(true);
+                                                triggerProductSearch(text);
+                                            }}
+                                            onFocus={() => {
+                                                setActiveProductRow(index);
+                                                setShowProductDropdown(true);
+                                                triggerProductSearch(item.description || '');
+                                            }}
                                             placeholder="Buscar producto..." style={{ ...inputStyle, fontSize: '13px' }}
                                         />
                                         {showProductDropdown && activeProductRow === index && (
