@@ -103,6 +103,55 @@ export async function GET(request: Request) {
         }
         debugLog.push('Global Zoho Token obtained.');
 
+        // 3.5 Auto-sync warehouse names & statuses from Zoho
+        // The locationdetails endpoint is the ONLY reliable source for both
+        // correct names AND active/inactive status for all locations.
+        try {
+            const orgId = process.env.ZOHO_BOOKS_ORGANIZATION_ID;
+            const hdrs = { Authorization: `Zoho-oauthtoken ${auth.accessToken}` };
+
+            // Grab any one item to get the full location list
+            const itemListRes = await fetch(
+                `${auth.apiDomain}/inventory/v1/items?organization_id=${orgId}&page=1&per_page=1`,
+                { headers: hdrs }
+            );
+            const itemListData = await itemListRes.json();
+            const sampleItemId = itemListData.items?.[0]?.item_id;
+
+            if (sampleItemId) {
+                const locRes = await fetch(
+                    `${auth.apiDomain}/inventory/v1/items/${sampleItemId}/locationdetails?organization_id=${orgId}`,
+                    { headers: hdrs }
+                );
+                const locData = await locRes.json();
+                const locations = locData.item_location_details?.locations || [];
+
+                let whUpdated = 0;
+                for (const loc of locations) {
+                    const zohoId = String(loc.location_id);
+                    const isActive = loc.status === 'active';
+                    const locName = String(loc.location_name || '');
+
+                    const { error: whErr } = await supabase
+                        .from('warehouses')
+                        .update({
+                            name: locName,
+                            code: locName.substring(0, 40),
+                            active: isActive,
+                            updated_at: new Date().toISOString(),
+                        })
+                        .eq('zoho_warehouse_id', zohoId);
+
+                    if (!whErr) whUpdated++;
+                }
+                debugLog.push(`Warehouse sync: ${whUpdated}/${locations.length} updated (names + status)`);
+            } else {
+                debugLog.push('Warehouse sync skipped: no items found to query locations');
+            }
+        } catch (whSyncErr: any) {
+            debugLog.push(`Warehouse sync skipped: ${whSyncErr.message}`);
+        }
+
         // 4. Load warehouses once
         const { data: warehouses } = await supabase.from('warehouses').select('id, zoho_warehouse_id, active').not('zoho_warehouse_id', 'is', null);
         const warehouseMap = new Map((warehouses || []).map((w: any) => [String(w.zoho_warehouse_id), { id: w.id, active: w.active }]));
@@ -113,6 +162,7 @@ export async function GET(request: Request) {
         // 5. Process each item reusing the token
         let successCount = 0;
         let failCount = 0;
+
 
         for (const queueItem of pendingItems) {
             try {

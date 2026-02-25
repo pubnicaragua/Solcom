@@ -19,22 +19,36 @@ async function syncWarehouses() {
     const accessToken = auth.access_token;
     const apiDomain = auth.api_domain || 'https://www.zohoapis.com';
     const orgId = process.env.ZOHO_BOOKS_ORGANIZATION_ID;
+    const headers = { Authorization: `Zoho-oauthtoken ${accessToken}` };
 
-    console.log('📦 Buscando sucursales/bodegas en Zoho...');
-    const whRes = await fetch(`${apiDomain}/inventory/v1/branches?organization_id=${orgId}`, {
-        headers: { Authorization: `Zoho-oauthtoken ${accessToken}` }
-    });
-    const data = await whRes.json();
-    const branches = data.branches || [];
+    // 1. Get any item to query its locationdetails (the REAL source of truth)
+    console.log('📦 Obteniendo lista de ubicaciones desde locationdetails...');
+    const itemRes = await fetch(`${apiDomain}/inventory/v1/items?organization_id=${orgId}&page=1&per_page=1`, { headers });
+    const itemData = await itemRes.json();
+    const sampleItemId = itemData.items?.[0]?.item_id;
 
-    console.log(`✨ Encontradas ${branches.length} sucursales/bodegas en Zoho.`);
+    if (!sampleItemId) {
+        console.error('❌ No se encontraron items en Zoho para obtener ubicaciones.');
+        return;
+    }
 
-    for (const b of branches) {
+    const locRes = await fetch(`${apiDomain}/inventory/v1/items/${sampleItemId}/locationdetails?organization_id=${orgId}`, { headers });
+    const locData = await locRes.json();
+    const locations = locData.item_location_details?.locations || [];
+
+    console.log(`✅ ${locations.length} ubicaciones encontradas.\n`);
+    console.log('🔄 Sincronizando con Supabase...\n');
+
+    for (const loc of locations) {
+        const zohoId = String(loc.location_id);
+        const locName = String(loc.location_name || '');
+        const isActive = loc.status === 'active';
+
         const warehouseData = {
-            zoho_warehouse_id: String(b.branch_id),
-            name: b.branch_name,
-            code: b.branch_name.substring(0, 40),
-            active: b.status === 'active' || b.status === undefined, // status sometimes undefined for branches
+            zoho_warehouse_id: zohoId,
+            name: locName,
+            code: locName.substring(0, 40),
+            active: isActive,
             updated_at: new Date().toISOString()
         };
 
@@ -42,12 +56,14 @@ async function syncWarehouses() {
             .from('warehouses')
             .upsert(warehouseData, { onConflict: 'zoho_warehouse_id' });
 
+        const badge = isActive ? '🟢 activa' : '🔴 inactiva';
         if (error) {
-            console.error(`❌ Error con ${b.branch_name}:`, error.message);
+            console.error(`❌ Error con ${locName}: ${error.message}`);
         } else {
-            console.log(`✅ Bodega sincronizada: ${b.branch_name} [${b.status}]`);
+            console.log(`✅ ${locName.padEnd(35)} [${badge}]`);
         }
     }
+
     console.log('\n🏁 Sincronización de bodegas completada.');
 }
 
