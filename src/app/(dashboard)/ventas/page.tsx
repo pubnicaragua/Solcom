@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import Link from 'next/link';
 import {
   FileText, Plus, Search, Filter, DollarSign, Clock,
   CheckCircle, AlertTriangle, XCircle, Eye, Trash2,
@@ -178,27 +179,42 @@ export default function FacturacionPage() {
             Gestiona tus facturas y cobros
           </p>
         </div>
-        <button
-          onClick={() => setShowInvoiceForm(true)}
-          style={{
-            display: 'flex', alignItems: 'center', gap: '8px',
-            padding: '12px 24px', background: 'var(--brand-primary)', color: 'white',
-            border: 'none', borderRadius: '10px', fontSize: '14px', fontWeight: 700,
-            cursor: 'pointer', boxShadow: '0 4px 14px rgba(220,38,38,0.3)',
-            transition: 'transform 0.15s, box-shadow 0.15s',
-          }}
-          onMouseEnter={(e) => {
-            e.currentTarget.style.transform = 'translateY(-2px)';
-            e.currentTarget.style.boxShadow = '0 6px 20px rgba(220,38,38,0.4)';
-          }}
-          onMouseLeave={(e) => {
-            e.currentTarget.style.transform = 'translateY(0)';
-            e.currentTarget.style.boxShadow = '0 4px 14px rgba(220,38,38,0.3)';
-          }}
-        >
-          <Plus size={18} />
-          Nueva Factura
-        </button>
+        <div style={{ display: 'flex', gap: '10px', alignItems: 'center', flexWrap: 'wrap' }}>
+          <Link
+            href="/ventas/cotizaciones"
+            style={{
+              display: 'inline-flex', alignItems: 'center', gap: '8px',
+              padding: '12px 20px', background: 'rgba(59,130,246,0.18)', color: '#93C5FD',
+              border: '1px solid rgba(59,130,246,0.4)', borderRadius: '10px', fontSize: '14px', fontWeight: 700,
+              textDecoration: 'none',
+            }}
+          >
+            <FileText size={16} />
+            Cotizaciones
+          </Link>
+
+          <button
+            onClick={() => setShowInvoiceForm(true)}
+            style={{
+              display: 'flex', alignItems: 'center', gap: '8px',
+              padding: '12px 24px', background: 'var(--brand-primary)', color: 'white',
+              border: 'none', borderRadius: '10px', fontSize: '14px', fontWeight: 700,
+              cursor: 'pointer', boxShadow: '0 4px 14px rgba(220,38,38,0.3)',
+              transition: 'transform 0.15s, box-shadow 0.15s',
+            }}
+            onMouseEnter={(e) => {
+              e.currentTarget.style.transform = 'translateY(-2px)';
+              e.currentTarget.style.boxShadow = '0 6px 20px rgba(220,38,38,0.4)';
+            }}
+            onMouseLeave={(e) => {
+              e.currentTarget.style.transform = 'translateY(0)';
+              e.currentTarget.style.boxShadow = '0 4px 14px rgba(220,38,38,0.3)';
+            }}
+          >
+            <Plus size={18} />
+            Nueva Factura
+          </button>
+        </div>
       </div>
 
       {/* KPI Cards */}

@@ -20,6 +20,11 @@ const menuItems = [
   { icon: HelpCircle, label: 'Cómo Funciona', href: '/how-it-works', module: 'public' },
 ];
 
+const billingSubItems = [
+  { label: 'Facturas', href: '/ventas' },
+  { label: 'Cotizaciones', href: '/ventas/cotizaciones' },
+];
+
 import { useSidebar } from '@/contexts/SidebarContext';
 
 export default function Sidebar() {
@@ -95,7 +100,8 @@ export default function Sidebar() {
         <nav style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
           {menuItems.map((item) => {
             const Icon = item.icon;
-            const isActive = pathname === item.href;
+            const isBilling = item.href === '/ventas';
+            const isActive = pathname === item.href || (isBilling && pathname.startsWith('/ventas/'));
 
             // Mostrar módulos públicos siempre, o verificar permisos si ya cargó
             if (item.module !== 'public' && !loading && !hasPermission(role, item.module)) {
@@ -103,42 +109,69 @@ export default function Sidebar() {
             }
 
             return (
-              <Link
-                key={item.href}
-                href={item.href}
-                title={isCollapsed ? item.label : ''}
-                style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: 12,
-                  padding: isCollapsed ? '10px 0' : '10px 14px',
-                  justifyContent: isCollapsed ? 'center' : 'flex-start',
-                  borderRadius: 8,
-                  fontSize: 14,
-                  fontWeight: 500,
-                  color: isActive ? '#FFFFFF' : '#D1D5DB',
-                  background: isActive ? '#DC2626' : 'transparent',
-                  border: isActive ? '1px solid #DC2626' : '1px solid transparent',
-                  cursor: 'pointer',
-                  transition: 'all 0.2s',
-                  textDecoration: 'none',
-                }}
-                onMouseEnter={(e) => {
-                  if (!isActive) {
-                    e.currentTarget.style.background = '#374151';
-                    e.currentTarget.style.color = '#FFFFFF';
-                  }
-                }}
-                onMouseLeave={(e) => {
-                  if (!isActive) {
-                    e.currentTarget.style.background = 'transparent';
-                    e.currentTarget.style.color = '#D1D5DB';
-                  }
-                }}
-              >
-                <Icon size={20} />
-                {!isCollapsed && <span>{item.label}</span>}
-              </Link>
+              <div key={item.href}>
+                <Link
+                  href={item.href}
+                  title={isCollapsed ? item.label : ''}
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 12,
+                    padding: isCollapsed ? '10px 0' : '10px 14px',
+                    justifyContent: isCollapsed ? 'center' : 'flex-start',
+                    borderRadius: 8,
+                    fontSize: 14,
+                    fontWeight: 500,
+                    color: isActive ? '#FFFFFF' : '#D1D5DB',
+                    background: isActive ? '#DC2626' : 'transparent',
+                    border: isActive ? '1px solid #DC2626' : '1px solid transparent',
+                    cursor: 'pointer',
+                    transition: 'all 0.2s',
+                    textDecoration: 'none',
+                  }}
+                  onMouseEnter={(e) => {
+                    if (!isActive) {
+                      e.currentTarget.style.background = '#374151';
+                      e.currentTarget.style.color = '#FFFFFF';
+                    }
+                  }}
+                  onMouseLeave={(e) => {
+                    if (!isActive) {
+                      e.currentTarget.style.background = 'transparent';
+                      e.currentTarget.style.color = '#D1D5DB';
+                    }
+                  }}
+                >
+                  <Icon size={20} />
+                  {!isCollapsed && <span>{item.label}</span>}
+                </Link>
+
+                {!isCollapsed && isBilling && (
+                  <div style={{ marginTop: 4, marginBottom: 8, marginLeft: 34, display: 'grid', gap: 4 }}>
+                    {billingSubItems.map((sub) => {
+                      const isSubActive = pathname === sub.href;
+                      return (
+                        <Link
+                          key={sub.href}
+                          href={sub.href}
+                          style={{
+                            fontSize: 13,
+                            color: isSubActive ? '#FFFFFF' : '#9CA3AF',
+                            background: isSubActive ? 'rgba(220,38,38,0.5)' : 'transparent',
+                            border: isSubActive ? '1px solid rgba(220,38,38,0.8)' : '1px solid transparent',
+                            borderRadius: 6,
+                            padding: '6px 10px',
+                            textDecoration: 'none',
+                            transition: 'all 0.2s',
+                          }}
+                        >
+                          {sub.label}
+                        </Link>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
             );
           })}
         </nav>
