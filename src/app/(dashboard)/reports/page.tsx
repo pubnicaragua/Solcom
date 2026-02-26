@@ -277,34 +277,6 @@ export default function ReportsPage() {
         nextY = (doc as any).lastAutoTable.finalY + 12;
       }
 
-      // 3. Alertas Quiebre Stock
-      if (exportLowStock.length > 0) {
-        if (nextY > 170) { doc.addPage(); nextY = 20; }
-        doc.setFontSize(14);
-        doc.setTextColor(245, 158, 11); // #f59e0b
-        doc.text('Alerta Crítica: Quiebre de Stock', 14, nextY);
-
-        const alertRowsPDF = exportLowStock.map((item: any) => [
-          item.stock_total <= 3 ? 'Crítico' : 'Bajo',
-          item.sku || '',
-          item.name || '',
-          item.marca || '—',
-          String(item.stock_total || 0)
-        ]);
-
-        autoTable(doc, {
-          startY: nextY + 4,
-          head: [['Estado', 'SKU', 'Producto', 'Marca', 'Stock Actual']],
-          body: alertRowsPDF,
-          theme: 'striped',
-          styles: { fontSize: 8, cellPadding: 1.8 },
-          headStyles: { fillColor: [245, 158, 11], textColor: 255 },
-          alternateRowStyles: { fillColor: [248, 250, 252] },
-          margin: { left: 14, right: 14 },
-        });
-        nextY = (doc as any).lastAutoTable.finalY + 12;
-      }
-
       // 4. Money Maker Categorías
       if (exportMoneyCats.length > 0) {
         if (nextY > 170) { doc.addPage(); nextY = 20; }
@@ -313,19 +285,19 @@ export default function ReportsPage() {
         doc.text('El "Money Maker" de Categorías', 14, nextY);
 
         const catRowsPDF = exportMoneyCats.map((cat: any) => {
-          const avgTicket = cat.stock > 0 ? (cat.capital / cat.stock) : 0;
+          const percentageUnits = exportStats?.totalStock > 0 ? (cat.stock / exportStats.totalStock) * 100 : 0;
           return [
             cat.label,
             String(cat.uniqueSkus || 0),
             (cat.stock || 0).toLocaleString('es-NI'),
             `$${(cat.capital || 0).toLocaleString('es-NI', { maximumFractionDigits: 2 })}`,
-            `$${avgTicket.toLocaleString('es-NI', { maximumFractionDigits: 2 })}`
+            `${percentageUnits.toFixed(1)}%`
           ];
         });
 
         autoTable(doc, {
           startY: nextY + 4,
-          head: [['Categoría', 'SKUs Diferentes', 'Stock Físico (Unids)', 'Capital Invertido', 'Ticket Promedio']],
+          head: [['Categoría', 'SKUs Diferentes', 'Stock Físico (Unids)', 'Capital Invertido', '% del Inventario']],
           body: catRowsPDF,
           theme: 'striped',
           styles: { fontSize: 8, cellPadding: 1.8 },
@@ -344,19 +316,19 @@ export default function ReportsPage() {
         doc.text('El "Money Maker" de Marcas', 14, nextY);
 
         const brandRowsPDF = exportMoneyBrands.map((brand: any) => {
-          const avgTicket = brand.stock > 0 ? (brand.capital / brand.stock) : 0;
+          const percentageUnits = exportStats?.totalStock > 0 ? (brand.stock / exportStats.totalStock) * 100 : 0;
           return [
             brand.label,
             String(brand.uniqueSkus || 0),
             (brand.stock || 0).toLocaleString('es-NI'),
             `$${(brand.capital || 0).toLocaleString('es-NI', { maximumFractionDigits: 2 })}`,
-            `$${avgTicket.toLocaleString('es-NI', { maximumFractionDigits: 2 })}`
+            `${percentageUnits.toFixed(1)}%`
           ];
         });
 
         autoTable(doc, {
           startY: nextY + 4,
-          head: [['Marca', 'SKUs Diferentes', 'Stock Físico (Unids)', 'Capital Invertido', 'Ticket Promedio']],
+          head: [['Marca', 'SKUs Diferentes', 'Stock Físico (Unids)', 'Capital Invertido', '% del Inventario']],
           body: brandRowsPDF,
           theme: 'striped',
           styles: { fontSize: 8, cellPadding: 1.8 },
@@ -434,38 +406,27 @@ export default function ReportsPage() {
         </tr>`;
       }).join('');
 
-      // 2. Alertas
-      const alertRows = exportLowStock.map((item: any) => `
-        <tr>
-          <td style="text-align:center">${item.stock_total <= 3 ? 'Critico' : 'Bajo'}</td>
-          <td style="mso-number-format:'\\@'">${item.sku || ''}</td>
-          <td>${item.name || ''}</td>
-          <td>${item.marca || '—'}</td>
-          <td style="text-align:right;color:#ef4444;font-weight:bold">${item.stock_total || 0}</td>
-        </tr>
-      `).join('');
-
       // 3. Money Maker Categorías
       const mmCatsRows = exportMoneyCats.map((cat: any) => {
-        const avgTicket = cat.stock > 0 ? (cat.capital / cat.stock) : 0;
+        const percentageUnits = exportStats?.totalStock > 0 ? (cat.stock / exportStats.totalStock) * 100 : 0;
         return `<tr>
           <td>${cat.label}</td>
           <td style="text-align:center">${cat.uniqueSkus || 0}</td>
           <td style="text-align:right">${(cat.stock || 0).toLocaleString('es-NI')}</td>
           <td style="text-align:right">${(cat.capital || 0).toLocaleString('es-NI', { maximumFractionDigits: 2 })}</td>
-          <td style="text-align:right">${avgTicket.toLocaleString('es-NI', { maximumFractionDigits: 2 })}</td>
+          <td style="text-align:center">${percentageUnits.toFixed(1)}%</td>
         </tr>`;
       }).join('');
 
       // 4. Money Maker Marcas
       const mmBrandsRows = exportMoneyBrands.map((brand: any) => {
-        const avgTicket = brand.stock > 0 ? (brand.capital / brand.stock) : 0;
+        const percentageUnits = exportStats?.totalStock > 0 ? (brand.stock / exportStats.totalStock) * 100 : 0;
         return `<tr>
           <td>${brand.label}</td>
           <td style="text-align:center">${brand.uniqueSkus || 0}</td>
           <td style="text-align:right">${(brand.stock || 0).toLocaleString('es-NI')}</td>
           <td style="text-align:right">${(brand.capital || 0).toLocaleString('es-NI', { maximumFractionDigits: 2 })}</td>
-          <td style="text-align:right">${avgTicket.toLocaleString('es-NI', { maximumFractionDigits: 2 })}</td>
+          <td style="text-align:center">${percentageUnits.toFixed(1)}%</td>
         </tr>`;
       }).join('');
 
@@ -520,18 +481,10 @@ export default function ReportsPage() {
               <tbody>${brandRows}</tbody>
             </table>
 
-            <h2 class="orange">Alerta Crítica: Quiebre de Stock</h2>
-            <table>
-              <thead>
-                <tr><th class="orange">Estado</th><th class="orange">SKU</th><th class="orange">Producto</th><th class="orange">Marca</th><th class="orange">Stock Actual</th></tr>
-              </thead>
-              <tbody>${alertRows}</tbody>
-            </table>
-
             <h2 class="purple">El "Money Maker" de Categorías</h2>
             <table>
               <thead>
-                <tr><th class="purple">Categoría</th><th class="purple">SKUs Diferentes</th><th class="purple">Stock Físico (Unids)</th><th class="purple">Capital Invertido</th><th class="purple">Ticket Promedio</th></tr>
+                <tr><th class="purple">Categoría</th><th class="purple">SKUs Diferentes</th><th class="purple">Stock Físico (Unids)</th><th class="purple">Capital Invertido</th><th class="purple">% del Inventario</th></tr>
               </thead>
               <tbody>${mmCatsRows}</tbody>
             </table>
@@ -539,7 +492,7 @@ export default function ReportsPage() {
             <h2 class="orange">El "Money Maker" de Marcas</h2>
             <table>
               <thead>
-                <tr><th class="orange">Marca</th><th class="orange">SKUs Diferentes</th><th class="orange">Stock Físico (Unids)</th><th class="orange">Capital Invertido</th><th class="orange">Ticket Promedio</th></tr>
+                <tr><th class="orange">Marca</th><th class="orange">SKUs Diferentes</th><th class="orange">Stock Físico (Unids)</th><th class="orange">Capital Invertido</th><th class="orange">% del Inventario</th></tr>
               </thead>
               <tbody>${mmBrandsRows}</tbody>
             </table>
@@ -827,55 +780,6 @@ export default function ReportsPage() {
         </div>
       </Card>
 
-      {/* NUEVA SECCIÓN: ALERTA CRÍTICA: QUIEBRE DE STOCK */}
-      <div style={{ background: 'linear-gradient(135deg, #f59e0b 0%, #b45309 100%)', padding: '12px 20px', borderRadius: 8 }}>
-        <h2 style={{ color: 'white', fontSize: 18, fontWeight: 700, margin: 0 }}>Alerta Crítica: Quiebre de Stock (Restocking)</h2>
-      </div>
-      <Card>
-        <div style={{ padding: 16 }}>
-          {loading ? (
-            <div style={{ height: 200, background: 'var(--panel)', borderRadius: 4, animation: 'pulse 1.5s infinite' }} />
-          ) : !reportData?.lowStockList || reportData.lowStockList.length === 0 ? (
-            <div style={{ textAlign: 'center', padding: '30px 0', color: 'var(--muted)' }}>
-              <Package size={32} style={{ marginBottom: 8, opacity: 0.5, margin: '0 auto' }} />
-              <div>No hay productos con stock crítico (bajo 10 unidades)</div>
-            </div>
-          ) : (
-            <div style={{ maxHeight: 400, overflowY: 'auto', overflowX: 'auto', borderRadius: 8, border: '1px solid var(--border)' }}>
-              <table style={{ width: '100%', minWidth: 600, borderCollapse: 'collapse', fontSize: 13 }}>
-                <thead>
-                  <tr style={{ background: 'var(--panel)', position: 'sticky', top: 0, zIndex: 1 }}>
-                    <th style={{ padding: '10px 12px', textAlign: 'left', fontWeight: 600, borderBottom: '1px solid var(--border)' }}>Estado</th>
-                    <th style={{ padding: '10px 12px', textAlign: 'left', fontWeight: 600, borderBottom: '1px solid var(--border)' }}>SKU</th>
-                    <th style={{ padding: '10px 12px', textAlign: 'left', fontWeight: 600, borderBottom: '1px solid var(--border)' }}>Producto</th>
-                    <th style={{ padding: '10px 12px', textAlign: 'left', fontWeight: 600, borderBottom: '1px solid var(--border)' }}>Marca</th>
-                    <th style={{ padding: '10px 12px', textAlign: 'right', fontWeight: 600, borderBottom: '1px solid var(--border)' }}>Stock Actual</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {reportData.lowStockList.map((item: any, idx: number) => {
-                    const isCritical = item.stock_total <= 3;
-                    return (
-                      <tr key={item.id} style={{ borderBottom: '1px solid var(--border)', background: idx % 2 === 0 ? 'transparent' : 'var(--panel)' }}>
-                        <td style={{ padding: '8px 12px', textAlign: 'center', width: 40 }}>
-                          <div style={{ width: 10, height: 10, borderRadius: '50%', background: isCritical ? '#ef4444' : '#f59e0b', margin: '0 auto', boxShadow: `0 0 8px ${isCritical ? '#ef4444' : '#f59e0b'} ` }} title={isCritical ? 'Estado Crítico (<= 3)' : 'Bajo Stock (< 10)'} />
-                        </td>
-                        <td style={{ padding: '8px 12px', fontFamily: 'monospace', fontSize: 12 }}>{item.sku}</td>
-                        <td style={{ padding: '8px 12px', maxWidth: 220, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{item.name}</td>
-                        <td style={{ padding: '8px 12px', color: 'var(--muted)' }}>{item.marca || '—'}</td>
-                        <td style={{ padding: '8px 12px', textAlign: 'right', fontWeight: 700, color: isCritical ? '#ef4444' : '#f59e0b', fontSize: 16 }}>
-                          {item.stock_total}
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            </div>
-          )}
-        </div>
-      </Card>
-
       {/* NUEVA SECCIÓN: MONEY MAKER DE CATEGORÍAS */}
       <div style={{ background: 'linear-gradient(135deg, #8b5cf6 0%, #6d28d9 100%)', padding: '12px 20px', borderRadius: 8 }}>
         <h2 style={{ color: 'white', fontSize: 18, fontWeight: 700, margin: 0 }}>El "Money Maker" de Categorías</h2>
@@ -897,12 +801,12 @@ export default function ReportsPage() {
                     <th style={{ padding: '10px 12px', textAlign: 'center', fontWeight: 600, borderBottom: '1px solid var(--border)' }}>SKUs Diferentes</th>
                     <th style={{ padding: '10px 12px', textAlign: 'right', fontWeight: 600, borderBottom: '1px solid var(--border)' }}>Stock Físico (Unids)</th>
                     <th style={{ padding: '10px 12px', textAlign: 'right', fontWeight: 600, borderBottom: '1px solid var(--border)' }}>Capital Invertido</th>
-                    <th style={{ padding: '10px 12px', textAlign: 'right', fontWeight: 600, borderBottom: '1px solid var(--border)' }}>Ticket Prom. (Costo/Uníd)</th>
+                    <th style={{ padding: '10px 12px', textAlign: 'right', fontWeight: 600, borderBottom: '1px solid var(--border)' }}>% del Inventario</th>
                   </tr>
                 </thead>
                 <tbody>
                   {reportData.moneyMakerCategories.map((cat: any, idx: number) => {
-                    const avgTicket = cat.stock > 0 ? (cat.capital / cat.stock) : 0;
+                    const percentageUnits = stats?.totalStock > 0 ? (cat.stock / stats.totalStock) * 100 : 0;
                     return (
                       <tr key={idx} style={{ borderBottom: '1px solid var(--border)', background: idx % 2 === 0 ? 'transparent' : 'var(--panel)' }}>
                         <td style={{ padding: '8px 12px', fontWeight: 600, color: '#8b5cf6' }}>{cat.label}</td>
@@ -911,8 +815,13 @@ export default function ReportsPage() {
                         <td style={{ padding: '8px 12px', textAlign: 'right', color: '#10b981', fontWeight: 700 }}>
                           ${(cat.capital || 0).toLocaleString('es-NI', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                         </td>
-                        <td style={{ padding: '8px 12px', textAlign: 'right', color: 'var(--muted)' }}>
-                          ${avgTicket.toLocaleString('es-NI', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                        <td style={{ padding: '8px 12px', textAlign: 'center' }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 8, justifyContent: 'flex-end' }}>
+                            <div style={{ fontWeight: 600 }}>{percentageUnits.toFixed(1)}%</div>
+                            <div style={{ width: 60, height: 6, background: 'var(--border)', borderRadius: 3, overflow: 'hidden' }}>
+                              <div style={{ width: `${percentageUnits}%`, height: '100%', background: '#8b5cf6' }} />
+                            </div>
+                          </div>
                         </td>
                       </tr>
                     );
@@ -945,12 +854,12 @@ export default function ReportsPage() {
                     <th style={{ padding: '10px 12px', textAlign: 'center', fontWeight: 600, borderBottom: '1px solid var(--border)' }}>SKUs Diferentes</th>
                     <th style={{ padding: '10px 12px', textAlign: 'right', fontWeight: 600, borderBottom: '1px solid var(--border)' }}>Stock Físico (Unids)</th>
                     <th style={{ padding: '10px 12px', textAlign: 'right', fontWeight: 600, borderBottom: '1px solid var(--border)' }}>Capital Invertido</th>
-                    <th style={{ padding: '10px 12px', textAlign: 'right', fontWeight: 600, borderBottom: '1px solid var(--border)' }}>Ticket Prom. (Costo/Uníd)</th>
+                    <th style={{ padding: '10px 12px', textAlign: 'right', fontWeight: 600, borderBottom: '1px solid var(--border)' }}>% del Inventario</th>
                   </tr>
                 </thead>
                 <tbody>
                   {reportData.moneyMakerBrands.map((brand: any, idx: number) => {
-                    const avgTicket = brand.stock > 0 ? (brand.capital / brand.stock) : 0;
+                    const percentageUnits = stats?.totalStock > 0 ? (brand.stock / stats.totalStock) * 100 : 0;
                     return (
                       <tr key={idx} style={{ borderBottom: '1px solid var(--border)', background: idx % 2 === 0 ? 'transparent' : 'var(--panel)' }}>
                         <td style={{ padding: '8px 12px', fontWeight: 600, color: '#f59e0b' }}>{brand.label}</td>
@@ -959,8 +868,13 @@ export default function ReportsPage() {
                         <td style={{ padding: '8px 12px', textAlign: 'right', color: '#10b981', fontWeight: 700 }}>
                           ${(brand.capital || 0).toLocaleString('es-NI', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                         </td>
-                        <td style={{ padding: '8px 12px', textAlign: 'right', color: 'var(--muted)' }}>
-                          ${avgTicket.toLocaleString('es-NI', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                        <td style={{ padding: '8px 12px', textAlign: 'center' }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 8, justifyContent: 'flex-end' }}>
+                            <div style={{ fontWeight: 600 }}>{percentageUnits.toFixed(1)}%</div>
+                            <div style={{ width: 60, height: 6, background: 'var(--border)', borderRadius: 3, overflow: 'hidden' }}>
+                              <div style={{ width: `${percentageUnits}%`, height: '100%', background: '#f59e0b' }} />
+                            </div>
+                          </div>
                         </td>
                       </tr>
                     );
