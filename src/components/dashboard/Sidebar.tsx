@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { Package, BarChart3, Settings, Users, HelpCircle, Bot, Menu, X, ClipboardList, Calendar, FolderOpen, ArrowLeftRight, FileText, ChevronLeft, ChevronRight, Rocket } from 'lucide-react';
@@ -31,6 +31,26 @@ export default function Sidebar() {
   const pathname = usePathname();
   const { isOpen, close, isCollapsed, toggleCollapse } = useSidebar();
   const { role, loading } = useUserRole();
+
+  const [expandedMenus, setExpandedMenus] = useState<Record<string, boolean>>({
+    '/ventas': pathname.startsWith('/ventas')
+  });
+
+  useEffect(() => {
+    setExpandedMenus(prev => ({
+      ...prev,
+      '/ventas': pathname.startsWith('/ventas')
+    }));
+  }, [pathname]);
+
+  const handleMenuClick = (href: string) => {
+    if (href === '/ventas') {
+      setExpandedMenus(prev => ({
+        ...prev,
+        [href]: !prev[href]
+      }));
+    }
+  };
 
   return (
     <>
@@ -112,6 +132,12 @@ export default function Sidebar() {
               <div key={item.href}>
                 <Link
                   href={item.href}
+                  onClick={(e) => {
+                    if (isBilling) {
+                      e.preventDefault();
+                    }
+                    handleMenuClick(item.href);
+                  }}
                   title={isCollapsed ? item.label : ''}
                   style={{
                     display: 'flex',
@@ -146,8 +172,27 @@ export default function Sidebar() {
                   {!isCollapsed && <span>{item.label}</span>}
                 </Link>
 
-                {!isCollapsed && isBilling && (
-                  <div style={{ marginTop: 4, marginBottom: 8, marginLeft: 34, display: 'grid', gap: 4 }}>
+                {!isCollapsed && isBilling && expandedMenus[item.href] && (
+                  <div style={{
+                    marginTop: 4,
+                    marginBottom: 8,
+                    marginLeft: 23,
+                    paddingLeft: 14,
+                    position: 'relative',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    gap: 4
+                  }}>
+                    {/* Linea vertical sutil de conexión */}
+                    <div style={{
+                      position: 'absolute',
+                      top: -4,
+                      bottom: 16,
+                      left: 0,
+                      width: 1,
+                      backgroundColor: '#4B5563'
+                    }} />
+
                     {billingSubItems.map((sub) => {
                       const isSubActive = pathname === sub.href;
                       return (
@@ -155,16 +200,27 @@ export default function Sidebar() {
                           key={sub.href}
                           href={sub.href}
                           style={{
+                            position: 'relative',
                             fontSize: 13,
-                            color: isSubActive ? '#FFFFFF' : '#9CA3AF',
-                            background: isSubActive ? 'rgba(220,38,38,0.5)' : 'transparent',
-                            border: isSubActive ? '1px solid rgba(220,38,38,0.8)' : '1px solid transparent',
                             borderRadius: 6,
                             padding: '6px 10px',
                             textDecoration: 'none',
                             transition: 'all 0.2s',
+                            display: 'block',
+                            color: isSubActive ? '#FFFFFF' : '#9CA3AF',
+                            background: isSubActive ? 'rgba(220,38,38,0.5)' : 'transparent',
+                            border: isSubActive ? '1px solid rgba(220,38,38,0.8)' : '1px solid transparent',
                           }}
                         >
+                          {/* Conexión horizontal con la linea principal */}
+                          <div style={{
+                            position: 'absolute',
+                            top: '50%',
+                            left: -14,
+                            width: 14,
+                            height: 1,
+                            backgroundColor: '#4B5563'
+                          }} />
                           {sub.label}
                         </Link>
                       );
