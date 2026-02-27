@@ -446,6 +446,7 @@ export async function GET(request: Request) {
                 id: item.id,
                 sku: item.sku,
                 name: item.name,
+                zoho_item_id: item.zoho_item_id ?? null,
                 color: item.color || null,
                 state: normalizeItemState(item.state),
                 brand: item.marca || null,

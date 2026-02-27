@@ -7,6 +7,15 @@ dotenv.config({ path: '.env.local' });
 async function testFetchSerials() {
     try {
         const auth = await getZohoAccessToken();
+        if ('error' in auth) {
+            console.error('Auth failed:', auth.error);
+            return;
+        }
+        if (!auth.accessToken) {
+            console.error('Auth failed: access token vacío');
+            return;
+        }
+
         const organizationId = process.env.ZOHO_BOOKS_ORGANIZATION_ID;
         const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
         const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
@@ -23,7 +32,7 @@ async function testFetchSerials() {
 
         console.log('Testing with Item ID:', itemId);
 
-        const url = `https://${auth.apiDomain}/inventory/v1/items/serialnumbers?organization_id=${organizationId}&item_id=${itemId}`;
+        const url = `${auth.apiDomain}/inventory/v1/items/serialnumbers?organization_id=${organizationId}&item_id=${itemId}`;
         const res = await fetch(url, {
             headers: { 'Authorization': `Zoho-oauthtoken ${auth.accessToken}` }
         });

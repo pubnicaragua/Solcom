@@ -31,7 +31,55 @@ function authDomainCandidates(rawDomain: string | undefined): string[] {
     return candidates;
 }
 
-export async function getZohoAccessToken() {
+type ZohoAuthSuccess = {
+    accessToken: string;
+    apiDomain: string;
+    authDomainUsed: string;
+};
+
+type ZohoAuthError = {
+    error: string;
+};
+
+const AUTH_REFRESH_SAFETY_MS = 60_000;
+const AUTH_RATE_LIMIT_COOLDOWN_MS = 45_000;
+const AUTH_ERROR_COOLDOWN_MS = 8_000;
+
+let cachedAuth: (ZohoAuthSuccess & { expiresAt: number }) | null = null;
+let authInFlight: Promise<ZohoAuthSuccess | ZohoAuthError> | null = null;
+let authErrorUntil = 0;
+let authErrorMessage = '';
+
+function isRateLimitedAuth(status: number, rawText: string): boolean {
+    if (status === 429) return true;
+    const text = rawText.toLowerCase();
+    return text.includes('too many requests') || text.includes('access denied');
+}
+
+function toSafeSnippet(rawText: string): string {
+    return rawText.slice(0, 140).replace(/\s+/g, ' ').trim();
+}
+
+export async function getZohoAccessToken(options: { forceRefresh?: boolean } = {}) {
+    const forceRefresh = options.forceRefresh === true;
+
+    if (!forceRefresh && cachedAuth && Date.now() < cachedAuth.expiresAt) {
+        return {
+            accessToken: cachedAuth.accessToken,
+            apiDomain: cachedAuth.apiDomain,
+            authDomainUsed: cachedAuth.authDomainUsed,
+        };
+    }
+
+    if (!forceRefresh && authErrorUntil > Date.now()) {
+        return { error: authErrorMessage || 'Zoho auth temporalmente bloqueado por rate limit' };
+    }
+
+    if (!forceRefresh && authInFlight) {
+        return authInFlight;
+    }
+
+    const runAuth = async (): Promise<ZohoAuthSuccess | ZohoAuthError> => {
     const clientId = (process.env.ZOHO_BOOKS_CLIENT_ID || '').trim();
     const clientSecret = (process.env.ZOHO_BOOKS_CLIENT_SECRET || '').trim();
     const refreshToken = (process.env.ZOHO_BOOKS_REFRESH_TOKEN || '').trim();
@@ -42,6 +90,7 @@ export async function getZohoAccessToken() {
 
     const domains = authDomainCandidates(process.env.ZOHO_AUTH_DOMAIN);
     const errors: string[] = [];
+    let rateLimited = false;
 
     for (const authDomain of domains) {
         const response = await fetch(`${authDomain}/oauth/v2/token`, {
@@ -60,8 +109,13 @@ export async function getZohoAccessToken() {
 
         const rawText = await response.text();
         if (!response.ok) {
-            const snippet = rawText.slice(0, 140).replace(/\s+/g, ' ').trim();
+            const snippet = toSafeSnippet(rawText);
             errors.push(`${authDomain} -> ${response.status}: ${snippet}`);
+            if (isRateLimitedAuth(response.status, rawText)) {
+                rateLimited = true;
+                // Evita golpear todos los dominios cuando Zoho ya está rate-limiteando.
+                break;
+            }
             continue;
         }
 
@@ -79,16 +133,46 @@ export async function getZohoAccessToken() {
             continue;
         }
 
-        return {
+        const expiresInSecRaw = Number(data.expires_in ?? data.expires_in_sec ?? 3600);
+        const expiresInSec = Number.isFinite(expiresInSecRaw) && expiresInSecRaw > 0
+            ? expiresInSecRaw
+            : 3600;
+
+        cachedAuth = {
             accessToken: data.access_token as string,
             apiDomain: (data.api_domain as string) || 'https://www.zohoapis.com',
             authDomainUsed: authDomain,
+            expiresAt: Date.now() + (expiresInSec * 1000) - AUTH_REFRESH_SAFETY_MS,
+        };
+        authErrorUntil = 0;
+        authErrorMessage = '';
+
+        return {
+            accessToken: cachedAuth.accessToken,
+            apiDomain: cachedAuth.apiDomain,
+            authDomainUsed: cachedAuth.authDomainUsed,
         };
     }
 
+    const finalError = `Zoho auth failed on all domains. Attempts: ${errors.join(' | ')}`;
+    authErrorMessage = finalError;
+    authErrorUntil = Date.now() + (rateLimited ? AUTH_RATE_LIMIT_COOLDOWN_MS : AUTH_ERROR_COOLDOWN_MS);
+
     return {
-        error: `Zoho auth failed on all domains. Attempts: ${errors.join(' | ')}`,
+        error: finalError,
     };
+    };
+
+    if (forceRefresh) {
+        return runAuth();
+    }
+
+    authInFlight = runAuth();
+    try {
+        return await authInFlight;
+    } finally {
+        authInFlight = null;
+    }
 }
 
 export class AuthExpiredError extends Error {

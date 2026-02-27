@@ -3,7 +3,7 @@
 import { useState, useEffect, useRef } from 'react';
 import {
     X, Plus, Trash2, Search, UserPlus, FileText,
-    MapPin, Hash, User, Truck, ChevronDown,
+    MapPin, User, Truck, ChevronDown,
 } from 'lucide-react';
 import CustomerModal from './CustomerModal';
 import DeliverySelector from './DeliverySelector';
@@ -14,6 +14,7 @@ interface InvoiceFormItem {
     zoho_item_id: string | null;
     description: string;
     quantity: number;
+    max_available_qty: number | null;
     unit_price: number;
     discount_percent: number;
     serial_number_value: string;
@@ -59,11 +60,27 @@ interface Salesperson {
     photo_url?: string | null;
 }
 
+interface InvoicePrefillItem {
+    item_id: string;
+    zoho_item_id?: string | null;
+    description: string;
+    quantity?: number;
+    available_qty?: number | null;
+    unit_price?: number;
+    discount_percent?: number;
+}
+
+interface InvoicePrefillData {
+    warehouse_id?: string | null;
+    items?: InvoicePrefillItem[];
+}
+
 interface InvoiceFormProps {
     isOpen: boolean;
     onClose: () => void;
     onSaved: () => void;
     editInvoice?: any;
+    prefillData?: InvoicePrefillData | null;
 }
 
 const TERMS_OPTIONS = [
@@ -78,7 +95,7 @@ const TERMS_OPTIONS = [
     { value: 'contado', label: 'Contado' },
 ];
 
-export default function InvoiceForm({ isOpen, onClose, onSaved, editInvoice }: InvoiceFormProps) {
+export default function InvoiceForm({ isOpen, onClose, onSaved, editInvoice, prefillData = null }: InvoiceFormProps) {
     // Customer
     const [customers, setCustomers] = useState<Customer[]>([]);
     const [selectedCustomer, setSelectedCustomer] = useState<Customer | null>(null);
@@ -123,6 +140,7 @@ export default function InvoiceForm({ isOpen, onClose, onSaved, editInvoice }: I
             zoho_item_id: null,
             description: '',
             quantity: 1,
+            max_available_qty: null,
             unit_price: 0,
             discount_percent: 0,
             serial_number_value: '',
@@ -150,6 +168,58 @@ export default function InvoiceForm({ isOpen, onClose, onSaved, editInvoice }: I
             fetchSalespeople();
         }
     }, [isOpen]);
+
+    useEffect(() => {
+        if (!isOpen || editInvoice || !prefillData) return;
+
+        const normalizedItems = Array.isArray(prefillData.items)
+            ? prefillData.items
+                .map((item) => {
+                    const maxAvailable = (() => {
+                        const parsed = Number(item?.available_qty ?? 0);
+                        return Number.isFinite(parsed) && parsed > 0 ? Math.floor(parsed) : null;
+                    })();
+                    const requestedQty = Math.max(1, Math.floor(Number(item?.quantity ?? 1) || 1));
+                    const normalizedQty = maxAvailable ? Math.min(requestedQty, maxAvailable) : requestedQty;
+
+                    return {
+                        item_id: String(item?.item_id || '').trim() || null,
+                        zoho_item_id: String(item?.zoho_item_id || '').trim() || null,
+                        description: String(item?.description || '').trim(),
+                        quantity: normalizedQty,
+                        max_available_qty: maxAvailable,
+                        unit_price: Math.max(0, Number(item?.unit_price ?? 0) || 0),
+                        discount_percent: Math.max(0, Math.min(100, Number(item?.discount_percent ?? 0) || 0)),
+                        serial_number_value: '',
+                        available_serials: [],
+                        loading_serials: false,
+                    };
+                })
+                .filter((item) => item.item_id && item.description)
+            : [];
+
+        if (prefillData.warehouse_id) {
+            setWarehouseId(prefillData.warehouse_id);
+        }
+
+        setLineItems(
+            normalizedItems.length > 0
+                ? normalizedItems
+                : [{
+                    item_id: null,
+                    zoho_item_id: null,
+                    description: '',
+                    quantity: 1,
+                    max_available_qty: null,
+                    unit_price: 0,
+                    discount_percent: 0,
+                    serial_number_value: '',
+                    available_serials: [],
+                    loading_serials: false,
+                }]
+        );
+        setError('');
+    }, [isOpen, editInvoice, prefillData]);
 
     // Auto-calc due date from terms
     useEffect(() => {
@@ -251,6 +321,22 @@ export default function InvoiceForm({ isOpen, onClose, onSaved, editInvoice }: I
                 .filter(Boolean) as Product[];
 
             setProducts(normalizedProducts);
+            setLineItems((current) => current.map((line) => {
+                if (!line.item_id) return line;
+                const matched = normalizedProducts.find((product) => product.item_id === line.item_id);
+                if (!matched) return line;
+
+                const maxAvailable = Math.max(0, Math.floor(Number(matched.quantity) || 0));
+                const nextQty = maxAvailable > 0
+                    ? Math.min(Math.max(1, Math.floor(Number(line.quantity) || 1)), maxAvailable)
+                    : Math.max(1, Math.floor(Number(line.quantity) || 1));
+
+                return {
+                    ...line,
+                    max_available_qty: maxAvailable > 0 ? maxAvailable : null,
+                    quantity: nextQty,
+                };
+            }));
         } catch (err) {
             console.error('Error fetching products:', err);
             setProducts([]);
@@ -263,6 +349,7 @@ export default function InvoiceForm({ isOpen, onClose, onSaved, editInvoice }: I
             setProducts([]);
             setLineItems((current) => current.map((line) => ({
                 ...line,
+                max_available_qty: null,
                 available_serials: [],
                 loading_serials: false,
                 serial_number_value: '',
@@ -314,6 +401,18 @@ export default function InvoiceForm({ isOpen, onClose, onSaved, editInvoice }: I
             .split(',')
             .map((entry) => entry.trim())
             .filter(Boolean);
+    };
+
+    const getEffectiveMaxQty = (line: InvoiceFormItem): number | null => {
+        const stockMax = line.max_available_qty && line.max_available_qty > 0
+            ? Math.floor(line.max_available_qty)
+            : Number.POSITIVE_INFINITY;
+        const serialMax = line.available_serials.length > 0
+            ? line.available_serials.length
+            : Number.POSITIVE_INFINITY;
+
+        const effective = Math.min(stockMax, serialMax);
+        return Number.isFinite(effective) && effective > 0 ? effective : null;
     };
 
     const normalizeSerialInput = (value: unknown): string => {
@@ -399,12 +498,22 @@ export default function InvoiceForm({ isOpen, onClose, onSaved, editInvoice }: I
                 const normalizedSelected = serials.length > 0
                     ? selected.filter((code) => allowed.has(code))
                     : selected;
-                const limitedSelected = normalizedSelected.slice(0, Math.max(1, line.quantity));
+                const serialMax = serials.length > 0 ? serials.length : null;
+                const stockMax = line.max_available_qty && line.max_available_qty > 0 ? line.max_available_qty : null;
+                const effectiveMax = (() => {
+                    if (serialMax && stockMax) return Math.min(serialMax, stockMax);
+                    if (serialMax) return serialMax;
+                    if (stockMax) return stockMax;
+                    return null;
+                })();
+                const nextQty = effectiveMax ? Math.min(Math.max(1, line.quantity), effectiveMax) : Math.max(1, line.quantity);
+                const limitedSelected = normalizedSelected.slice(0, nextQty);
 
                 return {
                     ...line,
                     loading_serials: false,
                     available_serials: serials,
+                    quantity: nextQty,
                     serial_number_value: limitedSelected.join(','),
                 };
             }));
@@ -420,6 +529,7 @@ export default function InvoiceForm({ isOpen, onClose, onSaved, editInvoice }: I
 
     const selectProduct = (product: Product, rowIndex: number) => {
         const zohoItemId = String(product.zoho_item_id || '').trim() || null;
+        const maxAvailable = Math.max(0, Math.floor(Number(product.quantity) || 0));
 
         setLineItems((current) => current.map((line, idx) => {
             if (idx !== rowIndex) return line;
@@ -428,6 +538,8 @@ export default function InvoiceForm({ isOpen, onClose, onSaved, editInvoice }: I
                 item_id: product.item_id,
                 zoho_item_id: zohoItemId,
                 description: product.name,
+                quantity: 1,
+                max_available_qty: maxAvailable > 0 ? maxAvailable : null,
                 unit_price: product.unit_price || 0,
                 serial_number_value: '',
                 available_serials: [],
@@ -445,14 +557,18 @@ export default function InvoiceForm({ isOpen, onClose, onSaved, editInvoice }: I
     const updateLineItem = (index: number, field: keyof InvoiceFormItem, value: any) => {
         const updated = [...lineItems];
         if (!updated[index]) return;
-        updated[index] = { ...updated[index], [field]: value };
 
         if (field === 'quantity') {
-            const qty = Math.max(1, Number(value) || 1);
+            const parsedQty = Math.max(1, Math.floor(Number(value) || 1));
+            const effectiveMax = getEffectiveMaxQty(updated[index]);
+            const qty = effectiveMax ? Math.min(parsedQty, effectiveMax) : parsedQty;
+            updated[index] = { ...updated[index], quantity: qty };
             const selected = serialArray(updated[index].serial_number_value);
             if (selected.length > qty) {
                 updated[index].serial_number_value = selected.slice(0, qty).join(',');
             }
+        } else {
+            updated[index] = { ...updated[index], [field]: value };
         }
 
         setLineItems(updated);
@@ -482,6 +598,7 @@ export default function InvoiceForm({ isOpen, onClose, onSaved, editInvoice }: I
                 zoho_item_id: null,
                 description: '',
                 quantity: 1,
+                max_available_qty: null,
                 unit_price: 0,
                 discount_percent: 0,
                 serial_number_value: '',
@@ -519,6 +636,11 @@ export default function InvoiceForm({ isOpen, onClose, onSaved, editInvoice }: I
         if (status === 'cancelada' && !cancellationReasonId) { setError('Selecciona un motivo de anulación'); return; }
 
         for (const line of lineItems.filter((item) => item.description.trim())) {
+            const effectiveMax = getEffectiveMaxQty(line);
+            if (effectiveMax && line.quantity > effectiveMax) {
+                setError(`El artículo "${line.description}" solo permite ${effectiveMax} unidades según stock/seriales disponibles.`);
+                return;
+            }
             const selectedSerials = serialArray(line.serial_number_value);
             if (line.available_serials.length > 0 && selectedSerials.length !== line.quantity) {
                 setError(`El artículo "${line.description}" requiere exactamente ${line.quantity} serial(es).`);
@@ -609,6 +731,7 @@ export default function InvoiceForm({ isOpen, onClose, onSaved, editInvoice }: I
             zoho_item_id: null,
             description: '',
             quantity: 1,
+            max_available_qty: null,
             unit_price: 0,
             discount_percent: 0,
             serial_number_value: '',
@@ -657,7 +780,13 @@ export default function InvoiceForm({ isOpen, onClose, onSaved, editInvoice }: I
                             <FileText size={22} style={{ color: 'var(--brand-primary)' }} />
                             Nueva Factura
                         </h2>
-                        <button onClick={onClose} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--muted)', padding: '4px' }}>
+                        <button
+                            onClick={() => {
+                                resetForm();
+                                onClose();
+                            }}
+                            style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--muted)', padding: '4px' }}
+                        >
                             <X size={22} />
                         </button>
                     </div>
@@ -978,9 +1107,34 @@ export default function InvoiceForm({ isOpen, onClose, onSaved, editInvoice }: I
                                             />
                                         )}
                                     </div>
-                                    <input type="number" min="1" step="1" value={item.quantity}
-                                        onChange={(e) => updateLineItem(index, 'quantity', Math.max(1, parseInt(e.target.value) || 1))}
-                                        style={{ ...inputStyle, textAlign: 'center' }} />
+                                    {item.item_id ? (
+                                        <div
+                                            title="Cantidad definida desde el preparador de factura"
+                                            style={{
+                                                ...inputStyle,
+                                                textAlign: 'center',
+                                                fontWeight: 700,
+                                                display: 'flex',
+                                                alignItems: 'center',
+                                                justifyContent: 'center',
+                                                opacity: 0.9,
+                                                cursor: 'not-allowed',
+                                                userSelect: 'none',
+                                            }}
+                                        >
+                                            {Math.max(1, Math.floor(Number(item.quantity) || 1))}
+                                        </div>
+                                    ) : (
+                                        <input
+                                            type="number"
+                                            min="1"
+                                            max={getEffectiveMaxQty(item) || undefined}
+                                            step="1"
+                                            value={item.quantity}
+                                            onChange={(e) => updateLineItem(index, 'quantity', e.target.value)}
+                                            style={{ ...inputStyle, textAlign: 'center' }}
+                                        />
+                                    )}
                                     <input type="number" min="0" step="0.01" value={item.unit_price}
                                         onChange={(e) => updateLineItem(index, 'unit_price', parseFloat(e.target.value) || 0)}
                                         style={{ ...inputStyle, textAlign: 'right' }} />
@@ -1117,7 +1271,11 @@ export default function InvoiceForm({ isOpen, onClose, onSaved, editInvoice }: I
                             display: 'flex', justifyContent: 'flex-end', gap: '12px',
                             paddingTop: '16px', borderTop: '1px solid var(--border)',
                         }}>
-                            <button onClick={onClose}
+                            <button
+                                onClick={() => {
+                                    resetForm();
+                                    onClose();
+                                }}
                                 style={{ padding: '12px 24px', background: 'transparent', color: 'var(--muted)', border: '1px solid var(--border)', borderRadius: '8px', fontSize: '14px', fontWeight: 600, cursor: 'pointer' }}>
                                 Cancelar
                             </button>

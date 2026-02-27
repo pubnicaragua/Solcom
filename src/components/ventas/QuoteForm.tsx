@@ -37,6 +37,7 @@ interface QuoteLine {
 interface EditQuoteData {
     id: string;
     customer_id: string | null;
+    customer?: { name?: string | null } | null;
     warehouse_id: string | null;
     date: string;
     valid_until: string | null;
@@ -94,6 +95,7 @@ function normalizeNumber(value: unknown, fallback = 0): number {
 export default function QuoteForm({ isOpen, onClose, onSaved, editQuote }: QuoteFormProps) {
     const [customers, setCustomers] = useState<Customer[]>([]);
     const [customerSearch, setCustomerSearch] = useState('');
+    const [showCustomerDropdown, setShowCustomerDropdown] = useState(false);
     const [selectedCustomerId, setSelectedCustomerId] = useState<string>('');
 
     const [warehouses, setWarehouses] = useState<Warehouse[]>([]);
@@ -144,6 +146,7 @@ export default function QuoteForm({ isOpen, onClose, onSaved, editQuote }: Quote
         }
 
         setSelectedCustomerId(editQuote.customer_id || '');
+        setCustomerSearch(editQuote.customer?.name || '');
         setWarehouseId(editQuote.warehouse_id || '');
         setQuoteDate(editQuote.date || formatDateYmd(new Date()));
         setValidUntil(editQuote.valid_until || '');
@@ -222,6 +225,7 @@ export default function QuoteForm({ isOpen, onClose, onSaved, editQuote }: Quote
 
     function resetForm() {
         setCustomerSearch('');
+        setShowCustomerDropdown(false);
         setSelectedCustomerId('');
         setWarehouseId('');
         setProductSearch('');
@@ -290,6 +294,12 @@ export default function QuoteForm({ isOpen, onClose, onSaved, editQuote }: Quote
             description: selected.name,
             unit_price: selected.unit_price,
         });
+    }
+
+    function selectCustomer(customer: Customer) {
+        setSelectedCustomerId(customer.id);
+        setCustomerSearch(customer.name);
+        setShowCustomerDropdown(false);
     }
 
     const computed = useMemo(() => {
@@ -430,36 +440,76 @@ export default function QuoteForm({ isOpen, onClose, onSaved, editQuote }: Quote
                     <div style={{ display: 'grid', gridTemplateColumns: '1.5fr 1fr 1fr', gap: 12 }}>
                         <div>
                             <label style={{ fontSize: 12, color: 'var(--muted)', fontWeight: 700 }}>Cliente</label>
-                            <input
-                                value={customerSearch}
-                                onChange={(e) => {
-                                    const text = e.target.value;
-                                    setCustomerSearch(text);
-                                    void fetchCustomers(text);
-                                }}
-                                placeholder="Buscar cliente..."
-                                style={{
-                                    width: '100%', marginTop: 6,
-                                    padding: '10px 12px', borderRadius: 8,
-                                    border: '1px solid var(--border)',
-                                    background: 'var(--background)', color: 'var(--text)',
-                                }}
-                            />
-                            <select
-                                value={selectedCustomerId}
-                                onChange={(e) => setSelectedCustomerId(e.target.value)}
-                                style={{
-                                    width: '100%', marginTop: 8,
-                                    padding: '10px 12px', borderRadius: 8,
-                                    border: '1px solid var(--border)',
-                                    background: 'var(--background)', color: 'var(--text)',
-                                }}
-                            >
-                                <option value="">Seleccionar cliente</option>
-                                {customers.map((customer) => (
-                                    <option key={customer.id} value={customer.id}>{customer.name}</option>
-                                ))}
-                            </select>
+                            <div style={{ position: 'relative', marginTop: 6 }}>
+                                <input
+                                    value={customerSearch}
+                                    onFocus={() => setShowCustomerDropdown(true)}
+                                    onBlur={() => setTimeout(() => setShowCustomerDropdown(false), 140)}
+                                    onChange={(e) => {
+                                        const text = e.target.value;
+                                        setCustomerSearch(text);
+                                        setShowCustomerDropdown(true);
+                                        if (!text.trim()) {
+                                            setSelectedCustomerId('');
+                                        }
+                                        void fetchCustomers(text);
+                                    }}
+                                    placeholder="Buscar cliente..."
+                                    style={{
+                                        width: '100%',
+                                        padding: '10px 12px',
+                                        borderRadius: 8,
+                                        border: '1px solid var(--border)',
+                                        background: 'var(--background)', color: 'var(--text)',
+                                    }}
+                                />
+
+                                {showCustomerDropdown && (
+                                    <div style={{
+                                        position: 'absolute',
+                                        top: 'calc(100% + 6px)',
+                                        left: 0,
+                                        right: 0,
+                                        zIndex: 50,
+                                        maxHeight: 230,
+                                        overflowY: 'auto',
+                                        borderRadius: 8,
+                                        border: '1px solid var(--border)',
+                                        background: 'var(--panel)',
+                                        boxShadow: '0 12px 35px rgba(0,0,0,0.35)',
+                                    }}>
+                                        {customers.length === 0 ? (
+                                            <div style={{ padding: '10px 12px', fontSize: 13, color: 'var(--muted)' }}>
+                                                Sin resultados
+                                            </div>
+                                        ) : (
+                                            customers.map((customer) => (
+                                                <button
+                                                    key={customer.id}
+                                                    onClick={() => selectCustomer(customer)}
+                                                    style={{
+                                                        width: '100%',
+                                                        textAlign: 'left',
+                                                        padding: '10px 12px',
+                                                        border: 'none',
+                                                        borderBottom: '1px solid var(--border)',
+                                                        background: selectedCustomerId === customer.id ? 'rgba(59,130,246,0.15)' : 'transparent',
+                                                        color: 'var(--text)',
+                                                        cursor: 'pointer',
+                                                    }}
+                                                >
+                                                    <div style={{ fontSize: 13, fontWeight: 600 }}>{customer.name}</div>
+                                                    {(customer.email || customer.ruc) && (
+                                                        <div style={{ fontSize: 11, color: 'var(--muted)' }}>
+                                                            {customer.email || customer.ruc}
+                                                        </div>
+                                                    )}
+                                                </button>
+                                            ))
+                                        )}
+                                    </div>
+                                )}
+                            </div>
                         </div>
 
                         <div>
