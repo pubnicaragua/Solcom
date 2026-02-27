@@ -18,6 +18,186 @@ export default function ReunionesPage() {
           </p>
         </div>
 
+        {/* Reunión del 27 de Febrero */}
+        <Card style={{ marginBottom: 32, background: 'white', borderRadius: 16, overflow: 'hidden' }}>
+          {/* Header de la Reunión */}
+          <div style={{ background: 'linear-gradient(135deg, #3b82f6 0%, #1e40af 100%)', padding: 32, color: 'white' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 16 }}>
+              <Calendar size={32} />
+              <div>
+                <h2 style={{ fontSize: 32, fontWeight: 700, margin: 0 }}>
+                  Minuta ampliada – Reunión Solis Comercial
+                </h2>
+                <div style={{ display: 'flex', gap: 16, marginTop: 8, fontSize: 16, opacity: 0.95 }}>
+                  <span style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                    <Calendar size={16} />
+                    27 de Febrero, 2026
+                  </span>
+                  <span style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                    <Clock size={16} />
+                    11:45 a. m. (Nicaragua)
+                  </span>
+                </div>
+              </div>
+            </div>
+            <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
+              <Badge style={{ background: 'rgba(255,255,255,0.2)', color: 'white', padding: '6px 12px' }}>
+                ✅ Completada
+              </Badge>
+              <Badge style={{ background: 'rgba(255,255,255,0.2)', color: 'white', padding: '6px 12px' }}>
+                🎯 Definiciones Funcionales
+              </Badge>
+            </div>
+          </div>
+
+          <div style={{ padding: 32 }}>
+            {/* Participantes */}
+            <div style={{ marginBottom: 32 }}>
+              <h3 style={{ fontSize: 20, fontWeight: 600, marginBottom: 16, display: 'flex', alignItems: 'center', gap: 8 }}>
+                <Users size={24} color="#3b82f6" />
+                Participantes
+              </h3>
+              <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
+                <Badge variant="neutral">👤 Luis Artola (Solis Comercial)</Badge>
+                <Badge variant="neutral">👤 Sergio Manzanares</Badge>
+                <Badge variant="neutral">👤 Sebastián Narváez</Badge>
+              </div>
+            </div>
+
+            {/* Resumen Ejecutivo */}
+            <div style={{ marginBottom: 32, padding: 24, background: '#eff6ff', borderRadius: 12, borderLeft: '4px solid #3b82f6' }}>
+              <h3 style={{ fontSize: 20, fontWeight: 600, marginBottom: 16, color: '#3b82f6' }}>
+                📋 Objetivo de la Reunión
+              </h3>
+              <p style={{ fontSize: 16, lineHeight: 1.6, color: '#4a5568', marginBottom: 12 }}>
+                <strong>Tema general:</strong> Ajustes y definiciones funcionales para flujo Comercial–Bodega–Caja (cotizaciones, órdenes de venta, facturación, inventario por bodega, moneda y permisos).
+              </p>
+              <p style={{ fontSize: 16, lineHeight: 1.6, color: '#4a5568', margin: 0 }}>
+                <strong>Objetivo:</strong> Alinear el flujo operativo completo desde que el vendedor selecciona productos y cliente, pasando por cotización u orden de venta, control de inventario por bodega, generación de ticket para bodega, procesos de envío/delivery, y el cierre en Caja/POS, incluyendo reglas de moneda y permisos por tipo de usuario.
+              </p>
+            </div>
+
+            {/* Puntos Clave Discutidos */}
+            <div style={{ marginBottom: 32 }}>
+              <h3 style={{ fontSize: 20, fontWeight: 600, marginBottom: 16, display: 'flex', alignItems: 'center', gap: 8 }}>
+                <FileText size={24} color="#3b82f6" />
+                Acuerdos y Definiciones Funcionales
+              </h3>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+                {[
+                  {
+                    title: '3.1 Eliminación automática de factura al vencerse',
+                    content: 'Al vencerse, la factura debe dejar de estar activa y no afectar operación; definir mecanismo de eliminación/anulación con trazabilidad (liberar unidades, registro de auditoría, notificar a responsables).',
+                    status: 'action-required'
+                  },
+                  {
+                    title: '3.2 Cotización desde inventario',
+                    content: 'Selección múltiple rápida tipo carrito. No aparta unidades (no hace reserva). Muestra alertas si hay inconsistencias o el producto no está en la bodega.',
+                    status: 'approved'
+                  },
+                  {
+                    title: '3.3 Orden de venta desde inventario',
+                    content: 'Selección múltiple, captura datos de entrega, y a diferencia de la cotización sí aparta unidades (reserva). Trabaja únicamente con disponibilidad de la bodega asignada y genera ticket para bodega.',
+                    status: 'approved'
+                  },
+                  {
+                    title: '3.4 Moneda: Córdobas vs Dólares',
+                    content: 'En módulo de cotización se permite seleccionar NIO o USD según cliente, pero registro en Zoho permanece en USD (requerirá lógica de presentación/convertibilidad).',
+                    status: 'approved'
+                  },
+                  {
+                    title: '3.5 Roles: Vendedor vs Cajero',
+                    content: 'Vendedor genera la orden; el Cajero confirma pago y registra trazabilidad de pago (cambia estado a "Pagado" desde Caja/POS registrando forma de pago).',
+                    status: 'approved'
+                  },
+                  {
+                    title: '3.6 Permisos por usuario',
+                    content: 'Control de acceso por tipo de usuario. Visibilidad de inventario y disponibilidad en órdenes restringidas según la bodega asignada y el rol.',
+                    status: 'approved'
+                  },
+                  {
+                    title: '3.7 Flujo según canal: Envío vs Compra en sucursal',
+                    content: 'Envío genera Orden de Venta (bodega valida disponibilidad e interactúa con delivery). Compra en sucursal genera Factura directamente en POS.',
+                    status: 'approved'
+                  },
+                  {
+                    title: '3.8 Acciones del vendedor',
+                    content: 'El flujo de vendedor incluye búsqueda/selección de productos y captura de datos del cliente directamente en el proceso.',
+                    status: 'approved'
+                  }
+                ].map((punto, idx) => (
+                  <div key={idx} style={{ padding: 20, background: 'white', border: '1px solid #e2e8f0', borderRadius: 8 }}>
+                    <div style={{ display: 'flex', alignItems: 'flex-start', gap: 12 }}>
+                      {punto.status === 'approved' && <CheckCircle2 size={20} color="#10b981" />}
+                      {punto.status === 'action-required' && <AlertCircle size={20} color="#f59e0b" />}
+                      {punto.status === 'pending' && <Clock size={20} color="#6b7280" />}
+                      {punto.status === 'in-progress' && <ArrowRight size={20} color="#3b82f6" />}
+                      <div style={{ flex: 1 }}>
+                        <h4 style={{ fontSize: 16, fontWeight: 600, marginBottom: 8, color: '#1a202c' }}>
+                          {punto.title}
+                        </h4>
+                        <p style={{ fontSize: 14, lineHeight: 1.6, color: '#4a5568', margin: 0 }}>
+                          {punto.content}
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            {/* Decisiones Tomadas */}
+            <div style={{ marginBottom: 32, padding: 24, background: '#f0fdf4', borderRadius: 12, borderLeft: '4px solid #10b981' }}>
+              <h3 style={{ fontSize: 20, fontWeight: 600, marginBottom: 16, color: '#10b981', display: 'flex', alignItems: 'center', gap: 8 }}>
+                <CheckCircle2 size={24} />
+                Reglas Operativas Resumidas
+              </h3>
+              <ul style={{ fontSize: 16, lineHeight: 1.8, color: '#4a5568', paddingLeft: 20, margin: 0 }}>
+                <li><strong>Cotización:</strong> selección múltiple, rápida, no reserva, de cualquier bodega, con alertas.</li>
+                <li><strong>Orden de Venta:</strong> selección múltiple, captura datos, ticket para bodega, reserva unidades, solo disponibilidad de bodega asignada.</li>
+                <li><strong>Envíos:</strong> siempre por orden de venta; bodega gestiona estados y coordinación (WhatsApp).</li>
+                <li><strong>Sucursal:</strong> factura directa en caja.</li>
+                <li><strong>Moneda:</strong> cotización en NIO o USD según cliente; Zoho en USD.</li>
+                <li><strong>Roles:</strong> vendedor crea, cajero marca pagado y registra información de pago.</li>
+                <li><strong>Permisos:</strong> visibilidad por bodega según usuario.</li>
+              </ul>
+            </div>
+
+            {/* Acciones Pendientes */}
+            <div style={{ marginBottom: 32 }}>
+              <h3 style={{ fontSize: 20, fontWeight: 600, marginBottom: 16, display: 'flex', alignItems: 'center', gap: 8 }}>
+                <AlertCircle size={24} color="#f59e0b" />
+                Pendientes / Puntos a Precisar
+              </h3>
+
+              <Card style={{ marginBottom: 16, padding: 20, background: '#fffbeb', border: '1px solid #fbbf24' }}>
+                <h4 style={{ fontSize: 18, fontWeight: 600, marginBottom: 12, color: '#92400e', display: 'flex', alignItems: 'center', gap: 8 }}>
+                  ⚠️ Para Próxima Sesión
+                </h4>
+                <div style={{ background: 'white', padding: 16, borderRadius: 8, marginBottom: 12 }}>
+                  <ol style={{ fontSize: 14, lineHeight: 1.8, color: '#4a5568', paddingLeft: 20, margin: 0 }}>
+                    <li>Definir si "eliminar factura al vencerse" significa borrar o anular con auditoría y qué pasa con inventario/documentos asociados.</li>
+                    <li>Confirmar el término correcto: "orden de compras" vs "orden de venta" en el flujo del vendedor.</li>
+                    <li>Especificar cómo se maneja tipo de cambio cuando el cliente cotiza en NIO pero Zoho registra en USD (fuente del TC y reglas de redondeo).</li>
+                    <li>Definir estructura del ticket de bodega (número de orden, productos, bodega, prioridad, etc.).</li>
+                    <li>Definir estados de orden y quién puede cambiarlos (ej.: Creada → En preparación → Lista → En ruta → Entregada / Cancelada).</li>
+                  </ol>
+                </div>
+              </Card>
+            </div>
+
+            {/* Próximos Pasos */}
+            <div style={{ padding: 24, background: '#f8f9ff', borderRadius: 12, borderLeft: '4px solid #3b82f6' }}>
+              <h3 style={{ fontSize: 20, fontWeight: 600, marginBottom: 16, color: '#3b82f6' }}>
+                🚀 Cierre y Siguientes Pasos
+              </h3>
+              <p style={{ fontSize: 16, lineHeight: 1.8, color: '#4a5568', margin: 0 }}>
+                Se consolidó un flujo operativo diferenciado por cotización vs orden, y por canal envío vs sucursal, con controles de inventario por bodega, permisos por rol, y separación clara entre vendedor y cajero. Se deja lista la base funcional para traducir a <strong>historias de usuario y especificación técnica</strong>.
+              </p>
+            </div>
+          </div>
+        </Card>
+
         {/* Reunión del 21 de Febrero */}
         <Card style={{ marginBottom: 32, background: 'white', borderRadius: 16, overflow: 'hidden' }}>
           {/* Header de la Reunión */}
@@ -69,11 +249,11 @@ export default function ReunionesPage() {
                 📋 Resumen Ejecutivo
               </h3>
               <p style={{ fontSize: 16, lineHeight: 1.6, color: '#4a5568', marginBottom: 12 }}>
-                Se revisó el <strong>módulo de inventario</strong> y <strong>reportes</strong> para identificar mejoras de UX y funcionalidades pendientes. 
+                Se revisó el <strong>módulo de inventario</strong> y <strong>reportes</strong> para identificar mejoras de UX y funcionalidades pendientes.
                 Se detectaron varios puntos críticos que necesitan ajuste para mejorar la experiencia del usuario.
               </p>
               <p style={{ fontSize: 16, lineHeight: 1.6, color: '#4a5568' }}>
-                Se definieron <strong>acciones específicas</strong> para corregir el comportamiento de filtros, agregar totales en reportes, 
+                Se definieron <strong>acciones específicas</strong> para corregir el comportamiento de filtros, agregar totales en reportes,
                 y mejorar la visualización de porcentajes en análisis por marcas.
               </p>
             </div>
@@ -153,7 +333,7 @@ export default function ReunionesPage() {
                 <AlertCircle size={24} color="#f59e0b" />
                 Acciones Pendientes
               </h3>
-              
+
               {/* Para Equipo de Desarrollo */}
               <Card style={{ marginBottom: 16, padding: 20, background: '#eff6ff', border: '1px solid #3b82f6' }}>
                 <h4 style={{ fontSize: 18, fontWeight: 600, marginBottom: 12, color: '#1e40af', display: 'flex', alignItems: 'center', gap: 8 }}>
@@ -249,11 +429,11 @@ export default function ReunionesPage() {
                 📋 Resumen Ejecutivo
               </h3>
               <p style={{ fontSize: 16, lineHeight: 1.6, color: '#4a5568', marginBottom: 12 }}>
-                Se presentó y validó el <strong>MVP (Producto Mínimo Viable)</strong> del sistema ERP para Solis Comercial. 
+                Se presentó y validó el <strong>MVP (Producto Mínimo Viable)</strong> del sistema ERP para Solis Comercial.
                 El cliente aprobó la interfaz visual y funcionalidades presentadas, confirmando que cumple con las expectativas iniciales.
               </p>
               <p style={{ fontSize: 16, lineHeight: 1.6, color: '#4a5568' }}>
-                Se definieron los <strong>siguientes pasos técnicos</strong> para integración con Zoho Creator, configuración de 
+                Se definieron los <strong>siguientes pasos técnicos</strong> para integración con Zoho Creator, configuración de
                 agentes de IA con SalesIQ, y mejoras en la gestión de inventario en tiempo real.
               </p>
             </div>
@@ -333,14 +513,14 @@ export default function ReunionesPage() {
                 <AlertCircle size={24} color="#f59e0b" />
                 Acciones Pendientes
               </h3>
-              
+
               {/* Para Luis - OpenAI */}
               <Card style={{ marginBottom: 16, padding: 20, background: '#fffbeb', border: '1px solid #fbbf24' }}>
                 <h4 style={{ fontSize: 18, fontWeight: 600, marginBottom: 12, color: '#92400e', display: 'flex', alignItems: 'center', gap: 8 }}>
                   🤖 Para Luis: Habilitar Modelo GPT-4.5+ en OpenAI
                 </h4>
                 <p style={{ fontSize: 14, color: '#78350f', marginBottom: 16 }}>
-                  El modelo actual (GPT-4.0) no soporta interpretación de imágenes, audio ni acciones automatizadas. 
+                  El modelo actual (GPT-4.0) no soporta interpretación de imágenes, audio ni acciones automatizadas.
                   Se requiere actualizar a GPT-4.5 o superior.
                 </p>
                 <div style={{ background: 'white', padding: 16, borderRadius: 8, marginBottom: 12 }}>
@@ -364,7 +544,7 @@ export default function ReunionesPage() {
                   </ol>
                 </div>
                 <div style={{ padding: 12, background: '#fef3c7', borderRadius: 6, fontSize: 13, color: '#78350f' }}>
-                  <strong>💡 Nota:</strong> El costo de GPT-4.5 es aproximadamente 2x el de GPT-4.0. Con el consumo actual 
+                  <strong>💡 Nota:</strong> El costo de GPT-4.5 es aproximadamente 2x el de GPT-4.0. Con el consumo actual
                   (~$3.65/mes), se estima un costo de ~$7-8/mes. Validar presupuesto antes de activar.
                 </div>
               </Card>
@@ -385,8 +565,8 @@ export default function ReunionesPage() {
                     <p style={{ margin: 0, marginBottom: 12 }}><strong>Asunto:</strong> Solicitud de Acceso a API REST - Integración con Sistema de Inventario</p>
                     <p style={{ margin: 0, marginBottom: 8 }}>Estimado equipo de SalesIQ,</p>
                     <p style={{ margin: 0, marginBottom: 8 }}>
-                      Somos Solis Comercial y actualmente utilizamos SalesIQ para atención al cliente con integración de OpenAI. 
-                      Necesitamos habilitar el acceso a la <strong>API REST de SalesIQ</strong> para conectar nuestro agente de IA 
+                      Somos Solis Comercial y actualmente utilizamos SalesIQ para atención al cliente con integración de OpenAI.
+                      Necesitamos habilitar el acceso a la <strong>API REST de SalesIQ</strong> para conectar nuestro agente de IA
                       con nuestro sistema de inventario en tiempo real.
                     </p>
                     <p style={{ margin: 0, marginBottom: 8 }}><strong>Requerimientos específicos:</strong></p>
@@ -397,28 +577,28 @@ export default function ReunionesPage() {
                       <li>Acceso a ID de conversación para mantener historial por usuario</li>
                     </ul>
                     <p style={{ margin: 0, marginBottom: 8 }}>
-                      <strong>Endpoint que proveeremos:</strong> Tendremos un endpoint REST que retorna inventario actualizado 
+                      <strong>Endpoint que proveeremos:</strong> Tendremos un endpoint REST que retorna inventario actualizado
                       en formato JSON para que el agente pueda consultar disponibilidad, precios y características de productos.
                     </p>
                     <p style={{ margin: 0, marginBottom: 8 }}>
                       Por favor, indíquenos el proceso para habilitar estos accesos y la documentación técnica correspondiente.
                     </p>
-                    <p style={{ margin: 0 }}>Saludos cordiales,<br/>Equipo Técnico - Solis Comercial</p>
+                    <p style={{ margin: 0 }}>Saludos cordiales,<br />Equipo Técnico - Solis Comercial</p>
                   </div>
                 </div>
                 <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
-                  <a 
-                    href="https://www.zoho.com/salesiq/help/developer-section/rest-api.html" 
-                    target="_blank" 
+                  <a
+                    href="https://www.zoho.com/salesiq/help/developer-section/rest-api.html"
+                    target="_blank"
                     rel="noopener"
-                    style={{ 
-                      display: 'inline-flex', 
-                      alignItems: 'center', 
-                      gap: 6, 
-                      padding: '8px 16px', 
-                      background: '#3b82f6', 
-                      color: 'white', 
-                      borderRadius: 6, 
+                    style={{
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: 6,
+                      padding: '8px 16px',
+                      background: '#3b82f6',
+                      color: 'white',
+                      borderRadius: 6,
                       textDecoration: 'none',
                       fontSize: 14,
                       fontWeight: 500
@@ -427,19 +607,19 @@ export default function ReunionesPage() {
                     <ExternalLink size={16} />
                     Documentación SalesIQ API
                   </a>
-                  <a 
-                    href="https://api-console.zoho.com/" 
-                    target="_blank" 
+                  <a
+                    href="https://api-console.zoho.com/"
+                    target="_blank"
                     rel="noopener"
-                    style={{ 
-                      display: 'inline-flex', 
-                      alignItems: 'center', 
-                      gap: 6, 
-                      padding: '8px 16px', 
-                      background: 'white', 
-                      color: '#3b82f6', 
+                    style={{
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: 6,
+                      padding: '8px 16px',
+                      background: 'white',
+                      color: '#3b82f6',
                       border: '1px solid #3b82f6',
-                      borderRadius: 6, 
+                      borderRadius: 6,
                       textDecoration: 'none',
                       fontSize: 14,
                       fontWeight: 500
