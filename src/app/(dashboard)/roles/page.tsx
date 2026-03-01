@@ -88,6 +88,8 @@ export default function RolesPage() {
   const [newUserRole, setNewUserRole] = useState<'admin' | 'manager' | 'operator' | 'auditor'>('operator');
   const [showNewUserForm, setShowNewUserForm] = useState(false);
   const [loading, setLoading] = useState(true);
+  const [usersError, setUsersError] = useState<string | null>(null);
+  const [permissionsError, setPermissionsError] = useState<string | null>(null);
   const [permissions, setPermissions] = useState<Permission[]>([]);
   const [rolePermissions, setRolePermissions] = useState<RolePermission[]>([]);
   const [savingPermission, setSavingPermission] = useState(false);
@@ -123,29 +125,52 @@ export default function RolesPage() {
     }
   }, [selectedRole]);
 
+  async function readApiError(response: Response, fallback: string) {
+    try {
+      const data = await response.json();
+      return data?.error || fallback;
+    } catch {
+      return fallback;
+    }
+  }
+
   async function loadUsers() {
     setLoading(true);
+    setUsersError(null);
     try {
       const response = await fetch('/api/users');
       if (response.ok) {
         const data = await response.json();
         setUsers(data);
+      } else {
+        const message = await readApiError(response, 'No se pudieron cargar los usuarios');
+        setUsers([]);
+        setUsersError(message);
       }
     } catch (error) {
       console.error('Error loading users:', error);
+      setUsers([]);
+      setUsersError('Error de conexión al cargar usuarios');
     }
     setLoading(false);
   }
 
   async function loadPermissions() {
+    setPermissionsError(null);
     try {
       const response = await fetch('/api/permissions');
       if (response.ok) {
         const data = await response.json();
         setPermissions(data);
+      } else {
+        const message = await readApiError(response, 'No se pudieron cargar los permisos');
+        setPermissions([]);
+        setPermissionsError(message);
       }
     } catch (error) {
       console.error('Error loading permissions:', error);
+      setPermissions([]);
+      setPermissionsError('Error de conexión al cargar permisos');
     }
   }
 
@@ -629,6 +654,21 @@ export default function RolesPage() {
                   onChange={(e) => setUserQuery(e.target.value)}
                 />
               </div>
+              {usersError && (
+                <div
+                  style={{
+                    marginBottom: 10,
+                    padding: 10,
+                    borderRadius: 6,
+                    border: '1px solid rgba(239, 68, 68, 0.35)',
+                    background: 'rgba(239, 68, 68, 0.12)',
+                    color: '#fecaca',
+                    fontSize: 12,
+                  }}
+                >
+                  {usersError}
+                </div>
+              )}
               <div style={{ display: 'grid', gap: 8 }}>
                 {loading ? (
                   <div style={{ padding: 20, textAlign: 'center', color: 'var(--muted)' }}>Cargando usuarios...</div>
@@ -806,10 +846,13 @@ export default function RolesPage() {
                       borderRadius: 8,
                       padding: 12,
                       fontSize: 13,
-                      color: 'var(--muted)',
+                      color: permissionsError ? '#fecaca' : 'var(--muted)',
+                      background: permissionsError ? 'rgba(239, 68, 68, 0.12)' : 'transparent',
                     }}
                   >
-                    No hay permisos cargados en la tabla `permissions`. Ejecuta el script `permissions-schema.sql`.
+                    {permissionsError
+                      ? `Error cargando permisos: ${permissionsError}`
+                      : 'No hay permisos cargados en la tabla `permissions`. Ejecuta el script `permissions-schema.sql`.'}
                   </div>
                 )}
                 {Object.entries(groupedPermissions).map(([module, perms]) => {

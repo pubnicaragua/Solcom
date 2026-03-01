@@ -4,6 +4,10 @@ import { NextResponse } from 'next/server';
 import { getAuthenticatedProfile } from '@/lib/auth/warehouse-permissions';
 import { getEffectiveModuleAccess, hasModuleAccess } from '@/lib/auth/module-permissions';
 
+function isMissingTable(error: any): boolean {
+  return String(error?.code || '') === '42P01';
+}
+
 export async function GET() {
   try {
     const supabase = createRouteHandlerClient({ cookies });
@@ -21,7 +25,15 @@ export async function GET() {
       .select('*')
       .order('module', { ascending: true });
 
-    if (error) throw error;
+    if (error) {
+      if (isMissingTable(error)) {
+        return NextResponse.json(
+          { error: 'Falta migración de permisos. Ejecuta permissions-schema.sql' },
+          { status: 500 }
+        );
+      }
+      throw error;
+    }
 
     return NextResponse.json(permissions);
   } catch (error: any) {
