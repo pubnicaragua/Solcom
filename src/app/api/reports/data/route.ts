@@ -1,7 +1,61 @@
 import { NextResponse } from 'next/server';
-import { createServerClient } from '@/lib/supabase/server';
+import { createRouteHandlerClient } from '@supabase/auth-helpers-nextjs';
+import { cookies } from 'next/headers';
+import {
+    getAuthenticatedProfile,
+    getWarehouseAccessScope,
+    isWarehouseAllowed,
+    listWarehousesForScope,
+} from '@/lib/auth/warehouse-permissions';
+import { getEffectiveModuleAccess, hasModuleAccess } from '@/lib/auth/module-permissions';
 
 export const dynamic = 'force-dynamic';
+
+async function getScopedTotalsForItems(
+    supabase: ReturnType<typeof createRouteHandlerClient>,
+    itemIds: string[],
+    allowedWarehouseIds: string[]
+) {
+    const totals = new Map<string, number>();
+    if (itemIds.length === 0 || allowedWarehouseIds.length === 0) return totals;
+
+    try {
+        const { data: balances, error: balanceError } = await (supabase.from as any)('inventory_balance')
+            .select('item_id, warehouse_id, qty_on_hand')
+            .in('item_id', itemIds)
+            .in('warehouse_id', allowedWarehouseIds);
+
+        if (balanceError) throw balanceError;
+
+        for (const row of balances || []) {
+            const itemId = String(row.item_id || '');
+            if (!itemId) continue;
+            totals.set(itemId, Number(totals.get(itemId) || 0) + Number(row.qty_on_hand || 0));
+        }
+        return totals;
+    } catch (_balanceError) {
+        const { data: snapshots, error: snapshotError } = await supabase
+            .from('stock_snapshots')
+            .select('item_id, warehouse_id, qty, synced_at')
+            .in('item_id', itemIds)
+            .in('warehouse_id', allowedWarehouseIds)
+            .order('synced_at', { ascending: false });
+
+        if (snapshotError) throw snapshotError;
+
+        const latestByItemWarehouse = new Set<string>();
+        for (const row of snapshots || []) {
+            const itemId = String(row.item_id || '');
+            const warehouseId = String(row.warehouse_id || '');
+            if (!itemId || !warehouseId) continue;
+            const key = `${itemId}__${warehouseId}`;
+            if (latestByItemWarehouse.has(key)) continue;
+            latestByItemWarehouse.add(key);
+            totals.set(itemId, Number(totals.get(itemId) || 0) + Number(row.qty || 0));
+        }
+        return totals;
+    }
+}
 
 export async function GET(request: Request) {
     try {
@@ -12,12 +66,98 @@ export async function GET(request: Request) {
         const state = searchParams.get('state') || '';
         const color = searchParams.get('color') || '';
 
-        const supabase = createServerClient();
+        const supabase = createRouteHandlerClient({ cookies });
+        const auth = await getAuthenticatedProfile(supabase);
+        if (!auth.ok) {
+            return NextResponse.json({ error: auth.error }, { status: auth.status });
+        }
+
+        const moduleAccess = await getEffectiveModuleAccess(supabase, auth.userId, auth.role);
+        if (!hasModuleAccess(moduleAccess, 'reports')) {
+            return NextResponse.json({ error: 'No autorizado para este módulo' }, { status: 403 });
+        }
+
+        const scope = await getWarehouseAccessScope(supabase, auth.userId, auth.role);
+        if (!scope.canViewStock) {
+            return NextResponse.json({
+                stats: {
+                    totalProducts: 0,
+                    totalStock: 0,
+                    totalValue: 0,
+                    lowStockItems: 0,
+                    outOfStockItems: 0,
+                    activeWarehouses: 0,
+                },
+                charts: {
+                    categoryBreakdown: [],
+                    brandBreakdown: [],
+                },
+                moneyMakerCategories: [],
+                moneyMakerBrands: [],
+                filterOptions: {
+                    categories: [],
+                    marcas: [],
+                    warehouses: [],
+                    states: [],
+                    colors: [],
+                },
+                aging: {
+                    items: [],
+                    totalUnits: 0,
+                    totalValue: 0,
+                },
+                lowStockList: [],
+                sinMarcaCount: 0,
+            });
+        }
+
+        const activeWarehouses = await listWarehousesForScope(supabase, scope, { activeOnly: true });
+        const allowedWarehouseIds = activeWarehouses.map((warehouseRow) => warehouseRow.id);
+
+        if (allowedWarehouseIds.length === 0) {
+            return NextResponse.json({
+                stats: {
+                    totalProducts: 0,
+                    totalStock: 0,
+                    totalValue: 0,
+                    lowStockItems: 0,
+                    outOfStockItems: 0,
+                    activeWarehouses: 0,
+                },
+                charts: {
+                    categoryBreakdown: [],
+                    brandBreakdown: [],
+                },
+                moneyMakerCategories: [],
+                moneyMakerBrands: [],
+                filterOptions: {
+                    categories: [],
+                    marcas: [],
+                    warehouses: [],
+                    states: [],
+                    colors: [],
+                },
+                aging: {
+                    items: [],
+                    totalUnits: 0,
+                    totalValue: 0,
+                },
+                lowStockList: [],
+                sinMarcaCount: 0,
+            });
+        }
+
+        const requestedWarehouse = warehouse
+            ? activeWarehouses.find((warehouseRow) => warehouseRow.code === warehouse || warehouseRow.id === warehouse) || null
+            : null;
+        if (warehouse && (!requestedWarehouse || !isWarehouseAllowed(scope, requestedWarehouse.id))) {
+            return NextResponse.json({ error: 'No tienes permiso para consultar esa bodega' }, { status: 403 });
+        }
 
         // 1) Fetch items with filters (fast, no JOINs)
         let itemsQuery = supabase
             .from('items')
-            .select('id, sku, name, category, marca, state, color, stock_total, price, updated_at')
+            .select('id, sku, name, category, marca, state, color, price, updated_at')
             .is('zoho_removed_at', null);
 
         if (category) itemsQuery = itemsQuery.ilike('category', `%${category}%`);
@@ -47,39 +187,46 @@ export async function GET(request: Request) {
             if (page > 20) break;
         }
 
+        const allItemIds = allItems.map((item: any) => String(item.id));
+        const scopedTotals = await getScopedTotalsForItems(supabase, allItemIds, allowedWarehouseIds);
+        allItems = allItems.map((item: any) => ({
+            ...item,
+            stock_total: scopedTotals.get(item.id) ?? 0,
+        }));
+
         // If filtering by warehouse, narrow items to those with stock in that warehouse
-        if (warehouse) {
-            const { data: whData } = await supabase
-                .from('warehouses')
-                .select('id')
-                .eq('code', warehouse)
-                .single();
+        if (requestedWarehouse) {
+            const itemIds = allItems.map((item: any) => item.id);
+            const BATCH = 200;
+            const matchingItemIds = new Set<string>();
 
-            if (whData) {
-                const itemIds = allItems.map(i => i.id);
-                const BATCH = 200;
-                const matchingItemIds = new Set<string>();
+            for (let i = 0; i < itemIds.length; i += BATCH) {
+                const batch = itemIds.slice(i, i + BATCH);
+                try {
+                    const { data: balances, error: balanceError } = await (supabase.from as any)('inventory_balance')
+                        .select('item_id, qty_on_hand')
+                        .eq('warehouse_id', requestedWarehouse.id)
+                        .in('item_id', batch)
+                        .gt('qty_on_hand', 0);
 
-                for (let i = 0; i < itemIds.length; i += BATCH) {
-                    const batch = itemIds.slice(i, i + BATCH);
+                    if (balanceError) throw balanceError;
+                    for (const row of balances || []) {
+                        matchingItemIds.add(row.item_id);
+                    }
+                } catch (_balanceError) {
                     const { data: snaps } = await supabase
                         .from('stock_snapshots')
-                        .select('item_id')
+                        .select('item_id, qty')
                         .in('item_id', batch)
-                        .eq('warehouse_id', whData.id)
+                        .eq('warehouse_id', requestedWarehouse.id)
                         .gt('qty', 0);
 
-                    if (snaps) snaps.forEach(s => matchingItemIds.add(s.item_id));
+                    if (snaps) snaps.forEach((snap: any) => matchingItemIds.add(snap.item_id));
                 }
-
-                allItems = allItems.filter(i => matchingItemIds.has(i.id));
             }
-        }
 
-        // 2) Fetch warehouses (fast)
-        const { data: activeWh } = await supabase
-            .from('warehouses').select('id, code, name').eq('active', true);
-        const activeWarehouses = activeWh || [];
+            allItems = allItems.filter((item: any) => matchingItemIds.has(item.id));
+        }
 
         // 3) Build filter options from ALL items (before warehouse filter)
         // Re-query without warehouse filter for filter options

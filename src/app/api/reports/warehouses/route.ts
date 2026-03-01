@@ -1,5 +1,12 @@
 import { NextResponse } from 'next/server';
-import { createServerClient } from '@/lib/supabase/server';
+import { createRouteHandlerClient } from '@supabase/auth-helpers-nextjs';
+import { cookies } from 'next/headers';
+import {
+    getAuthenticatedProfile,
+    getWarehouseAccessScope,
+    listWarehousesForScope,
+} from '@/lib/auth/warehouse-permissions';
+import { getEffectiveModuleAccess, hasModuleAccess } from '@/lib/auth/module-permissions';
 
 export const dynamic = 'force-dynamic';
 
@@ -11,13 +18,23 @@ export async function GET(request: Request) {
         const state = searchParams.get('state') || '';
         const color = searchParams.get('color') || '';
 
-        const supabase = createServerClient();
+        const supabase = createRouteHandlerClient({ cookies });
+        const auth = await getAuthenticatedProfile(supabase);
+        if (!auth.ok) {
+            return NextResponse.json({ error: auth.error }, { status: auth.status });
+        }
 
-        const { data: warehouses } = await supabase
-            .from('warehouses')
-            .select('id, code, name')
-            .eq('active', true)
-            .order('code', { ascending: true });
+        const moduleAccess = await getEffectiveModuleAccess(supabase, auth.userId, auth.role);
+        if (!hasModuleAccess(moduleAccess, 'reports')) {
+            return NextResponse.json({ error: 'No autorizado para este módulo' }, { status: 403 });
+        }
+
+        const scope = await getWarehouseAccessScope(supabase, auth.userId, auth.role);
+        if (!scope.canViewStock) {
+            return NextResponse.json({ warehouseBreakdown: [] });
+        }
+
+        const warehouses = await listWarehousesForScope(supabase, scope, { activeOnly: true });
 
         if (!warehouses || warehouses.length === 0) {
             return NextResponse.json({ warehouseBreakdown: [] });

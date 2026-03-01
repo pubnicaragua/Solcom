@@ -1,10 +1,25 @@
 import { useEffect, useMemo, useState } from 'react';
 import { createBrowserClient } from '@supabase/ssr';
+import {
+  getDefaultModuleAccess,
+  mapOverrides,
+  mergeModuleOverrides,
+} from '@/lib/auth/module-permissions';
 
 export type UserRole = 'admin' | 'manager' | 'operator' | 'auditor';
+export type ModuleAccessMap = Record<string, boolean>;
+
+function normalizeRole(value: unknown): UserRole {
+  const role = String(value ?? '').trim().toLowerCase();
+  if (role === 'admin' || role === 'manager' || role === 'operator' || role === 'auditor') {
+    return role;
+  }
+  return 'operator';
+}
 
 export function useUserRole() {
   const [role, setRole] = useState<UserRole>('operator');
+  const [moduleAccess, setModuleAccess] = useState<ModuleAccessMap>(getDefaultModuleAccess('operator'));
   const [loading, setLoading] = useState(true);
   const supabase = useMemo(
     () =>
@@ -32,6 +47,7 @@ export function useUserRole() {
         if (!user) {
           if (!canceled) {
             setRole('operator');
+            setModuleAccess(getDefaultModuleAccess('operator'));
           }
           return;
         }
@@ -42,8 +58,22 @@ export function useUserRole() {
           .eq('id', user.id)
           .maybeSingle();
 
+        const normalizedRole = normalizeRole(profile?.role);
+        const baseAccess = getDefaultModuleAccess(normalizedRole);
+
+        let overridesMap: ModuleAccessMap = {};
+        const { data: overrides, error: overridesError } = await (supabase as any)
+          .from('user_module_permissions')
+          .select('module, can_access')
+          .eq('user_id', user.id);
+
+        if (!overridesError) {
+          overridesMap = mapOverrides(overrides || []);
+        }
+
         if (!canceled) {
-          setRole((profile?.role as UserRole) || 'operator');
+          setRole(normalizedRole);
+          setModuleAccess(mergeModuleOverrides(baseAccess, overridesMap));
         }
       } catch (error: any) {
         // Ignore aborted auth locks (seen on rapid remounts in dev).
@@ -63,6 +93,7 @@ export function useUserRole() {
       if (canceled) return;
       if (!session?.user) {
         setRole('operator');
+        setModuleAccess(getDefaultModuleAccess('operator'));
         setLoading(false);
         return;
       }
@@ -75,16 +106,14 @@ export function useUserRole() {
     };
   }, [supabase]);
 
-  return { role, loading };
+  const hasModuleAccess = (module: string) => {
+    if (!module) return false;
+    return Boolean(moduleAccess[module]);
+  };
+
+  return { role, loading, moduleAccess, hasModuleAccess };
 }
 
 export function hasPermission(role: UserRole, module: string): boolean {
-  const permissions: Record<UserRole, string[]> = {
-    admin: ['inventory', 'ventas', 'reports', 'ai-agents', 'roles', 'settings', 'entregables', 'next-steps', 'transfers', 'fase2'],
-    manager: ['inventory', 'ventas', 'reports', 'ai-agents', 'transfers'],
-    operator: ['inventory', 'ventas'],
-    auditor: ['reports'],
-  };
-
-  return permissions[role]?.includes(module) || false;
+  return Boolean(getDefaultModuleAccess(role)[module]);
 }

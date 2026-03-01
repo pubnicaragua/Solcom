@@ -1,5 +1,21 @@
 import { createServerClient, type CookieOptions } from '@supabase/ssr';
 import { NextResponse, type NextRequest } from 'next/server';
+import {
+  canAccessPath,
+  getDefaultModuleAccess,
+  getFallbackPath,
+  mapOverrides,
+  mergeModuleOverrides,
+} from '@/lib/auth/module-permissions';
+import type { AppRole } from '@/lib/auth/warehouse-permissions';
+
+function normalizeRole(value: unknown): AppRole {
+  const role = String(value ?? '').trim().toLowerCase();
+  if (role === 'admin' || role === 'manager' || role === 'operator' || role === 'auditor') {
+    return role;
+  }
+  return 'operator';
+}
 
 export async function middleware(request: NextRequest) {
   const path = request.nextUrl.pathname;
@@ -96,7 +112,29 @@ export async function middleware(request: NextRequest) {
   }
 
   if (path === '/' && user) {
-    return NextResponse.redirect(new URL('/inventory', request.url));
+    try {
+      const { data: profile } = await supabase
+        .from('user_profiles')
+        .select('role')
+        .eq('id', user.id)
+        .maybeSingle();
+
+      const role = normalizeRole(profile?.role);
+      const baseAccess = getDefaultModuleAccess(role);
+      let moduleAccess = baseAccess;
+
+      const { data: overrideRows, error: overrideError } = await supabase
+        .from('user_module_permissions')
+        .select('module, can_access')
+        .eq('user_id', user.id);
+      if (!overrideError) {
+        moduleAccess = mergeModuleOverrides(baseAccess, mapOverrides(overrideRows || []));
+      }
+
+      return NextResponse.redirect(new URL(getFallbackPath(moduleAccess), request.url));
+    } catch (_error) {
+      return NextResponse.redirect(new URL('/inventory', request.url));
+    }
   }
 
   if (path === '/' && !user) {
@@ -108,7 +146,29 @@ export async function middleware(request: NextRequest) {
   }
 
   if (user && isPublicRoute && !path.startsWith('/reuniones') && !path.startsWith('/login-clientes')) {
-    return NextResponse.redirect(new URL('/inventory', request.url));
+    try {
+      const { data: profile } = await supabase
+        .from('user_profiles')
+        .select('role')
+        .eq('id', user.id)
+        .maybeSingle();
+
+      const role = normalizeRole(profile?.role);
+      const baseAccess = getDefaultModuleAccess(role);
+      let moduleAccess = baseAccess;
+
+      const { data: overrideRows, error: overrideError } = await supabase
+        .from('user_module_permissions')
+        .select('module, can_access')
+        .eq('user_id', user.id);
+      if (!overrideError) {
+        moduleAccess = mergeModuleOverrides(baseAccess, mapOverrides(overrideRows || []));
+      }
+
+      return NextResponse.redirect(new URL(getFallbackPath(moduleAccess), request.url));
+    } catch (_error) {
+      return NextResponse.redirect(new URL('/inventory', request.url));
+    }
   }
 
   // Permitir acceso a rutas de cliente si está autenticado
@@ -147,23 +207,24 @@ export async function middleware(request: NextRequest) {
         return NextResponse.redirect(new URL('/login-clientes', request.url));
       }
 
-      const userRole = profile?.role || 'operator';
+      const userRole = normalizeRole(profile?.role || 'operator');
       const path = request.nextUrl.pathname;
 
-      // Definir permisos por rol
-      const rolePermissions: Record<string, string[]> = {
-        admin: ['/inventory', '/ventas', '/reports', '/ai-agents', '/roles', '/settings', '/how-it-works', '/next-steps', '/entregables', '/cliente', '/transfers', '/fase2'],
-        manager: ['/inventory', '/ventas', '/reports', '/ai-agents', '/how-it-works', '/entregables', '/cliente', '/transfers'],
-        operator: ['/inventory', '/ventas', '/how-it-works', '/cliente'],
-        auditor: ['/reports', '/how-it-works', '/cliente'],
-      };
+      const baseAccess = getDefaultModuleAccess(userRole);
+      let moduleAccess = baseAccess;
 
-      const allowedPaths = rolePermissions[userRole] || rolePermissions.operator;
-      const hasAccess = allowedPaths.some(allowedPath => path.startsWith(allowedPath));
+      const { data: overrideRows, error: overrideError } = await supabase
+        .from('user_module_permissions')
+        .select('module, can_access')
+        .eq('user_id', user.id);
 
-      // Permitir acceso a /entregables y /cliente para todos los usuarios autenticados
-      if (!hasAccess && !isPublicRoute && !isClientRoute && !path.startsWith('/entregables')) {
-        return NextResponse.redirect(new URL('/inventory', request.url));
+      if (!overrideError) {
+        moduleAccess = mergeModuleOverrides(baseAccess, mapOverrides(overrideRows || []));
+      }
+
+      const hasAccess = canAccessPath(path, moduleAccess);
+      if (!hasAccess && !isPublicRoute && !isClientRoute) {
+        return NextResponse.redirect(new URL(getFallbackPath(moduleAccess), request.url));
       }
     } catch (error) {
       return response;

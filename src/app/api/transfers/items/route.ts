@@ -2,6 +2,12 @@
 import { NextResponse } from 'next/server';
 import { createRouteHandlerClient } from '@supabase/auth-helpers-nextjs';
 import { cookies } from 'next/headers';
+import {
+    getAuthenticatedProfile,
+    getWarehouseAccessScope,
+    isWarehouseAllowed,
+} from '@/lib/auth/warehouse-permissions';
+import { getEffectiveModuleAccess, hasModuleAccess } from '@/lib/auth/module-permissions';
 
 export const dynamic = 'force-dynamic';
 
@@ -47,9 +53,26 @@ export async function GET(request: Request) {
         }
 
         const supabase = createRouteHandlerClient({ cookies });
-        const { data: { user } } = await supabase.auth.getUser();
-        if (!user) {
-            return NextResponse.json({ error: 'No autorizado' }, { status: 401, headers: NO_STORE_HEADERS });
+        const auth = await getAuthenticatedProfile(supabase);
+        if (!auth.ok) {
+            return NextResponse.json({ error: auth.error }, { status: auth.status, headers: NO_STORE_HEADERS });
+        }
+
+        const moduleAccess = await getEffectiveModuleAccess(supabase, auth.userId, auth.role);
+        if (!hasModuleAccess(moduleAccess, 'transfers')) {
+            return NextResponse.json({ error: 'No autorizado para este módulo' }, { status: 403, headers: NO_STORE_HEADERS });
+        }
+
+        const scope = await getWarehouseAccessScope(supabase, auth.userId, auth.role);
+        if (!scope.canViewStock) {
+            return NextResponse.json([], { headers: NO_STORE_HEADERS });
+        }
+
+        if (!isWarehouseAllowed(scope, warehouseId)) {
+            return NextResponse.json(
+                { error: 'No tienes permiso para consultar esa bodega' },
+                { status: 403, headers: NO_STORE_HEADERS }
+            );
         }
 
         // 1) Buscar primero items por término (evita consultas gigantes con .in de miles de IDs).

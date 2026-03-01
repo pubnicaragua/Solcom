@@ -2,10 +2,20 @@ import { createRouteHandlerClient } from '@supabase/auth-helpers-nextjs';
 import { createClient } from '@supabase/supabase-js';
 import { cookies } from 'next/headers';
 import { NextResponse } from 'next/server';
+import { requireAdminProfile } from '@/lib/auth/warehouse-permissions';
+import { getEffectiveModuleAccess, hasModuleAccess } from '@/lib/auth/module-permissions';
 
 export async function GET() {
   try {
     const supabase = createRouteHandlerClient({ cookies });
+    const adminCheck = await requireAdminProfile(supabase);
+    if (!adminCheck.ok) {
+      return NextResponse.json({ error: adminCheck.error }, { status: adminCheck.status });
+    }
+    const moduleAccess = await getEffectiveModuleAccess(supabase, adminCheck.userId, adminCheck.role);
+    if (!hasModuleAccess(moduleAccess, 'roles')) {
+      return NextResponse.json({ error: 'No autorizado para este módulo' }, { status: 403 });
+    }
 
     const { data: users, error } = await supabase
       .from('user_profiles')
@@ -24,6 +34,16 @@ export async function POST(request: Request) {
   try {
     console.log('[API] POST /api/users request received');
     console.log('[API] Service Role Key present:', !!process.env.SUPABASE_SERVICE_ROLE_KEY);
+    const supabase = createRouteHandlerClient({ cookies });
+    const adminCheck = await requireAdminProfile(supabase);
+    if (!adminCheck.ok) {
+      return NextResponse.json({ error: adminCheck.error }, { status: adminCheck.status });
+    }
+    const moduleAccess = await getEffectiveModuleAccess(supabase, adminCheck.userId, adminCheck.role);
+    if (!hasModuleAccess(moduleAccess, 'roles')) {
+      return NextResponse.json({ error: 'No autorizado para este módulo' }, { status: 403 });
+    }
+
     // Admin operations REQUIRE a service role client
     const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
     const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;

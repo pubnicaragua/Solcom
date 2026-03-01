@@ -4,7 +4,7 @@ import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { Package, BarChart3, Settings, Users, HelpCircle, Bot, Menu, X, ClipboardList, Calendar, FolderOpen, ArrowLeftRight, FileText, ChevronLeft, ChevronRight, Rocket } from 'lucide-react';
-import { useUserRole, hasPermission } from '@/hooks/useUserRole';
+import { useUserRole } from '@/hooks/useUserRole';
 
 const menuItems = [
   { icon: Package, label: 'Inventario', href: '/inventory', module: 'inventory' },
@@ -30,7 +30,7 @@ import { useSidebar } from '@/contexts/SidebarContext';
 export default function Sidebar() {
   const pathname = usePathname();
   const { isOpen, close, isCollapsed, toggleCollapse } = useSidebar();
-  const { role, loading } = useUserRole();
+  const { loading, hasModuleAccess } = useUserRole();
 
   const [expandedMenus, setExpandedMenus] = useState<Record<string, boolean>>({
     '/ventas': pathname.startsWith('/ventas')
@@ -124,7 +124,7 @@ export default function Sidebar() {
             const isActive = pathname === item.href || (isBilling && pathname.startsWith('/ventas/'));
 
             // Mostrar módulos públicos siempre, o verificar permisos si ya cargó
-            if (item.module !== 'public' && !loading && !hasPermission(role, item.module)) {
+            if (item.module !== 'public' && !loading && !hasModuleAccess(item.module)) {
               return null;
             }
 

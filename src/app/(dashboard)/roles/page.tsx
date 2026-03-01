@@ -6,8 +6,7 @@ import Button from '@/components/ui/Button';
 import Badge from '@/components/ui/Badge';
 import Input from '@/components/ui/Input';
 import Select from '@/components/ui/Select';
-import { Shield, Users, Edit, Trash2, Plus, Check, X, Save, XCircle, UserPlus, Loader2 } from 'lucide-react';
-import { createBrowserClient } from '@supabase/ssr';
+import { Shield, Edit, Trash2, Check, X, Save, XCircle, UserPlus, Loader2, Building2, Blocks } from 'lucide-react';
 
 interface UserProfile {
   id: string;
@@ -37,6 +36,22 @@ interface Permission {
 interface RolePermission {
   role: string;
   permission_code: string;
+}
+
+interface WarehouseOption {
+  id: string;
+  code: string;
+  name: string;
+  active: boolean;
+  selected?: boolean;
+}
+
+interface ModulePermissionOption {
+  module: string;
+  label: string;
+  allowed_by_role: boolean;
+  override_mode: 'inherit' | 'allow' | 'deny';
+  effective_access: boolean;
 }
 
 const ROLE_DEFINITIONS: Record<string, { name: string; description: string; color: string }> = {
@@ -78,10 +93,24 @@ export default function RolesPage() {
   const [savingPermission, setSavingPermission] = useState(false);
   const [userQuery, setUserQuery] = useState('');
   const [permissionQuery, setPermissionQuery] = useState('');
-  const supabase = createBrowserClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-  );
+  const [warehouseModalOpen, setWarehouseModalOpen] = useState(false);
+  const [warehouseModalLoading, setWarehouseModalLoading] = useState(false);
+  const [warehouseModalSaving, setWarehouseModalSaving] = useState(false);
+  const [warehouseModalError, setWarehouseModalError] = useState<string | null>(null);
+  const [warehouseModalUser, setWarehouseModalUser] = useState<UserProfile | null>(null);
+  const [warehouseOptions, setWarehouseOptions] = useState<WarehouseOption[]>([]);
+  const [warehouseSearch, setWarehouseSearch] = useState('');
+  const [allWarehousesAccess, setAllWarehousesAccess] = useState(false);
+  const [canViewStock, setCanViewStock] = useState(true);
+  const [selectedWarehouseIds, setSelectedWarehouseIds] = useState<string[]>([]);
+  const [moduleModalOpen, setModuleModalOpen] = useState(false);
+  const [moduleModalLoading, setModuleModalLoading] = useState(false);
+  const [moduleModalSaving, setModuleModalSaving] = useState(false);
+  const [moduleModalError, setModuleModalError] = useState<string | null>(null);
+  const [moduleModalUser, setModuleModalUser] = useState<UserProfile | null>(null);
+  const [moduleOptions, setModuleOptions] = useState<ModulePermissionOption[]>([]);
+  const [moduleModes, setModuleModes] = useState<Record<string, 'inherit' | 'allow' | 'deny'>>({});
+  const [moduleSearch, setModuleSearch] = useState('');
 
   useEffect(() => {
     loadUsers();
@@ -206,6 +235,158 @@ export default function RolesPage() {
     }
   }
 
+  async function openWarehousePermissions(user: UserProfile) {
+    setWarehouseModalOpen(true);
+    setWarehouseModalUser(user);
+    setWarehouseModalLoading(true);
+    setWarehouseModalError(null);
+    setWarehouseOptions([]);
+    setWarehouseSearch('');
+    setAllWarehousesAccess(false);
+    setCanViewStock(true);
+    setSelectedWarehouseIds([]);
+
+    try {
+      const response = await fetch(`/api/users/${user.id}/warehouse-permissions`, { cache: 'no-store' });
+      const data = await response.json();
+      if (!response.ok) {
+        throw new Error(data?.error || 'No se pudieron cargar los permisos por bodega');
+      }
+
+      const options = Array.isArray(data?.warehouses) ? (data.warehouses as WarehouseOption[]) : [];
+      const warehouseIdsFromResponse = Array.isArray(data?.warehouse_ids)
+        ? (data.warehouse_ids as string[])
+        : options.filter((option) => option.selected).map((option) => option.id);
+
+      setWarehouseOptions(options);
+      setAllWarehousesAccess(Boolean(data?.all_warehouses));
+      setCanViewStock(Boolean(data?.can_view_stock ?? true));
+      setSelectedWarehouseIds(Array.from(new Set(warehouseIdsFromResponse)));
+    } catch (error: any) {
+      setWarehouseModalError(error?.message || 'Error al cargar permisos de bodega');
+    } finally {
+      setWarehouseModalLoading(false);
+    }
+  }
+
+  function closeWarehousePermissions() {
+    if (warehouseModalSaving) return;
+    setWarehouseModalOpen(false);
+    setWarehouseModalUser(null);
+    setWarehouseModalError(null);
+  }
+
+  function toggleWarehouseSelection(warehouseId: string) {
+    setSelectedWarehouseIds((prev) =>
+      prev.includes(warehouseId) ? prev.filter((id) => id !== warehouseId) : [...prev, warehouseId]
+    );
+  }
+
+  async function saveWarehousePermissions() {
+    if (!warehouseModalUser) return;
+    setWarehouseModalSaving(true);
+    setWarehouseModalError(null);
+
+    try {
+      const payload = {
+        all_warehouses: allWarehousesAccess,
+        can_view_stock: canViewStock,
+        warehouse_ids: allWarehousesAccess ? [] : selectedWarehouseIds,
+      };
+
+      const response = await fetch(`/api/users/${warehouseModalUser.id}/warehouse-permissions`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
+
+      const data = await response.json();
+      if (!response.ok) {
+        throw new Error(data?.error || 'No se pudieron guardar los permisos');
+      }
+
+      alert('Permisos por bodega actualizados correctamente');
+      closeWarehousePermissions();
+    } catch (error: any) {
+      setWarehouseModalError(error?.message || 'Error al guardar permisos por bodega');
+    } finally {
+      setWarehouseModalSaving(false);
+    }
+  }
+
+  async function openModulePermissions(user: UserProfile) {
+    setModuleModalOpen(true);
+    setModuleModalUser(user);
+    setModuleModalLoading(true);
+    setModuleModalSaving(false);
+    setModuleModalError(null);
+    setModuleOptions([]);
+    setModuleModes({});
+    setModuleSearch('');
+
+    try {
+      const response = await fetch(`/api/users/${user.id}/module-permissions`, { cache: 'no-store' });
+      const data = await response.json();
+      if (!response.ok) {
+        throw new Error(data?.error || 'No se pudieron cargar permisos por módulo');
+      }
+
+      const modules = Array.isArray(data?.modules) ? (data.modules as ModulePermissionOption[]) : [];
+      const modeMap: Record<string, 'inherit' | 'allow' | 'deny'> = {};
+      for (const moduleRow of modules) {
+        modeMap[moduleRow.module] = moduleRow.override_mode || 'inherit';
+      }
+      setModuleOptions(modules);
+      setModuleModes(modeMap);
+    } catch (error: any) {
+      setModuleModalError(error?.message || 'Error al cargar permisos por módulo');
+    } finally {
+      setModuleModalLoading(false);
+    }
+  }
+
+  function closeModulePermissions() {
+    if (moduleModalSaving) return;
+    setModuleModalOpen(false);
+    setModuleModalUser(null);
+    setModuleModalError(null);
+  }
+
+  function setModuleMode(module: string, mode: 'inherit' | 'allow' | 'deny') {
+    setModuleModes((prev) => ({ ...prev, [module]: mode }));
+  }
+
+  async function saveModulePermissions() {
+    if (!moduleModalUser) return;
+    setModuleModalSaving(true);
+    setModuleModalError(null);
+
+    try {
+      const overrides = moduleOptions.map((moduleRow) => ({
+        module: moduleRow.module,
+        mode: moduleModes[moduleRow.module] || 'inherit',
+      }));
+
+      const response = await fetch(`/api/users/${moduleModalUser.id}/module-permissions`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ overrides }),
+      });
+
+      const data = await response.json();
+      if (!response.ok) {
+        throw new Error(data?.error || 'No se pudieron guardar permisos por módulo');
+      }
+
+      alert('Permisos por módulo actualizados correctamente');
+      closeModulePermissions();
+    } catch (error: any) {
+      setModuleModalError(error?.message || 'Error al guardar permisos por módulo');
+    } finally {
+      setModuleModalSaving(false);
+    }
+  }
+
   async function togglePermission(permissionCode: string) {
     if (!selectedRole) return;
     
@@ -274,6 +455,18 @@ export default function RolesPage() {
       .join(' ')
       .toLowerCase()
       .includes(q);
+  });
+
+  const filteredWarehouseOptions = warehouseOptions.filter((warehouse) => {
+    const q = warehouseSearch.trim().toLowerCase();
+    if (!q) return true;
+    return `${warehouse.code} ${warehouse.name}`.toLowerCase().includes(q);
+  });
+
+  const filteredModuleOptions = moduleOptions.filter((moduleRow) => {
+    const q = moduleSearch.trim().toLowerCase();
+    if (!q) return true;
+    return `${moduleRow.label} ${moduleRow.module}`.toLowerCase().includes(q);
   });
 
   const groupedPermissions = permissions.reduce((acc, perm) => {
@@ -500,6 +693,50 @@ export default function RolesPage() {
                           </div>
                           <div style={{ display: 'flex', gap: 6 }}>
                             <button
+                              onClick={() => openModulePermissions(user)}
+                              title="Permisos por módulo"
+                              style={{
+                                height: 28,
+                                borderRadius: 4,
+                                border: '1px solid var(--border)',
+                                background: 'var(--panel)',
+                                color: 'var(--text)',
+                                display: 'inline-flex',
+                                alignItems: 'center',
+                                justifyContent: 'center',
+                                gap: 6,
+                                cursor: 'pointer',
+                                padding: '0 10px',
+                                fontSize: 11,
+                                fontWeight: 600,
+                              }}
+                            >
+                              <Blocks size={14} color="var(--muted)" />
+                              Módulos
+                            </button>
+                            <button
+                              onClick={() => openWarehousePermissions(user)}
+                              title="Permisos de bodegas"
+                              style={{
+                                height: 28,
+                                borderRadius: 4,
+                                border: '1px solid var(--border)',
+                                background: 'var(--panel)',
+                                color: 'var(--text)',
+                                display: 'inline-flex',
+                                alignItems: 'center',
+                                justifyContent: 'center',
+                                gap: 6,
+                                cursor: 'pointer',
+                                padding: '0 10px',
+                                fontSize: 11,
+                                fontWeight: 600,
+                              }}
+                            >
+                              <Building2 size={14} color="var(--muted)" />
+                              Bodegas
+                            </button>
+                            <button
                               onClick={() => setEditingUser(user)}
                               style={{
                                 width: 28,
@@ -560,6 +797,19 @@ export default function RolesPage() {
                   <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: 8, background: 'var(--brand-primary)10', borderRadius: 4 }}>
                     <Loader2 size={16} style={{ animation: 'spin 1s linear infinite' }} />
                     <span style={{ fontSize: 13 }}>Actualizando permisos...</span>
+                  </div>
+                )}
+                {permissions.length === 0 && (
+                  <div
+                    style={{
+                      border: '1px solid var(--border)',
+                      borderRadius: 8,
+                      padding: 12,
+                      fontSize: 13,
+                      color: 'var(--muted)',
+                    }}
+                  >
+                    No hay permisos cargados en la tabla `permissions`. Ejecuta el script `permissions-schema.sql`.
                   </div>
                 )}
                 {Object.entries(groupedPermissions).map(([module, perms]) => {
@@ -649,6 +899,336 @@ export default function RolesPage() {
           </div>
         </Card>
       </div>
+
+      {moduleModalOpen && moduleModalUser && (
+        <div
+          onClick={closeModulePermissions}
+          style={{
+            position: 'fixed',
+            inset: 0,
+            background: 'rgba(2, 6, 23, 0.75)',
+            backdropFilter: 'blur(4px)',
+            zIndex: 101,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            padding: 16,
+          }}
+        >
+          <div
+            onClick={(event) => event.stopPropagation()}
+            style={{
+              width: 'min(820px, 100%)',
+              maxHeight: '90vh',
+              overflowY: 'auto',
+              borderRadius: 10,
+              border: '1px solid var(--border)',
+              background: 'var(--panel-2)',
+              padding: 16,
+              display: 'grid',
+              gap: 12,
+            }}
+          >
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
+              <div>
+                <div className="h-subtitle" style={{ marginBottom: 2 }}>Permisos por Módulo</div>
+                <div style={{ fontSize: 12, color: 'var(--muted)' }}>
+                  {moduleModalUser.full_name || moduleModalUser.email}
+                </div>
+              </div>
+              <Button variant="secondary" size="sm" onClick={closeModulePermissions}>Cerrar</Button>
+            </div>
+
+            {moduleModalLoading ? (
+              <div style={{ padding: 18, textAlign: 'center', color: 'var(--muted)' }}>
+                Cargando módulos...
+              </div>
+            ) : (
+              <>
+                {moduleModalError && (
+                  <div
+                    style={{
+                      background: 'rgba(239, 68, 68, 0.12)',
+                      border: '1px solid rgba(239, 68, 68, 0.35)',
+                      borderRadius: 8,
+                      padding: 10,
+                      fontSize: 13,
+                      color: '#fecaca',
+                    }}
+                  >
+                    {moduleModalError}
+                  </div>
+                )}
+
+                <Input
+                  placeholder="Buscar módulo por nombre o código"
+                  value={moduleSearch}
+                  onChange={(event) => setModuleSearch(event.target.value)}
+                />
+
+                <div
+                  style={{
+                    maxHeight: 430,
+                    overflowY: 'auto',
+                    border: '1px solid var(--border)',
+                    borderRadius: 8,
+                    padding: 8,
+                    display: 'grid',
+                    gap: 6,
+                  }}
+                >
+                  {filteredModuleOptions.length === 0 ? (
+                    <div style={{ padding: 10, textAlign: 'center', fontSize: 13, color: 'var(--muted)' }}>
+                      No hay módulos para mostrar.
+                    </div>
+                  ) : (
+                    filteredModuleOptions.map((moduleRow) => {
+                      const mode = moduleModes[moduleRow.module] || 'inherit';
+                      const effectiveAccess =
+                        mode === 'allow' ? true : mode === 'deny' ? false : moduleRow.allowed_by_role;
+
+                      return (
+                        <div
+                          key={moduleRow.module}
+                          style={{
+                            display: 'grid',
+                            gap: 8,
+                            padding: 10,
+                            borderRadius: 8,
+                            border: '1px solid var(--border)',
+                            background: effectiveAccess ? 'var(--success)10' : 'var(--panel)',
+                          }}
+                        >
+                          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
+                            <div>
+                              <div style={{ fontSize: 13, fontWeight: 700 }}>{moduleRow.label}</div>
+                              <div style={{ fontSize: 11, color: 'var(--muted)' }}>{moduleRow.module}</div>
+                            </div>
+                            <div style={{ fontSize: 11, color: effectiveAccess ? 'var(--success)' : 'var(--danger)' }}>
+                              {effectiveAccess ? 'Acceso habilitado' : 'Acceso denegado'}
+                            </div>
+                          </div>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+                            <button
+                              type="button"
+                              onClick={() => setModuleMode(moduleRow.module, 'inherit')}
+                              style={{
+                                padding: '6px 10px',
+                                borderRadius: 6,
+                                border: mode === 'inherit' ? '1px solid var(--brand-primary)' : '1px solid var(--border)',
+                                background: mode === 'inherit' ? 'var(--brand-primary)20' : 'var(--panel)',
+                                color: 'var(--text)',
+                                fontSize: 12,
+                                cursor: 'pointer',
+                              }}
+                            >
+                              Heredar ({moduleRow.allowed_by_role ? 'rol: permitido' : 'rol: denegado'})
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => setModuleMode(moduleRow.module, 'allow')}
+                              style={{
+                                padding: '6px 10px',
+                                borderRadius: 6,
+                                border: mode === 'allow' ? '1px solid var(--success)' : '1px solid var(--border)',
+                                background: mode === 'allow' ? 'var(--success)20' : 'var(--panel)',
+                                color: 'var(--text)',
+                                fontSize: 12,
+                                cursor: 'pointer',
+                              }}
+                            >
+                              Permitir
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => setModuleMode(moduleRow.module, 'deny')}
+                              style={{
+                                padding: '6px 10px',
+                                borderRadius: 6,
+                                border: mode === 'deny' ? '1px solid var(--danger)' : '1px solid var(--border)',
+                                background: mode === 'deny' ? 'rgba(239,68,68,0.18)' : 'var(--panel)',
+                                color: 'var(--text)',
+                                fontSize: 12,
+                                cursor: 'pointer',
+                              }}
+                            >
+                              Denegar
+                            </button>
+                          </div>
+                        </div>
+                      );
+                    })
+                  )}
+                </div>
+
+                <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8 }}>
+                  <Button variant="secondary" size="sm" onClick={closeModulePermissions} disabled={moduleModalSaving}>
+                    Cancelar
+                  </Button>
+                  <Button variant="primary" size="sm" onClick={saveModulePermissions} disabled={moduleModalSaving}>
+                    {moduleModalSaving ? 'Guardando...' : 'Guardar permisos'}
+                  </Button>
+                </div>
+              </>
+            )}
+          </div>
+        </div>
+      )}
+
+      {warehouseModalOpen && warehouseModalUser && (
+        <div
+          onClick={closeWarehousePermissions}
+          style={{
+            position: 'fixed',
+            inset: 0,
+            background: 'rgba(2, 6, 23, 0.75)',
+            backdropFilter: 'blur(4px)',
+            zIndex: 100,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            padding: 16,
+          }}
+        >
+          <div
+            onClick={(event) => event.stopPropagation()}
+            style={{
+              width: 'min(760px, 100%)',
+              maxHeight: '90vh',
+              overflowY: 'auto',
+              borderRadius: 10,
+              border: '1px solid var(--border)',
+              background: 'var(--panel-2)',
+              padding: 16,
+              display: 'grid',
+              gap: 12,
+            }}
+          >
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
+              <div>
+                <div className="h-subtitle" style={{ marginBottom: 2 }}>Permisos de Bodega</div>
+                <div style={{ fontSize: 12, color: 'var(--muted)' }}>
+                  {warehouseModalUser.full_name || warehouseModalUser.email}
+                </div>
+              </div>
+              <Button variant="secondary" size="sm" onClick={closeWarehousePermissions}>Cerrar</Button>
+            </div>
+
+            {warehouseModalLoading ? (
+              <div style={{ padding: 18, textAlign: 'center', color: 'var(--muted)' }}>
+                Cargando configuración...
+              </div>
+            ) : (
+              <>
+                {warehouseModalError && (
+                  <div
+                    style={{
+                      background: 'rgba(239, 68, 68, 0.12)',
+                      border: '1px solid rgba(239, 68, 68, 0.35)',
+                      borderRadius: 8,
+                      padding: 10,
+                      fontSize: 13,
+                      color: '#fecaca',
+                    }}
+                  >
+                    {warehouseModalError}
+                  </div>
+                )}
+
+                <div style={{ display: 'grid', gap: 8 }}>
+                  <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13 }}>
+                    <input
+                      type="checkbox"
+                      checked={canViewStock}
+                      onChange={(event) => setCanViewStock(event.target.checked)}
+                    />
+                    Permitir ver stock
+                  </label>
+                  <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13 }}>
+                    <input
+                      type="checkbox"
+                      checked={allWarehousesAccess}
+                      onChange={(event) => setAllWarehousesAccess(event.target.checked)}
+                      disabled={!canViewStock}
+                    />
+                    Acceso a todas las bodegas
+                  </label>
+                </div>
+
+                {!allWarehousesAccess && canViewStock && (
+                  <>
+                    <Input
+                      placeholder="Buscar bodega por código o nombre"
+                      value={warehouseSearch}
+                      onChange={(event) => setWarehouseSearch(event.target.value)}
+                    />
+                    <div
+                      style={{
+                        maxHeight: 320,
+                        overflowY: 'auto',
+                        border: '1px solid var(--border)',
+                        borderRadius: 8,
+                        padding: 8,
+                        display: 'grid',
+                        gap: 6,
+                      }}
+                    >
+                      {filteredWarehouseOptions.length === 0 ? (
+                        <div style={{ padding: 10, textAlign: 'center', fontSize: 13, color: 'var(--muted)' }}>
+                          No hay bodegas para mostrar.
+                        </div>
+                      ) : (
+                        filteredWarehouseOptions.map((warehouse) => (
+                          <label
+                            key={warehouse.id}
+                            style={{
+                              display: 'flex',
+                              alignItems: 'center',
+                              gap: 8,
+                              padding: 8,
+                              borderRadius: 6,
+                              border: '1px solid var(--border)',
+                              background: selectedWarehouseIds.includes(warehouse.id) ? 'var(--brand-primary)15' : 'var(--panel)',
+                              fontSize: 13,
+                            }}
+                          >
+                            <input
+                              type="checkbox"
+                              checked={selectedWarehouseIds.includes(warehouse.id)}
+                              onChange={() => toggleWarehouseSelection(warehouse.id)}
+                            />
+                            <span style={{ fontWeight: 600 }}>{warehouse.code}</span>
+                            <span style={{ color: 'var(--muted)' }}>{warehouse.name}</span>
+                            {!warehouse.active && (
+                              <span style={{ marginLeft: 'auto', fontSize: 11, color: 'var(--warning)' }}>Inactiva</span>
+                            )}
+                          </label>
+                        ))
+                      )}
+                    </div>
+                  </>
+                )}
+
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                  <div style={{ fontSize: 12, color: 'var(--muted)' }}>
+                    {allWarehousesAccess
+                      ? 'Acceso completo a bodegas activado.'
+                      : `${selectedWarehouseIds.length} bodega(s) seleccionada(s).`}
+                  </div>
+                  <div style={{ display: 'flex', gap: 8 }}>
+                    <Button variant="secondary" size="sm" onClick={closeWarehousePermissions} disabled={warehouseModalSaving}>
+                      Cancelar
+                    </Button>
+                    <Button variant="primary" size="sm" onClick={saveWarehousePermissions} disabled={warehouseModalSaving}>
+                      {warehouseModalSaving ? 'Guardando...' : 'Guardar permisos'}
+                    </Button>
+                  </div>
+                </div>
+              </>
+            )}
+          </div>
+        </div>
+      )}
     </div>
   );
 }
