@@ -40,11 +40,24 @@ async function generateQuoteNumber(supabase: any): Promise<string> {
     }
 
     const year = new Date().getFullYear();
-    const { count } = await supabase
-        .from('sales_quotes')
-        .select('*', { count: 'exact', head: true });
+    const prefix = `COT-${year}-`;
 
-    return `COT-${year}-${String((count || 0) + 1).padStart(5, '0')}`;
+    // Find the highest existing number for this year
+    const { data: latest } = await supabase
+        .from('sales_quotes')
+        .select('quote_number')
+        .ilike('quote_number', `${prefix}%`)
+        .order('quote_number', { ascending: false })
+        .limit(1)
+        .single();
+
+    let nextNum = 1;
+    if (latest?.quote_number) {
+        const match = latest.quote_number.match(/(\d+)$/);
+        if (match) nextNum = parseInt(match[1], 10) + 1;
+    }
+
+    return `${prefix}${String(nextNum).padStart(5, '0')}`;
 }
 
 // GET /api/ventas/quotes — list quotes
@@ -145,6 +158,7 @@ export async function POST(req: NextRequest) {
             discount_amount = 0,
             notes,
             template_key,
+            source,
             items = [],
         } = body || {};
 
@@ -172,16 +186,39 @@ export async function POST(req: NextRequest) {
             total: totals.total,
             notes: notes || null,
             template_key: template_key || null,
+            source: source || null,
         };
 
-        const { data: quote, error: quoteError } = await supabase
-            .from('sales_quotes')
-            .insert(insertQuote)
-            .select()
-            .single();
+        // Retry loop for duplicate quote number conflicts
+        let quote: any = null;
+        let lastError: any = null;
+        for (let attempt = 0; attempt < 5; attempt++) {
+            if (attempt > 0) {
+                // Regenerate number with timestamp suffix to guarantee uniqueness
+                const year = new Date().getFullYear();
+                const ts = Date.now().toString(36).toUpperCase();
+                insertQuote.quote_number = `COT-${year}-${ts}`;
+            }
+            const { data, error: insertErr } = await supabase
+                .from('sales_quotes')
+                .insert(insertQuote)
+                .select()
+                .single();
 
-        if (quoteError || !quote) {
-            return NextResponse.json({ error: quoteError?.message || 'No se pudo crear la cotización' }, { status: 500 });
+            if (!insertErr && data) {
+                quote = data;
+                break;
+            }
+
+            lastError = insertErr;
+            // Only retry on unique constraint violation
+            if (!insertErr?.message?.includes('duplicate key') && !insertErr?.message?.includes('unique constraint')) {
+                break;
+            }
+        }
+
+        if (!quote) {
+            return NextResponse.json({ error: lastError?.message || 'No se pudo crear la cotización' }, { status: 500 });
         }
 
         const quoteItems = items.map((item: any, index: number) => {

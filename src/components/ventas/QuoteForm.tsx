@@ -668,6 +668,12 @@ export default function QuoteForm({ isOpen, onClose, onSaved, editQuote }: Quote
                                             }}
                                         >
                                             <option value="">Seleccionar producto...</option>
+                                            {/* Show current item as fallback if not in loaded products list */}
+                                            {line.item_id && !products.find((p) => p.id === line.item_id) && (
+                                                <option value={line.item_id}>
+                                                    {line.description || 'Producto seleccionado'}
+                                                </option>
+                                            )}
                                             {products.map((product) => (
                                                 <option key={product.id} value={product.id}>
                                                     {product.name}{product.sku ? ` (${product.sku})` : ''}

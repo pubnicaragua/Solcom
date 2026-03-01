@@ -53,6 +53,7 @@ export async function POST(
                 total,
                 notes,
                 converted_invoice_id,
+                source,
                 items:sales_quote_items(*)
             `)
             .eq('id', params.id)
@@ -60,6 +61,14 @@ export async function POST(
 
         if (quoteError || !quote) {
             return NextResponse.json({ error: quoteError?.message || 'Cotización no encontrada' }, { status: 404 });
+        }
+
+        // Block conversion for cart-generated quotes
+        if (quote.source === 'inventory_cart') {
+            return NextResponse.json(
+                { error: 'Las cotizaciones generadas desde el inventario no pueden convertirse a factura. Usa el módulo de facturación directamente.' },
+                { status: 400 }
+            );
         }
 
         if (quote.converted_invoice_id || quote.status === 'convertida') {
