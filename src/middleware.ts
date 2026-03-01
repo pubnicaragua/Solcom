@@ -148,22 +148,60 @@ export async function middleware(request: NextRequest) {
       }
 
       const userRole = profile?.role || 'operator';
-      const path = request.nextUrl.pathname;
+      const currentPath = request.nextUrl.pathname;
 
-      // Definir permisos por rol
-      const rolePermissions: Record<string, string[]> = {
-        admin: ['/inventory', '/ventas', '/reports', '/ai-agents', '/roles', '/settings', '/how-it-works', '/next-steps', '/entregables', '/cliente', '/transfers', '/fase2'],
-        manager: ['/inventory', '/ventas', '/reports', '/ai-agents', '/how-it-works', '/entregables', '/cliente', '/transfers'],
-        operator: ['/inventory', '/ventas', '/how-it-works', '/cliente'],
-        auditor: ['/reports', '/how-it-works', '/cliente'],
+      // Rutas siempre accesibles para cualquier usuario autenticado
+      const alwaysAllowedPaths = ['/how-it-works', '/entregables', '/cliente'];
+      if (alwaysAllowedPaths.some(p => currentPath.startsWith(p))) {
+        return response;
+      }
+
+      // Admin siempre tiene acceso a todo
+      if (userRole === 'admin') {
+        return response;
+      }
+
+      // Mapeo de módulo (en BD) a ruta URL
+      const moduleToPath: Record<string, string> = {
+        inventory: '/inventory',
+        ventas: '/ventas',
+        reports: '/reports',
+        'ai-agents': '/ai-agents',
+        transfers: '/transfers',
+        roles: '/roles',
+        users: '/roles',
+        settings: '/settings',
+        fase2: '/fase2',
       };
 
-      const allowedPaths = rolePermissions[userRole] || rolePermissions.operator;
-      const hasAccess = allowedPaths.some(allowedPath => path.startsWith(allowedPath));
+      // Consultar permisos del rol desde la BD
+      const { data: rolePerms } = await supabase
+        .from('role_permissions')
+        .select('permission_code')
+        .eq('role', userRole);
 
-      // Permitir acceso a /entregables y /cliente para todos los usuarios autenticados
-      if (!hasAccess && !isPublicRoute && !isClientRoute && !path.startsWith('/entregables')) {
-        return NextResponse.redirect(new URL('/inventory', request.url));
+      // Extraer módulos permitidos desde los permission_codes (e.g. 'inventory.view' -> 'inventory')
+      const permittedModules = new Set<string>();
+      if (rolePerms && Array.isArray(rolePerms)) {
+        rolePerms.forEach((rp: any) => {
+          const mod = rp.permission_code?.split('.')[0];
+          if (mod) permittedModules.add(mod);
+        });
+      }
+
+      // Construir lista de paths permitidos desde los módulos
+      const allowedPaths: string[] = [];
+      permittedModules.forEach(mod => {
+        const p = moduleToPath[mod];
+        if (p) allowedPaths.push(p);
+      });
+
+      const hasAccess = allowedPaths.some(allowedPath => currentPath.startsWith(allowedPath));
+
+      if (!hasAccess && !isPublicRoute && !isClientRoute) {
+        // Redirigir al primer módulo permitido, o /inventory por defecto
+        const defaultPath = allowedPaths[0] || '/inventory';
+        return NextResponse.redirect(new URL(defaultPath, request.url));
       }
     } catch (error) {
       return response;

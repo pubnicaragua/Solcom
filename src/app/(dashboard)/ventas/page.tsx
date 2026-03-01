@@ -393,7 +393,7 @@ export default function FacturacionPage() {
         <div>
           <h1 className="h-title" style={{ fontWeight: 700, marginBottom: '4px', display: 'flex', alignItems: 'center', gap: '10px' }}>
             <FileText size={24} style={{ color: 'var(--brand-primary)' }} />
-            Facturación
+            Ventas
           </h1>
           <p style={{ fontSize: '14px', color: 'var(--muted)' }}>
             Gestiona tus facturas y cobros

@@ -532,11 +532,11 @@ export default function ReportsPage() {
         <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
           <Button variant="secondary" size="sm" onClick={exportToExcel} disabled={exporting === 'excel'}>
             <Download size={16} style={{ marginRight: 6 }} />
-            <span style={{ display: isMobile ? 'none' : 'inline' }}>{exporting === 'excel' ? 'Exportando...' : 'Excel Pro'}</span>
+            <span style={{ display: isMobile ? 'none' : 'inline' }}>{exporting === 'excel' ? 'Exportando...' : 'Excel'}</span>
           </Button>
           <Button variant="secondary" size="sm" onClick={exportToPDF} disabled={exporting === 'pdf'}>
             <FileText size={16} style={{ marginRight: 6 }} />
-            <span style={{ display: isMobile ? 'none' : 'inline' }}>{exporting === 'pdf' ? 'Exportando...' : 'PDF Pro'}</span>
+            <span style={{ display: isMobile ? 'none' : 'inline' }}>{exporting === 'pdf' ? 'Exportando...' : 'PDF'}</span>
           </Button>
         </div>
       </div>

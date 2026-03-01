@@ -1,59 +1,24 @@
 'use client';
 
 import { useState, useRef, useEffect } from 'react';
-import { Bell, Check, X, Clock, AlertCircle, Package, TrendingUp } from 'lucide-react';
+import { Bell, Check, X, Clock, AlertCircle, Package } from 'lucide-react';
 import Badge from '@/components/ui/Badge';
+import { useNotifications } from '@/components/providers/NotificationsProvider';
 
 interface Notification {
   id: string;
-  type: 'info' | 'warning' | 'success' | 'error';
+  type: string;
   title: string;
   message: string;
-  timestamp: Date;
-  read: boolean;
+  created_at: string;
+  is_read: boolean;
 }
-
-const MOCK_NOTIFICATIONS: Notification[] = [
-  {
-    id: '1',
-    type: 'warning',
-    title: 'Stock Bajo',
-    message: 'El producto "Laptop Dell Inspiron" tiene solo 3 unidades en bodega X1',
-    timestamp: new Date(Date.now() - 1000 * 60 * 15),
-    read: false,
-  },
-  {
-    id: '2',
-    type: 'success',
-    title: 'Sincronización Completa',
-    message: 'Se sincronizaron 1,247 productos desde Zoho Creator',
-    timestamp: new Date(Date.now() - 1000 * 60 * 60),
-    read: false,
-  },
-  {
-    id: '3',
-    type: 'info',
-    title: 'Nuevo Reporte Disponible',
-    message: 'El reporte mensual de inventario está listo para descargar',
-    timestamp: new Date(Date.now() - 1000 * 60 * 60 * 2),
-    read: true,
-  },
-  {
-    id: '4',
-    type: 'error',
-    title: 'Error en Sincronización',
-    message: 'No se pudo sincronizar la bodega X5. Intenta nuevamente.',
-    timestamp: new Date(Date.now() - 1000 * 60 * 60 * 5),
-    read: true,
-  },
-];
 
 export default function NotificationsDropdown() {
   const [isOpen, setIsOpen] = useState(false);
-  const [notifications, setNotifications] = useState<Notification[]>(MOCK_NOTIFICATIONS);
   const dropdownRef = useRef<HTMLDivElement>(null);
-
-  const unreadCount = notifications.filter(n => !n.read).length;
+  
+  const { notifications, unreadCount, markAsRead, markAllAsRead } = useNotifications();
 
   useEffect(() => {
     function handleClickOutside(event: MouseEvent) {
@@ -71,36 +36,21 @@ export default function NotificationsDropdown() {
     };
   }, [isOpen]);
 
-  function markAsRead(id: string) {
-    setNotifications(prev =>
-      prev.map(n => (n.id === id ? { ...n, read: true } : n))
-    );
-  }
-
-  function markAllAsRead() {
-    setNotifications(prev => prev.map(n => ({ ...n, read: true })));
-  }
-
-  function deleteNotification(id: string) {
-    setNotifications(prev => prev.filter(n => n.id !== id));
-  }
-
   function getIcon(type: string) {
     switch (type) {
-      case 'warning':
+      case 'low_stock':
         return <AlertCircle size={16} color="#eab308" />;
-      case 'success':
-        return <Check size={16} color="#22c55e" />;
-      case 'error':
+      case 'sync_error':
         return <X size={16} color="#ef4444" />;
-      case 'info':
-      default:
+      case 'new_transfer':
         return <Package size={16} color="#3b82f6" />;
+      default:
+        return <Bell size={16} color="#3b82f6" />;
     }
   }
 
-  function getTimeAgo(date: Date) {
-    const seconds = Math.floor((Date.now() - date.getTime()) / 1000);
+  function getTimeAgo(dateString: string) {
+    const seconds = Math.floor((new Date().getTime() - new Date(dateString).getTime()) / 1000);
     
     if (seconds < 60) return 'Hace un momento';
     if (seconds < 3600) return `Hace ${Math.floor(seconds / 60)} min`;
@@ -223,13 +173,13 @@ export default function NotificationsDropdown() {
                 <p style={{ fontSize: '14px' }}>No tienes notificaciones</p>
               </div>
             ) : (
-              notifications.map((notification) => (
+              notifications.map((notification: Notification) => (
                 <div
                   key={notification.id}
                   style={{
                     padding: '12px 16px',
                     borderBottom: '1px solid var(--border)',
-                    background: notification.read ? 'transparent' : 'rgba(59, 130, 246, 0.05)',
+                    background: notification.is_read ? 'transparent' : 'rgba(59, 130, 246, 0.05)',
                     cursor: 'pointer',
                     transition: 'background 0.2s',
                   }}
@@ -237,7 +187,7 @@ export default function NotificationsDropdown() {
                     e.currentTarget.style.background = 'var(--panel)';
                   }}
                   onMouseLeave={(e) => {
-                    e.currentTarget.style.background = notification.read
+                    e.currentTarget.style.background = notification.is_read
                       ? 'transparent'
                       : 'rgba(59, 130, 246, 0.05)';
                   }}
@@ -257,27 +207,12 @@ export default function NotificationsDropdown() {
                         <h4
                           style={{
                             fontSize: '14px',
-                            fontWeight: notification.read ? 500 : 600,
+                            fontWeight: notification.is_read ? 500 : 600,
                             margin: 0,
                           }}
                         >
                           {notification.title}
                         </h4>
-                        <button
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            deleteNotification(notification.id);
-                          }}
-                          style={{
-                            padding: '2px',
-                            background: 'transparent',
-                            border: 'none',
-                            cursor: 'pointer',
-                            opacity: 0.5,
-                          }}
-                        >
-                          <X size={14} />
-                        </button>
                       </div>
                       <p
                         style={{
@@ -299,7 +234,7 @@ export default function NotificationsDropdown() {
                         }}
                       >
                         <Clock size={11} />
-                        {getTimeAgo(notification.timestamp)}
+                        {getTimeAgo(notification.created_at)}
                       </div>
                     </div>
                   </div>

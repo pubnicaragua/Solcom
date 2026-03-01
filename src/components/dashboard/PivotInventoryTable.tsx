@@ -440,6 +440,11 @@ export default function PivotInventoryTable({ filters }: PivotInventoryTableProp
             return !expandedProducts.has(path);
         }
 
+        // Level 0 (State) is expanded by default. Level 1 (Brand) is collapsed by default.
+        if (node.level === 1) {
+            return !collapsedGroups.has(path);
+        }
+
         return collapsedGroups.has(path);
     }
 
@@ -480,7 +485,7 @@ export default function PivotInventoryTable({ filters }: PivotInventoryTableProp
                     borderRadius: 12,
                 }}>
                     <Loader2 size={22} style={{ animation: 'spin 1s linear infinite', color: '#60a5fa' }} />
-                    <span style={{ fontSize: 14, fontWeight: 500 }}>Cargando tabla pivot...</span>
+                    <span style={{ fontSize: 14, fontWeight: 500 }}>Cargando Tabla Pivot...</span>
                 </div>
             </Card>
         );

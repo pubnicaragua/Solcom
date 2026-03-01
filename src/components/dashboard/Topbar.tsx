@@ -1,6 +1,7 @@
 import { X } from 'lucide-react';
 import { useSidebar } from '@/contexts/SidebarContext';
 import UserProfileDropdown from './UserProfileDropdown';
+import NotificationsDropdown from './NotificationsDropdown';
 
 export default function Topbar() {
   const { isOpen, toggle } = useSidebar();
@@ -59,7 +60,8 @@ export default function Topbar() {
           </div>
         </div>
 
-        <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
+          <NotificationsDropdown />
           <UserProfileDropdown />
         </div>
       </div>

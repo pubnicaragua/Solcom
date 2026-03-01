@@ -6,96 +6,78 @@ import Button from '@/components/ui/Button';
 import Badge from '@/components/ui/Badge';
 import Input from '@/components/ui/Input';
 import Select from '@/components/ui/Select';
-import { Shield, Users, Edit, Trash2, Plus, Check, X, Save, XCircle, UserPlus, Loader2 } from 'lucide-react';
-import { createBrowserClient } from '@supabase/ssr';
+import { Shield, Users, Edit, Trash2, Plus, Save, XCircle, UserPlus, Loader2, Key } from 'lucide-react';
+import CreateRoleModal from './components/CreateRoleModal';
+import EditRoleModal from './components/EditRoleModal';
 
 interface UserProfile {
   id: string;
   email: string;
   full_name: string;
-  role: 'admin' | 'manager' | 'operator' | 'auditor';
+  role: string;
   created_at: string;
 }
 
-interface RoleInfo {
+interface Role {
   id: string;
   name: string;
   description: string;
-  userCount: number;
-  permissions: string[];
-  color: string;
+  is_custom: boolean;
+  created_at: string;
 }
 
-interface Permission {
-  id: string;
-  code: string;
-  name: string;
-  description: string;
-  module: string;
-}
-
-interface RolePermission {
-  role: string;
-  permission_code: string;
-}
-
-const ROLE_DEFINITIONS: Record<string, { name: string; description: string; color: string }> = {
-  admin: {
-    name: 'Administrador',
-    description: 'Acceso completo al sistema',
-    color: 'var(--brand-accent)',
-  },
-  manager: {
-    name: 'Gerente de Bodega',
-    description: 'Gestión de inventario y transferencias',
-    color: 'var(--success)',
-  },
-  operator: {
-    name: 'Vendedor',
-    description: 'Solo lectura de inventario y ventas',
-    color: '#3B82F6',
-  },
-  auditor: {
-    name: 'Auditor',
-    description: 'Solo lectura de reportes',
-    color: 'var(--warning)',
-  },
+const ROLE_DISPLAY_NAMES: Record<string, string> = {
+  admin: 'SUPER ADMIN',
+  manager: 'SUPERVISOR',
+  operator: 'Colaborador',
+  auditor: 'Auditor'
 };
-
 
 export default function RolesPage() {
   const [users, setUsers] = useState<UserProfile[]>([]);
-  const [selectedRole, setSelectedRole] = useState<string | null>(null);
+  const [roles, setRoles] = useState<Role[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  // Users state
   const [editingUser, setEditingUser] = useState<UserProfile | null>(null);
+  const [editingPassword, setEditingPassword] = useState('');
   const [newUserEmail, setNewUserEmail] = useState('');
   const [newUserName, setNewUserName] = useState('');
   const [newUserPassword, setNewUserPassword] = useState('');
-  const [newUserRole, setNewUserRole] = useState<'admin' | 'manager' | 'operator' | 'auditor'>('operator');
+  const [newUserRole, setNewUserRole] = useState('');
   const [showNewUserForm, setShowNewUserForm] = useState(false);
-  const [loading, setLoading] = useState(true);
-  const [permissions, setPermissions] = useState<Permission[]>([]);
-  const [rolePermissions, setRolePermissions] = useState<RolePermission[]>([]);
-  const [savingPermission, setSavingPermission] = useState(false);
   const [userQuery, setUserQuery] = useState('');
-  const [permissionQuery, setPermissionQuery] = useState('');
-  const supabase = createBrowserClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-  );
+
+  // Roles state
+  const [showCreateRoleModal, setShowCreateRoleModal] = useState(false);
+  const [editingRole, setEditingRole] = useState<Role | null>(null);
 
   useEffect(() => {
-    loadUsers();
-    loadPermissions();
+    loadData();
   }, []);
 
-  useEffect(() => {
-    if (selectedRole) {
-      loadRolePermissions(selectedRole);
+  async function loadData() {
+    setLoading(true);
+    await Promise.all([loadRoles(), loadUsers()]);
+    setLoading(false);
+  }
+
+  async function loadRoles() {
+    try {
+      const response = await fetch('/api/roles');
+      if (response.ok) {
+        const data = await response.json();
+        setRoles(data);
+        if (data.length > 0 && !newUserRole) {
+          setNewUserRole(data[0].name);
+        }
+      }
+    } catch (error) {
+      console.error('Error loading roles:', error);
     }
-  }, [selectedRole]);
+  }
 
   async function loadUsers() {
-    setLoading(true);
     try {
       const response = await fetch('/api/users');
       if (response.ok) {
@@ -105,50 +87,45 @@ export default function RolesPage() {
     } catch (error) {
       console.error('Error loading users:', error);
     }
-    setLoading(false);
   }
 
-  async function loadPermissions() {
+  async function handleUpdateUser(userId: string) {
+    if (!editingUser) return;
+    
     try {
-      const response = await fetch('/api/permissions');
-      if (response.ok) {
-        const data = await response.json();
-        setPermissions(data);
-      }
-    } catch (error) {
-      console.error('Error loading permissions:', error);
-    }
-  }
-
-  async function loadRolePermissions(role: string) {
-    try {
-      const response = await fetch(`/api/role-permissions?role=${role}`);
-      if (response.ok) {
-        const data = await response.json();
-        setRolePermissions(data);
-      }
-    } catch (error) {
-      console.error('Error loading role permissions:', error);
-    }
-  }
-
-  async function handleUpdateUserRole(userId: string, newRole: 'admin' | 'manager' | 'operator' | 'auditor') {
-    try {
+      // 1. Update Profile (Name & Role)
       const response = await fetch(`/api/users/${userId}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ role: newRole })
+        body: JSON.stringify({ 
+          role: editingUser.role,
+          full_name: editingUser.full_name
+        })
       });
 
-      if (response.ok) {
-        await loadUsers();
-        setEditingUser(null);
-        alert('Rol actualizado correctamente');
-      } else {
-        alert('Error al actualizar el rol');
+      if (!response.ok) {
+        throw new Error('Error al actualizar el perfil del usuario');
       }
-    } catch (error) {
-      alert('Error al actualizar el rol');
+
+      // 2. Update Password if provided
+      if (editingPassword) {
+        const passRes = await fetch(`/api/users/${userId}/reset-password`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ password: editingPassword })
+        });
+        
+        if (!passRes.ok) {
+          throw new Error('Error al actualizar la contraseña');
+        }
+      }
+
+      await loadUsers();
+      setEditingUser(null);
+      setEditingPassword('');
+      alert('Usuario actualizado correctamente');
+    } catch (error: any) {
+      alert(error.message || 'Error al actualizar el usuario');
     }
   }
 
@@ -162,7 +139,6 @@ export default function RolesPage() {
 
       if (response.ok) {
         await loadUsers();
-        alert('Usuario eliminado correctamente');
       } else {
         alert('Error al eliminar el usuario');
       }
@@ -173,7 +149,7 @@ export default function RolesPage() {
 
   async function handleCreateUser() {
     if (!newUserEmail || !newUserName) {
-      alert('Por favor completa todos los campos');
+      alert('Por favor completa todos los campos requeridos');
       return;
     }
 
@@ -184,7 +160,7 @@ export default function RolesPage() {
         body: JSON.stringify({
           email: newUserEmail,
           full_name: newUserName,
-          role: newUserRole,
+          role: newUserRole || (roles[0]?.name || 'operator'),
           password: newUserPassword || undefined
         })
       });
@@ -195,8 +171,7 @@ export default function RolesPage() {
         setNewUserEmail('');
         setNewUserName('');
         setNewUserPassword('');
-        setNewUserRole('operator');
-        alert('Usuario creado correctamente');
+        setNewUserRole(roles[0]?.name || '');
       } else {
         const data = await response.json();
         alert(`Error: ${data.error}`);
@@ -206,90 +181,37 @@ export default function RolesPage() {
     }
   }
 
-  async function togglePermission(permissionCode: string) {
-    if (!selectedRole) return;
-    
-    setSavingPermission(true);
-    const hasPermission = rolePermissions.some(rp => rp.permission_code === permissionCode);
-
-    try {
-      const response = await fetch('/api/role-permissions', {
-        method: hasPermission ? 'DELETE' : 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          role: selectedRole,
-          permission_code: permissionCode
-        })
-      });
-
-      if (response.ok) {
-        await loadRolePermissions(selectedRole);
-      }
-    } catch (error) {
-      console.error('Error toggling permission:', error);
-    }
-    setSavingPermission(false);
+  function getRoleCount(roleName: string) {
+    return users.filter(u => u.role === roleName).length;
   }
 
-  async function setModulePermissions(module: string, enable: boolean) {
-    if (!selectedRole) return;
-
-    const modulePerms = permissions.filter((p) => p.module === module);
-    if (modulePerms.length === 0) return;
-
-    setSavingPermission(true);
-    try {
-      for (const perm of modulePerms) {
-        const hasPerm = rolePermissions.some((rp) => rp.permission_code === perm.code);
-        if ((enable && hasPerm) || (!enable && !hasPerm)) continue;
-
-        await fetch('/api/role-permissions', {
-          method: enable ? 'POST' : 'DELETE',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ role: selectedRole, permission_code: perm.code })
-        });
-      }
-
-      await loadRolePermissions(selectedRole);
-    } catch (error) {
-      console.error('Error bulk updating module permissions:', error);
-    }
-    setSavingPermission(false);
-  }
-
-  function getRoleCount(role: string) {
-    return users.filter(u => u.role === role).length;
-  }
-
-  const rolesWithCounts = Object.entries(ROLE_DEFINITIONS).map(([roleKey, roleInfo]) => ({
-    id: roleKey,
-    ...roleInfo,
-    userCount: getRoleCount(roleKey)
-  }));
+  const getRoleDisplayName = (name: string) => {
+    return ROLE_DISPLAY_NAMES[name] || name;
+  };
 
   const filteredUsers = users.filter((u) => {
     const q = userQuery.trim().toLowerCase();
     if (!q) return true;
-    return [u.full_name, u.email, ROLE_DEFINITIONS[u.role]?.name || u.role]
+    return [u.full_name, u.email, getRoleDisplayName(u.role)]
       .join(' ')
       .toLowerCase()
       .includes(q);
   });
 
-  const groupedPermissions = permissions.reduce((acc, perm) => {
-    if (!acc[perm.module]) acc[perm.module] = [];
-    acc[perm.module].push(perm);
-    return acc;
-  }, {} as Record<string, Permission[]>);
-
   return (
     <div style={{ display: 'grid', gap: 14 }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-        <div className="h-title">Roles y Permisos</div>
-        <Button variant="primary" size="sm" onClick={() => setShowNewUserForm(!showNewUserForm)}>
-          <UserPlus size={16} style={{ marginRight: 6 }} />
-          Nuevo Usuario
-        </Button>
+        <div className="h-title">Roles y Usuarios</div>
+        <div style={{ display: 'flex', gap: 8 }}>
+          <Button variant="secondary" size="sm" onClick={() => setShowCreateRoleModal(true)}>
+            <Plus size={16} style={{ marginRight: 6 }} />
+            Nuevo Rol
+          </Button>
+          <Button variant="primary" size="sm" onClick={() => setShowNewUserForm(!showNewUserForm)}>
+            <UserPlus size={16} style={{ marginRight: 6 }} />
+            Nuevo Usuario
+          </Button>
+        </div>
       </div>
 
       {showNewUserForm && (
@@ -316,13 +238,8 @@ export default function RolesPage() {
               />
               <Select
                 value={newUserRole}
-                onChange={(e) => setNewUserRole(e.target.value as any)}
-                options={[
-                  { value: 'operator', label: 'Vendedor' },
-                  { value: 'manager', label: 'Gerente de Bodega' },
-                  { value: 'auditor', label: 'Auditor' },
-                  { value: 'admin', label: 'Administrador' }
-                ]}
+                onChange={(e) => setNewUserRole(e.target.value)}
+                options={roles.map(r => ({ value: r.name, label: getRoleDisplayName(r.name) }))}
               />
               <div style={{ display: 'flex', gap: 8 }}>
                 <Button variant="primary" size="sm" onClick={handleCreateUser}>
@@ -340,23 +257,23 @@ export default function RolesPage() {
       )}
 
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 }}>
-        <div style={{ display: 'grid', gap: 14, alignContent: 'start' }}>
-          <Card>
-            <div style={{ padding: 8 }}>
-              <div className="h-subtitle" style={{ marginBottom: 12 }}>
-                Roles del Sistema
-              </div>
+        <Card>
+          <div style={{ padding: 8 }}>
+            <div className="h-subtitle" style={{ marginBottom: 12 }}>
+              Roles del Sistema
+            </div>
+            {loading && roles.length === 0 ? (
+              <div style={{ padding: 20, textAlign: 'center', color: 'var(--muted)' }}>Cargando roles...</div>
+            ) : (
               <div style={{ display: 'grid', gap: 8 }}>
-                {rolesWithCounts.map((role) => (
+                {roles.map((role) => (
                   <div
                     key={role.id}
-                    onClick={() => setSelectedRole(role.id)}
                     style={{
                       padding: 14,
                       borderRadius: 6,
-                      border: `1px solid ${selectedRole === role.id ? role.color : 'var(--border)'}`,
-                      background: selectedRole === role.id ? `${role.color}10` : 'var(--panel)',
-                      cursor: 'pointer',
+                      border: '1px solid var(--border)',
+                      background: 'var(--panel)',
                       transition: 'all 0.2s',
                     }}
                   >
@@ -366,289 +283,211 @@ export default function RolesPage() {
                           width: 36,
                           height: 36,
                           borderRadius: 6,
-                          background: `${role.color}20`,
+                          background: 'var(--brand-primary)10',
                           display: 'flex',
                           alignItems: 'center',
                           justifyContent: 'center',
                         }}
                       >
-                        <Shield size={18} color={role.color} />
+                        <Shield size={18} color="var(--brand-primary)" />
                       </div>
                       <div style={{ flex: 1 }}>
-                        <div style={{ fontSize: 15, fontWeight: 600, marginBottom: 2 }}>
-                          {role.name}
+                        <div style={{ fontSize: 15, fontWeight: 600, marginBottom: 2, display: 'flex', alignItems: 'center', gap: 8 }}>
+                          {getRoleDisplayName(role.name)}
+                          {role.is_custom && <Badge size="sm" variant="neutral">Personalizado</Badge>}
                         </div>
                         <div style={{ fontSize: 12, color: 'var(--muted)' }}>
-                          {role.userCount} usuarios
+                          {getRoleCount(role.name)} usuarios asignados
                         </div>
                       </div>
                       <div style={{ display: 'flex', gap: 6 }}>
                         <button
+                          onClick={() => setEditingRole(role)}
+                          title="Configurar Accesos"
                           style={{
-                            width: 28,
-                            height: 28,
+                            padding: '6px 12px',
                             borderRadius: 4,
                             border: '1px solid var(--border)',
                             background: 'var(--panel)',
                             display: 'flex',
                             alignItems: 'center',
-                            justifyContent: 'center',
+                            gap: 6,
+                            fontSize: 13,
+                            fontWeight: 500,
                             cursor: 'pointer',
                           }}
                         >
                           <Edit size={14} color="var(--muted)" />
-                        </button>
-                        <button
-                          style={{
-                            width: 28,
-                            height: 28,
-                            borderRadius: 4,
-                            border: '1px solid var(--border)',
-                            background: 'var(--panel)',
-                            display: 'flex',
-                            alignItems: 'center',
-                            justifyContent: 'center',
-                            cursor: 'pointer',
-                          }}
-                        >
-                          <Trash2 size={14} color="var(--danger)" />
+                          Configurar
                         </button>
                       </div>
                     </div>
-                    <div style={{ fontSize: 13, color: 'var(--muted)' }}>
-                      {role.description}
-                    </div>
+                    {role.description && (
+                      <div style={{ fontSize: 13, color: 'var(--muted)' }}>
+                        {role.description}
+                      </div>
+                    )}
                   </div>
                 ))}
-              </div>
-            </div>
-          </Card>
-
-          <Card>
-            <div style={{ padding: 8 }}>
-              <div className="h-subtitle" style={{ marginBottom: 12 }}>
-                Usuarios por Rol
-              </div>
-              <div style={{ marginBottom: 10 }}>
-                <Input
-                  placeholder="Buscar usuario por nombre o correo"
-                  value={userQuery}
-                  onChange={(e) => setUserQuery(e.target.value)}
-                />
-              </div>
-              <div style={{ display: 'grid', gap: 8 }}>
-                {loading ? (
-                  <div style={{ padding: 20, textAlign: 'center', color: 'var(--muted)' }}>Cargando usuarios...</div>
-                ) : (
-                  filteredUsers.map((user) => (
-                    <div
-                      key={user.id}
-                      style={{
-                        padding: 12,
-                        borderRadius: 6,
-                        background: 'var(--panel)',
-                        border: '1px solid var(--border)',
-                      }}
-                    >
-                      {editingUser?.id === user.id ? (
-                        <div style={{ display: 'grid', gap: 8 }}>
-                          <Input
-                            value={user.full_name}
-                            disabled
-                            style={{ fontSize: 13 }}
-                          />
-                          <Select
-                            value={editingUser.role}
-                            onChange={(e) => setEditingUser({ ...editingUser, role: e.target.value as any })}
-                            options={[
-                              { value: 'operator', label: 'Vendedor' },
-                              { value: 'manager', label: 'Gerente de Bodega' },
-                              { value: 'auditor', label: 'Auditor' },
-                              { value: 'admin', label: 'Administrador' }
-                            ]}
-                          />
-                          <div style={{ display: 'flex', gap: 6 }}>
-                            <Button
-                              variant="primary"
-                              size="sm"
-                              onClick={() => handleUpdateUserRole(user.id, editingUser.role)}
-                            >
-                              <Save size={14} style={{ marginRight: 4 }} />
-                              Guardar
-                            </Button>
-                            <Button
-                              variant="secondary"
-                              size="sm"
-                              onClick={() => setEditingUser(null)}
-                            >
-                              <XCircle size={14} style={{ marginRight: 4 }} />
-                              Cancelar
-                            </Button>
-                          </div>
-                        </div>
-                      ) : (
-                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                          <div style={{ flex: 1 }}>
-                            <div style={{ fontSize: 14, fontWeight: 600, marginBottom: 2 }}>{user.full_name || user.email}</div>
-                            <div style={{ fontSize: 12, color: 'var(--muted)', marginBottom: 4 }}>{user.email}</div>
-                            <Badge
-                              variant={user.role === 'admin' ? 'danger' : user.role === 'manager' ? 'warning' : 'neutral'}
-                              size="sm"
-                            >
-                              {ROLE_DEFINITIONS[user.role]?.name || user.role}
-                            </Badge>
-                          </div>
-                          <div style={{ display: 'flex', gap: 6 }}>
-                            <button
-                              onClick={() => setEditingUser(user)}
-                              style={{
-                                width: 28,
-                                height: 28,
-                                borderRadius: 4,
-                                border: '1px solid var(--border)',
-                                background: 'var(--panel)',
-                                display: 'flex',
-                                alignItems: 'center',
-                                justifyContent: 'center',
-                                cursor: 'pointer',
-                              }}
-                            >
-                              <Edit size={14} color="var(--muted)" />
-                            </button>
-                            <button
-                              onClick={() => handleDeleteUser(user.id)}
-                              style={{
-                                width: 28,
-                                height: 28,
-                                borderRadius: 4,
-                                border: '1px solid var(--border)',
-                                background: 'var(--panel)',
-                                display: 'flex',
-                                alignItems: 'center',
-                                justifyContent: 'center',
-                                cursor: 'pointer',
-                              }}
-                            >
-                              <Trash2 size={14} color="var(--danger)" />
-                            </button>
-                          </div>
-                        </div>
-                      )}
-                    </div>
-                  ))
-                )}
-              </div>
-            </div>
-          </Card>
-        </div>
-
-        <Card>
-          <div style={{ padding: 8 }}>
-            <div className="h-subtitle" style={{ marginBottom: 12 }}>
-              {selectedRole ? `Permisos: ${ROLE_DEFINITIONS[selectedRole]?.name}` : 'Selecciona un rol'}
-            </div>
-            {selectedRole ? (
-              <div style={{ display: 'grid', gap: 16 }}>
-                <div>
-                  <Input
-                    placeholder="Buscar permiso por nombre, código o módulo"
-                    value={permissionQuery}
-                    onChange={(e) => setPermissionQuery(e.target.value)}
-                  />
-                </div>
-                {savingPermission && (
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: 8, background: 'var(--brand-primary)10', borderRadius: 4 }}>
-                    <Loader2 size={16} style={{ animation: 'spin 1s linear infinite' }} />
-                    <span style={{ fontSize: 13 }}>Actualizando permisos...</span>
-                  </div>
-                )}
-                {Object.entries(groupedPermissions).map(([module, perms]) => {
-                  const query = permissionQuery.trim().toLowerCase();
-                  const visiblePerms = query
-                    ? perms.filter((perm) =>
-                        [perm.module, perm.name, perm.code, perm.description || ''].join(' ').toLowerCase().includes(query)
-                      )
-                    : perms;
-
-                  if (visiblePerms.length === 0) return null;
-
-                  const modulePermsEnabled = visiblePerms.filter((perm) =>
-                    rolePermissions.some((rp) => rp.permission_code === perm.code)
-                  ).length;
-
-                  return (
-                  <div key={module}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8, gap: 8, flexWrap: 'wrap' }}>
-                      <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--muted)', textTransform: 'uppercase' }}>
-                        {module} ({modulePermsEnabled}/{visiblePerms.length})
-                      </div>
-                      <div style={{ display: 'flex', gap: 6 }}>
-                        <Button variant="ghost" size="sm" onClick={() => setModulePermissions(module, true)}>
-                          Activar todo
-                        </Button>
-                        <Button variant="ghost" size="sm" onClick={() => setModulePermissions(module, false)}>
-                          Quitar todo
-                        </Button>
-                      </div>
-                    </div>
-                    <div style={{ display: 'grid', gap: 6 }}>
-                      {visiblePerms.map((perm) => {
-                        const hasPermission = rolePermissions.some(rp => rp.permission_code === perm.code);
-                        return (
-                          <div
-                            key={perm.code}
-                            onClick={() => togglePermission(perm.code)}
-                            style={{
-                              display: 'flex',
-                              alignItems: 'center',
-                              gap: 10,
-                              padding: 10,
-                              borderRadius: 4,
-                              background: hasPermission ? 'var(--success)10' : 'var(--panel)',
-                              border: `1px solid ${hasPermission ? 'var(--success)' : 'var(--border)'}`,
-                              cursor: 'pointer',
-                              transition: 'all 0.2s'
-                            }}
-                          >
-                            <div
-                              style={{
-                                width: 20,
-                                height: 20,
-                                borderRadius: 4,
-                                background: hasPermission ? 'var(--success)' : 'var(--panel)',
-                                border: `1px solid ${hasPermission ? 'var(--success)' : 'var(--border)'}`,
-                                display: 'flex',
-                                alignItems: 'center',
-                                justifyContent: 'center',
-                              }}
-                            >
-                              {hasPermission ? (
-                                <Check size={14} color="#fff" />
-                              ) : (
-                                <X size={14} color="var(--muted)" />
-                              )}
-                            </div>
-                            <div style={{ flex: 1 }}>
-                              <div style={{ fontSize: 14, fontWeight: 500 }}>{perm.name}</div>
-                              {perm.description && (
-                                <div style={{ fontSize: 12, color: 'var(--muted)', marginTop: 2 }}>{perm.description}</div>
-                              )}
-                            </div>
-                          </div>
-                        );
-                      })}
-                    </div>
-                  </div>
-                )})}
-              </div>
-            ) : (
-              <div style={{ padding: 40, textAlign: 'center', color: 'var(--muted)' }}>
-                Selecciona un rol para ver y modificar sus permisos
               </div>
             )}
           </div>
         </Card>
+
+        <Card>
+          <div style={{ padding: 8 }}>
+            <div className="h-subtitle" style={{ marginBottom: 12 }}>
+              Usuarios del Sistema
+            </div>
+            <div style={{ marginBottom: 10 }}>
+              <Input
+                placeholder="Buscar usuario por nombre, correo o rol"
+                value={userQuery}
+                onChange={(e) => setUserQuery(e.target.value)}
+              />
+            </div>
+            <div style={{ display: 'grid', gap: 8 }}>
+              {loading && users.length === 0 ? (
+                <div style={{ padding: 20, textAlign: 'center', color: 'var(--muted)' }}>Cargando usuarios...</div>
+              ) : (
+                filteredUsers.map((user) => (
+                  <div
+                    key={user.id}
+                    style={{
+                      padding: 12,
+                      borderRadius: 6,
+                      background: 'var(--panel)',
+                      border: '1px solid var(--border)',
+                    }}
+                  >
+                    {editingUser?.id === user.id ? (
+                      <div style={{ display: 'grid', gap: 10 }}>
+                        <div>
+                          <label style={{ fontSize: 11, color: 'var(--muted)', marginBottom: 4, display: 'block' }}>Nombre Completo</label>
+                          <Input
+                            value={editingUser.full_name}
+                            onChange={(e) => setEditingUser({ ...editingUser, full_name: e.target.value })}
+                            style={{ fontSize: 13 }}
+                          />
+                        </div>
+                        
+                        <div>
+                          <label style={{ fontSize: 11, color: 'var(--muted)', marginBottom: 4, display: 'block' }}>Correo (No editable)</label>
+                          <Input value={user.email} disabled style={{ fontSize: 13, opacity: 0.7 }} />
+                        </div>
+                        
+                        <div>
+                          <label style={{ fontSize: 11, color: 'var(--muted)', marginBottom: 4, display: 'block' }}>Asignar Rol</label>
+                          <Select
+                            value={editingUser.role}
+                            onChange={(e) => setEditingUser({ ...editingUser, role: e.target.value })}
+                            options={roles.map(r => ({ value: r.name, label: getRoleDisplayName(r.name) }))}
+                          />
+                        </div>
+
+                        <div>
+                          <label style={{ fontSize: 11, color: 'var(--muted)', marginBottom: 4, display: 'block' }}>
+                            <Key size={12} style={{ display: 'inline', marginRight: 4, verticalAlign: 'middle' }} />
+                            Cambiar Contraseña (dejar vacío si no se desea cambiar)
+                          </label>
+                          <Input
+                            type="password"
+                            placeholder="Nueva contraseña"
+                            value={editingPassword}
+                            onChange={(e) => setEditingPassword(e.target.value)}
+                            style={{ fontSize: 13 }}
+                          />
+                        </div>
+
+                        <div style={{ display: 'flex', gap: 6, marginTop: 4 }}>
+                          <Button
+                            variant="primary"
+                            size="sm"
+                            onClick={() => handleUpdateUser(user.id)}
+                          >
+                            <Save size={14} style={{ marginRight: 4 }} />
+                            Guardar Cambios
+                          </Button>
+                          <Button
+                            variant="secondary"
+                            size="sm"
+                            onClick={() => {
+                              setEditingUser(null);
+                              setEditingPassword('');
+                            }}
+                          >
+                            <XCircle size={14} style={{ marginRight: 4 }} />
+                            Cancelar
+                          </Button>
+                        </div>
+                      </div>
+                    ) : (
+                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                        <div style={{ flex: 1 }}>
+                          <div style={{ fontSize: 14, fontWeight: 600, marginBottom: 2 }}>{user.full_name || user.email}</div>
+                          <div style={{ fontSize: 12, color: 'var(--muted)', marginBottom: 4 }}>{user.email}</div>
+                          <Badge variant="neutral" size="sm">
+                            {getRoleDisplayName(user.role)}
+                          </Badge>
+                        </div>
+                        <div style={{ display: 'flex', gap: 6 }}>
+                          <button
+                            onClick={() => setEditingUser(user)}
+                            title="Editar usuario"
+                            style={{
+                              width: 28,
+                              height: 28,
+                              borderRadius: 4,
+                              border: '1px solid var(--border)',
+                              background: 'var(--panel)',
+                              display: 'flex',
+                              alignItems: 'center',
+                              justifyContent: 'center',
+                              cursor: 'pointer',
+                            }}
+                          >
+                            <Edit size={14} color="var(--muted)" />
+                          </button>
+                          <button
+                            onClick={() => handleDeleteUser(user.id)}
+                            title="Eliminar usuario"
+                            style={{
+                              width: 28,
+                              height: 28,
+                              borderRadius: 4,
+                              border: '1px solid var(--border)',
+                              background: 'var(--panel)',
+                              display: 'flex',
+                              alignItems: 'center',
+                              justifyContent: 'center',
+                              cursor: 'pointer',
+                            }}
+                          >
+                            <Trash2 size={14} color="var(--danger)" />
+                          </button>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                ))
+              )}
+            </div>
+          </div>
+        </Card>
       </div>
+
+      <CreateRoleModal 
+        isOpen={showCreateRoleModal} 
+        onClose={() => setShowCreateRoleModal(false)}
+        onSave={loadRoles}
+      />
+
+      <EditRoleModal
+        isOpen={!!editingRole}
+        role={editingRole}
+        onClose={() => setEditingRole(null)}
+        onSave={loadRoles}
+      />
     </div>
   );
 }

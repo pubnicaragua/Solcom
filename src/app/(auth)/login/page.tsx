@@ -6,7 +6,7 @@ import { createBrowserClient } from '@supabase/ssr';
 import Card from '@/components/ui/Card';
 import Button from '@/components/ui/Button';
 import Input from '@/components/ui/Input';
-import { LogIn, KeyRound, Mail } from 'lucide-react';
+import { LogIn, KeyRound, Mail, Eye, EyeOff } from 'lucide-react';
 
 export default function LoginPage() {
   const router = useRouter();
@@ -18,6 +18,7 @@ export default function LoginPage() {
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
   const [resetMode, setResetMode] = useState(false);
   const [resetSuccess, setResetSuccess] = useState(false);
 
@@ -305,7 +306,7 @@ export default function LoginPage() {
                       color: 'var(--muted)'
                     }} />
                     <input
-                      type="password"
+                      type={showPassword ? 'text' : 'password'}
                       value={password}
                       onChange={(e) => setPassword(e.target.value)}
                       placeholder="••••••••"
@@ -313,7 +314,7 @@ export default function LoginPage() {
                       autoComplete="new-password"
                       style={{
                         width: '100%',
-                        padding: '12px 14px 12px 44px',
+                        padding: '12px 44px 12px 44px',
                         borderRadius: 8,
                         border: '1px solid var(--border)',
                         background: 'var(--panel)',
@@ -323,6 +324,26 @@ export default function LoginPage() {
                         transition: 'all 0.2s',
                       }}
                     />
+                    <button
+                      type="button"
+                      onClick={() => setShowPassword(!showPassword)}
+                      tabIndex={-1}
+                      style={{
+                        position: 'absolute',
+                        right: 12,
+                        top: '50%',
+                        transform: 'translateY(-50%)',
+                        background: 'transparent',
+                        border: 'none',
+                        cursor: 'pointer',
+                        color: 'var(--muted)',
+                        padding: 2,
+                        display: 'flex',
+                        alignItems: 'center',
+                      }}
+                    >
+                      {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
+                    </button>
                   </div>
                 </div>
 
@@ -385,30 +406,7 @@ export default function LoginPage() {
               </form>
             )}
 
-            {!resetMode && (
-              <div style={{ 
-                marginTop: 28, 
-                padding: 16,
-                background: 'rgba(255, 255, 255, 0.03)',
-                borderRadius: 8,
-                border: '1px solid rgba(255, 255, 255, 0.06)'
-              }}>
-                <p style={{ fontSize: 12, color: 'var(--muted)', marginBottom: 8, textAlign: 'center' }}>
-                  Credenciales de prueba:
-                </p>
-                <div style={{ 
-                  fontSize: 12, 
-                  fontFamily: 'monospace',
-                  background: 'rgba(0, 0, 0, 0.2)',
-                  padding: 10,
-                  borderRadius: 6,
-                  lineHeight: 1.6
-                }}>
-                  <div><strong>Admin:</strong> admin@soliscomercialni.com / admin123</div>
-                  <div style={{ marginTop: 4 }}><strong>Manager:</strong> manager@soliscomercialni.com / manager123</div>
-                </div>
-              </div>
-            )}
+            
           </div>
         </Card>
 

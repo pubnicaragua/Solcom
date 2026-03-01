@@ -269,7 +269,7 @@ export default function SettingsPage() {
             </div>
             <div style={{ padding: 12, background: 'var(--panel)', borderRadius: 6 }}>
               <div style={{ fontSize: 12, color: 'var(--muted)', marginBottom: 4 }}>Última Actualización</div>
-              <div style={{ fontSize: 16, fontWeight: 600 }}>5 Feb 2026</div>
+              <div style={{ fontSize: 16, fontWeight: 600 }}>1 Mar 2026</div>
             </div>
             <div style={{ padding: 12, background: 'var(--panel)', borderRadius: 6 }}>
               <div style={{ fontSize: 12, color: 'var(--muted)', marginBottom: 4 }}>Entorno</div>
