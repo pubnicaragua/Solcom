@@ -3,15 +3,15 @@ import { cookies } from 'next/headers';
 import { NextResponse } from 'next/server';
 
 
-export const dynamic = 'force-dynamic';import { z } from 'zod';
+export const dynamic = 'force-dynamic'; import { z } from 'zod';
 import { requireAdminProfile } from '@/lib/auth/warehouse-permissions';
 import { getEffectiveModuleAccess, hasModuleAccess } from '@/lib/auth/module-permissions';
 
-// Removido roleSchema para aceptar roles dinámicos (UUIDs) y roles estáticos
+const roleSchema = z.enum(['admin', 'manager', 'operator', 'auditor']);
 
 const payloadSchema = z.object({
   role: z.string().trim().min(1, 'role es requerido'),
-  permission_codes: z.array(z.string().trim().min(1, 'permission_code es requerido')),
+  permission_code: z.string().trim().min(1, 'permission_code es requerido'),
 });
 
 function isMissingTable(error: any): boolean {
@@ -42,7 +42,11 @@ export async function GET(request: Request) {
 
     const { searchParams } = new URL(request.url);
     const roleParam = searchParams.get('role');
-    const role = roleParam?.trim() || null;
+    const parsedRole = roleParam ? roleSchema.safeParse(roleParam) : null;
+    if (parsedRole && !parsedRole.success) {
+      return NextResponse.json({ error: 'Rol inválido' }, { status: 400 });
+    }
+    const role = parsedRole?.success ? parsedRole.data : null;
 
     let query = supabase
       .from('role_permissions')
@@ -87,17 +91,11 @@ export async function POST(request: Request) {
         { status: 400 }
       );
     }
-    const { role, permission_codes } = parsed.data;
-
-    // Crear array de objetos para inserción masiva
-    const permissionsToInsert = permission_codes.map(permission_code => ({
-      role,
-      permission_code
-    }));
+    const { role, permission_code } = parsed.data;
 
     const { error } = await supabase
       .from('role_permissions')
-      .insert(permissionsToInsert);
+      .insert([{ role, permission_code }]);
 
     if (error) {
       if (isMissingTable(error)) {
@@ -109,7 +107,7 @@ export async function POST(request: Request) {
       throw error;
     }
 
-    return NextResponse.json({ success: true, inserted: permission_codes.length });
+    return NextResponse.json({ success: true });
   } catch (error: any) {
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
@@ -132,14 +130,13 @@ export async function DELETE(request: Request) {
         { status: 400 }
       );
     }
-    const { role, permission_codes } = parsed.data;
+    const { role, permission_code } = parsed.data;
 
-    // Para DELETE, eliminamos todos los permisos especificados para el rol
     const { error } = await supabase
       .from('role_permissions')
       .delete()
       .eq('role', role)
-      .in('permission_code', permission_codes);
+      .eq('permission_code', permission_code);
 
     if (error) {
       if (isMissingTable(error)) {

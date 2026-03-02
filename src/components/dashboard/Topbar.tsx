@@ -2,9 +2,12 @@ import { X } from 'lucide-react';
 import { useSidebar } from '@/contexts/SidebarContext';
 import UserProfileDropdown from './UserProfileDropdown';
 import NotificationsDropdown from './NotificationsDropdown';
+import { useRoleAccess } from '@/hooks/useRoleAccess';
 
 export default function Topbar() {
   const { isOpen, toggle } = useSidebar();
+  const { access: brandingAccess, loading: brandingLoading } = useRoleAccess('branding');
+  const canViewBrandLogo = !brandingLoading && brandingAccess.can_view;
 
   return (
     <header
@@ -38,11 +41,15 @@ export default function Topbar() {
             display: 'flex',
             alignItems: 'center'
           }}>
-            <img
-              src="https://www.soliscomercialni.com/Solis%20Comercial%20Logo.png"
-              alt="Solis Comercial"
-              style={{ height: 32, width: 'auto' }}
-            />
+            {canViewBrandLogo ? (
+              <img
+                src="https://www.soliscomercialni.com/Solis%20Comercial%20Logo.png"
+                alt="Solis Comercial"
+                style={{ height: 32, width: 'auto' }}
+              />
+            ) : (
+              <span style={{ fontSize: 14, fontWeight: 800, color: '#111827', letterSpacing: 0.4 }}>SC</span>
+            )}
           </div>
         )}
         {isOpen && <X size={24} color="#F9FAFB" style={{ background: '#1F2937', padding: 4, borderRadius: 4 }} />}

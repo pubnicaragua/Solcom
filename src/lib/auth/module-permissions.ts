@@ -118,6 +118,33 @@ function isMissingTable(error: any): boolean {
   return String(error?.code || '') === '42P01';
 }
 
+export async function hasRolePermissionCode(
+  supabase: SupabaseRouteClient,
+  role: string,
+  permissionCode: string
+): Promise<boolean> {
+  const normalizedRole = String(role || '').trim().toLowerCase();
+  if (!normalizedRole) return false;
+  if (normalizedRole === 'admin') return true;
+
+  const { data, error } = await (supabase as any)
+    .from('role_permissions')
+    .select('id')
+    .eq('role', normalizedRole)
+    .eq('permission_code', permissionCode)
+    .limit(1);
+
+  if (error) {
+    if (isMissingTable(error)) {
+      // Fail closed if role_permissions is missing, except admin handled above.
+      return false;
+    }
+    throw error;
+  }
+
+  return Array.isArray(data) && data.length > 0;
+}
+
 export async function getUserModuleOverrides(
   supabase: SupabaseRouteClient,
   userId: string

@@ -93,7 +93,8 @@ INSERT INTO permissions (code, name, description, module) VALUES
   ('settings.write', 'Modificar Configuración', 'Permite modificar la configuración del sistema', 'settings'),
   
   -- IA
-  ('ai.use', 'Usar Agentes IA', 'Permite usar los agentes de IA', 'ai-agents')
+  ('ai.use', 'Usar Agentes IA', 'Permite usar los agentes de IA', 'ai-agents'),
+  ('branding.view', 'Ver Logo de Marca', 'Permite ver el logo de la marca en la navegación', 'branding')
 ON CONFLICT (code) DO NOTHING;
 
 -- 7. Asignar permisos por defecto a roles
@@ -111,7 +112,8 @@ INSERT INTO role_permissions (role, permission_code) VALUES
   ('manager', 'transfers.write'),
   ('manager', 'reports.read'),
   ('manager', 'reports.export'),
-  ('manager', 'ventas.read')
+  ('manager', 'ventas.read'),
+  ('manager', 'branding.view')
 ON CONFLICT (role, permission_code) DO NOTHING;
 
 -- Operator (Vendedor): Solo lectura de inventario
@@ -119,13 +121,15 @@ INSERT INTO role_permissions (role, permission_code) VALUES
   ('operator', 'inventory.read'),
   ('operator', 'reports.read'),
   ('operator', 'ventas.read'),
-  ('operator', 'ventas.write')
+  ('operator', 'ventas.write'),
+  ('operator', 'branding.view')
 ON CONFLICT (role, permission_code) DO NOTHING;
 
 -- Auditor: Solo lectura de reportes
 INSERT INTO role_permissions (role, permission_code) VALUES
   ('auditor', 'reports.read'),
-  ('auditor', 'reports.export')
+  ('auditor', 'reports.export'),
+  ('auditor', 'branding.view')
 ON CONFLICT (role, permission_code) DO NOTHING;
 
 -- 8. Función para verificar permisos

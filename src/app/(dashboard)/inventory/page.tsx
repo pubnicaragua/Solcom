@@ -18,8 +18,10 @@ import ProductDetailsModal from '@/components/modals/ProductDetailsModal';
 import KPIGrid from '@/components/dashboard/KPIGrid';
 import type { PivotItem } from '@/components/dashboard/PivotInventoryTable';
 import type { CartItem } from '@/components/dashboard/InventoryCart';
+import { useRoleAccess } from '@/hooks/useRoleAccess';
 
 export default function InventoryPage() {
+  const { access: inventoryAccess, loading: inventoryAccessLoading } = useRoleAccess('inventory');
   const [filters, setFilters] = useState({
     search: '',
     warehouse: '',
@@ -198,6 +200,10 @@ export default function InventoryPage() {
   }
 
   function handleExport(format: 'csv' | 'excel' | 'pdf') {
+    if (!inventoryAccess.can_export) {
+      alert('No tienes permiso para exportar inventario');
+      return;
+    }
     const params = new URLSearchParams(filters);
     params.append('format', format);
     window.open(`/api/inventory/export?${params}`, '_blank');
@@ -345,14 +351,18 @@ export default function InventoryPage() {
             </button>
           )}
 
-          <Button variant="secondary" size="sm" onClick={() => handleExport('excel')}>
-            <FileSpreadsheet size={16} />
-            <span className="btn-label">Excel</span>
-          </Button>
-          <Button variant="secondary" size="sm" onClick={() => handleExport('pdf')}>
-            <FileText size={16} />
-            <span className="btn-label">PDF</span>
-          </Button>
+          {!inventoryAccessLoading && inventoryAccess.can_export && (
+            <>
+              <Button variant="secondary" size="sm" onClick={() => handleExport('excel')}>
+                <FileSpreadsheet size={16} />
+                <span className="btn-label">Excel</span>
+              </Button>
+              <Button variant="secondary" size="sm" onClick={() => handleExport('pdf')}>
+                <FileText size={16} />
+                <span className="btn-label">PDF</span>
+              </Button>
+            </>
+          )}
           <Button
             variant="primary"
             size="sm"
@@ -381,10 +391,11 @@ export default function InventoryPage() {
             </div>
             <div style={{ display: 'flex', gap: 8 }}>
               <Button
-                variant="ghost"
+                variant="secondary"
                 size="sm"
                 onClick={() => setShowAdvancedFilters(!showAdvancedFilters)}
               >
+                <Filter size={14} />
                 {showAdvancedFilters ? 'Ocultar' : 'Mostrar'} filtros avanzados
               </Button>
               {activeFiltersCount > 0 && (

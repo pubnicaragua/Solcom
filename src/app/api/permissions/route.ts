@@ -31,6 +31,7 @@ const MOCK_PERMISSIONS = [
   { code: 'settings.view',    name: 'Ver Configuración',       module: 'settings', description: 'Ver configuración del sistema' },
   { code: 'settings.edit',    name: 'Modificar Configuración', module: 'settings', description: 'Modificar configuración del sistema' },
   { code: 'ai-agents.use',    name: 'Usar Agentes IA',        module: 'ai-agents', description: 'Acceder y usar agentes de inteligencia artificial' },
+  { code: 'branding.view',    name: 'Ver Logo de Marca',      module: 'branding',  description: 'Permite ver el logo de la marca en la navegación' },
 ];
 
 export async function GET() {
