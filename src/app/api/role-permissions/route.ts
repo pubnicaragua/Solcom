@@ -1,13 +1,13 @@
 import { createRouteHandlerClient } from '@supabase/auth-helpers-nextjs';
 import { cookies } from 'next/headers';
 import { NextResponse } from 'next/server';
-
-
-export const dynamic = 'force-dynamic'; import { z } from 'zod';
+import { z } from 'zod';
 import { requireAdminProfile } from '@/lib/auth/warehouse-permissions';
 import { getEffectiveModuleAccess, hasModuleAccess } from '@/lib/auth/module-permissions';
 
-const roleSchema = z.enum(['admin', 'manager', 'operator', 'auditor']);
+export const dynamic = 'force-dynamic';
+
+const roleSchema = z.string().trim().min(1, 'role es requerido');
 
 const payloadSchema = z.object({
   role: z.string().trim().min(1, 'role es requerido'),
@@ -42,11 +42,14 @@ export async function GET(request: Request) {
 
     const { searchParams } = new URL(request.url);
     const roleParam = searchParams.get('role');
-    const parsedRole = roleParam ? roleSchema.safeParse(roleParam) : null;
-    if (parsedRole && !parsedRole.success) {
-      return NextResponse.json({ error: 'Rol inválido' }, { status: 400 });
+    let role: string | null = null;
+    if (roleParam != null) {
+      const parsedRole = roleSchema.safeParse(roleParam);
+      if (!parsedRole.success) {
+        return NextResponse.json({ error: 'Rol inválido' }, { status: 400 });
+      }
+      role = parsedRole.data;
     }
-    const role = parsedRole?.success ? parsedRole.data : null;
 
     let query = supabase
       .from('role_permissions')
