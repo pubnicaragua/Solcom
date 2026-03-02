@@ -4,6 +4,8 @@ import { NextResponse } from 'next/server';
 import { getAuthenticatedProfile } from '@/lib/auth/warehouse-permissions';
 import { getEffectiveModuleAccess, hasModuleAccess } from '@/lib/auth/module-permissions';
 
+export const dynamic = 'force-dynamic';
+
 function isMissingTable(error: any): boolean {
   return String(error?.code || '') === '42P01';
 }

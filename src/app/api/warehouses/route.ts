@@ -8,6 +8,8 @@ import {
 } from '@/lib/auth/warehouse-permissions';
 import { getEffectiveModuleAccess, hasModuleAccess } from '@/lib/auth/module-permissions';
 
+export const dynamic = 'force-dynamic';
+
 export async function GET() {
   try {
     const supabase = createRouteHandlerClient({ cookies });

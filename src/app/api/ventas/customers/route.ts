@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { createRouteHandlerClient } from '@supabase/auth-helpers-nextjs';
+
+
+export const dynamic = 'force-dynamic';import { createRouteHandlerClient } from '@supabase/auth-helpers-nextjs';
 import { cookies } from 'next/headers';
 
 const CUSTOMER_SEARCH_SELECT = 'id, name, email, phone, ruc, zoho_contact_id';

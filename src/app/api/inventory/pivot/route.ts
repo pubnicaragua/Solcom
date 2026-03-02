@@ -30,6 +30,8 @@ function normalizeItemState(value: unknown): 'NUEVO' | 'USADO' | null {
     return null;
 }
 
+export const dynamic = 'force-dynamic';
+
 export async function GET(request: Request) {
     try {
         const { searchParams } = new URL(request.url);

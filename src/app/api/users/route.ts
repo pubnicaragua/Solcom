@@ -2,7 +2,9 @@ import { createRouteHandlerClient } from '@supabase/auth-helpers-nextjs';
 import { createClient } from '@supabase/supabase-js';
 import { cookies } from 'next/headers';
 import { NextResponse } from 'next/server';
-import { requireAdminProfile } from '@/lib/auth/warehouse-permissions';
+
+
+export const dynamic = 'force-dynamic';import { requireAdminProfile } from '@/lib/auth/warehouse-permissions';
 import { getEffectiveModuleAccess, hasModuleAccess } from '@/lib/auth/module-permissions';
 
 export async function GET() {

@@ -1,7 +1,9 @@
 import { createRouteHandlerClient } from '@supabase/auth-helpers-nextjs';
 import { cookies } from 'next/headers';
 import { NextResponse } from 'next/server';
-import { z } from 'zod';
+
+
+export const dynamic = 'force-dynamic';import { z } from 'zod';
 import { requireAdminProfile } from '@/lib/auth/warehouse-permissions';
 import { getEffectiveModuleAccess, hasModuleAccess } from '@/lib/auth/module-permissions';
 
