@@ -15,9 +15,20 @@ export async function GET(request: Request) {
     pivotParams.set('showZeroStock', 'true');
 
     const pivotUrl = `${new URL(request.url).origin}/api/inventory/pivot?${pivotParams.toString()}`;
-    const pivotRes = await fetch(pivotUrl, { cache: 'no-store' });
+    const forwardHeaders = new Headers();
+    const cookieHeader = request.headers.get('cookie');
+    const authorizationHeader = request.headers.get('authorization');
+
+    if (cookieHeader) forwardHeaders.set('cookie', cookieHeader);
+    if (authorizationHeader) forwardHeaders.set('authorization', authorizationHeader);
+
+    const pivotRes = await fetch(pivotUrl, {
+      cache: 'no-store',
+      headers: forwardHeaders,
+    });
     if (!pivotRes.ok) {
-      throw new Error(`Pivot export error ${pivotRes.status}`);
+      const pivotErr = await pivotRes.text().catch(() => '');
+      throw new Error(`Pivot export error ${pivotRes.status}${pivotErr ? `: ${pivotErr}` : ''}`);
     }
 
     const pivot = await pivotRes.json();
@@ -450,8 +461,12 @@ export async function GET(request: Request) {
       },
     });
   } catch (error) {
+    console.error('Inventory export error:', error);
     return NextResponse.json(
-      { error: 'Error al exportar inventario' },
+      {
+        error: 'Error al exportar inventario',
+        details: error instanceof Error ? error.message : 'Unknown error',
+      },
       { status: 500 }
     );
   }
