@@ -59,10 +59,16 @@ export default function ReportsPage() {
         if (globalFilters.state) params.set('state', globalFilters.state);
         if (globalFilters.color) params.set('color', globalFilters.color);
 
-        const res = await fetch(`/api/reports/data?${params.toString()}`);
+        const res = await fetch(`/api/reports/data?${params.toString()}`, { cache: 'no-store' });
         if (cancelled) return;
-        if (!res.ok) throw new Error(`Error ${res.status}`);
-        const data = await res.json();
+        const data = await res.json().catch(() => null);
+        if (!res.ok) {
+          const errorText =
+            data?.details
+              ? `${data?.error || `Error ${res.status}`}: ${data.details}`
+              : (data?.error || `Error ${res.status}`);
+          throw new Error(errorText);
+        }
         if (cancelled) return;
         setReportData(data);
         setLoading(false);

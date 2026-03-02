@@ -11,6 +11,50 @@ import { getEffectiveModuleAccess, hasModuleAccess } from '@/lib/auth/module-per
 
 export const dynamic = 'force-dynamic';
 
+function containsInsensitive(haystack: unknown, needle: string): boolean {
+    const text = String(haystack ?? '').trim().toLowerCase();
+    const query = String(needle ?? '').trim().toLowerCase();
+    if (!query) return true;
+    return text.includes(query);
+}
+
+function equalsInsensitive(value: unknown, expected: string): boolean {
+    const left = String(value ?? '').trim().toLowerCase();
+    const right = String(expected ?? '').trim().toLowerCase();
+    if (!right) return true;
+    return left === right;
+}
+
+function normalizeReportItem(row: any) {
+    return {
+        id: String(row?.id ?? '').trim(),
+        sku: String(row?.sku ?? '').trim(),
+        name: String(row?.name ?? '').trim(),
+        category: String(row?.category ?? '').trim() || null,
+        marca: String(row?.marca ?? '').trim() || null,
+        state: String(row?.state ?? '').trim() || null,
+        color: String(row?.color ?? '').trim() || null,
+        price: Number(row?.price ?? 0) || 0,
+        updated_at: row?.updated_at || null,
+        zoho_removed_at: row?.zoho_removed_at ?? null,
+    };
+}
+
+function applyItemFilters(
+    items: Array<ReturnType<typeof normalizeReportItem>>,
+    filters: { category: string; marca: string; state: string; color: string }
+) {
+    return items.filter((item) => {
+        // Soft-delete guard only when column exists in current DB schema rows.
+        if (item.zoho_removed_at) return false;
+        if (filters.category && !containsInsensitive(item.category, filters.category)) return false;
+        if (filters.marca && !equalsInsensitive(item.marca, filters.marca)) return false;
+        if (filters.state && !equalsInsensitive(item.state, filters.state)) return false;
+        if (filters.color && !containsInsensitive(item.color, filters.color)) return false;
+        return true;
+    });
+}
+
 async function getScopedTotalsForItems(
     supabase: ReturnType<typeof createRouteHandlerClient>,
     itemIds: string[],
@@ -18,40 +62,47 @@ async function getScopedTotalsForItems(
 ) {
     const totals = new Map<string, number>();
     if (itemIds.length === 0 || allowedWarehouseIds.length === 0) return totals;
+    const ITEM_CHUNK = 250;
 
     try {
-        const { data: balances, error: balanceError } = await (supabase.from as any)('inventory_balance')
-            .select('item_id, warehouse_id, qty_on_hand')
-            .in('item_id', itemIds)
-            .in('warehouse_id', allowedWarehouseIds);
+        for (let i = 0; i < itemIds.length; i += ITEM_CHUNK) {
+            const itemChunk = itemIds.slice(i, i + ITEM_CHUNK);
+            const { data: balances, error: balanceError } = await (supabase.from as any)('inventory_balance')
+                .select('item_id, warehouse_id, qty_on_hand')
+                .in('item_id', itemChunk)
+                .in('warehouse_id', allowedWarehouseIds);
 
-        if (balanceError) throw balanceError;
+            if (balanceError) throw balanceError;
 
-        for (const row of balances || []) {
-            const itemId = String(row.item_id || '');
-            if (!itemId) continue;
-            totals.set(itemId, Number(totals.get(itemId) || 0) + Number(row.qty_on_hand || 0));
+            for (const row of balances || []) {
+                const itemId = String(row.item_id || '');
+                if (!itemId) continue;
+                totals.set(itemId, Number(totals.get(itemId) || 0) + Number(row.qty_on_hand || 0));
+            }
         }
         return totals;
     } catch (_balanceError) {
-        const { data: snapshots, error: snapshotError } = await supabase
-            .from('stock_snapshots')
-            .select('item_id, warehouse_id, qty, synced_at')
-            .in('item_id', itemIds)
-            .in('warehouse_id', allowedWarehouseIds)
-            .order('synced_at', { ascending: false });
-
-        if (snapshotError) throw snapshotError;
-
         const latestByItemWarehouse = new Set<string>();
-        for (const row of snapshots || []) {
-            const itemId = String(row.item_id || '');
-            const warehouseId = String(row.warehouse_id || '');
-            if (!itemId || !warehouseId) continue;
-            const key = `${itemId}__${warehouseId}`;
-            if (latestByItemWarehouse.has(key)) continue;
-            latestByItemWarehouse.add(key);
-            totals.set(itemId, Number(totals.get(itemId) || 0) + Number(row.qty || 0));
+        for (let i = 0; i < itemIds.length; i += ITEM_CHUNK) {
+            const itemChunk = itemIds.slice(i, i + ITEM_CHUNK);
+            const { data: snapshots, error: snapshotError } = await supabase
+                .from('stock_snapshots')
+                .select('item_id, warehouse_id, qty, synced_at')
+                .in('item_id', itemChunk)
+                .in('warehouse_id', allowedWarehouseIds)
+                .order('synced_at', { ascending: false });
+
+            if (snapshotError) throw snapshotError;
+
+            for (const row of snapshots || []) {
+                const itemId = String(row.item_id || '');
+                const warehouseId = String(row.warehouse_id || '');
+                if (!itemId || !warehouseId) continue;
+                const key = `${itemId}__${warehouseId}`;
+                if (latestByItemWarehouse.has(key)) continue;
+                latestByItemWarehouse.add(key);
+                totals.set(itemId, Number(totals.get(itemId) || 0) + Number(row.qty || 0));
+            }
         }
         return totals;
     }
@@ -154,19 +205,15 @@ export async function GET(request: Request) {
             return NextResponse.json({ error: 'No tienes permiso para consultar esa bodega' }, { status: 403 });
         }
 
-        // 1) Fetch items with filters (fast, no JOINs)
-        let itemsQuery = supabase
+        // 1) Fetch items in a schema-compatible way.
+        // We intentionally avoid hard-selecting optional columns to prevent
+        // 500s when a deployment runs against an older DB schema.
+        const itemsQuery = supabase
             .from('items')
-            .select('id, sku, name, category, marca, state, color, price, updated_at')
-            .is('zoho_removed_at', null);
-
-        if (category) itemsQuery = itemsQuery.ilike('category', `%${category}%`);
-        if (marca) itemsQuery = itemsQuery.eq('marca', marca);
-        if (state) itemsQuery = itemsQuery.eq('state', state);
-        if (color) itemsQuery = itemsQuery.ilike('color', `%${color}%`);
+            .select('*');
 
         // Paginate items
-        let allItems: any[] = [];
+        let allItemsRaw: any[] = [];
         let page = 0;
         const PAGE_SIZE = 1000;
         let hasMore = true;
@@ -178,7 +225,7 @@ export async function GET(request: Request) {
 
             if (error) throw error;
             if (data && data.length > 0) {
-                allItems = allItems.concat(data);
+                allItemsRaw = allItemsRaw.concat(data);
                 if (data.length < PAGE_SIZE) hasMore = false;
                 else page++;
             } else {
@@ -187,9 +234,14 @@ export async function GET(request: Request) {
             if (page > 20) break;
         }
 
-        const allItemIds = allItems.map((item: any) => String(item.id));
+        const normalizedItems = allItemsRaw
+            .map((row: any) => normalizeReportItem(row))
+            .filter((row) => row.id && row.name);
+        const filteredItems = applyItemFilters(normalizedItems, { category, marca, state, color });
+
+        const allItemIds = filteredItems.map((item: any) => String(item.id));
         const scopedTotals = await getScopedTotalsForItems(supabase, allItemIds, allowedWarehouseIds);
-        allItems = allItems.map((item: any) => ({
+        let allItems = filteredItems.map((item: any) => ({
             ...item,
             stock_total: scopedTotals.get(item.id) ?? 0,
         }));
