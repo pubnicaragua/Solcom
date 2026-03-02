@@ -56,6 +56,17 @@ export async function POST(request: Request) {
   try {
     const { name, description, is_custom } = await request.json();
 
+    // Verificar si el rol ya existe
+    const { data: existingRole } = await supabase
+      .from('roles')
+      .select('id')
+      .eq('name', name)
+      .single();
+
+    if (existingRole) {
+      return NextResponse.json({ error: `El rol "${name}" ya existe` }, { status: 409 });
+    }
+
     const { data: role, error } = await supabase
       .from('roles')
       .insert([
@@ -68,6 +79,10 @@ export async function POST(request: Request) {
 
     return NextResponse.json(role);
   } catch (error: any) {
+    // Manejar específicamente error de constraint duplicada
+    if (error.message?.includes('duplicate key') || error.message?.includes('roles_name_key')) {
+      return NextResponse.json({ error: 'El nombre del rol ya existe. Por favor usa otro nombre.' }, { status: 409 });
+    }
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
 }

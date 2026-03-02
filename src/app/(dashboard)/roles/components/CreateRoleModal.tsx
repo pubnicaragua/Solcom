@@ -89,7 +89,10 @@ export default function CreateRoleModal({ isOpen, onClose, onSave }: CreateRoleM
         })
       });
 
-      if (!roleRes.ok) throw new Error('Error al crear el rol');
+      if (!roleRes.ok) {
+        const errorData = await roleRes.json();
+        throw new Error(errorData.error || 'Error al crear el rol');
+      }
 
       // 2. Save permissions via role-permissions bulk API
       if (selectedCodes.size > 0) {
@@ -109,7 +112,13 @@ export default function CreateRoleModal({ isOpen, onClose, onSave }: CreateRoleM
       onClose();
     } catch (error: any) {
       console.error(error);
-      alert(error.message || 'Error al guardar el rol');
+      
+      // Manejar específicamente error de duplicado
+      if (error.message?.includes('ya existe') || error.message?.includes('duplicate key')) {
+        alert(`El rol "${roleName.toUpperCase()}" ya existe. Por favor usa otro nombre.`);
+      } else {
+        alert(error.message || 'Error al guardar el rol');
+      }
     } finally {
       setLoading(false);
     }
