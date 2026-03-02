@@ -13,7 +13,7 @@ const menuItems = [
   { icon: Bot, label: 'Agentes IA', href: '/ai-agents', module: 'ai-agents' },
   { icon: ArrowLeftRight, label: 'Transferencias', href: '/transfers', module: 'transfers' },
   { icon: Rocket, label: 'Fase 2', href: '/fase2', module: 'fase2' },
-  { icon: Calendar, label: 'Reuniones', href: '/reuniones', module: 'public' },
+  { icon: Calendar, label: 'Reuniones', href: '/reuniones', module: 'reuniones' },
   { icon: Users, label: 'Roles', href: '/roles', module: 'roles' },
   { icon: Settings, label: 'Configuración', href: '/settings', module: 'settings' },
   { icon: ClipboardList, label: 'Siguientes Pasos', href: '/next-steps', module: 'next-steps', hidden: true },
@@ -128,8 +128,8 @@ export default function Sidebar() {
               return null;
             }
 
-            // Mostrar módulos públicos siempre, o verificar permisos si ya cargó
-            if (item.module !== 'public' && !loading && !hasModuleAccess(item.module)) {
+            // Ocultar módulos protegidos mientras carga o si no tiene acceso
+            if (item.module !== 'public' && (loading || !hasModuleAccess(item.module))) {
               return null;
             }
 
