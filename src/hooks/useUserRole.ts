@@ -1,11 +1,25 @@
 import { useEffect, useMemo, useState } from 'react';
 import { createBrowserClient } from '@supabase/ssr';
+import {
+  getDefaultModuleAccess,
+  mapOverrides,
+  mergeModuleOverrides,
+} from '@/lib/auth/module-permissions';
 
-export type UserRole = string;
+export type UserRole = 'admin' | 'manager' | 'operator' | 'auditor';
+export type ModuleAccessMap = Record<string, boolean>;
+
+function normalizeRole(value: unknown): UserRole {
+  const role = String(value ?? '').trim().toLowerCase();
+  if (role === 'admin' || role === 'manager' || role === 'operator' || role === 'auditor') {
+    return role;
+  }
+  return 'operator';
+}
 
 export function useUserRole() {
   const [role, setRole] = useState<UserRole>('operator');
-  const [allowedModules, setAllowedModules] = useState<Set<string>>(new Set());
+  const [moduleAccess, setModuleAccess] = useState<ModuleAccessMap>(getDefaultModuleAccess('operator'));
   const [loading, setLoading] = useState(true);
   const supabase = useMemo(
     () =>
@@ -18,11 +32,9 @@ export function useUserRole() {
 
   useEffect(() => {
     let canceled = false;
-    let isFirstLoad = true;
 
-    async function fetchRoleAndPermissions() {
-      // Solo mostrar loading en la carga inicial, no en re-fetches (ej. cambio de pestaña)
-      if (!canceled && isFirstLoad) setLoading(true);
+    async function fetchRole() {
+      if (!canceled) setLoading(true);
 
       try {
         const {
@@ -35,7 +47,7 @@ export function useUserRole() {
         if (!user) {
           if (!canceled) {
             setRole('operator');
-            setAllowedModules(new Set());
+            setModuleAccess(getDefaultModuleAccess('operator'));
           }
           return;
         }
@@ -46,39 +58,34 @@ export function useUserRole() {
           .eq('id', user.id)
           .maybeSingle();
 
-        const userRole = profile?.role || 'operator';
+        const normalizedRole = normalizeRole(profile?.role);
+        const baseAccess = getDefaultModuleAccess(normalizedRole);
 
-        if (!canceled) {
-          setRole(userRole);
+        let overridesMap: ModuleAccessMap = {};
+        const { data: overrides, error: overridesError } = await (supabase as any)
+          .from('user_module_permissions')
+          .select('module, can_access')
+          .eq('user_id', user.id);
+
+        if (!overridesError) {
+          overridesMap = mapOverrides(overrides || []);
         }
 
-        // Fetch permitted modules from role_permissions + permissions tables
-        const { data: rolePerms } = await (supabase as any)
-          .from('role_permissions')
-          .select('permission_code, permissions(module)')
-          .eq('role', userRole);
-
         if (!canceled) {
-          const modules = new Set<string>();
-          if (rolePerms && Array.isArray(rolePerms)) {
-            rolePerms.forEach((rp: any) => {
-              const mod = rp.permissions?.module;
-              if (mod) modules.add(mod);
-            });
-          }
-          setAllowedModules(modules);
+          setRole(normalizedRole);
+          setModuleAccess(mergeModuleOverrides(baseAccess, overridesMap));
         }
       } catch (error: any) {
+        // Ignore aborted auth locks (seen on rapid remounts in dev).
         if (error?.name !== 'AbortError' && process.env.NODE_ENV !== 'production') {
           console.warn('useUserRole error:', error?.message || error);
         }
       } finally {
         if (!canceled) setLoading(false);
-        isFirstLoad = false;
       }
     }
 
-    fetchRoleAndPermissions();
+    fetchRole();
 
     const {
       data: { subscription },
@@ -86,11 +93,11 @@ export function useUserRole() {
       if (canceled) return;
       if (!session?.user) {
         setRole('operator');
-        setAllowedModules(new Set());
+        setModuleAccess(getDefaultModuleAccess('operator'));
         setLoading(false);
         return;
       }
-      void fetchRoleAndPermissions();
+      void fetchRole();
     });
 
     return () => {
@@ -99,29 +106,14 @@ export function useUserRole() {
     };
   }, [supabase]);
 
-  return { role, loading, allowedModules };
-}
-
-export function hasPermission(role: UserRole, module: string, allowedModules?: Set<string>): boolean {
-  // Módulos públicos siempre accesibles para cualquier rol autenticado
-  const publicModules = ['public', 'reuniones', 'how-it-works'];
-  if (publicModules.includes(module)) return true;
-
-  // admin siempre tiene acceso a todo
-  if (role === 'admin') return true;
-
-  // Si tenemos módulos desde la BD, usarlos
-  if (allowedModules && allowedModules.size > 0) {
-    return allowedModules.has(module);
-  }
-
-  // Fallback hardcodeado solo si la BD no responde (no debería pasar en producción)
-  const fallback: Record<string, string[]> = {
-    admin: ['inventory', 'ventas', 'reports', 'ai-agents', 'roles', 'settings', 'entregables', 'next-steps', 'transfers', 'fase2'],
-    manager: ['inventory', 'ventas', 'reports', 'transfers'],
-    operator: ['inventory', 'ventas', 'reports'],
-    auditor: ['reports'],
+  const hasModuleAccess = (module: string) => {
+    if (!module) return false;
+    return Boolean(moduleAccess[module]);
   };
 
-  return fallback[role]?.includes(module) || false;
+  return { role, loading, moduleAccess, hasModuleAccess };
+}
+
+export function hasPermission(role: UserRole, module: string): boolean {
+  return Boolean(getDefaultModuleAccess(role)[module]);
 }

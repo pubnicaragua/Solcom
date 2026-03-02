@@ -1,5 +1,12 @@
 import { NextResponse } from 'next/server';
-import { createServerClient } from '@/lib/supabase/server';
+import { createRouteHandlerClient } from '@supabase/auth-helpers-nextjs';
+import { cookies } from 'next/headers';
+import {
+    getAuthenticatedProfile,
+    getWarehouseAccessScope,
+    listWarehousesForScope,
+} from '@/lib/auth/warehouse-permissions';
+import { getEffectiveModuleAccess, hasModuleAccess } from '@/lib/auth/module-permissions';
 
 function sanitizeSearchTerm(raw: string): string {
     return raw
@@ -35,26 +42,57 @@ export async function GET(request: Request) {
         const stockLevel = searchParams.get('stockLevel') || '';
         const showZeroStock = searchParams.get('showZeroStock') !== 'false'; // default true
 
-        const supabase = createServerClient();
+        const supabase = createRouteHandlerClient({ cookies });
+        const auth = await getAuthenticatedProfile(supabase);
+        if (!auth.ok) {
+            return NextResponse.json({ error: auth.error }, { status: auth.status });
+        }
 
-        // 1) Fetch ACTIVE warehouses (columns) and ALL warehouses (for total)
-        const [{ data: activeWhRaw, error: whError }, { data: allWhRaw, error: allWhError }] = await Promise.all([
-            supabase.from('warehouses').select('id, code, name').eq('active', true).order('code', { ascending: true }),
-            supabase.from('warehouses').select('id, code, name'),
+        const moduleAccess = await getEffectiveModuleAccess(supabase, auth.userId, auth.role);
+        if (!hasModuleAccess(moduleAccess, 'inventory')) {
+            return NextResponse.json({ error: 'No autorizado para este módulo' }, { status: 403 });
+        }
+
+        const scope = await getWarehouseAccessScope(supabase, auth.userId, auth.role);
+        if (!scope.canViewStock) {
+            return NextResponse.json({
+                warehouses: [],
+                items: [],
+                totalBeforeFilter: 0,
+                selectedWarehouse: null,
+            });
+        }
+
+        // 1) Fetch ACTIVE warehouses (columns) and ALL authorized warehouses (for total)
+        const [activeWarehouses, allWarehouses] = await Promise.all([
+            listWarehousesForScope(supabase, scope, { activeOnly: true }),
+            listWarehousesForScope(supabase, scope, { activeOnly: false }),
         ]);
 
-        if (whError) throw whError;
-        if (allWhError) throw allWhError;
-        const activeWarehouses = activeWhRaw || [];
-        const allWarehouses = allWhRaw || [];
         const selectedWarehouse =
             (warehouse
                 ? activeWarehouses.find((w: any) => w.id === warehouse || w.code === warehouse)
-                : null) ||
+            : null) ||
             (warehouse
                 ? allWarehouses.find((w: any) => w.id === warehouse || w.code === warehouse)
                 : null) ||
             null;
+
+        if (warehouse && !selectedWarehouse) {
+            return NextResponse.json(
+                { error: 'No tienes permiso para consultar esa bodega' },
+                { status: 403 }
+            );
+        }
+
+        if (allWarehouses.length === 0) {
+            return NextResponse.json({
+                warehouses: [],
+                items: [],
+                totalBeforeFilter: 0,
+                selectedWarehouse: null,
+            });
+        }
 
         // 2) Fetch items with filters (search precision-first)
         const buildItemsQuery = (searchMode: 'prefix' | 'contains' | null) => {
@@ -67,16 +105,6 @@ export async function GET(request: Request) {
             if (color) itemsQuery = itemsQuery.ilike('color', `%${color}%`);
             if (state) itemsQuery = itemsQuery.eq('state', state);
             if (category) itemsQuery = itemsQuery.ilike('category', `%${category}%`);
-            if (stockLevel) {
-                switch (stockLevel) {
-                    case 'out': itemsQuery = itemsQuery.eq('stock_total', 0); break;
-                    case 'positive': itemsQuery = itemsQuery.gt('stock_total', 0); break;
-                    case 'critical': itemsQuery = itemsQuery.gte('stock_total', 1).lte('stock_total', 5); break;
-                    case 'low': itemsQuery = itemsQuery.gte('stock_total', 6).lte('stock_total', 20); break;
-                    case 'medium': itemsQuery = itemsQuery.gte('stock_total', 21).lte('stock_total', 50); break;
-                    case 'high': itemsQuery = itemsQuery.gt('stock_total', 50); break;
-                }
-            }
 
             if (search) {
                 if (searchMode === 'prefix') {
@@ -420,6 +448,7 @@ export async function GET(request: Request) {
 
         // 4) Build result: columns = active warehouses, total = ALL warehouses
         //    FALLBACK: if an item has NO snapshots at all, use items.stock_total
+        const canUseStockTotalFallback = scope.allWarehouses;
         const resultItems = items.map((item: any) => {
             const warehouseQty: Record<string, number> = {};
             const hasBreakdown = itemsWithBreakdown.has(item.id);
@@ -439,7 +468,7 @@ export async function GET(request: Request) {
                 }
             } else {
                 // No snapshots exist — use item's stock_total from Zoho sync as fallback
-                total = item.stock_total ?? 0;
+                total = canUseStockTotalFallback ? (item.stock_total ?? 0) : 0;
             }
 
             return {
@@ -465,13 +494,34 @@ export async function GET(request: Request) {
             ? resultItems.filter((item) => selectedWarehousePositiveItemIds!.has(item.id))
             : resultItems;
 
+        const itemsAfterStockLevel = stockLevel
+            ? itemsAfterWarehouseFilter.filter((item) => {
+                switch (stockLevel) {
+                    case 'out':
+                        return item.total === 0;
+                    case 'positive':
+                        return item.total > 0;
+                    case 'critical':
+                        return item.total >= 1 && item.total <= 5;
+                    case 'low':
+                        return item.total >= 6 && item.total <= 20;
+                    case 'medium':
+                        return item.total >= 21 && item.total <= 50;
+                    case 'high':
+                        return item.total > 50;
+                    default:
+                        return true;
+                }
+            })
+            : itemsAfterWarehouseFilter;
+
         // Optionally filter out only zero-stock items (keep negatives visible).
-        const finalItems = showZeroStock ? itemsAfterWarehouseFilter : itemsAfterWarehouseFilter.filter(i => i.total !== 0);
+        const finalItems = showZeroStock ? itemsAfterStockLevel : itemsAfterStockLevel.filter(i => i.total !== 0);
 
         return NextResponse.json({
             warehouses: activeWarehouses.map((w: any) => ({ code: w.code, name: w.name })),
             items: finalItems,
-            totalBeforeFilter: itemsAfterWarehouseFilter.length,
+            totalBeforeFilter: itemsAfterStockLevel.length,
             model: usingBalanceModel ? 'inventory_balance' : 'stock_snapshots',
             usedSnapshotGapFill,
             selectedWarehouse: selectedWarehouse ? { id: selectedWarehouse.id, code: selectedWarehouse.code } : null,

@@ -8,12 +8,15 @@ import Select from '@/components/ui/Select';
 import Badge from '@/components/ui/Badge';
 import KPIGrid from '@/components/dashboard/KPIGrid';
 import PivotInventoryTable from '@/components/dashboard/PivotInventoryTable';
+import type { PivotItem } from '@/components/dashboard/PivotInventoryTable';
 import TransferHistory from '@/components/dashboard/TransferHistory';
 import EditProductModal from '@/components/modals/EditProductModal';
 import UpdateStockModal from '@/components/modals/UpdateStockModal';
 import TransferModal from '@/components/modals/TransferModal';
 import ProductDetailsModal from '@/components/modals/ProductDetailsModal';
-import { Search, Filter, Download, Upload, Trash2, Edit, RefreshCw, FileSpreadsheet, FileText, BarChart3 } from 'lucide-react';
+import InventoryCart from '@/components/dashboard/InventoryCart';
+import type { CartItem } from '@/components/dashboard/InventoryCart';
+import { Search, Filter, Download, Upload, Trash2, Edit, RefreshCw, FileSpreadsheet, FileText, BarChart3, ShoppingCart } from 'lucide-react';
 
 export default function InventoryPage() {
   const [filters, setFilters] = useState({
@@ -55,6 +58,70 @@ export default function InventoryPage() {
   const [transferProduct, setTransferProduct] = useState<any>(null);
   const [detailsProduct, setDetailsProduct] = useState<any>(null);
   const [warehouses, setWarehouses] = useState<any[]>([]);
+
+  // ─── Cart State (desktop only) ───
+  const [cartItems, setCartItems] = useState<CartItem[]>([]);
+  const [cartMode, setCartMode] = useState(false);
+  const [cartOpen, setCartOpen] = useState(false);
+  const [isMobileView, setIsMobileView] = useState(false);
+  const [cartToast, setCartToast] = useState<{ name: string; qty: number } | null>(null);
+  const [cartPulse, setCartPulse] = useState(false);
+
+  useEffect(() => {
+    const checkMobile = () => setIsMobileView(window.innerWidth <= 768);
+    checkMobile();
+    window.addEventListener('resize', checkMobile);
+    return () => window.removeEventListener('resize', checkMobile);
+  }, []);
+
+  function addToCart(item: PivotItem) {
+    let newQty = 1;
+    setCartItems((prev) => {
+      const existing = prev.find((c) => c.itemId === item.id);
+      if (existing) {
+        newQty = existing.quantity + 1;
+        return prev.map((c) =>
+          c.itemId === item.id ? { ...c, quantity: c.quantity + 1 } : c
+        );
+      }
+      return [
+        ...prev,
+        {
+          itemId: item.id,
+          sku: item.sku,
+          name: item.name,
+          color: item.color,
+          brand: item.brand,
+          quantity: 1,
+        },
+      ];
+    });
+    // Auto-open cart on first add
+    if (cartItems.length === 0) setCartOpen(true);
+
+    // Toast notification
+    const label = item.name + (item.color ? ` — ${item.color}` : '');
+    setCartToast({ name: label, qty: newQty });
+    setTimeout(() => setCartToast(null), 2200);
+
+    // Pulse cart button
+    setCartPulse(true);
+    setTimeout(() => setCartPulse(false), 700);
+  }
+
+  function removeFromCart(itemId: string) {
+    setCartItems((prev) => prev.filter((c) => c.itemId !== itemId));
+  }
+
+  function updateCartQty(itemId: string, qty: number) {
+    setCartItems((prev) =>
+      prev.map((c) => (c.itemId === itemId ? { ...c, quantity: Math.max(1, qty) } : c))
+    );
+  }
+
+  function clearCart() {
+    setCartItems([]);
+  }
 
   useEffect(() => {
     fetchWarehouses();
@@ -161,6 +228,90 @@ export default function InventoryPage() {
           </div>
         </div>
         <div className="inv-actions" style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+          {/* Cart button — desktop only */}
+          {!isMobileView && (
+            <button
+              onClick={() => {
+                if (!cartMode) {
+                  setCartMode(true);
+                  setCartOpen(true);
+                } else {
+                  setCartMode(false);
+                }
+              }}
+              style={{
+                position: 'relative',
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: 7,
+                padding: '8px 16px',
+                borderRadius: 10,
+                border: cartMode
+                  ? '1.5px solid rgba(16,185,129,0.6)'
+                  : '1.5px solid rgba(255,255,255,0.12)',
+                background: cartMode
+                  ? 'linear-gradient(135deg, rgba(16,185,129,0.2) 0%, rgba(5,150,105,0.15) 100%)'
+                  : 'rgba(255,255,255,0.04)',
+                color: cartMode ? '#34d399' : 'var(--muted)',
+                fontSize: 13,
+                fontWeight: 700,
+                cursor: 'pointer',
+                transition: 'all 0.25s',
+                boxShadow: cartMode ? '0 0 20px rgba(16,185,129,0.15)' : 'none',
+                animation: cartPulse ? 'cartBtnPulse 0.5s ease-out' : 'none',
+              }}
+            >
+              <ShoppingCart size={17} />
+              <span className="btn-label">{cartMode ? 'Modo Carrito Activo' : 'Cotizar'}</span>
+              {cartItems.length > 0 && (
+                <span
+                  style={{
+                    position: 'absolute',
+                    top: -6,
+                    right: -6,
+                    minWidth: 20,
+                    height: 20,
+                    borderRadius: 10,
+                    background: 'linear-gradient(135deg, #10b981, #059669)',
+                    color: 'white',
+                    fontSize: 11,
+                    fontWeight: 800,
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    padding: '0 5px',
+                    boxShadow: '0 2px 8px rgba(16,185,129,0.4)',
+                    animation: 'cartBadgePop 0.3s ease-out',
+                  }}
+                >
+                  {cartItems.length}
+                </span>
+              )}
+            </button>
+          )}
+
+          {/* Open cart drawer if has items */}
+          {!isMobileView && cartItems.length > 0 && !cartOpen && (
+            <button
+              onClick={() => setCartOpen(true)}
+              style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: 6,
+                padding: '8px 14px',
+                borderRadius: 10,
+                border: '1px solid rgba(16,185,129,0.3)',
+                background: 'rgba(16,185,129,0.08)',
+                color: '#34d399',
+                fontSize: 12,
+                fontWeight: 700,
+                cursor: 'pointer',
+              }}
+            >
+              Ver carrito ({cartItems.length})
+            </button>
+          )}
+
           <Button variant="secondary" size="sm" onClick={() => handleExport('excel')}>
             <FileSpreadsheet size={16} />
             <span className="btn-label">Excel</span>
@@ -407,7 +558,11 @@ export default function InventoryPage() {
         </Card>
       )}
 
-      <PivotInventoryTable filters={filters} />
+      <PivotInventoryTable
+        filters={filters}
+        cartMode={cartMode}
+        onAddToCart={addToCart}
+      />
 
       <Card>
         <div style={{ padding: 16, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
@@ -452,7 +607,93 @@ export default function InventoryPage() {
         product={detailsProduct}
       />
 
+      {/* ─── Cart Drawer (desktop only) ─── */}
+      {!isMobileView && (
+        <InventoryCart
+          isOpen={cartOpen}
+          onClose={() => setCartOpen(false)}
+          items={cartItems}
+          onUpdateQuantity={updateCartQty}
+          onRemoveItem={removeFromCart}
+          onClearCart={clearCart}
+          onQuoteCreated={() => {
+            setCartMode(false);
+          }}
+        />
+      )}
+
+      {/* ─── Cart Toast Notification ─── */}
+      {cartToast && (
+        <div
+          style={{
+            position: 'fixed',
+            bottom: 24,
+            left: '50%',
+            transform: 'translateX(-50%)',
+            zIndex: 2100,
+            display: 'flex',
+            alignItems: 'center',
+            gap: 10,
+            padding: '12px 20px',
+            borderRadius: 12,
+            background: 'linear-gradient(135deg, rgba(16,185,129,0.95) 0%, rgba(5,150,105,0.95) 100%)',
+            color: 'white',
+            fontSize: 13,
+            fontWeight: 700,
+            boxShadow: '0 8px 32px rgba(16,185,129,0.35), 0 2px 8px rgba(0,0,0,0.3)',
+            animation: 'toastSlideUp 0.35s ease-out',
+            whiteSpace: 'nowrap',
+            maxWidth: '90vw',
+            overflow: 'hidden',
+            textOverflow: 'ellipsis',
+            backdropFilter: 'blur(8px)',
+          }}
+        >
+          <span style={{
+            width: 22,
+            height: 22,
+            borderRadius: '50%',
+            background: 'rgba(255,255,255,0.25)',
+            display: 'inline-flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            fontSize: 13,
+            fontWeight: 900,
+            flexShrink: 0,
+          }}>
+            ✓
+          </span>
+          <span style={{ overflow: 'hidden', textOverflow: 'ellipsis' }}>
+            {cartToast.name}
+          </span>
+          <span style={{
+            background: 'rgba(255,255,255,0.2)',
+            padding: '2px 8px',
+            borderRadius: 6,
+            fontSize: 12,
+            fontWeight: 800,
+            flexShrink: 0,
+          }}>
+            ×{cartToast.qty}
+          </span>
+        </div>
+      )}
+
       <style jsx>{`
+        @keyframes cartBadgePop {
+          0% { transform: scale(0.5); opacity: 0; }
+          50% { transform: scale(1.3); }
+          100% { transform: scale(1); opacity: 1; }
+        }
+        @keyframes cartBtnPulse {
+          0% { transform: scale(1); box-shadow: 0 0 0 0 rgba(16,185,129, 0.5); }
+          50% { transform: scale(1.08); box-shadow: 0 0 0 8px rgba(16,185,129, 0); }
+          100% { transform: scale(1); box-shadow: 0 0 0 0 rgba(16,185,129, 0); }
+        }
+        @keyframes toastSlideUp {
+          0% { opacity: 0; transform: translateX(-50%) translateY(20px); }
+          100% { opacity: 1; transform: translateX(-50%) translateY(0); }
+        }
         @media (max-width: 640px) {
           .inv-header {
             flex-direction: column;

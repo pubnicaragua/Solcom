@@ -1,5 +1,12 @@
 import { NextResponse } from 'next/server';
-import { createServerClient } from '@/lib/supabase/server';
+import { createRouteHandlerClient } from '@supabase/auth-helpers-nextjs';
+import { cookies } from 'next/headers';
+import {
+  getAuthenticatedProfile,
+  getWarehouseAccessScope,
+  listWarehousesForScope,
+} from '@/lib/auth/warehouse-permissions';
+import { getEffectiveModuleAccess, hasModuleAccess } from '@/lib/auth/module-permissions';
 
 export async function GET(request: Request) {
   try {
@@ -18,7 +25,47 @@ export async function GET(request: Request) {
     const priceRange = searchParams.get('priceRange') || '';
     const sortBy = searchParams.get('sortBy') || 'name';
 
-    const supabase = createServerClient();
+    const supabase = createRouteHandlerClient({ cookies });
+    const auth = await getAuthenticatedProfile(supabase);
+    if (!auth.ok) {
+      return NextResponse.json({ error: auth.error }, { status: auth.status });
+    }
+
+    const moduleAccess = await getEffectiveModuleAccess(supabase, auth.userId, auth.role);
+    if (!hasModuleAccess(moduleAccess, 'inventory')) {
+      return NextResponse.json({ error: 'No autorizado para este módulo' }, { status: 403 });
+    }
+
+    const scope = await getWarehouseAccessScope(supabase, auth.userId, auth.role);
+    if (!scope.canViewStock) {
+      return NextResponse.json({
+        data: [],
+        page,
+        limit,
+        total: 0,
+        totalPages: 0,
+      });
+    }
+
+    const scopedActiveWarehouses = await listWarehousesForScope(supabase, scope, { activeOnly: true });
+    const allowedWarehouseIds = scopedActiveWarehouses.map((w) => w.id);
+    if (allowedWarehouseIds.length === 0) {
+      return NextResponse.json({
+        data: [],
+        page,
+        limit,
+        total: 0,
+        totalPages: 0,
+      });
+    }
+
+    const requestedWarehouseId = warehouse
+      ? scopedActiveWarehouses.find((w) => w.id === warehouse || w.code === warehouse)?.id || null
+      : null;
+    if (warehouse && !requestedWarehouseId) {
+      return NextResponse.json({ error: 'No tienes permiso para consultar esa bodega' }, { status: 403 });
+    }
+
     const offset = (page - 1) * limit;
 
     const buildBaseQuery = () => {
@@ -33,10 +80,11 @@ export async function GET(request: Request) {
           warehouses!inner(code, name, active),
           items!inner(sku, name, color, state, category, marca, stock_total, price)
         `)
-        .eq('warehouses.active', true);
+        .eq('warehouses.active', true)
+        .in('warehouse_id', allowedWarehouseIds);
 
-      if (warehouse) {
-        base = base.eq('warehouses.code', warehouse);
+      if (requestedWarehouseId) {
+        base = base.eq('warehouse_id', requestedWarehouseId);
       }
 
       if (brand || marca) {
@@ -98,29 +146,53 @@ export async function GET(request: Request) {
       return base;
     };
 
+    const getScopedTotalsForItems = async (itemIds: string[]) => {
+      const totals = new Map<string, number>();
+      if (itemIds.length === 0) return totals;
+
+      try {
+        const { data: balances, error: balanceError } = await (supabase.from as any)('inventory_balance')
+          .select('item_id, warehouse_id, qty_on_hand')
+          .in('item_id', itemIds)
+          .in('warehouse_id', allowedWarehouseIds);
+
+        if (balanceError) throw balanceError;
+
+        for (const row of balances || []) {
+          const itemId = String(row.item_id || '');
+          if (!itemId) continue;
+          totals.set(itemId, Number(totals.get(itemId) || 0) + Number(row.qty_on_hand || 0));
+        }
+        return totals;
+      } catch (_balanceError) {
+        const { data: snapshots, error: snapError } = await supabase
+          .from('stock_snapshots')
+          .select('item_id, warehouse_id, qty, synced_at')
+          .in('item_id', itemIds)
+          .in('warehouse_id', allowedWarehouseIds)
+          .order('synced_at', { ascending: false });
+
+        if (snapError) throw snapError;
+
+        const seen = new Set<string>();
+        for (const row of snapshots || []) {
+          const itemId = String(row.item_id || '');
+          const warehouseId = String(row.warehouse_id || '');
+          if (!itemId || !warehouseId) continue;
+          const key = `${itemId}__${warehouseId}`;
+          if (seen.has(key)) continue;
+          seen.add(key);
+          totals.set(itemId, Number(totals.get(itemId) || 0) + Number(row.qty || 0));
+        }
+        return totals;
+      }
+    };
+
     // Vista agrupada: una fila por producto (sin repetir por bodega)
     if (groupBy === 'item') {
       let itemIdsInWarehouse: string[] | null = null;
       if (warehouse && warehouse.trim()) {
-        const codeOrId = warehouse.trim();
-        let whId: string | null = null;
-        const { data: byCode } = await supabase
-          .from('warehouses')
-          .select('id')
-          .eq('active', true)
-          .eq('code', codeOrId)
-          .limit(1);
-        if (byCode?.[0]?.id) {
-          whId = byCode[0].id;
-        } else {
-          const { data: byId } = await supabase
-            .from('warehouses')
-            .select('id')
-            .eq('active', true)
-            .eq('id', codeOrId)
-            .limit(1);
-          whId = byId?.[0]?.id ?? null;
-        }
+        const whId = requestedWarehouseId;
         if (whId) {
           const { data: snapRows } = await supabase
             .from('stock_snapshots')
@@ -164,36 +236,26 @@ export async function GET(request: Request) {
           if (!Number.isNaN(max)) itemsQuery = itemsQuery.lte('price', max);
         }
       }
-      if (stockLevel) {
-        switch (stockLevel) {
-          case 'out': itemsQuery = itemsQuery.eq('stock_total', 0); break;
-          case 'critical': itemsQuery = itemsQuery.gte('stock_total', 1).lte('stock_total', 5); break;
-          case 'low': itemsQuery = itemsQuery.gte('stock_total', 6).lte('stock_total', 20); break;
-          case 'medium': itemsQuery = itemsQuery.gte('stock_total', 21).lte('stock_total', 50); break;
-          case 'high': itemsQuery = itemsQuery.gt('stock_total', 50); break;
-        }
-      }
-
       const orderCol = sortBy === 'name_desc' ? 'name' : sortBy === 'name' ? 'name' : sortBy === 'stock_asc' ? 'stock_total' : sortBy === 'stock_desc' ? 'stock_total' : 'name';
       const orderAsc = sortBy === 'stock_desc' ? false : true;
-      const { data: itemsData, error: itemsError, count: itemsCount } = await itemsQuery
+      const { data: itemsData, error: itemsError } = await itemsQuery
         .order(orderCol, { ascending: orderAsc })
         .range(offset, offset + limit - 1);
 
       if (itemsError) throw itemsError;
 
       const list = itemsData || [];
-      const total = itemsCount ?? list.length;
       const itemIds = list.map((r: any) => r.id);
+      const scopedStockTotalByItem = await getScopedTotalsForItems(itemIds);
 
       // Cuántas bodegas (activas) tienen cada ítem
       let warehouseCountByItem: Record<string, number> = {};
       if (itemIds.length > 0) {
-        const { data: activeWh } = await supabase.from('warehouses').select('id').eq('active', true);
-        const whIdsActive = new Set((activeWh ?? []).map((w: any) => w.id));
+        const whIdsActive = new Set(allowedWarehouseIds);
         const { data: snapCounts } = await supabase
           .from('stock_snapshots')
           .select('item_id, warehouse_id')
+          .in('warehouse_id', allowedWarehouseIds)
           .in('item_id', itemIds);
         const byItem = new Map<string, Set<string>>();
         for (const row of snapCounts || []) {
@@ -219,18 +281,31 @@ export async function GET(request: Request) {
         warehouse_name: null,
         qty: null,
         warehouse_count: warehouseCountByItem[row.id] ?? 0,
-        stock_total: row.stock_total ?? 0,
+        stock_total: scopedStockTotalByItem.get(row.id) ?? 0,
         price: row.price ?? 0,
         synced_at: null,
         grouped: true,
       }));
 
+      const stockFiltered = stockLevel
+        ? formatted.filter((row) => {
+            switch (stockLevel) {
+              case 'out': return row.stock_total === 0;
+              case 'critical': return row.stock_total >= 1 && row.stock_total <= 5;
+              case 'low': return row.stock_total >= 6 && row.stock_total <= 20;
+              case 'medium': return row.stock_total >= 21 && row.stock_total <= 50;
+              case 'high': return row.stock_total > 50;
+              default: return true;
+            }
+          })
+        : formatted;
+
       return NextResponse.json({
-        data: formatted,
+        data: stockFiltered,
         page,
         limit,
-        total,
-        totalPages: Math.ceil(total / limit),
+        total: stockFiltered.length,
+        totalPages: Math.ceil(stockFiltered.length / limit),
       });
     }
 
@@ -271,6 +346,9 @@ export async function GET(request: Request) {
 
         const total = combined.length;
         const paged = combined.slice(offset, offset + limit);
+        const scopedTotals = await getScopedTotalsForItems(
+          Array.from(new Set(paged.map((row: any) => String(row.item_id || '')).filter(Boolean)))
+        );
 
         const formattedData = paged.map((row: any) => ({
           id: row.id,
@@ -285,7 +363,7 @@ export async function GET(request: Request) {
           warehouse_code: row.warehouses.code,
           warehouse_name: row.warehouses.name,
           qty: row.qty,
-          stock_total: row.items.stock_total || 0,
+          stock_total: scopedTotals.get(row.item_id) ?? 0,
           price: row.items.price || 0,
           synced_at: row.synced_at,
         }));
@@ -347,6 +425,10 @@ export async function GET(request: Request) {
       throw error;
     }
 
+    const scopedTotals = await getScopedTotalsForItems(
+      Array.from(new Set((data || []).map((row: any) => String(row.item_id || '')).filter(Boolean)))
+    );
+
     const formattedData = (data || []).map((row: any) => ({
       id: row.id,
       warehouse_id: row.warehouse_id,
@@ -360,7 +442,7 @@ export async function GET(request: Request) {
       warehouse_code: row.warehouses.code,
       warehouse_name: row.warehouses.name,
       qty: row.qty,
-      stock_total: row.items.stock_total || 0,
+      stock_total: scopedTotals.get(row.item_id) ?? 0,
       price: row.items.price || 0,
       synced_at: row.synced_at,
     }));

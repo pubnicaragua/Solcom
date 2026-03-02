@@ -13,8 +13,10 @@ import {
   Trash2,
   ArrowRightLeft,
   ArrowLeft,
+  Eye,
 } from 'lucide-react';
 import QuoteForm from '@/components/ventas/QuoteForm';
+import QuotePreview from '@/components/ventas/QuotePreview';
 
 type QuoteStatus = 'borrador' | 'enviada' | 'aceptada' | 'rechazada' | 'vencida' | 'convertida';
 
@@ -34,6 +36,7 @@ interface Quote {
   notes: string | null;
   template_key: string | null;
   converted_invoice_id: string | null;
+  source: string | null;
   created_at: string;
 }
 
@@ -87,6 +90,7 @@ export default function CotizacionesPage() {
   });
 
   const [showForm, setShowForm] = useState(false);
+  const [previewQuoteId, setPreviewQuoteId] = useState<string | null>(null);
   const [editQuote, setEditQuote] = useState<QuoteDetail | null>(null);
 
   useEffect(() => {
@@ -475,7 +479,25 @@ export default function CotizacionesPage() {
                   )}
                 </div>
 
-                <div style={{ fontSize: 13, fontWeight: 700, color: '#60A5FA' }}>{quote.quote_number}</div>
+                <div style={{ marginRight: '10px', fontSize: 13, fontWeight: 700, color: '#60A5FA', display: 'flex', alignItems: 'center', gap: 6 }}>
+                  {quote.quote_number}
+                  {quote.source === 'inventory_cart' && (
+                    <span
+                      title="Cotización generada desde inventario"
+                      style={{
+                        fontSize: 10,
+                        padding: '2px 6px',
+                        borderRadius: 6,
+                        background: 'rgba(16,185,129,0.15)',
+                        color: '#34d399',
+                        fontWeight: 700,
+                        whiteSpace: 'nowrap',
+                      }}
+                    >
+                      Inventario
+                    </span>
+                  )}
+                </div>
 
                 <div>
                   <select
@@ -508,6 +530,20 @@ export default function CotizacionesPage() {
 
                 <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 6 }}>
                   <button
+                    onClick={() => setPreviewQuoteId(quote.id)}
+                    title="Ver cotización"
+                    style={{
+                      width: 32, height: 32, borderRadius: 7,
+                      border: '1px solid rgba(96,165,250,0.4)',
+                      background: 'rgba(59,130,246,0.12)',
+                      color: '#60A5FA',
+                      display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+                      cursor: 'pointer',
+                    }}
+                  >
+                    <Eye size={14} />
+                  </button>
+                  <button
                     onClick={() => handleEdit(quote.id)}
                     title="Editar"
                     style={{
@@ -522,22 +558,24 @@ export default function CotizacionesPage() {
                     <Edit3 size={14} />
                   </button>
 
-                  <button
-                    onClick={() => handleConvert(quote.id)}
-                    disabled={quote.status === 'convertida'}
-                    title={quote.status === 'convertida' ? 'Ya convertida' : 'Convertir a factura'}
-                    style={{
-                      width: 32, height: 32, borderRadius: 7,
-                      border: '1px solid rgba(168,85,247,0.5)',
-                      background: quote.status === 'convertida' ? 'rgba(168,85,247,0.1)' : 'rgba(168,85,247,0.2)',
-                      color: '#C084FC',
-                      display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
-                      cursor: quote.status === 'convertida' ? 'not-allowed' : 'pointer',
-                      opacity: quote.status === 'convertida' ? 0.65 : 1,
-                    }}
-                  >
-                    <ArrowRightLeft size={14} />
-                  </button>
+                  {quote.source !== 'inventory_cart' && (
+                    <button
+                      onClick={() => handleConvert(quote.id)}
+                      disabled={quote.status === 'convertida'}
+                      title={quote.status === 'convertida' ? 'Ya convertida' : 'Convertir a factura'}
+                      style={{
+                        width: 32, height: 32, borderRadius: 7,
+                        border: '1px solid rgba(168,85,247,0.5)',
+                        background: quote.status === 'convertida' ? 'rgba(168,85,247,0.1)' : 'rgba(168,85,247,0.2)',
+                        color: '#C084FC',
+                        display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+                        cursor: quote.status === 'convertida' ? 'not-allowed' : 'pointer',
+                        opacity: quote.status === 'convertida' ? 0.65 : 1,
+                      }}
+                    >
+                      <ArrowRightLeft size={14} />
+                    </button>
+                  )}
 
                   <button
                     onClick={() => handleDelete(quote.id)}
@@ -620,6 +658,12 @@ export default function CotizacionesPage() {
         }}
         onSaved={refreshAll}
         editQuote={editQuote}
+      />
+
+      <QuotePreview
+        isOpen={!!previewQuoteId}
+        quoteId={previewQuoteId}
+        onClose={() => setPreviewQuoteId(null)}
       />
     </div>
   );

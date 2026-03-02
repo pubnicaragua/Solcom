@@ -1,5 +1,12 @@
 import { NextResponse } from 'next/server';
-import { createServerClient } from '@/lib/supabase/server';
+import { createRouteHandlerClient } from '@supabase/auth-helpers-nextjs';
+import { cookies } from 'next/headers';
+import {
+  getAuthenticatedProfile,
+  getWarehouseAccessScope,
+  listWarehousesForScope,
+} from '@/lib/auth/warehouse-permissions';
+import { getEffectiveModuleAccess, hasModuleAccess } from '@/lib/auth/module-permissions';
 
 export const dynamic = 'force-dynamic';
 
@@ -17,17 +24,27 @@ export async function GET(
       return NextResponse.json({ error: 'itemId requerido' }, { status: 400 });
     }
 
-    const supabase = createServerClient();
-
-    // Obtener todas las bodegas (activas e inactivas) para no ocultar stock
-    const { data: allWarehouses, error: whError } = await supabase
-      .from('warehouses')
-      .select('id, code, name, active')
-      .order('code');
-
-    if (whError) {
-      return NextResponse.json({ error: whError.message }, { status: 500 });
+    const supabase = createRouteHandlerClient({ cookies });
+    const auth = await getAuthenticatedProfile(supabase);
+    if (!auth.ok) {
+      return NextResponse.json({ error: auth.error }, { status: auth.status });
     }
+
+    const moduleAccess = await getEffectiveModuleAccess(supabase, auth.userId, auth.role);
+    if (!hasModuleAccess(moduleAccess, 'inventory')) {
+      return NextResponse.json({ error: 'No autorizado para este módulo' }, { status: 403 });
+    }
+
+    const scope = await getWarehouseAccessScope(supabase, auth.userId, auth.role);
+    if (!scope.canViewStock) {
+      return NextResponse.json({ warehouses: [] });
+    }
+
+    const allWarehouses = await listWarehousesForScope(supabase, scope, { activeOnly: false });
+    if (allWarehouses.length === 0) {
+      return NextResponse.json({ warehouses: [] });
+    }
+    const warehouseIds = allWarehouses.map((warehouse) => warehouse.id);
 
     const qtyByWarehouse = new Map<string, number>();
 
@@ -35,7 +52,8 @@ export async function GET(
     try {
       const { data: balances, error: balanceError } = await (supabase.from as any)('inventory_balance')
         .select('warehouse_id, qty_on_hand')
-        .eq('item_id', itemId);
+        .eq('item_id', itemId)
+        .in('warehouse_id', warehouseIds);
 
       if (balanceError) {
         if (!isMissingRelationError(balanceError)) {
@@ -58,6 +76,7 @@ export async function GET(
         .from('stock_snapshots')
         .select('warehouse_id, qty, synced_at')
         .eq('item_id', itemId)
+        .in('warehouse_id', warehouseIds)
         .order('synced_at', { ascending: false });
 
       if (snapError) {

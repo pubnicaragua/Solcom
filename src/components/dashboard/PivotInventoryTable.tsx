@@ -21,7 +21,7 @@ interface WarehouseColor {
     text_color: string;
 }
 
-interface PivotItem {
+export interface PivotItem {
     id: string;
     sku: string;
     name: string;
@@ -43,6 +43,8 @@ interface PivotData {
 
 interface PivotInventoryTableProps {
     filters?: any;
+    cartMode?: boolean;
+    onAddToCart?: (item: PivotItem) => void;
 }
 
 /* ───── hierarchy builder ───── */
@@ -199,7 +201,7 @@ function ensureTooltipCSS() {
 }
 
 /* ───── component ───── */
-export default function PivotInventoryTable({ filters }: PivotInventoryTableProps) {
+export default function PivotInventoryTable({ filters, cartMode, onAddToCart }: PivotInventoryTableProps) {
     const [data, setData] = useState<PivotData | null>(null);
     const [loading, setLoading] = useState(true);
     const [syncing, setSyncing] = useState(false);
@@ -218,6 +220,7 @@ export default function PivotInventoryTable({ filters }: PivotInventoryTableProp
     const pivotCacheRef = useRef<Map<string, { data: PivotData; ts: number }>>(new Map());
     const [isMobile, setIsMobile] = useState(false);
     const [colorModalOpen, setColorModalOpen] = useState(false);
+    const [cartAddedId, setCartAddedId] = useState<string | null>(null);
     const { role } = useUserRole();
     const canEditWarehouseColors = role === 'admin';
 
@@ -884,19 +887,40 @@ export default function PivotInventoryTable({ filters }: PivotInventoryTableProp
                                         const colorVal = rowItem ? (rowItem.color || '') : '';
                                         const daysInStockVal = rowItem?.daysInStock ?? null;
 
+                                        const isCartTarget = cartMode && isVariantRow && rowItem && !isZeroStock;
+                                        const isCartFlash = cartAddedId === rowItem?.id;
+
                                         return (
                                             <tr
                                                 key={path}
                                                 style={{
-                                                    background: style.bg,
-                                                    transition: 'background 0.15s',
+                                                    position: 'relative' as const,
+                                                    background: isCartFlash
+                                                        ? 'rgba(16,185,129,0.28)'
+                                                        : style.bg,
+                                                    transition: 'background 0.3s ease',
                                                     opacity: isZeroStock && isItemRow ? 0.5 : 1,
+                                                    cursor: isCartTarget ? 'pointer' : undefined,
+                                                    outline: isCartTarget ? '1px dashed rgba(16,185,129,0.4)' : 'none',
+                                                    outlineOffset: '-1px',
+                                                    boxShadow: isCartFlash ? 'inset 0 0 30px rgba(16,185,129,0.15)' : 'none',
+                                                }}
+                                                onClick={() => {
+                                                    if (isCartTarget && onAddToCart && rowItem) {
+                                                        onAddToCart(rowItem);
+                                                        setCartAddedId(rowItem.id);
+                                                        setTimeout(() => setCartAddedId(null), 1200);
+                                                    }
                                                 }}
                                                 onMouseEnter={(e) => {
-                                                    if (node.level >= 2) e.currentTarget.style.background = 'rgba(255,255,255,0.04)';
+                                                    if (isCartTarget) {
+                                                        e.currentTarget.style.background = 'rgba(16,185,129,0.12)';
+                                                    } else if (node.level >= 2) {
+                                                        e.currentTarget.style.background = 'rgba(255,255,255,0.04)';
+                                                    }
                                                 }}
                                                 onMouseLeave={(e) => {
-                                                    e.currentTarget.style.background = style.bg;
+                                                    e.currentTarget.style.background = isCartFlash ? 'rgba(16,185,129,0.28)' : style.bg;
                                                 }}
                                             >
                                                 {/* Producto (sticky) */}
@@ -928,7 +952,24 @@ export default function PivotInventoryTable({ filters }: PivotInventoryTableProp
                                                                 : <ChevronDown size={14} style={{ opacity: 0.6, flexShrink: 0 }} />
                                                         )}
                                                         {!hasChildren && isVariantRow && (
-                                                            <span style={{ width: 14, display: 'inline-block', flexShrink: 0, opacity: 0.6 }}>-</span>
+                                                            isCartTarget
+                                                                ? <span style={{
+                                                                    width: 14,
+                                                                    height: 14,
+                                                                    display: 'inline-flex',
+                                                                    alignItems: 'center',
+                                                                    justifyContent: 'center',
+                                                                    flexShrink: 0,
+                                                                    borderRadius: 3,
+                                                                    background: isCartFlash ? 'rgba(16,185,129,0.5)' : 'rgba(16,185,129,0.2)',
+                                                                    color: '#34d399',
+                                                                    fontSize: 10,
+                                                                    fontWeight: 900,
+                                                                    transition: 'all 0.3s',
+                                                                }}>
+                                                                    {isCartFlash ? '✓' : '+'}
+                                                                </span>
+                                                                : <span style={{ width: 14, display: 'inline-block', flexShrink: 0, opacity: 0.6 }}>-</span>
                                                         )}
                                                         {!hasChildren && !isVariantRow && node.level >= 2 && (
                                                             <span style={{ width: 14, display: 'inline-block', flexShrink: 0 }} />
