@@ -7,7 +7,7 @@ export const dynamic = 'force-dynamic';import { z } from 'zod';
 import { requireAdminProfile } from '@/lib/auth/warehouse-permissions';
 import { getEffectiveModuleAccess, hasModuleAccess } from '@/lib/auth/module-permissions';
 
-const roleSchema = z.enum(['admin', 'manager', 'operator', 'auditor']);
+// Removido roleSchema para aceptar roles dinámicos (UUIDs) y roles estáticos
 
 const payloadSchema = z.object({
   role: z.string().trim().min(1, 'role es requerido'),
@@ -42,11 +42,7 @@ export async function GET(request: Request) {
 
     const { searchParams } = new URL(request.url);
     const roleParam = searchParams.get('role');
-    const parsedRole = roleParam ? roleSchema.safeParse(roleParam) : null;
-    if (parsedRole && !parsedRole.success) {
-      return NextResponse.json({ error: 'Rol inválido' }, { status: 400 });
-    }
-    const role = parsedRole?.success ? parsedRole.data : null;
+    const role = roleParam?.trim() || null;
 
     let query = supabase
       .from('role_permissions')

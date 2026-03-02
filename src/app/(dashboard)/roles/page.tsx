@@ -175,6 +175,28 @@ export default function RolesPage() {
     }
   }
 
+  async function deleteRole(roleId: string, roleName: string) {
+    try {
+      const response = await fetch(`/api/roles?id=${roleId}`, {
+        method: 'DELETE'
+      });
+
+      if (response.ok) {
+        alert(`Rol "${roleName}" eliminado correctamente`);
+        await loadRoles();
+        if (selectedRole === roleId) {
+          setSelectedRole(null);
+        }
+      } else {
+        const errorData = await response.json();
+        throw new Error(errorData.error || 'Error al eliminar el rol');
+      }
+    } catch (error: any) {
+      console.error('Error deleting role:', error);
+      alert(error.message || 'Error al eliminar el rol');
+    }
+  }
+
   async function loadPermissions() {
     setPermissionsError(null);
     try {
@@ -660,6 +682,16 @@ export default function RolesPage() {
                           <Edit size={14} color="var(--muted)" />
                         </button>
                         <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            if (role.is_custom) {
+                              if (confirm(`¿Estás seguro de eliminar el rol "${role.name}"?`)) {
+                                deleteRole(role.id, role.name);
+                              }
+                            } else {
+                              alert('No se pueden eliminar roles del sistema');
+                            }
+                          }}
                           style={{
                             width: 28,
                             height: 28,
@@ -669,8 +701,10 @@ export default function RolesPage() {
                             display: 'flex',
                             alignItems: 'center',
                             justifyContent: 'center',
-                            cursor: 'pointer',
+                            cursor: role.is_custom ? 'pointer' : 'not-allowed',
+                            opacity: role.is_custom ? 1 : 0.5,
                           }}
+                          disabled={!role.is_custom}
                         >
                           <Trash2 size={14} color="var(--danger)" />
                         </button>

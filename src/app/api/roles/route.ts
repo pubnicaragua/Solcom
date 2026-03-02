@@ -86,3 +86,58 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
 }
+
+export async function DELETE(request: Request) {
+  try {
+    const cookieStore = cookies();
+    const supabase = createServerClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL!,
+      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+      {
+        cookies: {
+          get(name: string) {
+            return cookieStore.get(name)?.value;
+          },
+        },
+      }
+    );
+
+    const { searchParams } = new URL(request.url);
+    const roleId = searchParams.get('id');
+
+    if (!roleId) {
+      return NextResponse.json({ error: 'ID del rol es requerido' }, { status: 400 });
+    }
+
+    // Verificar si el rol tiene usuarios asignados
+    const { data: usersWithRole } = await supabase
+      .from('users')
+      .select('id')
+      .eq('role', roleId)
+      .limit(1);
+
+    if (usersWithRole && usersWithRole.length > 0) {
+      return NextResponse.json({ error: 'No se puede eliminar un rol con usuarios asignados' }, { status: 400 });
+    }
+
+    // Eliminar permisos del rol primero
+    const { error: permsError } = await supabase
+      .from('role_permissions')
+      .delete()
+      .eq('role', roleId);
+
+    if (permsError) throw permsError;
+
+    // Eliminar el rol
+    const { error } = await supabase
+      .from('roles')
+      .delete()
+      .eq('id', roleId);
+
+    if (error) throw error;
+
+    return NextResponse.json({ success: true });
+  } catch (error: any) {
+    return NextResponse.json({ error: error.message }, { status: 500 });
+  }
+}
