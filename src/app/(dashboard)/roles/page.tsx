@@ -157,6 +157,21 @@ export default function RolesPage() {
     setLoading(false);
   }
 
+  async function loadRoles() {
+    try {
+      const response = await fetch('/api/roles');
+      if (response.ok) {
+        const data = await response.json();
+        // Forzar recarga de usuarios para actualizar la lista de roles
+        await loadUsers();
+      }
+    } catch (error) {
+      console.error('Error loading roles:', error);
+      // Como fallback, recargar usuarios
+      await loadUsers();
+    }
+  }
+
   async function loadPermissions() {
     setPermissionsError(null);
     try {
@@ -1343,7 +1358,7 @@ export default function RolesPage() {
         onClose={() => setCreateRoleModalOpen(false)}
         onSave={async () => {
           setCreateRoleModalOpen(false);
-          await loadUsers();
+          await loadRoles();
         }}
       />
     </div>

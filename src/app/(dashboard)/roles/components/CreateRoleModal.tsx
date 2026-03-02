@@ -110,6 +110,11 @@ export default function CreateRoleModal({ isOpen, onClose, onSave }: CreateRoleM
       alert('Rol creado exitosamente');
       onSave();
       onClose();
+      
+      // Forzar recarga de la página para asegurar actualización de UI
+      setTimeout(() => {
+        window.location.reload();
+      }, 500);
     } catch (error: any) {
       console.error(error);
       
