@@ -1,22 +1,23 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import Card from '@/components/ui/Card';
 import Button from '@/components/ui/Button';
 import Input from '@/components/ui/Input';
 import Select from '@/components/ui/Select';
 import Badge from '@/components/ui/Badge';
-import KPIGrid from '@/components/dashboard/KPIGrid';
+import { Package, Search, Filter, Download, Upload, FileSpreadsheet, ShoppingCart, X, Trash2, Plus, Minus, Check, Edit, RefreshCw, FileText, BarChart3 } from 'lucide-react';
 import PivotInventoryTable from '@/components/dashboard/PivotInventoryTable';
-import type { PivotItem } from '@/components/dashboard/PivotInventoryTable';
+import InventoryCart from '@/components/dashboard/InventoryCart';
+import * as XLSX from 'xlsx';
 import TransferHistory from '@/components/dashboard/TransferHistory';
 import EditProductModal from '@/components/modals/EditProductModal';
 import UpdateStockModal from '@/components/modals/UpdateStockModal';
 import TransferModal from '@/components/modals/TransferModal';
 import ProductDetailsModal from '@/components/modals/ProductDetailsModal';
-import InventoryCart from '@/components/dashboard/InventoryCart';
+import KPIGrid from '@/components/dashboard/KPIGrid';
+import type { PivotItem } from '@/components/dashboard/PivotInventoryTable';
 import type { CartItem } from '@/components/dashboard/InventoryCart';
-import { Search, Filter, Download, Upload, Trash2, Edit, RefreshCw, FileSpreadsheet, FileText, BarChart3, ShoppingCart } from 'lucide-react';
 
 export default function InventoryPage() {
   const [filters, setFilters] = useState({
@@ -213,44 +214,32 @@ export default function InventoryPage() {
   function downloadTemplate() {
     // Crear datos de ejemplo para la plantilla XLSX
     const headers = ['SKU', 'Nombre', 'Categoría', 'Marca', 'Color', 'Precio', 'Stock Mínimo', 'Estado'];
-    const example = ['PROD-001', 'Laptop Dell Inspiron 15', 'Computadoras', 'Dell', 'Negro', '450.00', '5', 'Activo'];
+    const example = ['PROD-001', 'Laptop Dell Inspiron 15', 'Computadoras', 'Dell', 'Negro', 450.00, 5, 'Activo'];
     
     // Crear worksheet data
     const wsData = [headers, example];
     
-    // Crear workbook y worksheet usando SheetJS
-    const wb = {
-      SheetNames: ['Inventario'],
-      Sheets: {
-        'Inventario': {
-          '!ref': 'A1:H2',
-          A1: { t: 's', v: 'SKU' },
-          B1: { t: 's', v: 'Nombre' },
-          C1: { t: 's', v: 'Categoría' },
-          D1: { t: 's', v: 'Marca' },
-          E1: { t: 's', v: 'Color' },
-          F1: { t: 's', v: 'Precio' },
-          G1: { t: 's', v: 'Stock Mínimo' },
-          H1: { t: 's', v: 'Estado' },
-          A2: { t: 's', v: 'PROD-001' },
-          B2: { t: 's', v: 'Laptop Dell Inspiron 15' },
-          C2: { t: 's', v: 'Computadoras' },
-          D2: { t: 's', v: 'Dell' },
-          E2: { t: 's', v: 'Negro' },
-          F2: { t: 'n', v: 450.00 },
-          G2: { t: 'n', v: 5 },
-          H2: { t: 's', v: 'Activo' },
-        }
-      }
-    };
+    // Crear worksheet usando XLSX
+    const ws = XLSX.utils.aoa_to_sheet(wsData);
     
-    // Convertir a CSV simple (compatible sin librerías adicionales)
-    const csvContent = wsData.map(row => row.join(',')).join('\n');
-    const blob = new Blob(['\ufeff' + csvContent], { type: 'text/csv;charset=utf-8;' });
-    const link = document.createElement('a');
-    link.href = URL.createObjectURL(blob);
-    link.download = 'plantilla_importacion_inventario.csv';
-    link.click();
+    // Ajustar ancho de columnas
+    ws['!cols'] = [
+      { wch: 15 },  // SKU
+      { wch: 30 },  // Nombre
+      { wch: 15 },  // Categoría
+      { wch: 15 },  // Marca
+      { wch: 12 },  // Color
+      { wch: 10 },  // Precio
+      { wch: 15 },  // Stock Mínimo
+      { wch: 10 },  // Estado
+    ];
+    
+    // Crear workbook
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, 'Inventario');
+    
+    // Generar archivo XLSX y descargarlo
+    XLSX.writeFile(wb, 'plantilla_importacion_inventario.xlsx');
   }
 
   const activeFiltersCount = Object.values(filters).filter(v => v !== '' && v !== 'name').length;
@@ -841,14 +830,35 @@ export default function InventoryPage() {
               </div>
             </div>
 
-            <div style={{ display: 'flex', gap: 12 }}>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
               <Button
                 variant="secondary"
                 onClick={downloadTemplate}
-                style={{ flex: 1 }}
+                style={{ 
+                  width: '100%',
+                  padding: '14px 20px',
+                  fontSize: 14,
+                  fontWeight: 600,
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  gap: 10,
+                  borderRadius: 10,
+                  border: '2px dashed var(--border)',
+                  background: 'var(--background)',
+                  transition: 'all 0.2s'
+                }}
+                onMouseEnter={(e: any) => {
+                  e.currentTarget.style.borderColor = 'var(--brand-primary)';
+                  e.currentTarget.style.background = 'var(--panel)';
+                }}
+                onMouseLeave={(e: any) => {
+                  e.currentTarget.style.borderColor = 'var(--border)';
+                  e.currentTarget.style.background = 'var(--background)';
+                }}
               >
-                <Download size={16} />
-                Descargar Plantilla
+                <Download size={20} />
+                <span>Descargar Plantilla XLSX</span>
               </Button>
               <Button
                 variant="primary"
@@ -880,10 +890,20 @@ export default function InventoryPage() {
                   };
                   input.click();
                 }}
-                style={{ flex: 1 }}
+                style={{ 
+                  width: '100%',
+                  padding: '14px 20px',
+                  fontSize: 14,
+                  fontWeight: 600,
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  gap: 10,
+                  borderRadius: 10
+                }}
               >
-                <Upload size={16} />
-                Seleccionar Archivo
+                <Upload size={20} />
+                <span>Seleccionar Archivo para Importar</span>
               </Button>
             </div>
           </div>

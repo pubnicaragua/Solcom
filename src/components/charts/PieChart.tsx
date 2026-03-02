@@ -79,26 +79,52 @@ export default function PieChart({ data, size = 200, showLegend = true }: PieCha
         viewBox={`0 0 ${size} ${size}`}
         style={{ maxWidth: '100%', height: 'auto' }}
       >
-        {slices.map((slice) => (
-          <g
-            key={slice.index}
-            onMouseEnter={() => setHoveredIndex(slice.index)}
-            onMouseLeave={() => setHoveredIndex(null)}
-            style={{ cursor: 'pointer' }}
-          >
-            <path
-              d={describeArc(centerX, centerY, radius, slice.startAngle, slice.endAngle)}
-              fill={slice.color}
-              stroke="var(--card)"
-              strokeWidth="2"
-              opacity={hoveredIndex === null || hoveredIndex === slice.index ? 1 : 0.6}
-              style={{
-                transition: 'opacity 0.2s ease, filter 0.2s ease',
-                filter: hoveredIndex === slice.index ? 'brightness(1.15)' : 'brightness(1)'
-              }}
-            />
-          </g>
-        ))}
+        {slices.map((slice) => {
+          // Calcular posición del texto en el centro del slice
+          const midAngle = (slice.startAngle + slice.endAngle) / 2;
+          const labelRadius = radius * 0.7; // 70% del radio para posicionar el texto
+          const labelPos = polarToCartesian(centerX, centerY, labelRadius, midAngle);
+          
+          return (
+            <g
+              key={slice.index}
+              onMouseEnter={() => setHoveredIndex(slice.index)}
+              onMouseLeave={() => setHoveredIndex(null)}
+              style={{ cursor: 'pointer' }}
+            >
+              <path
+                d={describeArc(centerX, centerY, radius, slice.startAngle, slice.endAngle)}
+                fill={slice.color}
+                stroke="var(--card)"
+                strokeWidth="2"
+                opacity={hoveredIndex === null || hoveredIndex === slice.index ? 1 : 0.6}
+                style={{
+                  transition: 'opacity 0.2s ease, filter 0.2s ease',
+                  filter: hoveredIndex === slice.index ? 'brightness(1.15)' : 'brightness(1)'
+                }}
+              />
+              {/* Mostrar porcentaje solo si es mayor a 5% para evitar sobreposición */}
+              {slice.percentage > 5 && (
+                <text
+                  x={labelPos.x}
+                  y={labelPos.y}
+                  textAnchor="middle"
+                  dominantBaseline="middle"
+                  style={{
+                    fontSize: slice.percentage > 15 ? '13px' : '11px',
+                    fontWeight: 700,
+                    fill: 'white',
+                    pointerEvents: 'none',
+                    textShadow: '0 1px 3px rgba(0,0,0,0.5)',
+                    filter: 'drop-shadow(0 1px 2px rgba(0,0,0,0.8))'
+                  }}
+                >
+                  {slice.percentage.toFixed(1)}%
+                </text>
+              )}
+            </g>
+          );
+        })}
       </svg>
 
       <div
