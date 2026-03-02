@@ -567,6 +567,7 @@ export default function RolesPage() {
                 <div className="h-subtitle">
                   Roles del Sistema
                 </div>
+                {/* Botón Nuevo Rol - Requiere tabla 'roles' en BD
                 <Button
                   variant="primary"
                   size="sm"
@@ -575,6 +576,7 @@ export default function RolesPage() {
                   <Plus size={14} style={{ marginRight: 4 }} />
                   Nuevo Rol
                 </Button>
+                */}
               </div>
               <div style={{ display: 'grid', gap: 8 }}>
                 {rolesWithCounts.map((role) => (

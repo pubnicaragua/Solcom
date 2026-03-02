@@ -123,6 +123,11 @@ export default function Sidebar() {
             const isBilling = item.href === '/ventas';
             const isActive = pathname === item.href || (isBilling && pathname.startsWith('/ventas/'));
 
+            // Ocultar items marcados como hidden
+            if ((item as any).hidden) {
+              return null;
+            }
+
             // Mostrar módulos públicos siempre, o verificar permisos si ya cargó
             if (item.module !== 'public' && !loading && !hasModuleAccess(item.module)) {
               return null;

@@ -211,15 +211,42 @@ export default function InventoryPage() {
   }
 
   function downloadTemplate() {
+    // Crear datos de ejemplo para la plantilla XLSX
     const headers = ['SKU', 'Nombre', 'Categoría', 'Marca', 'Color', 'Precio', 'Stock Mínimo', 'Estado'];
     const example = ['PROD-001', 'Laptop Dell Inspiron 15', 'Computadoras', 'Dell', 'Negro', '450.00', '5', 'Activo'];
     
-    const csvContent = [
-      headers.join(','),
-      example.join(',')
-    ].join('\n');
+    // Crear worksheet data
+    const wsData = [headers, example];
     
-    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    // Crear workbook y worksheet usando SheetJS
+    const wb = {
+      SheetNames: ['Inventario'],
+      Sheets: {
+        'Inventario': {
+          '!ref': 'A1:H2',
+          A1: { t: 's', v: 'SKU' },
+          B1: { t: 's', v: 'Nombre' },
+          C1: { t: 's', v: 'Categoría' },
+          D1: { t: 's', v: 'Marca' },
+          E1: { t: 's', v: 'Color' },
+          F1: { t: 's', v: 'Precio' },
+          G1: { t: 's', v: 'Stock Mínimo' },
+          H1: { t: 's', v: 'Estado' },
+          A2: { t: 's', v: 'PROD-001' },
+          B2: { t: 's', v: 'Laptop Dell Inspiron 15' },
+          C2: { t: 's', v: 'Computadoras' },
+          D2: { t: 's', v: 'Dell' },
+          E2: { t: 's', v: 'Negro' },
+          F2: { t: 'n', v: 450.00 },
+          G2: { t: 'n', v: 5 },
+          H2: { t: 's', v: 'Activo' },
+        }
+      }
+    };
+    
+    // Convertir a CSV simple (compatible sin librerías adicionales)
+    const csvContent = wsData.map(row => row.join(',')).join('\n');
+    const blob = new Blob(['\ufeff' + csvContent], { type: 'text/csv;charset=utf-8;' });
     const link = document.createElement('a');
     link.href = URL.createObjectURL(blob);
     link.download = 'plantilla_importacion_inventario.csv';
@@ -693,12 +720,29 @@ export default function InventoryPage() {
               width: '100%',
               maxHeight: '90vh',
               overflow: 'auto',
-              padding: 24,
+              padding: 32,
+              boxShadow: '0 20px 60px rgba(0,0,0,0.4)',
             }}
             onClick={(e) => e.stopPropagation()}
           >
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
-              <h2 style={{ fontSize: 20, fontWeight: 700, margin: 0 }}>📥 Instrucciones de Importación</h2>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 24 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                <div style={{ 
+                  width: 48, 
+                  height: 48, 
+                  borderRadius: 12, 
+                  background: 'linear-gradient(135deg, var(--brand-primary) 0%, var(--brand-accent) 100%)',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center'
+                }}>
+                  <Upload size={24} color="white" />
+                </div>
+                <div>
+                  <h2 style={{ fontSize: 22, fontWeight: 700, margin: 0, marginBottom: 4 }}>Importar Inventario</h2>
+                  <p style={{ fontSize: 13, color: 'var(--muted)', margin: 0 }}>Sube un archivo Excel con tus productos</p>
+                </div>
+              </div>
               <button
                 onClick={() => setImportModalOpen(false)}
                 style={{
@@ -707,37 +751,97 @@ export default function InventoryPage() {
                   fontSize: 24,
                   cursor: 'pointer',
                   color: 'var(--muted)',
+                  padding: 4,
+                  borderRadius: 6,
+                  transition: 'all 0.2s',
+                }}
+                onMouseEnter={(e) => {
+                  e.currentTarget.style.background = 'var(--border)';
+                  e.currentTarget.style.color = 'var(--text)';
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.background = 'transparent';
+                  e.currentTarget.style.color = 'var(--muted)';
                 }}
               >
                 ×
               </button>
             </div>
 
-            <div style={{ marginBottom: 24, padding: 16, background: 'var(--background)', borderRadius: 12, border: '1px solid var(--border)' }}>
-              <h3 style={{ fontSize: 15, fontWeight: 600, marginBottom: 12, color: 'var(--brand-primary)' }}>📋 Formato del Archivo</h3>
-              <p style={{ fontSize: 14, color: 'var(--muted)', marginBottom: 12 }}>
-                El archivo debe ser <strong>CSV, XLSX o XLS</strong> con las siguientes columnas en este orden:
+            <div style={{ marginBottom: 24, padding: 20, background: 'var(--background)', borderRadius: 12, border: '1px solid var(--border)' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 16 }}>
+                <FileSpreadsheet size={20} color="var(--brand-primary)" />
+                <h3 style={{ fontSize: 15, fontWeight: 600, margin: 0, color: 'var(--text)' }}>Formato del Archivo</h3>
+              </div>
+              <p style={{ fontSize: 14, color: 'var(--muted)', marginBottom: 16, lineHeight: 1.6 }}>
+                El archivo debe ser <strong style={{ color: 'var(--text)' }}>XLSX o XLS</strong> con las siguientes columnas en este orden:
               </p>
-              <ol style={{ fontSize: 13, color: 'var(--text)', paddingLeft: 20, margin: 0 }}>
-                <li><strong>SKU</strong> - Código único del producto (obligatorio)</li>
-                <li><strong>Nombre</strong> - Nombre del producto (obligatorio)</li>
-                <li><strong>Categoría</strong> - Categoría del producto</li>
-                <li><strong>Marca</strong> - Marca del producto</li>
-                <li><strong>Color</strong> - Color del producto</li>
-                <li><strong>Precio</strong> - Precio unitario (formato: 450.00)</li>
-                <li><strong>Stock Mínimo</strong> - Cantidad mínima en inventario</li>
-                <li><strong>Estado</strong> - Activo o Inactivo</li>
-              </ol>
+              <div style={{ display: 'grid', gap: 8 }}>
+                {[
+                  { name: 'SKU', desc: 'Código único del producto', required: true },
+                  { name: 'Nombre', desc: 'Nombre del producto', required: true },
+                  { name: 'Categoría', desc: 'Categoría del producto', required: false },
+                  { name: 'Marca', desc: 'Marca del producto', required: false },
+                  { name: 'Color', desc: 'Color del producto', required: false },
+                  { name: 'Precio', desc: 'Precio unitario (ej: 450.00)', required: false },
+                  { name: 'Stock Mínimo', desc: 'Cantidad mínima en inventario', required: false },
+                  { name: 'Estado', desc: 'Activo o Inactivo', required: false },
+                ].map((col, idx) => (
+                  <div key={idx} style={{ 
+                    display: 'flex', 
+                    alignItems: 'center', 
+                    gap: 10,
+                    padding: '8px 12px',
+                    background: 'var(--panel)',
+                    borderRadius: 8,
+                    border: '1px solid var(--border)'
+                  }}>
+                    <div style={{ 
+                      minWidth: 24, 
+                      height: 24, 
+                      borderRadius: 6, 
+                      background: col.required ? 'var(--brand-primary)' : 'var(--border)',
+                      color: col.required ? 'white' : 'var(--muted)',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      fontSize: 11,
+                      fontWeight: 700
+                    }}>
+                      {idx + 1}
+                    </div>
+                    <div style={{ flex: 1 }}>
+                      <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text)' }}>
+                        {col.name}
+                        {col.required && <span style={{ color: 'var(--brand-accent)', marginLeft: 4 }}>*</span>}
+                      </div>
+                      <div style={{ fontSize: 11, color: 'var(--muted)' }}>{col.desc}</div>
+                    </div>
+                  </div>
+                ))}
+              </div>
             </div>
 
-            <div style={{ marginBottom: 24, padding: 16, background: 'rgba(59, 130, 246, 0.1)', borderRadius: 12, border: '1px solid rgba(59, 130, 246, 0.3)' }}>
-              <h3 style={{ fontSize: 15, fontWeight: 600, marginBottom: 8, color: '#3b82f6' }}>💡 Ejemplo de Fila</h3>
-              <code style={{ fontSize: 12, display: 'block', background: 'var(--background)', padding: 12, borderRadius: 8, overflowX: 'auto' }}>
-                PROD-001, Laptop Dell Inspiron 15, Computadoras, Dell, Negro, 450.00, 5, Activo
-              </code>
+            <div style={{ marginBottom: 24, padding: 20, background: 'rgba(59, 130, 246, 0.08)', borderRadius: 12, border: '1px solid rgba(59, 130, 246, 0.2)' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 12 }}>
+                <Search size={18} color="#3b82f6" />
+                <h3 style={{ fontSize: 14, fontWeight: 600, margin: 0, color: '#3b82f6' }}>Ejemplo de Fila</h3>
+              </div>
+              <div style={{ 
+                fontSize: 12, 
+                fontFamily: 'monospace',
+                background: 'var(--background)', 
+                padding: 14, 
+                borderRadius: 8, 
+                overflowX: 'auto',
+                color: 'var(--text)',
+                border: '1px solid var(--border)'
+              }}>
+                PROD-001 | Laptop Dell Inspiron 15 | Computadoras | Dell | Negro | 450.00 | 5 | Activo
+              </div>
             </div>
 
-            <div style={{ display: 'flex', gap: 12, marginBottom: 20 }}>
+            <div style={{ display: 'flex', gap: 12 }}>
               <Button
                 variant="secondary"
                 onClick={downloadTemplate}
@@ -746,23 +850,13 @@ export default function InventoryPage() {
                 <Download size={16} />
                 Descargar Plantilla
               </Button>
-            </div>
-
-            <div style={{ display: 'flex', gap: 12 }}>
-              <Button
-                variant="ghost"
-                onClick={() => setImportModalOpen(false)}
-                style={{ flex: 1 }}
-              >
-                Cancelar
-              </Button>
               <Button
                 variant="primary"
                 onClick={() => {
                   setImportModalOpen(false);
                   const input = document.createElement('input');
                   input.type = 'file';
-                  input.accept = '.csv,.xlsx,.xls';
+                  input.accept = '.xlsx,.xls';
                   input.onchange = async (e) => {
                     const file = (e.target as HTMLInputElement).files?.[0];
                     if (file) {
