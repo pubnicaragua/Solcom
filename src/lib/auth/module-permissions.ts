@@ -21,6 +21,7 @@ export const MODULE_DEFINITIONS: ModuleDefinition[] = [
   { key: 'ai-agents', label: 'Agentes IA', paths: ['/ai-agents'] },
   { key: 'transfers', label: 'Transferencias', paths: ['/transfers'] },
   { key: 'fase2', label: 'Fase 2', paths: ['/fase2'] },
+  { key: 'reuniones', label: 'Reuniones', paths: ['/reuniones'] },
   { key: 'roles', label: 'Roles', paths: ['/roles'] },
   { key: 'settings', label: 'Configuracion', paths: ['/settings'] },
   { key: 'next-steps', label: 'Siguientes Pasos', paths: ['/next-steps'] },
