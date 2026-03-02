@@ -93,6 +93,7 @@ export default function RolesPage() {
   const [permissionsError, setPermissionsError] = useState<string | null>(null);
   const [permissions, setPermissions] = useState<Permission[]>([]);
   const [rolePermissions, setRolePermissions] = useState<RolePermission[]>([]);
+  const [dynamicRoles, setDynamicRoles] = useState<any[]>([]);
   const [savingPermission, setSavingPermission] = useState(false);
   const [userQuery, setUserQuery] = useState('');
   const [permissionQuery, setPermissionQuery] = useState('');
@@ -119,6 +120,7 @@ export default function RolesPage() {
   useEffect(() => {
     loadUsers();
     loadPermissions();
+    loadRoles();
   }, []);
 
   useEffect(() => {
@@ -162,6 +164,7 @@ export default function RolesPage() {
       const response = await fetch('/api/roles');
       if (response.ok) {
         const data = await response.json();
+        setDynamicRoles(data);
         // Forzar recarga de usuarios para actualizar la lista de roles
         await loadUsers();
       }
@@ -484,11 +487,24 @@ export default function RolesPage() {
     return users.filter(u => u.role === role).length;
   }
 
-  const rolesWithCounts = Object.entries(ROLE_DEFINITIONS).map(([roleKey, roleInfo]) => ({
+  // Combinar roles estáticos con roles dinámicos
+  const staticRoles = Object.entries(ROLE_DEFINITIONS).map(([roleKey, roleInfo]) => ({
     id: roleKey,
     ...roleInfo,
-    userCount: getRoleCount(roleKey)
+    userCount: getRoleCount(roleKey),
+    is_custom: false
   }));
+
+  const dynamicRolesWithCounts = dynamicRoles.map((role: any) => ({
+    id: role.id,
+    name: role.name,
+    description: role.description || '',
+    color: 'var(--info)',
+    userCount: getRoleCount(role.name),
+    is_custom: role.is_custom || true
+  }));
+
+  const rolesWithCounts = [...staticRoles, ...dynamicRolesWithCounts];
 
   const filteredUsers = users.filter((u) => {
     const q = userQuery.trim().toLowerCase();
