@@ -10,12 +10,8 @@ import { getEffectiveModuleAccess, hasModuleAccess } from '@/lib/auth/module-per
 const roleSchema = z.enum(['admin', 'manager', 'operator', 'auditor']);
 
 const payloadSchema = z.object({
-  role: roleSchema,
-  permission_code: z
-    .string()
-    .trim()
-    .min(1, 'permission_code es requerido')
-    .max(120, 'permission_code demasiado largo'),
+  role: z.string().trim().min(1, 'role es requerido'),
+  permission_codes: z.array(z.string().trim().min(1, 'permission_code es requerido')),
 });
 
 function isMissingTable(error: any): boolean {
@@ -95,11 +91,17 @@ export async function POST(request: Request) {
         { status: 400 }
       );
     }
-    const { role, permission_code } = parsed.data;
+    const { role, permission_codes } = parsed.data;
+
+    // Crear array de objetos para inserción masiva
+    const permissionsToInsert = permission_codes.map(permission_code => ({
+      role,
+      permission_code
+    }));
 
     const { error } = await supabase
       .from('role_permissions')
-      .insert({ role, permission_code });
+      .insert(permissionsToInsert);
 
     if (error) {
       if (isMissingTable(error)) {
@@ -111,7 +113,7 @@ export async function POST(request: Request) {
       throw error;
     }
 
-    return NextResponse.json({ success: true });
+    return NextResponse.json({ success: true, inserted: permission_codes.length });
   } catch (error: any) {
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
