@@ -780,6 +780,28 @@ export default function ReportsPage() {
                     );
                   })}
                 </tbody>
+                <tfoot>
+                  <tr style={{ background: 'var(--panel)', borderTop: '2px solid var(--border)', fontWeight: 700 }}>
+                    <td style={{ padding: '10px 12px', textAlign: 'left' }}>Total</td>
+                    <td style={{ padding: '10px 12px', textAlign: 'center' }}>
+                      {warehouseData.reduce((acc: number, w: any) => acc + (w.uniqueSkus || 0), 0).toLocaleString('es-NI')}
+                    </td>
+                    <td style={{ padding: '10px 12px', textAlign: 'right' }}>
+                      {warehouseData.reduce((acc: number, w: any) => acc + (w.value || 0), 0).toLocaleString('es-NI')}
+                    </td>
+                    <td style={{ padding: '10px 12px', textAlign: 'right', color: '#10b981' }}>
+                      ${warehouseData.reduce((acc: number, w: any) => acc + (w.capital || 0), 0).toLocaleString('es-NI', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                    </td>
+                    <td style={{ padding: '10px 12px', textAlign: 'center' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 8, justifyContent: 'flex-end' }}>
+                        <div style={{ fontSize: 12 }}>100.0%</div>
+                        <div style={{ width: 60, height: 6, background: 'var(--border)', borderRadius: 3, overflow: 'hidden' }}>
+                          <div style={{ width: '100%', height: '100%', background: '#0ea5e9' }} />
+                        </div>
+                      </div>
+                    </td>
+                  </tr>
+                </tfoot>
               </table>
             </div>
           )}
