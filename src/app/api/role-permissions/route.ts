@@ -136,13 +136,14 @@ export async function DELETE(request: Request) {
         { status: 400 }
       );
     }
-    const { role, permission_code } = parsed.data;
+    const { role, permission_codes } = parsed.data;
 
+    // Para DELETE, eliminamos todos los permisos especificados para el rol
     const { error } = await supabase
       .from('role_permissions')
       .delete()
       .eq('role', role)
-      .eq('permission_code', permission_code);
+      .in('permission_code', permission_codes);
 
     if (error) {
       if (isMissingTable(error)) {
