@@ -16,8 +16,8 @@ const menuItems = [
   { icon: Calendar, label: 'Reuniones', href: '/reuniones', module: 'public' },
   { icon: Users, label: 'Roles', href: '/roles', module: 'roles' },
   { icon: Settings, label: 'Configuración', href: '/settings', module: 'settings' },
-  { icon: ClipboardList, label: 'Siguientes Pasos', href: '/next-steps', module: 'next-steps' },
-  { icon: HelpCircle, label: 'Cómo Funciona', href: '/how-it-works', module: 'public' },
+  { icon: ClipboardList, label: 'Siguientes Pasos', href: '/next-steps', module: 'next-steps', hidden: true },
+  { icon: HelpCircle, label: 'Cómo Funciona', href: '/how-it-works', module: 'public', hidden: true },
 ];
 
 const billingSubItems = [

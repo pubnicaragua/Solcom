@@ -1,4 +1,5 @@
 import { createRouteHandlerClient } from '@supabase/auth-helpers-nextjs';
+import { createClient } from '@supabase/supabase-js';
 import { cookies } from 'next/headers';
 import { NextResponse } from 'next/server';
 import { requireAdminProfile } from '@/lib/auth/warehouse-permissions';
@@ -18,18 +19,40 @@ export async function PATCH(
     if (!hasModuleAccess(moduleAccess, 'roles')) {
       return NextResponse.json({ error: 'No autorizado para este módulo' }, { status: 403 });
     }
-    const { role, full_name } = await request.json();
+    const { role, full_name, email, password } = await request.json();
 
+    // Actualizar user_profiles
     const updates: any = {};
     if (role) updates.role = role;
     if (full_name) updates.full_name = full_name;
 
-    const { error } = await supabase
-      .from('user_profiles')
-      .update(updates)
-      .eq('id', params.id);
+    if (Object.keys(updates).length > 0) {
+      const { error } = await supabase
+        .from('user_profiles')
+        .update(updates)
+        .eq('id', params.id);
 
-    if (error) throw error;
+      if (error) throw error;
+    }
+
+    // Actualizar email y/o contraseña en auth (requiere service role)
+    if (email || password) {
+      const supabaseAdmin = createClient(
+        process.env.NEXT_PUBLIC_SUPABASE_URL!,
+        process.env.SUPABASE_SERVICE_ROLE_KEY!
+      );
+
+      const authUpdates: any = {};
+      if (email) authUpdates.email = email;
+      if (password) authUpdates.password = password;
+
+      const { error: authError } = await supabaseAdmin.auth.admin.updateUserById(
+        params.id,
+        authUpdates
+      );
+
+      if (authError) throw authError;
+    }
 
     return NextResponse.json({ success: true });
   } catch (error: any) {
@@ -52,7 +75,13 @@ export async function DELETE(
       return NextResponse.json({ error: 'No autorizado para este módulo' }, { status: 403 });
     }
 
-    const { error } = await supabase.auth.admin.deleteUser(params.id);
+    // Usar service role para eliminar usuario de auth
+    const supabaseAdmin = createClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL!,
+      process.env.SUPABASE_SERVICE_ROLE_KEY!
+    );
+
+    const { error } = await supabaseAdmin.auth.admin.deleteUser(params.id);
 
     if (error) throw error;
 

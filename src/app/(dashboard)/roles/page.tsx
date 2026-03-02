@@ -6,7 +6,8 @@ import Button from '@/components/ui/Button';
 import Badge from '@/components/ui/Badge';
 import Input from '@/components/ui/Input';
 import Select from '@/components/ui/Select';
-import { Shield, Edit, Trash2, Check, X, Save, XCircle, UserPlus, Loader2, Building2, Blocks } from 'lucide-react';
+import { Shield, Edit, Trash2, Check, X, Save, XCircle, UserPlus, Loader2, Building2, Blocks, Plus } from 'lucide-react';
+import CreateRoleModal from './components/CreateRoleModal';
 
 interface UserProfile {
   id: string;
@@ -106,6 +107,7 @@ export default function RolesPage() {
   const [canViewStock, setCanViewStock] = useState(true);
   const [selectedWarehouseIds, setSelectedWarehouseIds] = useState<string[]>([]);
   const [moduleModalOpen, setModuleModalOpen] = useState(false);
+  const [createRoleModalOpen, setCreateRoleModalOpen] = useState(false);
   const [moduleModalLoading, setModuleModalLoading] = useState(false);
   const [moduleModalSaving, setModuleModalSaving] = useState(false);
   const [moduleModalError, setModuleModalError] = useState<string | null>(null);
@@ -561,8 +563,18 @@ export default function RolesPage() {
         <div style={{ display: 'grid', gap: 14, alignContent: 'start' }}>
           <Card>
             <div style={{ padding: 8 }}>
-              <div className="h-subtitle" style={{ marginBottom: 12 }}>
-                Roles del Sistema
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+                <div className="h-subtitle">
+                  Roles del Sistema
+                </div>
+                <Button
+                  variant="primary"
+                  size="sm"
+                  onClick={() => setCreateRoleModalOpen(true)}
+                >
+                  <Plus size={14} style={{ marginRight: 4 }} />
+                  Nuevo Rol
+                </Button>
               </div>
               <div style={{ display: 'grid', gap: 8 }}>
                 {rolesWithCounts.map((role) => (
@@ -685,26 +697,78 @@ export default function RolesPage() {
                     >
                       {editingUser?.id === user.id ? (
                         <div style={{ display: 'grid', gap: 8 }}>
-                          <Input
-                            value={user.full_name}
-                            disabled
-                            style={{ fontSize: 13 }}
-                          />
-                          <Select
-                            value={editingUser.role}
-                            onChange={(e) => setEditingUser({ ...editingUser, role: e.target.value as any })}
-                            options={[
-                              { value: 'operator', label: 'Vendedor' },
-                              { value: 'manager', label: 'Gerente de Bodega' },
-                              { value: 'auditor', label: 'Auditor' },
-                              { value: 'admin', label: 'Administrador' }
-                            ]}
-                          />
+                          <div>
+                            <label style={{ fontSize: 11, fontWeight: 600, color: 'var(--muted)', display: 'block', marginBottom: 4 }}>Nombre Completo</label>
+                            <Input
+                              value={editingUser.full_name || ''}
+                              onChange={(e) => setEditingUser({ ...editingUser, full_name: e.target.value })}
+                              placeholder="Nombre del usuario"
+                              style={{ fontSize: 13 }}
+                            />
+                          </div>
+                          <div>
+                            <label style={{ fontSize: 11, fontWeight: 600, color: 'var(--muted)', display: 'block', marginBottom: 4 }}>Email</label>
+                            <Input
+                              type="email"
+                              value={editingUser.email || ''}
+                              onChange={(e) => setEditingUser({ ...editingUser, email: e.target.value })}
+                              placeholder="correo@ejemplo.com"
+                              style={{ fontSize: 13 }}
+                            />
+                          </div>
+                          <div>
+                            <label style={{ fontSize: 11, fontWeight: 600, color: 'var(--muted)', display: 'block', marginBottom: 4 }}>Nueva Contraseña (opcional)</label>
+                            <Input
+                              type="password"
+                              value={(editingUser as any).newPassword || ''}
+                              onChange={(e) => setEditingUser({ ...editingUser, newPassword: e.target.value } as any)}
+                              placeholder="Dejar vacío para no cambiar"
+                              style={{ fontSize: 13 }}
+                            />
+                          </div>
+                          <div>
+                            <label style={{ fontSize: 11, fontWeight: 600, color: 'var(--muted)', display: 'block', marginBottom: 4 }}>Rol</label>
+                            <Select
+                              value={editingUser.role}
+                              onChange={(e) => setEditingUser({ ...editingUser, role: e.target.value as any })}
+                              options={[
+                                { value: 'operator', label: 'Vendedor' },
+                                { value: 'manager', label: 'Gerente de Bodega' },
+                                { value: 'auditor', label: 'Auditor' },
+                                { value: 'admin', label: 'Administrador' }
+                              ]}
+                            />
+                          </div>
                           <div style={{ display: 'flex', gap: 6 }}>
                             <Button
                               variant="primary"
                               size="sm"
-                              onClick={() => handleUpdateUserRole(user.id, editingUser.role)}
+                              onClick={async () => {
+                                const updates: any = { 
+                                  role: editingUser.role,
+                                  full_name: editingUser.full_name
+                                };
+                                if (editingUser.email !== user.email) {
+                                  updates.email = editingUser.email;
+                                }
+                                if ((editingUser as any).newPassword) {
+                                  updates.password = (editingUser as any).newPassword;
+                                }
+                                
+                                const response = await fetch(`/api/users/${user.id}`, {
+                                  method: 'PATCH',
+                                  headers: { 'Content-Type': 'application/json' },
+                                  body: JSON.stringify(updates),
+                                });
+
+                                if (response.ok) {
+                                  await loadUsers();
+                                  setEditingUser(null);
+                                  alert('Usuario actualizado correctamente');
+                                } else {
+                                  alert('Error al actualizar el usuario');
+                                }
+                              }}
                             >
                               <Save size={14} style={{ marginRight: 4 }} />
                               Guardar
@@ -1272,6 +1336,16 @@ export default function RolesPage() {
           </div>
         </div>
       )}
+
+      {/* Modal de Crear Rol */}
+      <CreateRoleModal
+        isOpen={createRoleModalOpen}
+        onClose={() => setCreateRoleModalOpen(false)}
+        onSave={async () => {
+          setCreateRoleModalOpen(false);
+          await loadUsers();
+        }}
+      />
     </div>
   );
 }

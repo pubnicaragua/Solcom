@@ -58,6 +58,7 @@ export default function InventoryPage() {
   const [transferProduct, setTransferProduct] = useState<any>(null);
   const [detailsProduct, setDetailsProduct] = useState<any>(null);
   const [warehouses, setWarehouses] = useState<any[]>([]);
+  const [importModalOpen, setImportModalOpen] = useState(false);
 
   // ─── Cart State (desktop only) ───
   const [cartItems, setCartItems] = useState<CartItem[]>([]);
@@ -209,6 +210,22 @@ export default function InventoryPage() {
     alert(`Acción "${action}" aplicada a ${selectedItems.length} productos`);
   }
 
+  function downloadTemplate() {
+    const headers = ['SKU', 'Nombre', 'Categoría', 'Marca', 'Color', 'Precio', 'Stock Mínimo', 'Estado'];
+    const example = ['PROD-001', 'Laptop Dell Inspiron 15', 'Computadoras', 'Dell', 'Negro', '450.00', '5', 'Activo'];
+    
+    const csvContent = [
+      headers.join(','),
+      example.join(',')
+    ].join('\n');
+    
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const link = document.createElement('a');
+    link.href = URL.createObjectURL(blob);
+    link.download = 'plantilla_importacion_inventario.csv';
+    link.click();
+  }
+
   const activeFiltersCount = Object.values(filters).filter(v => v !== '' && v !== 'name').length;
   const warehouseOptions = [
     { value: '', label: 'Todas las bodegas' },
@@ -323,33 +340,7 @@ export default function InventoryPage() {
           <Button
             variant="primary"
             size="sm"
-            onClick={async () => {
-              const input = document.createElement('input');
-              input.type = 'file';
-              input.accept = '.csv,.xlsx,.xls';
-              input.onchange = async (e) => {
-                const file = (e.target as HTMLInputElement).files?.[0];
-                if (file) {
-                  const formData = new FormData();
-                  formData.append('file', file);
-                  try {
-                    const response = await fetch('/api/inventory/import', {
-                      method: 'POST',
-                      body: formData,
-                    });
-                    if (response.ok) {
-                      alert('Archivo importado correctamente');
-                      window.location.reload();
-                    } else {
-                      alert('Error al importar archivo. Verifica el formato.');
-                    }
-                  } catch (error) {
-                    alert('Error de conexión. Intenta nuevamente.');
-                  }
-                }
-              };
-              input.click();
-            }}
+            onClick={() => setImportModalOpen(true)}
           >
             <Upload size={16} />
             <span className="btn-label">Importar</span>
@@ -676,6 +667,132 @@ export default function InventoryPage() {
           }}>
             ×{cartToast.qty}
           </span>
+        </div>
+      )}
+
+      {/* ─── Modal de Instrucciones de Importación ─── */}
+      {importModalOpen && (
+        <div
+          style={{
+            position: 'fixed',
+            inset: 0,
+            background: 'rgba(0,0,0,0.6)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            zIndex: 9999,
+            padding: 20,
+          }}
+          onClick={() => setImportModalOpen(false)}
+        >
+          <div
+            style={{
+              background: 'var(--panel)',
+              borderRadius: 16,
+              maxWidth: 600,
+              width: '100%',
+              maxHeight: '90vh',
+              overflow: 'auto',
+              padding: 24,
+            }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
+              <h2 style={{ fontSize: 20, fontWeight: 700, margin: 0 }}>📥 Instrucciones de Importación</h2>
+              <button
+                onClick={() => setImportModalOpen(false)}
+                style={{
+                  background: 'transparent',
+                  border: 'none',
+                  fontSize: 24,
+                  cursor: 'pointer',
+                  color: 'var(--muted)',
+                }}
+              >
+                ×
+              </button>
+            </div>
+
+            <div style={{ marginBottom: 24, padding: 16, background: 'var(--background)', borderRadius: 12, border: '1px solid var(--border)' }}>
+              <h3 style={{ fontSize: 15, fontWeight: 600, marginBottom: 12, color: 'var(--brand-primary)' }}>📋 Formato del Archivo</h3>
+              <p style={{ fontSize: 14, color: 'var(--muted)', marginBottom: 12 }}>
+                El archivo debe ser <strong>CSV, XLSX o XLS</strong> con las siguientes columnas en este orden:
+              </p>
+              <ol style={{ fontSize: 13, color: 'var(--text)', paddingLeft: 20, margin: 0 }}>
+                <li><strong>SKU</strong> - Código único del producto (obligatorio)</li>
+                <li><strong>Nombre</strong> - Nombre del producto (obligatorio)</li>
+                <li><strong>Categoría</strong> - Categoría del producto</li>
+                <li><strong>Marca</strong> - Marca del producto</li>
+                <li><strong>Color</strong> - Color del producto</li>
+                <li><strong>Precio</strong> - Precio unitario (formato: 450.00)</li>
+                <li><strong>Stock Mínimo</strong> - Cantidad mínima en inventario</li>
+                <li><strong>Estado</strong> - Activo o Inactivo</li>
+              </ol>
+            </div>
+
+            <div style={{ marginBottom: 24, padding: 16, background: 'rgba(59, 130, 246, 0.1)', borderRadius: 12, border: '1px solid rgba(59, 130, 246, 0.3)' }}>
+              <h3 style={{ fontSize: 15, fontWeight: 600, marginBottom: 8, color: '#3b82f6' }}>💡 Ejemplo de Fila</h3>
+              <code style={{ fontSize: 12, display: 'block', background: 'var(--background)', padding: 12, borderRadius: 8, overflowX: 'auto' }}>
+                PROD-001, Laptop Dell Inspiron 15, Computadoras, Dell, Negro, 450.00, 5, Activo
+              </code>
+            </div>
+
+            <div style={{ display: 'flex', gap: 12, marginBottom: 20 }}>
+              <Button
+                variant="secondary"
+                onClick={downloadTemplate}
+                style={{ flex: 1 }}
+              >
+                <Download size={16} />
+                Descargar Plantilla
+              </Button>
+            </div>
+
+            <div style={{ display: 'flex', gap: 12 }}>
+              <Button
+                variant="ghost"
+                onClick={() => setImportModalOpen(false)}
+                style={{ flex: 1 }}
+              >
+                Cancelar
+              </Button>
+              <Button
+                variant="primary"
+                onClick={() => {
+                  setImportModalOpen(false);
+                  const input = document.createElement('input');
+                  input.type = 'file';
+                  input.accept = '.csv,.xlsx,.xls';
+                  input.onchange = async (e) => {
+                    const file = (e.target as HTMLInputElement).files?.[0];
+                    if (file) {
+                      const formData = new FormData();
+                      formData.append('file', file);
+                      try {
+                        const response = await fetch('/api/inventory/import', {
+                          method: 'POST',
+                          body: formData,
+                        });
+                        if (response.ok) {
+                          alert('Archivo importado correctamente');
+                          window.location.reload();
+                        } else {
+                          alert('Error al importar archivo. Verifica el formato.');
+                        }
+                      } catch (error) {
+                        alert('Error de conexión. Intenta nuevamente.');
+                      }
+                    }
+                  };
+                  input.click();
+                }}
+                style={{ flex: 1 }}
+              >
+                <Upload size={16} />
+                Seleccionar Archivo
+              </Button>
+            </div>
+          </div>
         </div>
       )}
 

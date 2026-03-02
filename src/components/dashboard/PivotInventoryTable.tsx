@@ -221,6 +221,8 @@ export default function PivotInventoryTable({ filters, cartMode, onAddToCart }: 
     const [isMobile, setIsMobile] = useState(false);
     const [colorModalOpen, setColorModalOpen] = useState(false);
     const [cartAddedId, setCartAddedId] = useState<string | null>(null);
+    const [productColWidth, setProductColWidth] = useState(420);
+    const [isResizing, setIsResizing] = useState(false);
     const { role } = useUserRole();
     const canEditWarehouseColors = role === 'admin';
 
@@ -565,7 +567,7 @@ export default function PivotInventoryTable({ filters, cartMode, onAddToCart }: 
     const topSpacerHeight = shouldVirtualize ? startIndex * VIRTUAL_ROW_HEIGHT : 0;
     const bottomSpacerHeight = shouldVirtualize ? (totalFlatRows - endIndex) * VIRTUAL_ROW_HEIGHT : 0;
 
-    const stickyColWidth = 420;
+    const stickyColWidth = productColWidth;
     const skuColWidth = 150;
     const marcaColWidth = 110;
     const colorColWidth = 95;
@@ -763,7 +765,52 @@ export default function PivotInventoryTable({ filters, cartMode, onAddToCart }: 
                                             overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
                                             borderRight: '1px solid rgba(255,255,255,0.06)',
                                             borderBottom: '2px solid rgba(255,255,255,0.12)',
-                                        }}>Producto</th>
+                                        }}>
+                                            Producto
+                                            <div
+                                                style={{
+                                                    position: 'absolute',
+                                                    right: 0,
+                                                    top: 0,
+                                                    bottom: 0,
+                                                    width: 8,
+                                                    cursor: 'col-resize',
+                                                    background: isResizing ? 'rgba(59, 130, 246, 0.5)' : 'transparent',
+                                                    transition: 'background 0.2s',
+                                                }}
+                                                onMouseDown={(e) => {
+                                                    e.preventDefault();
+                                                    setIsResizing(true);
+                                                    const startX = e.clientX;
+                                                    const startWidth = productColWidth;
+
+                                                    const handleMouseMove = (moveEvent: MouseEvent) => {
+                                                        const delta = moveEvent.clientX - startX;
+                                                        const newWidth = Math.max(200, Math.min(800, startWidth + delta));
+                                                        setProductColWidth(newWidth);
+                                                    };
+
+                                                    const handleMouseUp = () => {
+                                                        setIsResizing(false);
+                                                        document.removeEventListener('mousemove', handleMouseMove);
+                                                        document.removeEventListener('mouseup', handleMouseUp);
+                                                    };
+
+                                                    document.addEventListener('mousemove', handleMouseMove);
+                                                    document.addEventListener('mouseup', handleMouseUp);
+                                                }}
+                                                onMouseEnter={(e) => {
+                                                    if (!isResizing) {
+                                                        e.currentTarget.style.background = 'rgba(59, 130, 246, 0.3)';
+                                                    }
+                                                }}
+                                                onMouseLeave={(e) => {
+                                                    if (!isResizing) {
+                                                        e.currentTarget.style.background = 'transparent';
+                                                    }
+                                                }}
+                                            />
+                                        </th>
                                         <th style={{
                                             position: 'sticky', left: stickyColWidth, top: 0, zIndex: 4,
                                             background: '#080f1d',
