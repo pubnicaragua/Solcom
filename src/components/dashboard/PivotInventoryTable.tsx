@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import Card from '@/components/ui/Card';
-import { ChevronRight, ChevronDown, ChevronUp, Loader2, Eye, EyeOff, Package, RefreshCw, Search, Palette } from 'lucide-react';
+import { ChevronRight, ChevronDown, ChevronUp, Loader2, Eye, EyeOff, Package, RefreshCw, Search, Palette, ShoppingCart } from 'lucide-react';
 import { supabase } from '@/lib/supabase/client';
 import { useUserRole } from '@/hooks/useUserRole';
 import WarehouseColorModal from '@/components/modals/WarehouseColorModal';
@@ -26,6 +26,7 @@ export interface PivotItem {
     sku: string;
     name: string;
     color: string | null;
+    color_hex?: string | null;
     state: string | null;
     brand: string | null;
     category: string | null;
@@ -726,6 +727,8 @@ export default function PivotInventoryTable({ filters, cartMode, onAddToCart }: 
                                     level={0}
                                     warehouseCodes={warehouseCodes}
                                     data={data!}
+                                    cartMode={cartMode}
+                                    onAddToCart={onAddToCart}
                                 />
                             ))
                         )}
@@ -1310,7 +1313,7 @@ export default function PivotInventoryTable({ filters, cartMode, onAddToCart }: 
 
 /* ─── Mobile Sub-components ─── */
 
-function MobileGroupNode({ node, level, warehouseCodes, data }: { node: TreeNode; level: number; warehouseCodes: string[]; data: PivotData }) {
+function MobileGroupNode({ node, level, warehouseCodes, data, cartMode, onAddToCart }: { node: TreeNode; level: number; warehouseCodes: string[]; data: PivotData; cartMode?: boolean; onAddToCart?: (item: PivotItem) => void; }) {
     const [expanded, setExpanded] = useState(false);
     const isBrand = level === 1;
 
@@ -1362,9 +1365,9 @@ function MobileGroupNode({ node, level, warehouseCodes, data }: { node: TreeNode
                 <div style={{ padding: '8px 8px 8px 16px' }}>
                     {node.children.map(child => (
                         isBrand ? (
-                            <MobileProductCard key={child.label} node={child} warehouseCodes={warehouseCodes} data={data} />
+                            <MobileProductCard key={child.label} node={child} warehouseCodes={warehouseCodes} data={data} cartMode={cartMode} onAddToCart={onAddToCart} />
                         ) : (
-                            <MobileGroupNode key={child.label} node={child} level={level + 1} warehouseCodes={warehouseCodes} data={data} />
+                            <MobileGroupNode key={child.label} node={child} level={level + 1} warehouseCodes={warehouseCodes} data={data} cartMode={cartMode} onAddToCart={onAddToCart} />
                         )
                     ))}
                 </div>
@@ -1373,7 +1376,7 @@ function MobileGroupNode({ node, level, warehouseCodes, data }: { node: TreeNode
     );
 }
 
-function MobileProductCard({ node, warehouseCodes, data }: { node: TreeNode; warehouseCodes: string[]; data: PivotData }) {
+function MobileProductCard({ node, warehouseCodes, data, cartMode, onAddToCart }: { node: TreeNode; warehouseCodes: string[]; data: PivotData; cartMode?: boolean; onAddToCart?: (item: PivotItem) => void; }) {
     const [expanded, setExpanded] = useState(false);
     // Node level 2 is Product. Included all variants totals.
     const total = node.grandTotal;
@@ -1430,12 +1433,43 @@ function MobileProductCard({ node, warehouseCodes, data }: { node: TreeNode; war
                     {node.children.length > 0 && (
                         <div style={{ marginTop: 12 }}>
                             <div style={{ fontSize: 11, fontWeight: 700, color: '#64748b', marginBottom: 6, textTransform: 'uppercase' }}>Variantes</div>
-                            {node.children.map(variant => (
-                                <div key={variant.label} style={{ display: 'flex', justifyContent: 'space-between', padding: '4px 0', fontSize: 12 }}>
-                                    <span style={{ color: '#94a3b8' }}>{variant.label}</span>
-                                    <span style={{ color: '#e2e8f0' }}>{variant.grandTotal}</span>
-                                </div>
-                            ))}
+                            {node.children.map(variant => {
+                                const rowItem = variant.items?.[0];
+                                return (
+                                    <div key={variant.label} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '6px 0', fontSize: 13, borderBottom: '1px solid rgba(255,255,255,0.03)' }}>
+                                        <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                                            {rowItem?.color && (
+                                                <div style={{
+                                                    width: 12, height: 12, borderRadius: '50%',
+                                                    backgroundColor: rowItem.color_hex || rowItem.color,
+                                                    border: '1px solid rgba(255,255,255,0.2)',
+                                                    flexShrink: 0
+                                                }} />
+                                            )}
+                                            <span style={{ color: '#cbd5e1', fontWeight: 500 }}>{variant.label}</span>
+                                        </div>
+                                        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                                            <span style={{ color: '#f8fafc', fontWeight: 600 }}>{variant.grandTotal}</span>
+                                            {cartMode && onAddToCart && rowItem && (
+                                                <button
+                                                    onClick={(e) => { e.stopPropagation(); onAddToCart(rowItem); }}
+                                                    style={{
+                                                        background: 'rgba(16,185,129,0.2)',
+                                                        border: '1px solid rgba(16,185,129,0.4)',
+                                                        borderRadius: 6,
+                                                        width: 32, height: 32,
+                                                        display: 'flex', alignItems: 'center', justifyContent: 'center',
+                                                        color: '#10b981',
+                                                        cursor: 'pointer'
+                                                    }}
+                                                >
+                                                    <ShoppingCart size={15} />
+                                                </button>
+                                            )}
+                                        </div>
+                                    </div>
+                                );
+                            })}
                         </div>
                     )}
                 </div>

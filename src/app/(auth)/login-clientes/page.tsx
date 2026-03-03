@@ -20,7 +20,7 @@ export default function LoginClientesPage() {
 
     try {
       console.log('Intentando login con:', email);
-      
+
       const { data, error: authError } = await supabase.auth.signInWithPassword({
         email,
         password,
@@ -36,15 +36,15 @@ export default function LoginClientesPage() {
       if (data.user) {
         console.log('✅ Login exitoso, usuario:', data.user.id);
         console.log('📝 Sesión creada en Supabase');
-        
+
         // Esperar mínimo para asegurar que las cookies se guarden
         await new Promise(resolve => setTimeout(resolve, 100));
-        
+
         console.log('🚀 Redirigiendo a dashboard...');
-        
+
         // Usar router.push que maneja mejor las cookies de Next.js
         router.push('/cliente/dashboard');
-        
+
         // Mantener loading activo durante la redirección
         return;
       }
@@ -77,9 +77,9 @@ export default function LoginClientesPage() {
           <img
             src="https://www.soliscomercialni.com/Solis%20Comercial%20Logo.png"
             alt="Solis Comercial"
-            style={{ 
-              maxWidth: '200px', 
-              height: 'auto', 
+            style={{
+              maxWidth: '200px',
+              height: 'auto',
               marginBottom: 24,
               background: 'white',
               padding: 12,
@@ -115,7 +115,7 @@ export default function LoginClientesPage() {
             </label>
             <Input
               type="email"
-              placeholder="tu@email.com"
+              placeholder="ventas@gmail.com"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
               disabled={loading}

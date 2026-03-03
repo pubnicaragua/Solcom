@@ -275,6 +275,7 @@ export async function GET(request: Request) {
         item_name: row.name,
         sku: row.sku,
         color: row.color,
+        color_hex: row.color_hex,
         state: row.state,
         category: row.category || null,
         brand: row.marca || null,
@@ -291,15 +292,15 @@ export async function GET(request: Request) {
 
       const stockFiltered = stockLevel
         ? formatted.filter((row) => {
-            switch (stockLevel) {
-              case 'out': return row.stock_total === 0;
-              case 'critical': return row.stock_total >= 1 && row.stock_total <= 5;
-              case 'low': return row.stock_total >= 6 && row.stock_total <= 20;
-              case 'medium': return row.stock_total >= 21 && row.stock_total <= 50;
-              case 'high': return row.stock_total > 50;
-              default: return true;
-            }
-          })
+          switch (stockLevel) {
+            case 'out': return row.stock_total === 0;
+            case 'critical': return row.stock_total >= 1 && row.stock_total <= 5;
+            case 'low': return row.stock_total >= 6 && row.stock_total <= 20;
+            case 'medium': return row.stock_total >= 21 && row.stock_total <= 50;
+            case 'high': return row.stock_total > 50;
+            default: return true;
+          }
+        })
         : formatted;
 
       return NextResponse.json({
@@ -358,6 +359,7 @@ export async function GET(request: Request) {
           item_id: row.item_id,
           item_name: row.items.name,
           color: row.items.color,
+          color_hex: row.items.color_hex,
           state: row.items.state,
           sku: row.items.sku,
           category: row.items.category || null,
@@ -415,9 +417,9 @@ export async function GET(request: Request) {
       .order(orderConfig.column, orderConfig.options)
       .range(offset, offset + limit - 1);
 
-    console.log('Inventory query result:', { 
-      dataLength: data?.length, 
-      count, 
+    console.log('Inventory query result:', {
+      dataLength: data?.length,
+      count,
       error,
       filters: { search, warehouse, state, category, brand, stockLevel }
     });
@@ -437,6 +439,7 @@ export async function GET(request: Request) {
       item_id: row.item_id,
       item_name: row.items.name,
       color: row.items.color,
+      color_hex: row.items.color_hex,
       state: row.items.state,
       sku: row.items.sku,
       category: row.items.category || null,

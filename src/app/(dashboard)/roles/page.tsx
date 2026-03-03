@@ -6,7 +6,7 @@ import Button from '@/components/ui/Button';
 import Badge from '@/components/ui/Badge';
 import Input from '@/components/ui/Input';
 import Select from '@/components/ui/Select';
-import { Shield, Edit, Trash2, Check, X, Save, XCircle, UserPlus, Loader2, Building2, Blocks, Plus } from 'lucide-react';
+import { Shield, Edit, Trash2, Check, X, Save, XCircle, UserPlus, Loader2, Building2, Blocks, Plus, UserCircle, Star, Briefcase } from 'lucide-react';
 import CreateRoleModal from './components/CreateRoleModal';
 
 interface UserProfile {
@@ -76,6 +76,16 @@ const ROLE_DEFINITIONS: Record<string, { name: string; description: string; colo
     description: 'Solo lectura de reportes',
     color: 'var(--warning)',
   },
+};
+
+const getRoleIcon = (roleName: string) => {
+  const name = roleName.toLowerCase();
+  if (name.includes('admin')) return Shield;
+  if (name.includes('manager') || name.includes('gerente')) return Briefcase;
+  if (name.includes('auditor') || name.includes('visual')) return Check;
+  if (name.includes('operator') || name.includes('vendedor')) return UserCircle;
+  if (name.includes('cliente')) return Star;
+  return Shield;
 };
 
 
@@ -456,7 +466,7 @@ export default function RolesPage() {
 
   async function togglePermission(permissionCode: string) {
     if (!selectedRole) return;
-    
+
     setSavingPermission(true);
     const hasPermission = rolePermissions.some(rp => rp.permission_code === permissionCode);
 
@@ -509,24 +519,35 @@ export default function RolesPage() {
     return users.filter(u => u.role === role).length;
   }
 
-  // Combinar roles estáticos con roles dinámicos
-  const staticRoles = Object.entries(ROLE_DEFINITIONS).map(([roleKey, roleInfo]) => ({
-    id: roleKey,
-    ...roleInfo,
-    userCount: getRoleCount(roleKey),
-    is_custom: false
-  }));
+  const dbRolesMap = new Map();
+  dynamicRoles.forEach((r: any) => dbRolesMap.set(r.name.toLowerCase(), r));
 
-  const dynamicRolesWithCounts = dynamicRoles.map((role: any) => ({
-    id: role.id,
-    name: role.name,
-    description: role.description || '',
-    color: 'var(--info)',
-    userCount: getRoleCount(role.name),
-    is_custom: role.is_custom || true
-  }));
+  const allRoles: any[] = [];
+  dynamicRoles.forEach((role: any) => {
+    const lowerName = role.name.toLowerCase();
+    const defaultDef = ROLE_DEFINITIONS[lowerName] || {};
+    allRoles.push({
+      id: role.id,
+      name: role.name,
+      description: role.description || defaultDef.description || 'Sin descripción',
+      color: defaultDef.color || '#6366f1',
+      userCount: getRoleCount(role.name),
+      is_custom: role.is_custom !== false
+    });
+  });
 
-  const rolesWithCounts = [...staticRoles, ...dynamicRolesWithCounts];
+  Object.entries(ROLE_DEFINITIONS).forEach(([roleKey, roleInfo]) => {
+    if (!dbRolesMap.has(roleKey.toLowerCase())) {
+      allRoles.push({
+        id: roleKey,
+        ...roleInfo,
+        userCount: getRoleCount(roleKey),
+        is_custom: false
+      });
+    }
+  });
+
+  const rolesWithCounts = allRoles;
 
   const filteredUsers = users.filter((u) => {
     const q = userQuery.trim().toLowerCase();
@@ -655,7 +676,10 @@ export default function RolesPage() {
                           justifyContent: 'center',
                         }}
                       >
-                        <Shield size={18} color={role.color} />
+                        {(() => {
+                          const IconComponent = getRoleIcon(role.name);
+                          return <IconComponent size={18} color={role.color} />;
+                        })()}
                       </div>
                       <div style={{ flex: 1 }}>
                         <div style={{ fontSize: 15, fontWeight: 600, marginBottom: 2 }}>
@@ -809,7 +833,7 @@ export default function RolesPage() {
                               variant="primary"
                               size="sm"
                               onClick={async () => {
-                                const updates: any = { 
+                                const updates: any = {
                                   role: editingUser.role,
                                   full_name: editingUser.full_name
                                 };
@@ -819,7 +843,7 @@ export default function RolesPage() {
                                 if ((editingUser as any).newPassword) {
                                   updates.password = (editingUser as any).newPassword;
                                 }
-                                
+
                                 const response = await fetch(`/api/users/${user.id}`, {
                                   method: 'PATCH',
                                   headers: { 'Content-Type': 'application/json' },
@@ -988,8 +1012,8 @@ export default function RolesPage() {
                   const query = permissionQuery.trim().toLowerCase();
                   const visiblePerms = query
                     ? perms.filter((perm) =>
-                        [perm.module, perm.name, perm.code, perm.description || ''].join(' ').toLowerCase().includes(query)
-                      )
+                      [perm.module, perm.name, perm.code, perm.description || ''].join(' ').toLowerCase().includes(query)
+                    )
                     : perms;
 
                   if (visiblePerms.length === 0) return null;
@@ -999,69 +1023,70 @@ export default function RolesPage() {
                   ).length;
 
                   return (
-                  <div key={module}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8, gap: 8, flexWrap: 'wrap' }}>
-                      <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--muted)', textTransform: 'uppercase' }}>
-                        {module} ({modulePermsEnabled}/{visiblePerms.length})
+                    <div key={module}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8, gap: 8, flexWrap: 'wrap' }}>
+                        <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--muted)', textTransform: 'uppercase' }}>
+                          {module} ({modulePermsEnabled}/{visiblePerms.length})
+                        </div>
+                        <div style={{ display: 'flex', gap: 6 }}>
+                          <Button variant="ghost" size="sm" onClick={() => setModulePermissions(module, true)}>
+                            Activar todo
+                          </Button>
+                          <Button variant="ghost" size="sm" onClick={() => setModulePermissions(module, false)}>
+                            Quitar todo
+                          </Button>
+                        </div>
                       </div>
-                      <div style={{ display: 'flex', gap: 6 }}>
-                        <Button variant="ghost" size="sm" onClick={() => setModulePermissions(module, true)}>
-                          Activar todo
-                        </Button>
-                        <Button variant="ghost" size="sm" onClick={() => setModulePermissions(module, false)}>
-                          Quitar todo
-                        </Button>
-                      </div>
-                    </div>
-                    <div style={{ display: 'grid', gap: 6 }}>
-                      {visiblePerms.map((perm) => {
-                        const hasPermission = rolePermissions.some(rp => rp.permission_code === perm.code);
-                        return (
-                          <div
-                            key={perm.code}
-                            onClick={() => togglePermission(perm.code)}
-                            style={{
-                              display: 'flex',
-                              alignItems: 'center',
-                              gap: 10,
-                              padding: 10,
-                              borderRadius: 4,
-                              background: hasPermission ? 'var(--success)10' : 'var(--panel)',
-                              border: `1px solid ${hasPermission ? 'var(--success)' : 'var(--border)'}`,
-                              cursor: 'pointer',
-                              transition: 'all 0.2s'
-                            }}
-                          >
+                      <div style={{ display: 'grid', gap: 6 }}>
+                        {visiblePerms.map((perm) => {
+                          const hasPermission = rolePermissions.some(rp => rp.permission_code === perm.code);
+                          return (
                             <div
+                              key={perm.code}
+                              onClick={() => togglePermission(perm.code)}
                               style={{
-                                width: 20,
-                                height: 20,
-                                borderRadius: 4,
-                                background: hasPermission ? 'var(--success)' : 'var(--panel)',
-                                border: `1px solid ${hasPermission ? 'var(--success)' : 'var(--border)'}`,
                                 display: 'flex',
                                 alignItems: 'center',
-                                justifyContent: 'center',
+                                gap: 10,
+                                padding: 10,
+                                borderRadius: 4,
+                                background: hasPermission ? 'var(--success)10' : 'var(--panel)',
+                                border: `1px solid ${hasPermission ? 'var(--success)' : 'var(--border)'}`,
+                                cursor: 'pointer',
+                                transition: 'all 0.2s'
                               }}
                             >
-                              {hasPermission ? (
-                                <Check size={14} color="#fff" />
-                              ) : (
-                                <X size={14} color="var(--muted)" />
-                              )}
+                              <div
+                                style={{
+                                  width: 20,
+                                  height: 20,
+                                  borderRadius: 4,
+                                  background: hasPermission ? 'var(--success)' : 'var(--panel)',
+                                  border: `1px solid ${hasPermission ? 'var(--success)' : 'var(--border)'}`,
+                                  display: 'flex',
+                                  alignItems: 'center',
+                                  justifyContent: 'center',
+                                }}
+                              >
+                                {hasPermission ? (
+                                  <Check size={14} color="#fff" />
+                                ) : (
+                                  <X size={14} color="var(--muted)" />
+                                )}
+                              </div>
+                              <div style={{ flex: 1 }}>
+                                <div style={{ fontSize: 14, fontWeight: 500 }}>{perm.name}</div>
+                                {perm.description && (
+                                  <div style={{ fontSize: 12, color: 'var(--muted)', marginTop: 2 }}>{perm.description}</div>
+                                )}
+                              </div>
                             </div>
-                            <div style={{ flex: 1 }}>
-                              <div style={{ fontSize: 14, fontWeight: 500 }}>{perm.name}</div>
-                              {perm.description && (
-                                <div style={{ fontSize: 12, color: 'var(--muted)', marginTop: 2 }}>{perm.description}</div>
-                              )}
-                            </div>
-                          </div>
-                        );
-                      })}
+                          );
+                        })}
+                      </div>
                     </div>
-                  </div>
-                )})}
+                  )
+                })}
               </div>
             ) : (
               <div style={{ padding: 40, textAlign: 'center', color: 'var(--muted)' }}>

@@ -215,13 +215,13 @@ export default function InventoryPage() {
     // Crear datos de ejemplo para la plantilla XLSX
     const headers = ['SKU', 'Nombre', 'Categoría', 'Marca', 'Color', 'Precio', 'Stock Mínimo', 'Estado'];
     const example = ['PROD-001', 'Laptop Dell Inspiron 15', 'Computadoras', 'Dell', 'Negro', 450.00, 5, 'Activo'];
-    
+
     // Crear worksheet data
     const wsData = [headers, example];
-    
+
     // Crear worksheet usando XLSX
     const ws = XLSX.utils.aoa_to_sheet(wsData);
-    
+
     // Ajustar ancho de columnas
     ws['!cols'] = [
       { wch: 15 },  // SKU
@@ -233,11 +233,11 @@ export default function InventoryPage() {
       { wch: 15 },  // Stock Mínimo
       { wch: 10 },  // Estado
     ];
-    
+
     // Crear workbook
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, 'Inventario');
-    
+
     // Generar archivo XLSX y descargarlo
     XLSX.writeFile(wb, 'plantilla_importacion_inventario.xlsx');
   }
@@ -261,8 +261,9 @@ export default function InventoryPage() {
           </div>
         </div>
         <div className="inv-actions" style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-          {/* Cart button — desktop only */}
-          {!isMobileView && (
+          {/* Cart toggle button (now visible on mobile too) */}
+          {(
+
             <button
               onClick={() => {
                 if (!cartMode) {
@@ -323,7 +324,7 @@ export default function InventoryPage() {
             </button>
           )}
 
-          {/* Open cart drawer if has items */}
+          {/* Open cart drawer if has items (toolbar button) */}
           {!isMobileView && cartItems.length > 0 && !cartOpen && (
             <button
               onClick={() => setCartOpen(true)}
@@ -614,8 +615,8 @@ export default function InventoryPage() {
         product={detailsProduct}
       />
 
-      {/* ─── Cart Drawer (desktop only) ─── */}
-      {!isMobileView && (
+      {/* ─── Cart Drawer (now works on mobile too) ─── */}
+      {(
         <InventoryCart
           isOpen={cartOpen}
           onClose={() => setCartOpen(false)}
@@ -686,6 +687,62 @@ export default function InventoryPage() {
         </div>
       )}
 
+      {/* ─── Mobile Floating Cart Button ─── */}
+      {isMobileView && (cartItems.length > 0 || cartMode) && (
+        <button
+          onClick={() => setCartOpen(true)}
+          style={{
+            position: 'fixed',
+            bottom: 24,
+            right: 24,
+            zIndex: 1990,
+            width: 60,
+            height: 60,
+            borderRadius: '50%',
+            background: 'linear-gradient(135deg, #10b981 0%, #059669 100%)',
+            border: 'none',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            boxShadow: '0 8px 32px rgba(16,185,129,0.4)',
+            cursor: 'pointer',
+            animation: cartPulse ? 'cartBtnPulse 0.5s ease-out' : 'none',
+            transition: 'transform 0.2s',
+          }}
+          onPointerDown={(e: any) => e.currentTarget.style.transform = 'scale(0.95)'}
+          onPointerUp={(e: any) => e.currentTarget.style.transform = 'scale(1)'}
+          onPointerLeave={(e: any) => e.currentTarget.style.transform = 'scale(1)'}
+        >
+          <ShoppingCart size={24} color="white" />
+
+          {cartItems.length > 0 && (
+            <span
+              style={{
+                position: 'absolute',
+                top: -2,
+                right: -2,
+                minWidth: 24,
+                height: 24,
+                borderRadius: 12,
+                background: '#ef4444',
+                color: 'white',
+                fontSize: 12,
+                fontWeight: 800,
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                padding: '0 6px',
+                border: '2px solid var(--background)',
+                boxShadow: '0 2px 8px rgba(239,68,68,0.4)',
+                animation: 'cartBadgePop 0.3s ease-out',
+              }}
+            >
+              {cartItems.length}
+            </span>
+          )}
+        </button>
+      )}
+
       {/* ─── Modal de Instrucciones de Importación ─── */}
       {importModalOpen && (
         <div
@@ -716,10 +773,10 @@ export default function InventoryPage() {
           >
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 24 }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-                <div style={{ 
-                  width: 48, 
-                  height: 48, 
-                  borderRadius: 12, 
+                <div style={{
+                  width: 48,
+                  height: 48,
+                  borderRadius: 12,
                   background: 'linear-gradient(135deg, var(--brand-primary) 0%, var(--brand-accent) 100%)',
                   display: 'flex',
                   alignItems: 'center',
@@ -776,19 +833,19 @@ export default function InventoryPage() {
                   { name: 'Stock Mínimo', desc: 'Cantidad mínima en inventario', required: false },
                   { name: 'Estado', desc: 'Activo o Inactivo', required: false },
                 ].map((col, idx) => (
-                  <div key={idx} style={{ 
-                    display: 'flex', 
-                    alignItems: 'center', 
+                  <div key={idx} style={{
+                    display: 'flex',
+                    alignItems: 'center',
                     gap: 10,
                     padding: '8px 12px',
                     background: 'var(--panel)',
                     borderRadius: 8,
                     border: '1px solid var(--border)'
                   }}>
-                    <div style={{ 
-                      minWidth: 24, 
-                      height: 24, 
-                      borderRadius: 6, 
+                    <div style={{
+                      minWidth: 24,
+                      height: 24,
+                      borderRadius: 6,
                       background: col.required ? 'var(--brand-primary)' : 'var(--border)',
                       color: col.required ? 'white' : 'var(--muted)',
                       display: 'flex',
@@ -816,12 +873,12 @@ export default function InventoryPage() {
                 <Search size={18} color="#3b82f6" />
                 <h3 style={{ fontSize: 14, fontWeight: 600, margin: 0, color: '#3b82f6' }}>Ejemplo de Fila</h3>
               </div>
-              <div style={{ 
-                fontSize: 12, 
+              <div style={{
+                fontSize: 12,
                 fontFamily: 'monospace',
-                background: 'var(--background)', 
-                padding: 14, 
-                borderRadius: 8, 
+                background: 'var(--background)',
+                padding: 14,
+                borderRadius: 8,
                 overflowX: 'auto',
                 color: 'var(--text)',
                 border: '1px solid var(--border)'
@@ -834,7 +891,7 @@ export default function InventoryPage() {
               <Button
                 variant="secondary"
                 onClick={downloadTemplate}
-                style={{ 
+                style={{
                   width: '100%',
                   padding: '14px 20px',
                   fontSize: 14,
@@ -890,7 +947,7 @@ export default function InventoryPage() {
                   };
                   input.click();
                 }}
-                style={{ 
+                style={{
                   width: '100%',
                   padding: '14px 20px',
                   fontSize: 14,

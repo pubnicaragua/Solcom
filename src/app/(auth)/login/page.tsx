@@ -96,17 +96,17 @@ export default function LoginPage() {
         <Card>
           <div style={{ padding: 40 }}>
             {/* Logo con fondo blanco para legibilidad */}
-            <div style={{ 
-              textAlign: 'center', 
+            <div style={{
+              textAlign: 'center',
               marginBottom: 32,
               background: '#ffffff',
               padding: 24,
               borderRadius: 12,
               boxShadow: '0 4px 6px rgba(0, 0, 0, 0.1)'
             }}>
-              <img 
-                src="https://www.soliscomercialni.com/Solis%20Comercial%20Logo.png" 
-                alt="Solis Comercial" 
+              <img
+                src="https://www.soliscomercialni.com/Solis%20Comercial%20Logo.png"
+                alt="Solis Comercial"
                 style={{ width: '100%', maxWidth: 240, height: 'auto', margin: '0 auto' }}
               />
             </div>
@@ -116,8 +116,8 @@ export default function LoginPage() {
                 {resetMode ? '¿Olvidaste tu contraseña?' : 'Bienvenido'}
               </h1>
               <p style={{ fontSize: 14, color: 'var(--muted)' }}>
-                {resetMode 
-                  ? 'Ingresa tu correo para recibir instrucciones' 
+                {resetMode
+                  ? 'Ingresa tu correo para recibir instrucciones'
                   : 'Accede al dashboard de inventario'
                 }
               </p>
@@ -162,20 +162,20 @@ export default function LoginPage() {
             {resetMode ? (
               <form onSubmit={handleResetPassword} style={{ display: 'grid', gap: 20 }}>
                 <div>
-                  <label style={{ 
-                    display: 'block', 
-                    fontSize: 13, 
-                    fontWeight: 500, 
+                  <label style={{
+                    display: 'block',
+                    fontSize: 13,
+                    fontWeight: 500,
                     marginBottom: 8,
                     color: 'var(--text)'
                   }}>
                     Correo Electrónico
                   </label>
                   <div style={{ position: 'relative' }}>
-                    <Mail size={18} style={{ 
-                      position: 'absolute', 
-                      left: 14, 
-                      top: '50%', 
+                    <Mail size={18} style={{
+                      position: 'absolute',
+                      left: 14,
+                      top: '50%',
                       transform: 'translateY(-50%)',
                       color: 'var(--muted)'
                     }} />
@@ -183,7 +183,7 @@ export default function LoginPage() {
                       type="email"
                       value={email}
                       onChange={(e) => setEmail(e.target.value)}
-                      placeholder="tu@email.com"
+                      placeholder="ventas@gmail.com"
                       required
                       autoComplete="off"
                       style={{
@@ -248,20 +248,20 @@ export default function LoginPage() {
             ) : (
               <form onSubmit={handleLogin} style={{ display: 'grid', gap: 20 }}>
                 <div>
-                  <label style={{ 
-                    display: 'block', 
-                    fontSize: 13, 
-                    fontWeight: 500, 
+                  <label style={{
+                    display: 'block',
+                    fontSize: 13,
+                    fontWeight: 500,
                     marginBottom: 8,
                     color: 'var(--text)'
                   }}>
                     Correo Electrónico
                   </label>
                   <div style={{ position: 'relative' }}>
-                    <Mail size={18} style={{ 
-                      position: 'absolute', 
-                      left: 14, 
-                      top: '50%', 
+                    <Mail size={18} style={{
+                      position: 'absolute',
+                      left: 14,
+                      top: '50%',
                       transform: 'translateY(-50%)',
                       color: 'var(--muted)'
                     }} />
@@ -269,7 +269,7 @@ export default function LoginPage() {
                       type="email"
                       value={email}
                       onChange={(e) => setEmail(e.target.value)}
-                      placeholder="tu@email.com"
+                      placeholder="ventas@gmail.com"
                       required
                       autoComplete="off"
                       style={{
@@ -288,20 +288,20 @@ export default function LoginPage() {
                 </div>
 
                 <div>
-                  <label style={{ 
-                    display: 'block', 
-                    fontSize: 13, 
-                    fontWeight: 500, 
+                  <label style={{
+                    display: 'block',
+                    fontSize: 13,
+                    fontWeight: 500,
                     marginBottom: 8,
                     color: 'var(--text)'
                   }}>
                     Contraseña
                   </label>
                   <div style={{ position: 'relative' }}>
-                    <KeyRound size={18} style={{ 
-                      position: 'absolute', 
-                      left: 14, 
-                      top: '50%', 
+                    <KeyRound size={18} style={{
+                      position: 'absolute',
+                      left: 14,
+                      top: '50%',
                       transform: 'translateY(-50%)',
                       color: 'var(--muted)'
                     }} />
@@ -406,15 +406,15 @@ export default function LoginPage() {
               </form>
             )}
 
-            
+
           </div>
         </Card>
 
-        <div style={{ 
-          textAlign: 'center', 
-          marginTop: 24, 
-          fontSize: 13, 
-          color: 'rgba(255, 255, 255, 0.5)' 
+        <div style={{
+          textAlign: 'center',
+          marginTop: 24,
+          fontSize: 13,
+          color: 'rgba(255, 255, 255, 0.5)'
         }}>
           © 2026 Solis Comercial - ¡A tu servicio, siempre!
         </div>

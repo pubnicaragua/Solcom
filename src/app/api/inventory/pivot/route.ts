@@ -74,7 +74,7 @@ export async function GET(request: Request) {
         const selectedWarehouse =
             (warehouse
                 ? activeWarehouses.find((w: any) => w.id === warehouse || w.code === warehouse)
-            : null) ||
+                : null) ||
             (warehouse
                 ? allWarehouses.find((w: any) => w.id === warehouse || w.code === warehouse)
                 : null) ||
@@ -479,6 +479,7 @@ export async function GET(request: Request) {
                 name: item.name,
                 zoho_item_id: item.zoho_item_id ?? null,
                 color: item.color || null,
+                color_hex: item.color_hex || null,
                 state: normalizeItemState(item.state),
                 brand: item.marca || null,
                 category: item.category || null,

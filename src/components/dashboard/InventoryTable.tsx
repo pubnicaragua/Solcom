@@ -21,6 +21,7 @@ interface InventoryItem {
   item_id: string;
   item_name: string;
   color: string | null;
+  color_hex?: string | null;
   state: string | null;
   sku: string;
   warehouse_code?: string | null;
@@ -628,7 +629,16 @@ function MobileInventoryCard({ item, onTransfer, onTransferFromWarehouse, openWa
               <Badge variant={isNew ? 'success' : 'warning'} size="sm">
                 {isNew ? 'Nuevo' : (item.state || 'N/A')}
               </Badge>
-              {item.color && <span style={{ fontSize: 12, color: '#94a3b8' }}>{item.color}</span>}
+              {item.color && (
+                <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                  <div style={{
+                    width: 14, height: 14, borderRadius: '50%',
+                    backgroundColor: item.color_hex || item.color,
+                    border: '1px solid rgba(255,255,255,0.2)'
+                  }} title={item.color} />
+                  <span style={{ fontSize: 12, color: '#94a3b8' }}>{item.color}</span>
+                </div>
+              )}
             </div>
           </div>
           <div style={{ textAlign: 'right' }}>

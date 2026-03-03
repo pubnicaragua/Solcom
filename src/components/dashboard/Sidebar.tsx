@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { Package, BarChart3, Settings, Users, HelpCircle, Bot, Menu, X, ClipboardList, Calendar, FolderOpen, ArrowLeftRight, FileText, ChevronLeft, ChevronRight, Rocket } from 'lucide-react';
+import { Package, BarChart3, Settings, Users, HelpCircle, Bot, Menu, X, ClipboardList, Calendar, FolderOpen, ArrowLeftRight, FileText, ChevronLeft, ChevronRight, Rocket, ShoppingCart } from 'lucide-react';
 import { useUserRole } from '@/hooks/useUserRole';
 
 const menuItems = [
@@ -11,6 +11,7 @@ const menuItems = [
   { icon: FileText, label: 'Facturación', href: '/ventas', module: 'ventas' },
   { icon: BarChart3, label: 'Reportes', href: '/reports', module: 'reports' },
   { icon: Bot, label: 'Agentes IA', href: '/ai-agents', module: 'ai-agents' },
+  { icon: ShoppingCart, label: 'Compras', href: '/compras', module: 'compras', adminOnly: true },
   { icon: ArrowLeftRight, label: 'Transferencias', href: '/transfers', module: 'transfers' },
   { icon: Rocket, label: 'Fase 2', href: '/fase2', module: 'fase2' },
   { icon: Calendar, label: 'Reuniones', href: '/reuniones', module: 'reuniones' },
@@ -30,7 +31,7 @@ import { useSidebar } from '@/contexts/SidebarContext';
 export default function Sidebar() {
   const pathname = usePathname();
   const { isOpen, close, isCollapsed, toggleCollapse } = useSidebar();
-  const { loading, hasModuleAccess } = useUserRole();
+  const { loading, hasModuleAccess, role } = useUserRole();
 
   const [expandedMenus, setExpandedMenus] = useState<Record<string, boolean>>({
     '/ventas': pathname.startsWith('/ventas')
@@ -130,6 +131,16 @@ export default function Sidebar() {
 
             // Ocultar módulos protegidos mientras carga o si no tiene acceso
             if (item.module !== 'public' && (loading || !hasModuleAccess(item.module))) {
+              // Si falla hasModuleAccess para "compras" (probablemente no exista en DB), y es admin, lo dejamos pasar.
+              if (item.adminOnly && role === 'admin') {
+                // bypass
+              } else {
+                return null;
+              }
+            }
+
+            // Ocultar items solo admin si no es admin
+            if ((item as any).adminOnly && role !== 'admin') {
               return null;
             }
 
