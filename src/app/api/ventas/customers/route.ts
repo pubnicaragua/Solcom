@@ -177,6 +177,7 @@ function toCustomerResponse(customer: CustomerRow) {
         phone: customer.phone || '',
         ruc: customer.ruc || '',
         payment_terms: '',
+        zoho_contact_id: customer.zoho_contact_id || null,
         source: customer.zoho_contact_id ? ('zoho' as const) : ('supabase' as const),
     };
 }

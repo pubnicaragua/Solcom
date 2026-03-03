@@ -272,6 +272,31 @@ export class ZohoBooksClient {
     async getWarehouses(): Promise<any> {
         return this.request('GET', '/books/v3/warehouses');
     }
+
+    async createEstimate(data: {
+        customer_id: string;
+        date: string;
+        expiry_date?: string;
+        reference_number?: string;
+        notes?: string;
+        discount?: number;
+        is_discount_before_tax?: boolean;
+        location_id?: string;
+        line_items: Array<{
+            item_id: string;
+            quantity: number;
+            rate: number;
+        }>;
+    }): Promise<{ estimate_id: string; estimate_number: string }> {
+        const result = await this.request('POST', '/books/v3/estimates', data);
+        if (result.code !== 0) {
+            throw new Error(result.message || 'Error al crear estimate en Zoho');
+        }
+        return {
+            estimate_id: result.estimate.estimate_id,
+            estimate_number: result.estimate.estimate_number,
+        };
+    }
 }
 
 export function createZohoBooksClient(): ZohoBooksClient | null {

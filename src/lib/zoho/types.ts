@@ -12,6 +12,7 @@ export interface ZohoBooksConfig {
   refreshToken: string;
   organizationId: string;
 }
+ 
 
 export interface ZohoInventoryItem {
   ID: string;
