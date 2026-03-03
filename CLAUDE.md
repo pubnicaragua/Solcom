@@ -33,6 +33,9 @@ npm run type-check       # Verificar TypeScript sin compilar
 npm run lint             # ESLint
 npm run check:kpis       # Diagnóstico de KPIs (producción)
 npm run check:kpis:local # Diagnóstico de KPIs (local)
+
+# Scripts manuales
+node scripts/sync-warehouse-hierarchy.js   # Sincroniza jerarquía empresarial/almacén desde Zoho
 ```
 
 ---
@@ -100,6 +103,11 @@ Los roles custom se crean dinámicamente en la tabla `roles` de Supabase. Sus pe
 > ALTER TABLE role_permissions DROP CONSTRAINT IF EXISTS role_permissions_role_check;
 > ```
 
+### Roles custom en el frontend (`roles/page.tsx`)
+- Los roles custom usan `role.name` (no UUID) como `id` para que coincida con `role_permissions.role`
+- Cada rol custom recibe un color de una paleta: `['#8B5CF6', '#EC4899', '#F59E0B', '#06B6D4', '#10B981', '#F97316']`
+- El panel de permisos muestra el nombre buscando en `rolesWithCounts`, no solo en `ROLE_DEFINITIONS`
+
 ---
 
 ## Sistema de permisos
@@ -135,7 +143,7 @@ Los roles custom se crean dinámicamente en la tabla `roles` de Supabase. Sus pe
 | `user_warehouse_permissions` | Bodegas específicas por usuario                    |
 | `inventory_items`            | Productos sincronizados desde Zoho                 |
 | `inventory_balance`          | Stock por bodega                                   |
-| `warehouses`                 | Bodegas                                            |
+| `warehouses`                 | Bodegas (con `warehouse_type` y `parent_warehouse_id`) |
 | `invoices` / `quotes`        | Facturas y cotizaciones                            |
 | `transfers`                  | Transferencias entre bodegas                       |
 
@@ -204,3 +212,21 @@ GROQ_API_KEY
 - **Exportación de inventario**: usa `window.open('/api/inventory/export?...')` — abre en nueva pestaña
 - **Zoho Inventory** es la fuente de verdad para productos; sincronizado via cron (`/api/cron/sync-inventory`) y webhooks (`/api/webhooks/zoho`)
 - **Zoho Books** maneja facturas/cotizaciones de ventas (integración separada)
+
+---
+
+## Jerarquía de bodegas
+
+Las bodegas tienen una clasificación jerárquica sincronizada desde Zoho:
+
+| warehouse_type | Descripción | parent_warehouse_id |
+|---------------|-------------|---------------------|
+| `empresarial` | Empresa/sucursal madre (MS, SC) | `NULL` |
+| `almacen`     | Bodega física hija | UUID de la empresarial |
+| `independiente` | Sin jerarquía | `NULL` |
+
+**Endpoint Zoho**: `/books/v3/locations?is_hierarchical_response=true` (diferente de `/inventory/v1/warehouses` que no trae jerarquía)
+
+**Sync**: `node scripts/sync-warehouse-hierarchy.js` — solo actualiza `warehouse_type` y `parent_warehouse_id`, no toca columnas existentes.
+
+**Migración SQL**: `src/lib/supabase/warehouse-hierarchy-migration.sql`
