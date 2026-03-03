@@ -12,9 +12,27 @@ function normalizeNumber(value: unknown, fallback = 0): number {
     return Number.isFinite(parsed) ? parsed : fallback;
 }
 
+function normalizeText(value: unknown): string {
+    return typeof value === 'string' ? value.trim() : '';
+}
+
 function normalizeStatus(value: unknown, fallback = 'borrador'): string {
     const text = typeof value === 'string' ? value.trim().toLowerCase() : '';
     return ORDER_STATUSES.has(text) ? text : fallback;
+}
+
+function isDuplicateKeyError(message: string): boolean {
+    const text = String(message || '').toLowerCase();
+    return text.includes('duplicate key') || text.includes('unique constraint');
+}
+
+function extractMissingColumn(message: string): string | null {
+    const text = String(message || '');
+    let match = text.match(/Could not find the '([^']+)' column/i);
+    if (match?.[1]) return match[1];
+    match = text.match(/column "?([a-zA-Z0-9_]+)"? does not exist/i);
+    if (match?.[1]) return match[1];
+    return null;
 }
 
 function calculateTotals(items: any[], taxRate: number, discountAmount: number) {
@@ -331,10 +349,15 @@ export async function POST(req: NextRequest) {
             warehouse_id,
             date,
             expected_delivery_date,
+            reference_number,
+            payment_terms,
+            delivery_method,
+            shipping_zone,
             status = 'borrador',
             tax_rate = 15,
             discount_amount = 0,
             notes,
+            salesperson_id,
             salesperson_name,
             source,
             items = [],
@@ -370,6 +393,10 @@ export async function POST(req: NextRequest) {
             warehouse_id: warehouse_id || null,
             date: date || new Date().toISOString().slice(0, 10),
             expected_delivery_date: expected_delivery_date || null,
+            reference_number: normalizeText(reference_number) || null,
+            payment_terms: normalizeText(payment_terms) || null,
+            delivery_method: normalizeText(delivery_method) || null,
+            shipping_zone: normalizeText(shipping_zone) || null,
             status: normalizeStatus(status, 'borrador'),
             subtotal: totals.subtotal,
             tax_rate: normalizedTaxRate,
@@ -377,6 +404,7 @@ export async function POST(req: NextRequest) {
             discount_amount: normalizedDiscount,
             total: totals.total,
             notes: notes || null,
+            salesperson_id: normalizeText(salesperson_id) || null,
             salesperson_name: salesperson_name || null,
             source: source || null,
         };
@@ -391,11 +419,29 @@ export async function POST(req: NextRequest) {
                     ? `OV-${warehouseCode}-${ts}`
                     : `OV-${new Date().getFullYear()}-${ts}`;
             }
-            const { data, error: insertErr } = await supabase
-                .from('sales_orders')
-                .insert(insertOrder)
-                .select()
-                .single();
+            let data: any = null;
+            let insertErr: any = null;
+            let columnRetry = 0;
+
+            while (columnRetry < 12) {
+                const result = await supabase
+                    .from('sales_orders')
+                    .insert(insertOrder)
+                    .select()
+                    .single();
+                data = result.data;
+                insertErr = result.error;
+
+                if (!insertErr || data) break;
+
+                const missingColumn = extractMissingColumn(insertErr?.message || '');
+                if (missingColumn && Object.prototype.hasOwnProperty.call(insertOrder, missingColumn)) {
+                    delete (insertOrder as any)[missingColumn];
+                    columnRetry += 1;
+                    continue;
+                }
+                break;
+            }
 
             if (!insertErr && data) {
                 order = data;
@@ -403,7 +449,7 @@ export async function POST(req: NextRequest) {
             }
 
             lastError = insertErr;
-            if (!insertErr?.message?.includes('duplicate key') && !insertErr?.message?.includes('unique constraint')) {
+            if (!isDuplicateKeyError(insertErr?.message || '')) {
                 break;
             }
         }

@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import {
     X, Loader2, User, Mail, Phone, Hash, Calendar,
-    Warehouse, CheckCircle, XCircle, ArrowRightLeft,
+    Warehouse, CheckCircle, XCircle, ArrowRightLeft, Pencil,
 } from 'lucide-react';
 
 type OrderStatus = 'borrador' | 'confirmada' | 'convertida' | 'cancelada';
@@ -20,6 +20,11 @@ interface SalesOrderItem {
 interface SalesOrderDetail {
     id: string;
     order_number: string;
+    reference_number: string | null;
+    payment_terms: string | null;
+    delivery_method: string | null;
+    shipping_zone: string | null;
+    salesperson_id: string | null;
     date: string;
     expected_delivery_date: string | null;
     status: OrderStatus;
@@ -42,6 +47,7 @@ interface SalesOrderPreviewProps {
     orderId: string | null;
     onClose: () => void;
     onConvert: (orderId: string) => void | Promise<void>;
+    onEdit?: (orderId: string) => void;
     onStatusChange?: () => void;
 }
 
@@ -57,6 +63,7 @@ export default function SalesOrderPreview({
     orderId,
     onClose,
     onConvert,
+    onEdit,
     onStatusChange,
 }: SalesOrderPreviewProps) {
     const [order, setOrder] = useState<SalesOrderDetail | null>(null);
@@ -211,6 +218,30 @@ export default function SalesOrderPreview({
                     </div>
 
                     <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                        {order && order.status !== 'convertida' && order.status !== 'cancelada' && (
+                            <button
+                                type="button"
+                                onClick={() => onEdit?.(order.id)}
+                                disabled={actionLoading !== null}
+                                style={{
+                                    display: 'inline-flex',
+                                    alignItems: 'center',
+                                    gap: 6,
+                                    padding: '8px 12px',
+                                    borderRadius: 8,
+                                    border: '1px solid rgba(245,158,11,0.35)',
+                                    background: 'rgba(245,158,11,0.12)',
+                                    color: '#FBBF24',
+                                    fontSize: 12,
+                                    fontWeight: 700,
+                                    cursor: actionLoading ? 'default' : 'pointer',
+                                }}
+                            >
+                                <Pencil size={14} />
+                                Editar
+                            </button>
+                        )}
+
                         {order?.status === 'borrador' && (
                             <button
                                 type="button"
@@ -385,6 +416,26 @@ export default function SalesOrderPreview({
                                         <Calendar size={12} style={{ color: 'var(--muted)' }} />
                                         <span>Entrega: {formatDate(order.expected_delivery_date)}</span>
                                     </div>
+                                    {order.reference_number && (
+                                        <div style={{ fontSize: 12, color: 'var(--muted)' }}>
+                                            Referencia: {order.reference_number}
+                                        </div>
+                                    )}
+                                    {order.payment_terms && (
+                                        <div style={{ fontSize: 12, color: 'var(--muted)' }}>
+                                            Términos: {order.payment_terms}
+                                        </div>
+                                    )}
+                                    {order.delivery_method && (
+                                        <div style={{ fontSize: 12, color: 'var(--muted)' }}>
+                                            Método entrega: {order.delivery_method}
+                                        </div>
+                                    )}
+                                    {order.shipping_zone && (
+                                        <div style={{ fontSize: 12, color: 'var(--muted)' }}>
+                                            Zona envío: {order.shipping_zone}
+                                        </div>
+                                    )}
                                     <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12 }}>
                                         <Warehouse size={12} style={{ color: 'var(--muted)' }} />
                                         <span>
@@ -394,6 +445,11 @@ export default function SalesOrderPreview({
                                     {order.salesperson_name && (
                                         <div style={{ fontSize: 12, color: 'var(--muted)' }}>
                                             Vendedor: {order.salesperson_name}
+                                        </div>
+                                    )}
+                                    {order.salesperson_id && (
+                                        <div style={{ fontSize: 12, color: 'var(--muted)' }}>
+                                            Vendedor ID: {order.salesperson_id}
                                         </div>
                                     )}
                                     {order.zoho_salesorder_id && (

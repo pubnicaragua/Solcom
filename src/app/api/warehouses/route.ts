@@ -14,6 +14,7 @@ export async function GET(request: Request) {
   try {
     const { searchParams } = new URL(request.url);
     const warehouseType = searchParams.get('type') || '';
+    const familyOf = searchParams.get('family_of') || '';
 
     const supabase = createRouteHandlerClient({ cookies });
     const auth = await getAuthenticatedProfile(supabase);
@@ -31,6 +32,23 @@ export async function GET(request: Request) {
       activeOnly: true,
       warehouseType: warehouseType || undefined,
     });
+
+    if (familyOf) {
+      const parent = data.find((warehouse) => warehouse.id === familyOf);
+      if (!parent) {
+        return NextResponse.json([], { status: 200 });
+      }
+
+      const family = data
+        .filter((warehouse) => warehouse.id === familyOf || warehouse.parent_warehouse_id === familyOf)
+        .sort((a, b) => {
+          if (a.id === familyOf) return -1;
+          if (b.id === familyOf) return 1;
+          return String(a.code || '').localeCompare(String(b.code || ''));
+        });
+
+      return NextResponse.json(family, { status: 200 });
+    }
 
     return NextResponse.json(data || []);
   } catch (error) {

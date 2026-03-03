@@ -8,6 +8,15 @@ function normalizeNumber(value: unknown, fallback = 0): number {
     return Number.isFinite(parsed) ? parsed : fallback;
 }
 
+function extractMissingColumn(message: string): string | null {
+    const text = String(message || '');
+    let match = text.match(/Could not find the '([^']+)' column/i);
+    if (match?.[1]) return match[1];
+    match = text.match(/column "?([a-zA-Z0-9_]+)"? does not exist/i);
+    if (match?.[1]) return match[1];
+    return null;
+}
+
 // POST /api/ventas/sales-orders/[id]/convert — convert to invoice
 export async function POST(
     req: NextRequest,
@@ -67,6 +76,9 @@ export async function POST(
             invoice_number: invoiceNumber,
             customer_id: order.customer_id,
             warehouse_id: order.warehouse_id,
+            order_number: order.order_number || null,
+            terms: (order as any).payment_terms || null,
+            salesperson_id: (order as any).salesperson_id || null,
             date: new Date().toISOString().slice(0, 10),
             due_date: null,
             status: 'enviada',
@@ -76,15 +88,31 @@ export async function POST(
             discount_amount: order.discount_amount,
             total: order.total,
             notes: order.notes ? `Convertida desde OV: ${order.order_number}. ${order.notes}` : `Convertida desde OV: ${order.order_number}`,
-            salesperson_name: order.salesperson_name || null,
             source: 'sales_order_conversion',
         };
 
-        const { data: invoice, error: invoiceError } = await supabase
-            .from('sales_invoices')
-            .insert(invoiceInsert)
-            .select()
-            .single();
+        let invoice: any = null;
+        let invoiceError: any = null;
+        let invoiceColumnRetry = 0;
+        while (invoiceColumnRetry < 12) {
+            const result = await supabase
+                .from('sales_invoices')
+                .insert(invoiceInsert)
+                .select()
+                .single();
+            invoice = result.data;
+            invoiceError = result.error;
+
+            if (!invoiceError || invoice) break;
+
+            const missingColumn = extractMissingColumn(invoiceError?.message || '');
+            if (missingColumn && Object.prototype.hasOwnProperty.call(invoiceInsert, missingColumn)) {
+                delete (invoiceInsert as any)[missingColumn];
+                invoiceColumnRetry += 1;
+                continue;
+            }
+            break;
+        }
 
         if (invoiceError || !invoice) {
             return NextResponse.json({ error: invoiceError?.message || 'No se pudo crear la factura' }, { status: 500 });

@@ -221,33 +221,77 @@ export function isWarehouseAllowed(scope: WarehouseAccessScope, warehouseId: str
 export async function listWarehousesForScope(
   supabase: SupabaseRouteClient,
   scope: WarehouseAccessScope,
-  options?: { activeOnly?: boolean; warehouseType?: string }
+  options?: { activeOnly?: boolean; warehouseType?: string; includeChildrenOfScope?: boolean }
 ): Promise<WarehouseRecord[]> {
   if (!scope.canViewStock) return [];
 
   const activeOnly = options?.activeOnly ?? false;
-  let query = supabase
-    .from('warehouses')
-    .select('id, code, name, active, warehouse_type, parent_warehouse_id')
-    .order('code', { ascending: true });
+  const includeChildrenOfScope = options?.includeChildrenOfScope ?? true;
+  const selectFields = 'id, code, name, active, warehouse_type, parent_warehouse_id';
 
-  if (activeOnly) {
-    query = query.eq('active', true);
+  const withCommonFilters = (query: any) => {
+    let next = query;
+    if (activeOnly) {
+      next = next.eq('active', true);
+    }
+    if (options?.warehouseType) {
+      next = next.eq('warehouse_type', options.warehouseType);
+    }
+    return next;
+  };
+
+  const normalizeRows = (rows: any[]): WarehouseRecord[] =>
+    (rows || []).map((row: any) => ({
+      id: row.id,
+      code: row.code,
+      name: row.name,
+      active: Boolean(row.active),
+      warehouse_type: row.warehouse_type || null,
+      parent_warehouse_id: row.parent_warehouse_id || null,
+    }));
+
+  if (scope.allWarehouses) {
+    const { data, error } = await withCommonFilters(
+      supabase.from('warehouses').select(selectFields).order('code', { ascending: true })
+    );
+    if (error) throw error;
+    return normalizeRows(data || []);
   }
 
-  if (options?.warehouseType) {
-    query = query.eq('warehouse_type', options.warehouseType);
+  if (scope.warehouseIds.length === 0) return [];
+
+  const directQuery = withCommonFilters(
+    supabase.from('warehouses').select(selectFields).in('id', scope.warehouseIds)
+  );
+
+  const childQuery = includeChildrenOfScope
+    ? withCommonFilters(
+      supabase
+        .from('warehouses')
+        .select(selectFields)
+        .in('parent_warehouse_id', scope.warehouseIds)
+    )
+    : null;
+
+  const [directResult, childResult] = await Promise.all([
+    directQuery,
+    childQuery ? childQuery : Promise.resolve({ data: [], error: null } as any),
+  ]);
+
+  if (directResult.error) throw directResult.error;
+  if (childResult?.error) throw childResult.error;
+
+  const merged = new Map<string, WarehouseRecord>();
+  for (const row of normalizeRows(directResult.data || [])) {
+    merged.set(row.id, row);
+  }
+  for (const row of normalizeRows(childResult?.data || [])) {
+    merged.set(row.id, row);
   }
 
-  if (!scope.allWarehouses) {
-    if (scope.warehouseIds.length === 0) return [];
-    query = query.in('id', scope.warehouseIds);
-  }
-
-  const { data, error } = await query;
-  if (error) throw error;
-
-  return (data || []).map((row: any) => ({
+  return Array.from(merged.values())
+    .sort((a, b) => String(a.code || '').localeCompare(String(b.code || '')))
+    .map((row) => ({
     id: row.id,
     code: row.code,
     name: row.name,

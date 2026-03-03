@@ -70,7 +70,9 @@ export default function InventoryPage() {
   const [cartType, setCartType] = useState<CartType>('cotizacion');
   const [parentWarehouseId, setParentWarehouseId] = useState<string>('');
   const [parentWarehouses, setParentWarehouses] = useState<any[]>([]);
+  const [familyWarehouses, setFamilyWarehouses] = useState<any[]>([]);
   const [loadingParentWarehouses, setLoadingParentWarehouses] = useState(false);
+  const [loadingFamilyWarehouses, setLoadingFamilyWarehouses] = useState(false);
   const [cartSelectorError, setCartSelectorError] = useState('');
   const [isMobileView, setIsMobileView] = useState(false);
   const [cartToast, setCartToast] = useState<{ name: string; qty: number } | null>(null);
@@ -88,17 +90,41 @@ export default function InventoryPage() {
     void fetchParentWarehouses();
   }, [cartMode]);
 
+  useEffect(() => {
+    if (!cartMode || !parentWarehouseId) {
+      setFamilyWarehouses([]);
+      return;
+    }
+    void fetchFamilyWarehouses(parentWarehouseId);
+  }, [cartMode, parentWarehouseId]);
+
   async function fetchParentWarehouses() {
     setLoadingParentWarehouses(true);
     try {
       const response = await fetch('/api/warehouses?type=empresarial');
       if (!response.ok) throw new Error('No se pudieron cargar las bodegas empresariales');
       const data = await response.json();
-      setParentWarehouses(Array.isArray(data) ? data : []);
+      setParentWarehouses(Array.isArray(data) ? data : data?.warehouses || []);
     } catch {
       setParentWarehouses([]);
     } finally {
       setLoadingParentWarehouses(false);
+    }
+  }
+
+  async function fetchFamilyWarehouses(parentId: string) {
+    setLoadingFamilyWarehouses(true);
+    try {
+      const response = await fetch(`/api/warehouses?family_of=${encodeURIComponent(parentId)}`, {
+        cache: 'no-store',
+      });
+      const data = await response.json().catch(() => []);
+      if (!response.ok) throw new Error('No se pudo cargar la familia de bodegas');
+      setFamilyWarehouses(Array.isArray(data) ? data : data?.warehouses || []);
+    } catch {
+      setFamilyWarehouses([]);
+    } finally {
+      setLoadingFamilyWarehouses(false);
     }
   }
 
@@ -112,6 +138,9 @@ export default function InventoryPage() {
     }
 
     setParentWarehouseId(nextWarehouseId);
+    if (!nextWarehouseId) {
+      setFamilyWarehouses([]);
+    }
     setCartSelectorError('');
   }
 
@@ -444,40 +473,7 @@ export default function InventoryPage() {
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 10 }}>
               <div>
                 <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--muted)', marginBottom: 6 }}>
-                  1. Tipo de documento
-                </div>
-                <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-                  {cartTypeOptions.map((option) => {
-                    const active = cartType === option.key;
-                    return (
-                      <button
-                        key={option.key}
-                        type="button"
-                        onClick={() => {
-                          setCartType(option.key);
-                          setCartSelectorError('');
-                        }}
-                        style={{
-                          padding: '7px 10px',
-                          borderRadius: 8,
-                          border: active ? '1px solid rgba(16,185,129,0.45)' : '1px solid rgba(255,255,255,0.12)',
-                          background: active ? 'rgba(16,185,129,0.15)' : 'rgba(255,255,255,0.02)',
-                          color: active ? '#34d399' : 'var(--muted)',
-                          fontSize: 12,
-                          fontWeight: 700,
-                          cursor: 'pointer',
-                        }}
-                      >
-                        {option.label}
-                      </button>
-                    );
-                  })}
-                </div>
-              </div>
-
-              <div>
-                <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--muted)', marginBottom: 6 }}>
-                  2. Bodega empresarial
+                  1. Bodega empresarial (obligatorio)
                 </div>
                 <select
                   value={parentWarehouseId}
@@ -502,12 +498,95 @@ export default function InventoryPage() {
                     </option>
                   ))}
                 </select>
+
+                {parentWarehouseId && (
+                  <div
+                    style={{
+                      marginTop: 8,
+                      padding: '8px 10px',
+                      borderRadius: 8,
+                      border: '1px solid rgba(16,185,129,0.22)',
+                      background: 'rgba(16,185,129,0.06)',
+                      display: 'flex',
+                      flexWrap: 'wrap',
+                      gap: 6,
+                    }}
+                  >
+                    {loadingFamilyWarehouses ? (
+                      <span style={{ fontSize: 12, color: 'var(--muted)' }}>Cargando bodegas hijas...</span>
+                    ) : familyWarehouses.length === 0 ? (
+                      <span style={{ fontSize: 12, color: 'var(--muted)' }}>
+                        No se encontraron almacenes hijos para esta bodega padre.
+                      </span>
+                    ) : (
+                      familyWarehouses.map((warehouse) => {
+                        const isParent = warehouse.id === parentWarehouseId;
+                        return (
+                          <span
+                            key={warehouse.id}
+                            style={{
+                              fontSize: 11,
+                              fontWeight: 700,
+                              color: isParent ? '#34d399' : '#93C5FD',
+                              border: isParent ? '1px solid rgba(16,185,129,0.45)' : '1px solid rgba(96,165,250,0.35)',
+                              background: isParent ? 'rgba(16,185,129,0.18)' : 'rgba(59,130,246,0.12)',
+                              padding: '2px 8px',
+                              borderRadius: 999,
+                            }}
+                          >
+                            {warehouse.code} {isParent ? '(Padre)' : '(Hijo)'}
+                          </span>
+                        );
+                      })
+                    )}
+                  </div>
+                )}
+              </div>
+
+              <div>
+                <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--muted)', marginBottom: 6 }}>
+                  2. Tipo de documento
+                </div>
+                <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                  {cartTypeOptions.map((option) => {
+                    const active = cartType === option.key;
+                    const disabled = !parentWarehouseId;
+                    return (
+                      <button
+                        key={option.key}
+                        type="button"
+                        disabled={disabled}
+                        onClick={() => {
+                          if (!parentWarehouseId) {
+                            setCartSelectorError('Primero selecciona una bodega empresarial.');
+                            return;
+                          }
+                          setCartType(option.key);
+                          setCartSelectorError('');
+                        }}
+                        style={{
+                          padding: '7px 10px',
+                          borderRadius: 8,
+                          border: active ? '1px solid rgba(16,185,129,0.45)' : '1px solid rgba(255,255,255,0.12)',
+                          background: active ? 'rgba(16,185,129,0.15)' : 'rgba(255,255,255,0.02)',
+                          color: active ? '#34d399' : 'var(--muted)',
+                          fontSize: 12,
+                          fontWeight: 700,
+                          cursor: disabled ? 'not-allowed' : 'pointer',
+                          opacity: disabled ? 0.55 : 1,
+                        }}
+                      >
+                        {option.label}
+                      </button>
+                    );
+                  })}
+                </div>
               </div>
             </div>
 
             <div style={{ fontSize: 12, color: parentWarehouseId ? '#34d399' : 'var(--muted)' }}>
               {parentWarehouseId
-                ? 'La tabla pivot ahora muestra la bodega padre y cada almacén hijo por separado.'
+                ? 'La tabla pivot y el carrito trabajan con la familia completa: bodega padre + almacenes hijos.'
                 : 'Selecciona la bodega padre para habilitar el carrito y evitar ventas fuera de su familia de almacenes.'}
             </div>
 
@@ -793,6 +872,7 @@ export default function InventoryPage() {
           warehouseId={parentWarehouseId}
           onWarehouseIdChange={(id) => handleParentWarehouseChange(id)}
           parentWarehouses={parentWarehouses}
+          familyWarehouses={familyWarehouses}
           onDocumentCreated={() => {
             setCartMode(false);
             setCartOpen(false);

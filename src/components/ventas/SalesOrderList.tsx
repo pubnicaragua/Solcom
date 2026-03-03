@@ -3,10 +3,11 @@
 import { useEffect, useState } from 'react';
 import {
     ClipboardList, Search, RefreshCw, Eye, Trash2,
-    CheckCircle, ArrowRightLeft,
+    CheckCircle, ArrowRightLeft, Pencil,
     ChevronLeft, ChevronRight, Calendar, Loader2,
 } from 'lucide-react';
 import SalesOrderPreview from './SalesOrderPreview';
+import SalesOrderForm from './SalesOrderForm';
 
 type OrderStatus = 'borrador' | 'confirmada' | 'convertida' | 'cancelada';
 
@@ -66,6 +67,7 @@ export default function SalesOrderList() {
     });
 
     const [previewOrderId, setPreviewOrderId] = useState<string | null>(null);
+    const [editOrderId, setEditOrderId] = useState<string | null>(null);
 
     useEffect(() => {
         void fetchOrders();
@@ -504,6 +506,30 @@ export default function SalesOrderList() {
 
                                                     {(order.status === 'borrador' || order.status === 'confirmada') && (
                                                         <button
+                                                            onClick={() => setEditOrderId(order.id)}
+                                                            disabled={isLoading}
+                                                            title="Editar"
+                                                            style={{
+                                                                padding: '5px 8px',
+                                                                borderRadius: 6,
+                                                                border: '1px solid rgba(245,158,11,0.3)',
+                                                                background: 'rgba(245,158,11,0.1)',
+                                                                color: '#FBBF24',
+                                                                cursor: isLoading ? 'wait' : 'pointer',
+                                                                display: 'flex',
+                                                                alignItems: 'center',
+                                                                gap: 3,
+                                                                fontSize: 11,
+                                                                fontWeight: 600,
+                                                            }}
+                                                        >
+                                                            <Pencil size={12} />
+                                                            Editar
+                                                        </button>
+                                                    )}
+
+                                                    {(order.status === 'borrador' || order.status === 'confirmada') && (
+                                                        <button
                                                             onClick={() => handleDelete(order.id)}
                                                             disabled={isLoading}
                                                             title="Eliminar"
@@ -595,7 +621,21 @@ export default function SalesOrderList() {
                     setPreviewOrderId(null);
                     void handleConvert(id);
                 }}
+                onEdit={(id) => {
+                    setPreviewOrderId(null);
+                    setEditOrderId(id);
+                }}
                 onStatusChange={() => {
+                    void fetchOrders();
+                    void fetchKPIs();
+                }}
+            />
+
+            <SalesOrderForm
+                isOpen={!!editOrderId}
+                orderId={editOrderId}
+                onClose={() => setEditOrderId(null)}
+                onSaved={() => {
                     void fetchOrders();
                     void fetchKPIs();
                 }}

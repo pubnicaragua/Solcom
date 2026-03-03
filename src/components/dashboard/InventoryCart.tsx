@@ -46,6 +46,7 @@ interface InventoryCartProps {
     warehouseId?: string;
     onWarehouseIdChange?: (warehouseId: string) => void;
     parentWarehouses?: Warehouse[];
+    familyWarehouses?: Warehouse[];
     onParentWarehouseChange?: (warehouseId: string | null) => void;
 }
 
@@ -141,6 +142,7 @@ export default function InventoryCart({
     warehouseId: controlledWarehouseId,
     onWarehouseIdChange,
     parentWarehouses: controlledParentWarehouses,
+    familyWarehouses: controlledFamilyWarehouses,
     onParentWarehouseChange,
 }: InventoryCartProps) {
     const [internalCartType, setInternalCartType] = useState<CartType>('cotizacion');
@@ -158,6 +160,7 @@ export default function InventoryCart({
     const [loadingCustomers, setLoadingCustomers] = useState(false);
 
     const [internalParentWarehouses, setInternalParentWarehouses] = useState<Warehouse[]>([]);
+    const [internalFamilyWarehouses, setInternalFamilyWarehouses] = useState<Warehouse[]>([]);
     const [internalWarehouseId, setInternalWarehouseId] = useState('');
 
     const [docDate, setDocDate] = useState(todayStr);
@@ -183,6 +186,7 @@ export default function InventoryCart({
 
     const cartType = controlledCartType ?? internalCartType;
     const parentWarehouses = controlledParentWarehouses ?? internalParentWarehouses;
+    const familyWarehouses = controlledFamilyWarehouses ?? internalFamilyWarehouses;
     const warehouseId = controlledWarehouseId ?? internalWarehouseId;
 
     const totalItems = items.length;

@@ -9,9 +9,22 @@ function normalizeNumber(value: unknown, fallback = 0): number {
     return Number.isFinite(parsed) ? parsed : fallback;
 }
 
+function normalizeText(value: unknown): string {
+    return typeof value === 'string' ? value.trim() : '';
+}
+
 function normalizeStatus(value: unknown, fallback = 'borrador'): string {
     const text = typeof value === 'string' ? value.trim().toLowerCase() : '';
     return ORDER_STATUSES.has(text) ? text : fallback;
+}
+
+function extractMissingColumn(message: string): string | null {
+    const text = String(message || '');
+    let match = text.match(/Could not find the '([^']+)' column/i);
+    if (match?.[1]) return match[1];
+    match = text.match(/column "?([a-zA-Z0-9_]+)"? does not exist/i);
+    if (match?.[1]) return match[1];
+    return null;
 }
 
 function calculateTotals(items: any[], taxRate: number, discountAmount: number) {
@@ -108,10 +121,15 @@ export async function PUT(
             warehouse_id,
             date,
             expected_delivery_date,
+            reference_number,
+            payment_terms,
+            delivery_method,
+            shipping_zone,
             status,
             tax_rate,
             discount_amount,
             notes,
+            salesperson_id,
             salesperson_name,
             items,
         } = body || {};
@@ -138,10 +156,15 @@ export async function PUT(
         if (warehouse_id !== undefined) updateData.warehouse_id = warehouse_id || null;
         if (date !== undefined) updateData.date = date;
         if (expected_delivery_date !== undefined) updateData.expected_delivery_date = expected_delivery_date || null;
+        if (reference_number !== undefined) updateData.reference_number = normalizeText(reference_number) || null;
+        if (payment_terms !== undefined) updateData.payment_terms = normalizeText(payment_terms) || null;
+        if (delivery_method !== undefined) updateData.delivery_method = normalizeText(delivery_method) || null;
+        if (shipping_zone !== undefined) updateData.shipping_zone = normalizeText(shipping_zone) || null;
         if (status !== undefined) updateData.status = normalizeStatus(status, 'borrador');
         if (tax_rate !== undefined) updateData.tax_rate = Math.max(0, normalizeNumber(tax_rate, 15));
         if (discount_amount !== undefined) updateData.discount_amount = Math.max(0, normalizeNumber(discount_amount, 0));
         if (notes !== undefined) updateData.notes = notes || null;
+        if (salesperson_id !== undefined) updateData.salesperson_id = normalizeText(salesperson_id) || null;
         if (salesperson_name !== undefined) updateData.salesperson_name = salesperson_name || null;
 
         if (Array.isArray(items) && items.length > 0) {
@@ -184,16 +207,32 @@ export async function PUT(
             }
         }
 
-        const { data, error } = await supabase
-            .from('sales_orders')
-            .update(updateData)
-            .eq('id', params.id)
-            .select(`
-                *,
-                customer:customers(id, name, email, phone, ruc, address),
-                warehouse:warehouses(id, code, name)
-            `)
-            .single();
+        let data: any = null;
+        let error: any = null;
+        let columnRetry = 0;
+        while (columnRetry < 12) {
+            const result = await supabase
+                .from('sales_orders')
+                .update(updateData)
+                .eq('id', params.id)
+                .select(`
+                    *,
+                    customer:customers(id, name, email, phone, ruc, address),
+                    warehouse:warehouses(id, code, name)
+                `)
+                .single();
+            data = result.data;
+            error = result.error;
+            if (!error || data) break;
+
+            const missingColumn = extractMissingColumn(error?.message || '');
+            if (missingColumn && Object.prototype.hasOwnProperty.call(updateData, missingColumn)) {
+                delete (updateData as any)[missingColumn];
+                columnRetry += 1;
+                continue;
+            }
+            break;
+        }
 
         if (error) {
             return NextResponse.json({ error: error.message }, { status: 500 });
