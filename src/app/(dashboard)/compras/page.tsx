@@ -306,7 +306,7 @@ function ComprasToolbox() {
                                                 <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
                                                     {vista.expandida ? <ChevronUp size={16} color="#94a3b8" /> : <ChevronDown size={16} color="#94a3b8" />}
                                                     <span style={{ fontSize: 14, fontWeight: 600, color: '#f8fafc' }}>{vista.nombre}</span>
-                                                    <Badge variant="info" size="sm">{endpointsActivos} Funciones</Badge>
+                                                    <Badge variant="neutral" size="sm">{endpointsActivos} Funciones</Badge>
                                                 </div>
                                                 <button
                                                     onClick={(e) => { e.stopPropagation(); removeVista(vista.id); }}
