@@ -17,7 +17,7 @@ interface Notification {
 export default function NotificationsDropdown() {
   const [isOpen, setIsOpen] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
-  
+
   const { notifications, unreadCount, markAsRead, markAllAsRead } = useNotifications();
 
   useEffect(() => {
@@ -51,7 +51,7 @@ export default function NotificationsDropdown() {
 
   function getTimeAgo(dateString: string) {
     const seconds = Math.floor((new Date().getTime() - new Date(dateString).getTime()) / 1000);
-    
+
     if (seconds < 60) return 'Hace un momento';
     if (seconds < 3600) return `Hace ${Math.floor(seconds / 60)} min`;
     if (seconds < 86400) return `Hace ${Math.floor(seconds / 3600)} h`;
@@ -107,30 +107,10 @@ export default function NotificationsDropdown() {
 
       {isOpen && (
         <div
-          style={{
-            position: 'absolute',
-            top: 'calc(100% + 8px)',
-            right: 0,
-            width: '380px',
-            maxHeight: '500px',
-            background: '#0f1419',
-            border: '1px solid var(--border)',
-            borderRadius: '8px',
-            boxShadow: '0 8px 24px rgba(0, 0, 0, 0.5)',
-            zIndex: 1000,
-            overflow: 'hidden',
-            display: 'flex',
-            flexDirection: 'column',
-          }}
+          className="fixed sm:absolute z-[1000] overflow-hidden flex flex-col bg-[#0f1419] border border-[color:var(--border)] rounded-lg shadow-[0_8px_24px_rgba(0,0,0,0.5)] left-4 right-4 top-[72px] sm:left-auto sm:right-0 sm:top-[calc(100%+8px)] sm:w-[380px] max-h-[80vh] sm:max-h-[500px]"
         >
           <div
-            style={{
-              padding: '16px',
-              borderBottom: '1px solid var(--border)',
-              display: 'flex',
-              justifyContent: 'space-between',
-              alignItems: 'center',
-            }}
+            className="flex flex-col sm:flex-row sm:justify-between items-start sm:items-center p-4 border-b border-[color:var(--border)] gap-3 sm:gap-0"
           >
             <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
               <h3 style={{ fontSize: '16px', fontWeight: 600, margin: 0 }}>
@@ -160,7 +140,7 @@ export default function NotificationsDropdown() {
             )}
           </div>
 
-          <div style={{ overflowY: 'auto', maxHeight: '400px' }}>
+          <div className="overflow-y-auto max-h-[calc(80vh-80px)] sm:max-h-[400px]">
             {notifications.length === 0 ? (
               <div
                 style={{
