@@ -205,7 +205,6 @@ function ensureTooltipCSS() {
 export default function PivotInventoryTable({ filters, cartMode, onAddToCart }: PivotInventoryTableProps) {
     const [data, setData] = useState<PivotData | null>(null);
     const [loading, setLoading] = useState(true);
-    const [syncing, setSyncing] = useState(false);
     const [collapsedGroups, setCollapsedGroups] = useState<Set<string>>(new Set());
     const [expandedProducts, setExpandedProducts] = useState<Set<string>>(new Set());
     const [copiedSku, setCopiedSku] = useState<string | null>(null);
@@ -239,28 +238,6 @@ export default function PivotInventoryTable({ filters, cartMode, onAddToCart }: 
         navigator.clipboard.writeText(sku);
         setCopiedSku(sku);
         setTimeout(() => setCopiedSku(null), 2000);
-    };
-
-    const handleSync = async () => {
-        if (syncing) return;
-        setSyncing(true);
-        try {
-            const res = await fetch('/api/inventory/sync-recent');
-            const result = await res.json();
-            if (res.ok) {
-                await fetchPivotData({ force: true });
-                alert(`Sincronización completada: ${result.itemsProcessed} ítems actualizados.\n(Si no terminó, vuelve a presionar el botón)`);
-            } else {
-                const detail = result.details || result.error || 'Desconocido';
-                const log = result.log ? '\n\nLog: ' + result.log.join('\n') : '';
-                alert('Error al sincronizar: ' + detail + log);
-            }
-        } catch (error: any) {
-            console.error('Sync failed', error);
-            alert('Error de conexión al sincronizar: ' + (error?.message || ''));
-        } finally {
-            setSyncing(false);
-        }
     };
 
     const fetchPivotData = useCallback(async (options?: { force?: boolean }) => {
@@ -628,30 +605,6 @@ export default function PivotInventoryTable({ filters, cartMode, onAddToCart }: 
                         </span>
                     </div>
                     <div className="pivot-toolbar-btns" style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-                        <button
-                            onClick={handleSync}
-                            disabled={syncing}
-                            className="pivot-btn"
-                            style={{
-                                display: 'flex',
-                                alignItems: 'center',
-                                gap: 6,
-                                padding: '5px 12px',
-                                background: 'rgba(59,130,246,0.15)',
-                                color: '#60a5fa',
-                                border: '1px solid rgba(59,130,246,0.3)',
-                                borderRadius: 8,
-                                cursor: syncing ? 'wait' : 'pointer',
-                                fontSize: 12,
-                                fontWeight: 500,
-                                transition: 'all 0.2s ease',
-                                opacity: syncing ? 0.7 : 1,
-                            }}
-                        >
-                            <RefreshCw size={14} className={syncing ? 'animate-spin' : ''} />
-                            <span className="pivot-btn-text">{syncing ? 'Sincronizando...' : 'Sync'}</span>
-                        </button>
-
                         {canEditWarehouseColors && (
                             <button
                                 onClick={() => setColorModalOpen(true)}
