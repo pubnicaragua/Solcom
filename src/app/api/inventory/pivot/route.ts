@@ -98,27 +98,48 @@ export async function GET(request: Request) {
         }
 
         // ─── Parent warehouse (family) mode ───
-        // When parent_warehouse is set, we combine stock from parent + child warehouses
-        // into a single column, useful for the cart's empresarial warehouse view.
+        // When parent_warehouse is set, we scope pivot columns to:
+        // parent empresarial + its child almacenes (separate columns).
         let familyMode = false;
-        let familyIds: string[] = [];
-        let familyParentCode = '';
-        let familyParentName = '';
+        let familyParentId = '';
+        let familyWarehouses: Array<{ id: string; code: string; name: string; parent_warehouse_id?: string | null; active?: boolean }> = [];
 
         if (parentWarehouse) {
-            const { data: familyRows, error: familyErr } = await supabase
-                .from('warehouses')
-                .select('id, code, name, warehouse_type, parent_warehouse_id')
-                .or(`id.eq.${parentWarehouse},parent_warehouse_id.eq.${parentWarehouse}`)
-                .eq('active', true);
-
-            if (!familyErr && familyRows && familyRows.length > 0) {
-                familyMode = true;
-                familyIds = familyRows.map((w: any) => w.id);
-                const parent = familyRows.find((w: any) => w.id === parentWarehouse);
-                familyParentCode = parent?.code || familyRows[0]?.code || 'FAM';
-                familyParentName = parent?.name || familyRows[0]?.name || 'Familia';
+            const parentFromScope = allWarehouses.find((w: any) => w.id === parentWarehouse);
+            if (!parentFromScope) {
+                return NextResponse.json(
+                    { error: 'No tienes permiso para consultar esa bodega empresarial' },
+                    { status: 403 }
+                );
             }
+
+            familyMode = true;
+            familyParentId = parentFromScope.id;
+
+            // Prefer scope-safe family from authorized warehouses.
+            familyWarehouses = allWarehouses.filter((w: any) =>
+                w.id === familyParentId || w.parent_warehouse_id === familyParentId
+            );
+            familyWarehouses = familyWarehouses.filter((w: any) => w.active !== false);
+
+            // If explicit permissions include only parent, pull child warehouses directly.
+            if (familyWarehouses.length <= 1) {
+                const { data: familyRows, error: familyErr } = await supabase
+                    .from('warehouses')
+                    .select('id, code, name, parent_warehouse_id, active')
+                    .or(`id.eq.${familyParentId},parent_warehouse_id.eq.${familyParentId}`)
+                    .eq('active', true);
+                if (!familyErr && familyRows && familyRows.length > 0) {
+                    familyWarehouses = familyRows;
+                }
+            }
+
+            // Ensure parent appears first, then children by code.
+            familyWarehouses.sort((a, b) => {
+                if (a.id === familyParentId) return -1;
+                if (b.id === familyParentId) return 1;
+                return String(a.code || '').localeCompare(String(b.code || ''));
+            });
         }
 
         // 2) Fetch items with filters (search precision-first)
@@ -546,17 +567,19 @@ export async function GET(request: Request) {
         // Optionally filter out only zero-stock items (keep negatives visible).
         const finalItems = showZeroStock ? itemsAfterStockLevel : itemsAfterStockLevel.filter(i => i.total !== 0);
 
-        // ─── Family mode: collapse all warehouse columns into one parent column ───
-        if (familyMode && familyIds.length > 0) {
-            const familyIdSet = new Set(familyIds);
-            const familyItems = items.map((item: any) => {
-                let combinedStock = 0;
-                for (const w of allWarehouses) {
-                    if (familyIdSet.has(w.id)) {
-                        const key = `${item.id}__${w.id}`;
-                        combinedStock += latestSnap.get(key) ?? 0;
-                    }
+        // ─── Family mode: parent + children as separate warehouse columns ───
+        if (familyMode && familyWarehouses.length > 0) {
+            const familyItemsBase = items.map((item: any) => {
+                const warehouseQty: Record<string, number> = {};
+                let familyTotal = 0;
+
+                for (const w of familyWarehouses) {
+                    const key = `${item.id}__${w.id}`;
+                    const qty = latestSnap.get(key) ?? 0;
+                    warehouseQty[w.code] = qty;
+                    familyTotal += qty;
                 }
+
                 return {
                     id: item.id,
                     sku: item.sku,
@@ -568,21 +591,47 @@ export async function GET(request: Request) {
                     brand: item.marca || null,
                     category: item.category || null,
                     price: item.price ?? 0,
-                    warehouseQty: { [familyParentCode]: combinedStock },
-                    total: combinedStock,
+                    warehouseQty,
+                    total: familyTotal,
                     daysInStock: lotAgeByItem.get(item.id) ?? null,
                     hasSnapshots: itemsWithBreakdown.has(item.id),
                 };
-            }).filter(i => i.total > 0);
+            });
+
+            const familyItemsAfterStockLevel = stockLevel
+                ? familyItemsBase.filter((item) => {
+                    switch (stockLevel) {
+                        case 'out':
+                            return item.total === 0;
+                        case 'positive':
+                            return item.total > 0;
+                        case 'critical':
+                            return item.total >= 1 && item.total <= 5;
+                        case 'low':
+                            return item.total >= 6 && item.total <= 20;
+                        case 'medium':
+                            return item.total >= 21 && item.total <= 50;
+                        case 'high':
+                            return item.total > 50;
+                        default:
+                            return true;
+                    }
+                })
+                : familyItemsBase;
+
+            const familyFinalItems = showZeroStock
+                ? familyItemsAfterStockLevel
+                : familyItemsAfterStockLevel.filter((i) => i.total !== 0);
 
             return NextResponse.json({
-                warehouses: [{ code: familyParentCode, name: familyParentName }],
-                items: familyItems,
-                totalBeforeFilter: familyItems.length,
+                warehouses: familyWarehouses.map((w) => ({ code: w.code, name: w.name })),
+                items: familyFinalItems,
+                totalBeforeFilter: familyItemsAfterStockLevel.length,
                 model: usingBalanceModel ? 'inventory_balance' : 'stock_snapshots',
                 usedSnapshotGapFill,
                 selectedWarehouse: null,
                 familyMode: true,
+                familyParentId,
             });
         }
 

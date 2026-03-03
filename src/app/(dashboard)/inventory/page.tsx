@@ -17,7 +17,7 @@ import TransferModal from '@/components/modals/TransferModal';
 import ProductDetailsModal from '@/components/modals/ProductDetailsModal';
 import KPIGrid from '@/components/dashboard/KPIGrid';
 import type { PivotItem } from '@/components/dashboard/PivotInventoryTable';
-import type { CartItem } from '@/components/dashboard/InventoryCart';
+import type { CartItem, CartType } from '@/components/dashboard/InventoryCart';
 import { useRoleAccess } from '@/hooks/useRoleAccess';
 
 export default function InventoryPage() {
@@ -67,7 +67,11 @@ export default function InventoryPage() {
   const [cartItems, setCartItems] = useState<CartItem[]>([]);
   const [cartMode, setCartMode] = useState(false);
   const [cartOpen, setCartOpen] = useState(false);
-  const [parentWarehouseId, setParentWarehouseId] = useState<string | null>(null);
+  const [cartType, setCartType] = useState<CartType>('cotizacion');
+  const [parentWarehouseId, setParentWarehouseId] = useState<string>('');
+  const [parentWarehouses, setParentWarehouses] = useState<any[]>([]);
+  const [loadingParentWarehouses, setLoadingParentWarehouses] = useState(false);
+  const [cartSelectorError, setCartSelectorError] = useState('');
   const [isMobileView, setIsMobileView] = useState(false);
   const [cartToast, setCartToast] = useState<{ name: string; qty: number } | null>(null);
   const [cartPulse, setCartPulse] = useState(false);
@@ -79,7 +83,47 @@ export default function InventoryPage() {
     return () => window.removeEventListener('resize', checkMobile);
   }, []);
 
+  useEffect(() => {
+    if (!cartMode) return;
+    void fetchParentWarehouses();
+  }, [cartMode]);
+
+  async function fetchParentWarehouses() {
+    setLoadingParentWarehouses(true);
+    try {
+      const response = await fetch('/api/warehouses?type=empresarial');
+      if (!response.ok) throw new Error('No se pudieron cargar las bodegas empresariales');
+      const data = await response.json();
+      setParentWarehouses(Array.isArray(data) ? data : []);
+    } catch {
+      setParentWarehouses([]);
+    } finally {
+      setLoadingParentWarehouses(false);
+    }
+  }
+
+  function handleParentWarehouseChange(nextWarehouseId: string) {
+    if (nextWarehouseId === parentWarehouseId) return;
+
+    if (cartItems.length > 0) {
+      const confirmed = confirm('Cambiar la bodega padre limpiará el carrito actual. ¿Deseas continuar?');
+      if (!confirmed) return;
+      clearCart();
+    }
+
+    setParentWarehouseId(nextWarehouseId);
+    setCartSelectorError('');
+  }
+
   function addToCart(item: PivotItem) {
+    if (!cartMode) return;
+
+    if (!parentWarehouseId) {
+      setCartSelectorError('Selecciona primero una bodega empresarial para habilitar el carrito.');
+      setCartOpen(true);
+      return;
+    }
+
     let newQty = 1;
     setCartItems((prev) => {
       const existing = prev.find((c) => c.itemId === item.id);
@@ -103,6 +147,7 @@ export default function InventoryPage() {
     });
     // Auto-open cart on first add
     if (cartItems.length === 0) setCartOpen(true);
+    setCartSelectorError('');
 
     // Toast notification
     const label = item.name + (item.color ? ` — ${item.color}` : '');
@@ -250,6 +295,13 @@ export default function InventoryPage() {
   }
 
   const activeFiltersCount = Object.values(filters).filter(v => v !== '' && v !== 'name').length;
+  const cartTypeOptions: Array<{ key: CartType; label: string }> = [
+    { key: 'cotizacion', label: 'Cotización' },
+    { key: 'factura', label: 'Factura' },
+    { key: 'orden_venta', label: 'Orden de Venta' },
+  ];
+  const selectedCartTypeLabel = cartTypeOptions.find((opt) => opt.key === cartType)?.label || 'Documento';
+
   const warehouseOptions = [
     { value: '', label: 'Todas las bodegas' },
     ...warehouses.map((w) => ({
@@ -276,8 +328,11 @@ export default function InventoryPage() {
                 if (!cartMode) {
                   setCartMode(true);
                   setCartOpen(true);
+                  setCartSelectorError('');
                 } else {
                   setCartMode(false);
+                  setCartOpen(false);
+                  setCartSelectorError('');
                 }
               }}
               style={{
@@ -303,7 +358,7 @@ export default function InventoryPage() {
               }}
             >
               <ShoppingCart size={17} />
-              <span className="btn-label">{cartMode ? 'Modo Carrito Activo' : 'Cotizar'}</span>
+              <span className="btn-label">{cartMode ? `Modo ${selectedCartTypeLabel}` : 'Modo Ventas'}</span>
               {cartItems.length > 0 && (
                 <span
                   style={{
@@ -377,6 +432,101 @@ export default function InventoryPage() {
       </div>
 
       <KPIGrid />
+
+      {cartMode && (
+        <Card>
+          <div style={{ padding: 14, display: 'grid', gap: 12 }}>
+            <div style={{ fontSize: 13, fontWeight: 800, color: 'var(--text)', display: 'flex', alignItems: 'center', gap: 8 }}>
+              <ShoppingCart size={16} color="#34d399" />
+              Flujo de ventas desde inventario
+            </div>
+
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 10 }}>
+              <div>
+                <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--muted)', marginBottom: 6 }}>
+                  1. Tipo de documento
+                </div>
+                <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                  {cartTypeOptions.map((option) => {
+                    const active = cartType === option.key;
+                    return (
+                      <button
+                        key={option.key}
+                        type="button"
+                        onClick={() => {
+                          setCartType(option.key);
+                          setCartSelectorError('');
+                        }}
+                        style={{
+                          padding: '7px 10px',
+                          borderRadius: 8,
+                          border: active ? '1px solid rgba(16,185,129,0.45)' : '1px solid rgba(255,255,255,0.12)',
+                          background: active ? 'rgba(16,185,129,0.15)' : 'rgba(255,255,255,0.02)',
+                          color: active ? '#34d399' : 'var(--muted)',
+                          fontSize: 12,
+                          fontWeight: 700,
+                          cursor: 'pointer',
+                        }}
+                      >
+                        {option.label}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+
+              <div>
+                <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--muted)', marginBottom: 6 }}>
+                  2. Bodega empresarial
+                </div>
+                <select
+                  value={parentWarehouseId}
+                  onChange={(e) => handleParentWarehouseChange(e.target.value)}
+                  style={{
+                    width: '100%',
+                    padding: '8px 10px',
+                    borderRadius: 8,
+                    border: parentWarehouseId ? '1px solid rgba(16,185,129,0.35)' : '1px solid rgba(255,255,255,0.12)',
+                    background: 'rgba(255,255,255,0.04)',
+                    color: 'var(--text)',
+                    fontSize: 13,
+                    fontWeight: 600,
+                  }}
+                >
+                  <option value="">
+                    {loadingParentWarehouses ? 'Cargando bodegas...' : 'Seleccionar bodega empresarial...'}
+                  </option>
+                  {parentWarehouses.map((warehouse) => (
+                    <option key={warehouse.id} value={warehouse.id}>
+                      {warehouse.code} — {warehouse.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            </div>
+
+            <div style={{ fontSize: 12, color: parentWarehouseId ? '#34d399' : 'var(--muted)' }}>
+              {parentWarehouseId
+                ? 'La tabla pivot ahora muestra la bodega padre y cada almacén hijo por separado.'
+                : 'Selecciona la bodega padre para habilitar el carrito y evitar ventas fuera de su familia de almacenes.'}
+            </div>
+
+            {cartSelectorError && (
+              <div style={{
+                padding: '8px 10px',
+                borderRadius: 8,
+                border: '1px solid rgba(239,68,68,0.4)',
+                background: 'rgba(127,29,29,0.3)',
+                color: '#FCA5A5',
+                fontSize: 12,
+                fontWeight: 700,
+              }}>
+                {cartSelectorError}
+              </div>
+            )}
+          </div>
+        </Card>
+      )}
 
       {/* Filtros Principales */}
       <Card>
@@ -582,7 +732,8 @@ export default function InventoryPage() {
         filters={filters}
         cartMode={cartMode}
         onAddToCart={addToCart}
-        parentWarehouseId={cartMode ? parentWarehouseId : undefined}
+        parentWarehouseId={cartMode && parentWarehouseId ? parentWarehouseId : undefined}
+        cartReady={cartMode && !!parentWarehouseId}
       />
 
       <Card>
@@ -637,10 +788,16 @@ export default function InventoryPage() {
           onUpdateQuantity={updateCartQty}
           onRemoveItem={removeFromCart}
           onClearCart={clearCart}
+          cartType={cartType}
+          onCartTypeChange={(type) => setCartType(type)}
+          warehouseId={parentWarehouseId}
+          onWarehouseIdChange={(id) => handleParentWarehouseChange(id)}
+          parentWarehouses={parentWarehouses}
           onDocumentCreated={() => {
             setCartMode(false);
+            setCartOpen(false);
+            setCartSelectorError('');
           }}
-          onParentWarehouseChange={(id) => setParentWarehouseId(id)}
         />
       )}
 

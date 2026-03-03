@@ -14,7 +14,7 @@ export interface CartItem {
     quantity: number;
 }
 
-type CartType = 'cotizacion' | 'factura' | 'orden_venta';
+export type CartType = 'cotizacion' | 'factura' | 'orden_venta';
 
 interface Customer {
     id: string;
@@ -41,6 +41,11 @@ interface InventoryCartProps {
     onRemoveItem: (itemId: string) => void;
     onClearCart: () => void;
     onDocumentCreated: () => void;
+    cartType?: CartType;
+    onCartTypeChange?: (type: CartType) => void;
+    warehouseId?: string;
+    onWarehouseIdChange?: (warehouseId: string) => void;
+    parentWarehouses?: Warehouse[];
     onParentWarehouseChange?: (warehouseId: string | null) => void;
 }
 
@@ -131,9 +136,14 @@ export default function InventoryCart({
     onRemoveItem,
     onClearCart,
     onDocumentCreated,
+    cartType: controlledCartType,
+    onCartTypeChange,
+    warehouseId: controlledWarehouseId,
+    onWarehouseIdChange,
+    parentWarehouses: controlledParentWarehouses,
     onParentWarehouseChange,
 }: InventoryCartProps) {
-    const [cartType, setCartType] = useState<CartType>('cotizacion');
+    const [internalCartType, setInternalCartType] = useState<CartType>('cotizacion');
     const [creating, setCreating] = useState(false);
     const [error, setError] = useState('');
     const [success, setSuccess] = useState(false);
@@ -147,8 +157,8 @@ export default function InventoryCart({
     const [selectedCustomerName, setSelectedCustomerName] = useState('');
     const [loadingCustomers, setLoadingCustomers] = useState(false);
 
-    const [parentWarehouses, setParentWarehouses] = useState<Warehouse[]>([]);
-    const [warehouseId, setWarehouseId] = useState('');
+    const [internalParentWarehouses, setInternalParentWarehouses] = useState<Warehouse[]>([]);
+    const [internalWarehouseId, setInternalWarehouseId] = useState('');
 
     const [docDate, setDocDate] = useState(todayStr);
 
@@ -171,9 +181,27 @@ export default function InventoryCart({
     const customerInputRef = useRef<HTMLInputElement>(null);
     const blurTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
+    const cartType = controlledCartType ?? internalCartType;
+    const parentWarehouses = controlledParentWarehouses ?? internalParentWarehouses;
+    const warehouseId = controlledWarehouseId ?? internalWarehouseId;
+
     const totalItems = items.length;
     const totalUnits = items.reduce((sum, item) => sum + item.quantity, 0);
     const config = CART_TYPE_CONFIG[cartType];
+
+    function setCartType(nextType: CartType) {
+        if (controlledCartType == null) {
+            setInternalCartType(nextType);
+        }
+        onCartTypeChange?.(nextType);
+    }
+
+    function setWarehouseId(nextId: string) {
+        if (controlledWarehouseId == null) {
+            setInternalWarehouseId(nextId);
+        }
+        onWarehouseIdChange?.(nextId);
+    }
 
     // Fetch customers
     const fetchCustomers = useCallback(async (search: string) => {
@@ -191,14 +219,15 @@ export default function InventoryCart({
 
     // Fetch parent (empresarial) warehouses
     const fetchParentWarehouses = useCallback(async () => {
+        if (controlledParentWarehouses) return;
         try {
             const res = await fetch('/api/warehouses?type=empresarial');
             const data = await res.json();
-            setParentWarehouses(Array.isArray(data) ? data : data?.warehouses || []);
+            setInternalParentWarehouses(Array.isArray(data) ? data : data?.warehouses || []);
         } catch {
-            setParentWarehouses([]);
+            setInternalParentWarehouses([]);
         }
-    }, []);
+    }, [controlledParentWarehouses]);
 
     // Load data when cart opens
     useEffect(() => {
@@ -369,6 +398,9 @@ export default function InventoryCart({
             setSelectedCustomerId('');
             setSelectedCustomerName('');
             setCustomerSearch('');
+            if (controlledWarehouseId == null) {
+                setWarehouseId('');
+            }
             setDocDate(todayStr());
             setValidUntil(todayPlusDays(7));
             setDueDate(todayPlusDays(30));

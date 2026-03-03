@@ -45,6 +45,7 @@ interface PivotData {
 interface PivotInventoryTableProps {
     filters?: any;
     cartMode?: boolean;
+    cartReady?: boolean;
     onAddToCart?: (item: PivotItem) => void;
     parentWarehouseId?: string | null;
 }
@@ -203,7 +204,7 @@ function ensureTooltipCSS() {
 }
 
 /* ───── component ───── */
-export default function PivotInventoryTable({ filters, cartMode, onAddToCart, parentWarehouseId }: PivotInventoryTableProps) {
+export default function PivotInventoryTable({ filters, cartMode, cartReady, onAddToCart, parentWarehouseId }: PivotInventoryTableProps) {
     const [data, setData] = useState<PivotData | null>(null);
     const [loading, setLoading] = useState(true);
     const [collapsedGroups, setCollapsedGroups] = useState<Set<string>>(new Set());
@@ -659,6 +660,21 @@ export default function PivotInventoryTable({ filters, cartMode, onAddToCart, pa
                     </div>
                 </div>
 
+                {cartMode && !cartReady && (
+                    <div style={{
+                        margin: '10px 12px 0',
+                        padding: '8px 10px',
+                        borderRadius: 8,
+                        border: '1px solid rgba(245,158,11,0.35)',
+                        background: 'rgba(120,53,15,0.25)',
+                        color: '#FCD34D',
+                        fontSize: 12,
+                        fontWeight: 700,
+                    }}>
+                        Selecciona una bodega empresarial para habilitar la selección de productos en carrito.
+                    </div>
+                )}
+
                 {isMobile ? (
                     /* ─── Mobile Card View ─── */
                     <div style={{ padding: 12, display: 'flex', flexDirection: 'column', gap: 12 }}>
@@ -672,6 +688,9 @@ export default function PivotInventoryTable({ filters, cartMode, onAddToCart, pa
                                         node={productNode}
                                         warehouseCodes={warehouseCodes}
                                         data={data!}
+                                        cartMode={cartMode}
+                                        cartReady={cartReady}
+                                        onAddToCart={onAddToCart}
                                     />
                                 );
                             })
@@ -685,6 +704,7 @@ export default function PivotInventoryTable({ filters, cartMode, onAddToCart, pa
                                     warehouseCodes={warehouseCodes}
                                     data={data!}
                                     cartMode={cartMode}
+                                    cartReady={cartReady}
                                     onAddToCart={onAddToCart}
                                 />
                             ))
@@ -894,7 +914,7 @@ export default function PivotInventoryTable({ filters, cartMode, onAddToCart, pa
                                         const colorVal = rowItem ? (rowItem.color || '') : '';
                                         const daysInStockVal = rowItem?.daysInStock ?? null;
 
-                                        const isCartTarget = cartMode && isVariantRow && rowItem && !isZeroStock;
+                                        const isCartTarget = cartMode && cartReady && isVariantRow && rowItem && !isZeroStock;
                                         const isCartFlash = cartAddedId === rowItem?.id;
 
                                         return (
@@ -1270,7 +1290,7 @@ export default function PivotInventoryTable({ filters, cartMode, onAddToCart, pa
 
 /* ─── Mobile Sub-components ─── */
 
-function MobileGroupNode({ node, level, warehouseCodes, data, cartMode, onAddToCart }: { node: TreeNode; level: number; warehouseCodes: string[]; data: PivotData; cartMode?: boolean; onAddToCart?: (item: PivotItem) => void; }) {
+function MobileGroupNode({ node, level, warehouseCodes, data, cartMode, cartReady, onAddToCart }: { node: TreeNode; level: number; warehouseCodes: string[]; data: PivotData; cartMode?: boolean; cartReady?: boolean; onAddToCart?: (item: PivotItem) => void; }) {
     const [expanded, setExpanded] = useState(false);
     const isBrand = level === 1;
 
@@ -1322,9 +1342,9 @@ function MobileGroupNode({ node, level, warehouseCodes, data, cartMode, onAddToC
                 <div style={{ padding: '8px 8px 8px 16px' }}>
                     {node.children.map(child => (
                         isBrand ? (
-                            <MobileProductCard key={child.label} node={child} warehouseCodes={warehouseCodes} data={data} cartMode={cartMode} onAddToCart={onAddToCart} />
+                            <MobileProductCard key={child.label} node={child} warehouseCodes={warehouseCodes} data={data} cartMode={cartMode} cartReady={cartReady} onAddToCart={onAddToCart} />
                         ) : (
-                            <MobileGroupNode key={child.label} node={child} level={level + 1} warehouseCodes={warehouseCodes} data={data} cartMode={cartMode} onAddToCart={onAddToCart} />
+                            <MobileGroupNode key={child.label} node={child} level={level + 1} warehouseCodes={warehouseCodes} data={data} cartMode={cartMode} cartReady={cartReady} onAddToCart={onAddToCart} />
                         )
                     ))}
                 </div>
@@ -1333,7 +1353,7 @@ function MobileGroupNode({ node, level, warehouseCodes, data, cartMode, onAddToC
     );
 }
 
-function MobileProductCard({ node, warehouseCodes, data, cartMode, onAddToCart }: { node: TreeNode; warehouseCodes: string[]; data: PivotData; cartMode?: boolean; onAddToCart?: (item: PivotItem) => void; }) {
+function MobileProductCard({ node, warehouseCodes, data, cartMode, cartReady, onAddToCart }: { node: TreeNode; warehouseCodes: string[]; data: PivotData; cartMode?: boolean; cartReady?: boolean; onAddToCart?: (item: PivotItem) => void; }) {
     const [expanded, setExpanded] = useState(false);
     // Node level 2 is Product. Included all variants totals.
     const total = node.grandTotal;
@@ -1407,7 +1427,7 @@ function MobileProductCard({ node, warehouseCodes, data, cartMode, onAddToCart }
                                         </div>
                                         <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
                                             <span style={{ color: '#f8fafc', fontWeight: 600 }}>{variant.grandTotal}</span>
-                                            {cartMode && onAddToCart && rowItem && (
+                                            {cartMode && cartReady && onAddToCart && rowItem && (
                                                 <button
                                                     onClick={(e) => { e.stopPropagation(); onAddToCart(rowItem); }}
                                                     style={{
