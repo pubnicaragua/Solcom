@@ -89,7 +89,7 @@ export default function SalesOrderList() {
             params.set('page', String(page));
             params.set('per_page', '20');
 
-            const res = await fetch(`/api/ventas/sales-orders?${params.toString()}`);
+            const res = await fetch(`/api/ventas/sales-orders?${params.toString()}`, { cache: 'no-store' });
             const data = await res.json();
 
             if (!res.ok) throw new Error(data?.error || 'Error al cargar órdenes');
@@ -106,14 +106,14 @@ export default function SalesOrderList() {
 
     async function fetchKPIs() {
         try {
-            const res = await fetch('/api/ventas/sales-orders?per_page=1');
+            const res = await fetch('/api/ventas/sales-orders?per_page=1', { cache: 'no-store' });
             const data = await res.json();
 
             // Fetch all statuses for KPI counts
             const [borradorRes, confirmadaRes, convertidaRes] = await Promise.all([
-                fetch('/api/ventas/sales-orders?status=borrador&per_page=1'),
-                fetch('/api/ventas/sales-orders?status=confirmada&per_page=1'),
-                fetch('/api/ventas/sales-orders?status=convertida&per_page=1'),
+                fetch('/api/ventas/sales-orders?status=borrador&per_page=1', { cache: 'no-store' }),
+                fetch('/api/ventas/sales-orders?status=confirmada&per_page=1', { cache: 'no-store' }),
+                fetch('/api/ventas/sales-orders?status=convertida&per_page=1', { cache: 'no-store' }),
             ]);
 
             const [borradorData, confirmadaData, convertidaData] = await Promise.all([

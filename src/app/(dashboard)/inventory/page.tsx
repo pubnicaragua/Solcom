@@ -170,6 +170,7 @@ export default function InventoryPage() {
           name: item.name,
           color: item.color,
           brand: item.brand,
+          unitPrice: Math.max(0, Number(item.price ?? 0) || 0),
           quantity: 1,
         },
       ];

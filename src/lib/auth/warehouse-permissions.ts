@@ -38,6 +38,7 @@ export interface WarehouseRecord {
   code: string;
   name: string;
   active: boolean;
+  zoho_warehouse_id?: string | null;
   warehouse_type?: string | null;
   parent_warehouse_id?: string | null;
 }
@@ -227,7 +228,7 @@ export async function listWarehousesForScope(
 
   const activeOnly = options?.activeOnly ?? false;
   const includeChildrenOfScope = options?.includeChildrenOfScope ?? true;
-  const selectFields = 'id, code, name, active, warehouse_type, parent_warehouse_id';
+  const selectFields = 'id, code, name, active, zoho_warehouse_id, warehouse_type, parent_warehouse_id';
 
   const withCommonFilters = (query: any) => {
     let next = query;
@@ -246,6 +247,7 @@ export async function listWarehousesForScope(
       code: row.code,
       name: row.name,
       active: Boolean(row.active),
+      zoho_warehouse_id: row.zoho_warehouse_id || null,
       warehouse_type: row.warehouse_type || null,
       parent_warehouse_id: row.parent_warehouse_id || null,
     }));
@@ -296,6 +298,7 @@ export async function listWarehousesForScope(
     code: row.code,
     name: row.name,
     active: Boolean(row.active),
+    zoho_warehouse_id: row.zoho_warehouse_id || null,
     warehouse_type: row.warehouse_type || null,
     parent_warehouse_id: row.parent_warehouse_id || null,
   }));

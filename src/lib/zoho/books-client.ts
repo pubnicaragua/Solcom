@@ -300,6 +300,33 @@ export class ZohoBooksClient {
         };
     }
 
+    async createInvoice(data: {
+        customer_id: string;
+        date: string;
+        due_date?: string;
+        reference_number?: string;
+        notes?: string;
+        discount?: number;
+        is_discount_before_tax?: boolean;
+        shipping_charge?: number;
+        salesperson_name?: string;
+        location_id?: string;
+        line_items: Array<{
+            item_id: string;
+            quantity: number;
+            rate: number;
+        }>;
+    }): Promise<{ invoice_id: string; invoice_number: string }> {
+        const result = await this.request('POST', '/books/v3/invoices', data);
+        if (result.code !== 0) {
+            throw new Error(result.message || 'Error al crear factura en Zoho');
+        }
+        return {
+            invoice_id: result.invoice.invoice_id,
+            invoice_number: result.invoice.invoice_number,
+        };
+    }
+
     async convertSalesOrderToInvoice(salesorderId: string): Promise<{ invoice_id: string; invoice_number: string }> {
         const result = await this.request('POST', `/books/v3/invoices/fromsalesorder?salesorder_id=${salesorderId}`);
         if (result.code !== 0) {

@@ -16,6 +16,21 @@ function normalizeText(value: unknown): string {
     return typeof value === 'string' ? value.trim() : '';
 }
 
+function normalizeSerialInput(value: unknown): string {
+    if (Array.isArray(value)) {
+        return value
+            .map((entry) => String(entry ?? '').trim())
+            .filter(Boolean)
+            .join(',');
+    }
+    return String(value ?? '')
+        .replace(/[\n;]/g, ',')
+        .split(',')
+        .map((entry) => entry.trim())
+        .filter(Boolean)
+        .join(',');
+}
+
 function normalizeStatus(value: unknown, fallback = 'borrador'): string {
     const text = typeof value === 'string' ? value.trim().toLowerCase() : '';
     return ORDER_STATUSES.has(text) ? text : fallback;
@@ -33,6 +48,45 @@ function extractMissingColumn(message: string): string | null {
     match = text.match(/column "?([a-zA-Z0-9_]+)"? does not exist/i);
     if (match?.[1]) return match[1];
     return null;
+}
+
+async function insertSalesOrderItemsWithColumnFallback(supabase: any, rows: any[]): Promise<{ error: any }> {
+    if (!Array.isArray(rows) || rows.length === 0) {
+        return { error: null };
+    }
+
+    const mutableRows = rows.map((row) => ({ ...row }));
+    let retry = 0;
+    while (retry < 12) {
+        const result = await supabase
+            .from('sales_order_items')
+            .insert(mutableRows);
+
+        if (!result.error) {
+            return { error: null };
+        }
+
+        const missingColumn = extractMissingColumn(result.error?.message || '');
+        if (!missingColumn) {
+            return { error: result.error };
+        }
+
+        let removed = false;
+        for (const row of mutableRows) {
+            if (Object.prototype.hasOwnProperty.call(row, missingColumn)) {
+                delete row[missingColumn];
+                removed = true;
+            }
+        }
+
+        if (!removed) {
+            return { error: result.error };
+        }
+
+        retry += 1;
+    }
+
+    return { error: new Error('No se pudieron insertar los items por columnas faltantes') };
 }
 
 function calculateTotals(items: any[], taxRate: number, discountAmount: number) {
@@ -469,14 +523,17 @@ export async function POST(req: NextRequest) {
                 quantity,
                 unit_price: unitPrice,
                 discount_percent: discountPercent,
+                serial_number_value: normalizeSerialInput(
+                    item?.serial_number_value ?? item?.serial_numbers ?? item?.serials
+                ) || null,
+                line_warehouse_id: normalizeText(item?.line_warehouse_id) || null,
+                line_zoho_warehouse_id: normalizeText(item?.line_zoho_warehouse_id) || null,
                 subtotal: Math.round(quantity * unitPrice * (1 - discountPercent / 100) * 100) / 100,
                 sort_order: index,
             };
         });
 
-        const { error: itemsError } = await supabase
-            .from('sales_order_items')
-            .insert(orderItems);
+        const { error: itemsError } = await insertSalesOrderItemsWithColumnFallback(supabase, orderItems);
 
         if (itemsError) {
             await supabase.from('sales_orders').delete().eq('id', order.id);
@@ -485,6 +542,7 @@ export async function POST(req: NextRequest) {
 
         // Sync to Zoho if requested
         let zohoSync: { zoho_salesorder_id: string; zoho_salesorder_number: string } | null = null;
+        let zohoWarning: string | null = null;
         if (sync_to_zoho) {
             try {
                 zohoSync = await syncSalesOrderToZoho({
@@ -501,16 +559,12 @@ export async function POST(req: NextRequest) {
                     items,
                 });
             } catch (zohoError: any) {
-                await supabase.from('sales_order_items').delete().eq('order_id', order.id);
-                await supabase.from('sales_orders').delete().eq('id', order.id);
-                return NextResponse.json(
-                    { error: zohoError?.message || 'No se pudo crear la orden de venta en Zoho' },
-                    { status: 400 }
-                );
+                zohoWarning = zohoError?.message || 'No se pudo crear la orden de venta en Zoho';
+                console.warn(`[sales-orders] OV local creada sin sincronizar en Zoho (${order.id}): ${zohoWarning}`);
             }
         }
 
-        return NextResponse.json({ order, zoho: zohoSync }, { status: 201 });
+        return NextResponse.json({ order, zoho: zohoSync, warning: zohoWarning }, { status: 201 });
     } catch (error: any) {
         return NextResponse.json({ error: error.message || 'Error interno' }, { status: 500 });
     }
