@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { Package, BarChart3, Settings, Users, HelpCircle, Bot, Menu, X, ClipboardList, Calendar, FolderOpen, ArrowLeftRight, FileText, ChevronLeft, ChevronRight, Rocket, ShoppingCart } from 'lucide-react';
 import { useUserRole } from '@/hooks/useUserRole';
+import { useRoleAccess } from '@/hooks/useRoleAccess';
 
 const menuItems = [
   { icon: Package, label: 'Inventario', href: '/inventory', module: 'inventory' },
@@ -32,6 +33,8 @@ export default function Sidebar() {
   const pathname = usePathname();
   const { isOpen, close, isCollapsed, toggleCollapse } = useSidebar();
   const { loading, hasModuleAccess, role } = useUserRole();
+  const { access: brandingAccess, loading: brandingLoading } = useRoleAccess('branding');
+  const canViewBrandLogo = !brandingLoading && brandingAccess.can_view;
 
   const [expandedMenus, setExpandedMenus] = useState<Record<string, boolean>>({
     '/ventas': pathname.startsWith('/ventas')
@@ -102,19 +105,35 @@ export default function Sidebar() {
               color: '#000'
             }}>SC</div>
           ) : (
-            <div style={{
-              background: '#FFFFFF',
-              padding: '8px',
-              borderRadius: '8px',
-              boxShadow: '0 2px 4px rgba(0,0,0,0.1)',
-              marginLeft: 20,
-            }}>
-              <img
-                src="https://www.soliscomercialni.com/Solis%20Comercial%20Logo.png"
-                alt="Solis Comercial"
-                style={{ width: '100', maxWidth: 160, height: 'auto', display: 'block' }}
-              />
-            </div>
+            canViewBrandLogo ? (
+              <div style={{
+                background: '#FFFFFF',
+                padding: '8px',
+                borderRadius: '8px',
+                boxShadow: '0 2px 4px rgba(0,0,0,0.1)',
+                marginLeft: 20,
+              }}>
+                <img
+                  src="https://www.soliscomercialni.com/Solis%20Comercial%20Logo.png"
+                  alt="Solis Comercial"
+                  style={{ width: '100', maxWidth: 160, height: 'auto', display: 'block' }}
+                />
+              </div>
+            ) : (
+              <div style={{
+                background: '#FFFFFF',
+                padding: '10px 14px',
+                borderRadius: '8px',
+                boxShadow: '0 2px 4px rgba(0,0,0,0.1)',
+                marginLeft: 20,
+                fontWeight: 800,
+                fontSize: 16,
+                color: '#111827',
+                letterSpacing: 0.4,
+              }}>
+                SC
+              </div>
+            )
           )}
         </div>
 

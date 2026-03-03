@@ -101,6 +101,7 @@ export default function RolesPage() {
   const [loading, setLoading] = useState(true);
   const [usersError, setUsersError] = useState<string | null>(null);
   const [permissionsError, setPermissionsError] = useState<string | null>(null);
+  const [rolePermissionsError, setRolePermissionsError] = useState<string | null>(null);
   const [permissions, setPermissions] = useState<Permission[]>([]);
   const [rolePermissions, setRolePermissions] = useState<RolePermission[]>([]);
   const [dynamicRoles, setDynamicRoles] = useState<any[]>([]);
@@ -228,13 +229,21 @@ export default function RolesPage() {
 
   async function loadRolePermissions(role: string) {
     try {
+      setRolePermissionsError(null);
       const response = await fetch(`/api/role-permissions?role=${role}`);
-      if (response.ok) {
-        const data = await response.json();
-        setRolePermissions(data);
+      const data = await response.json().catch(() => null);
+
+      if (!response.ok) {
+        setRolePermissions([]);
+        setRolePermissionsError(data?.error || 'No se pudieron cargar los permisos del rol');
+        return;
       }
+
+      setRolePermissions(Array.isArray(data) ? data : []);
     } catch (error) {
       console.error('Error loading role permissions:', error);
+      setRolePermissions([]);
+      setRolePermissionsError('Error de conexión al cargar permisos del rol');
     }
   }
 
@@ -465,7 +474,7 @@ export default function RolesPage() {
   }
 
   async function togglePermission(permissionCode: string) {
-    if (!selectedRole) return;
+    if (!selectedRole || savingPermission) return;
 
     setSavingPermission(true);
     const hasPermission = rolePermissions.some(rp => rp.permission_code === permissionCode);
@@ -480,17 +489,20 @@ export default function RolesPage() {
         })
       });
 
-      if (response.ok) {
-        await loadRolePermissions(selectedRole);
+      if (!response.ok) {
+        const data = await response.json().catch(() => null);
+        throw new Error(data?.error || 'No se pudo actualizar el permiso');
       }
+      await loadRolePermissions(selectedRole);
     } catch (error) {
       console.error('Error toggling permission:', error);
+      alert(error instanceof Error ? error.message : 'No se pudo actualizar el permiso');
     }
     setSavingPermission(false);
   }
 
   async function setModulePermissions(module: string, enable: boolean) {
-    if (!selectedRole) return;
+    if (!selectedRole || savingPermission) return;
 
     const modulePerms = permissions.filter((p) => p.module === module);
     if (modulePerms.length === 0) return;
@@ -501,16 +513,21 @@ export default function RolesPage() {
         const hasPerm = rolePermissions.some((rp) => rp.permission_code === perm.code);
         if ((enable && hasPerm) || (!enable && !hasPerm)) continue;
 
-        await fetch('/api/role-permissions', {
+        const response = await fetch('/api/role-permissions', {
           method: enable ? 'POST' : 'DELETE',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ role: selectedRole, permission_code: perm.code })
         });
+        if (!response.ok) {
+          const data = await response.json().catch(() => null);
+          throw new Error(data?.error || `No se pudo ${enable ? 'activar' : 'quitar'} ${perm.name}`);
+        }
       }
 
       await loadRolePermissions(selectedRole);
     } catch (error) {
       console.error('Error bulk updating module permissions:', error);
+      alert(error instanceof Error ? error.message : 'No se pudieron actualizar permisos del módulo');
     }
     setSavingPermission(false);
   }
@@ -522,16 +539,31 @@ export default function RolesPage() {
   const dbRolesMap = new Map();
   dynamicRoles.forEach((r: any) => dbRolesMap.set(r.name.toLowerCase(), r));
 
+  const CUSTOM_ROLE_COLORS = ['#8B5CF6', '#EC4899', '#F59E0B', '#06B6D4', '#10B981', '#F97316'];
+
   const allRoles: any[] = [];
-  dynamicRoles.forEach((role: any) => {
-    const lowerName = role.name.toLowerCase();
-    const defaultDef = ROLE_DEFINITIONS[lowerName] || {};
+  const baseRoleKeys = new Set(Object.keys(ROLE_DEFINITIONS).map((key) => key.toLowerCase()));
+  const seenDynamicRoleKeys = new Set<string>();
+
+  dynamicRoles.forEach((role: any, index: number) => {
+    const roleName = String(role?.name || '').trim();
+    if (!roleName) return;
+    const normalized = roleName.toLowerCase();
+
+    // Evita duplicar roles base (admin/manager/operator/auditor) ya renderizados en staticRoles
+    if (baseRoleKeys.has(normalized)) return;
+
+    // Evita duplicados por diferencias de mayúsculas/minúsculas en la tabla roles
+    if (seenDynamicRoleKeys.has(normalized)) return;
+    seenDynamicRoleKeys.add(normalized);
+
+    const defaultDef = ROLE_DEFINITIONS[normalized] || {};
     allRoles.push({
-      id: role.id,
-      name: role.name,
-      description: role.description || defaultDef.description || 'Sin descripción',
-      color: defaultDef.color || '#6366f1',
-      userCount: getRoleCount(role.name),
+      id: roleName,
+      name: roleName,
+      description: role.description || defaultDef.description || '',
+      color: CUSTOM_ROLE_COLORS[index % CUSTOM_ROLE_COLORS.length] || defaultDef.color || '#6366f1',
+      userCount: getRoleCount(roleName),
       is_custom: role.is_custom !== false
     });
   });
@@ -975,7 +1007,7 @@ export default function RolesPage() {
         <Card>
           <div style={{ padding: 8 }}>
             <div className="h-subtitle" style={{ marginBottom: 12 }}>
-              {selectedRole ? `Permisos: ${ROLE_DEFINITIONS[selectedRole]?.name}` : 'Selecciona un rol'}
+              {selectedRole ? `Permisos: ${rolesWithCounts.find(r => r.id === selectedRole)?.name || selectedRole}` : 'Selecciona un rol'}
             </div>
             {selectedRole ? (
               <div style={{ display: 'grid', gap: 16 }}>
@@ -990,6 +1022,20 @@ export default function RolesPage() {
                   <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: 8, background: 'var(--brand-primary)10', borderRadius: 4 }}>
                     <Loader2 size={16} style={{ animation: 'spin 1s linear infinite' }} />
                     <span style={{ fontSize: 13 }}>Actualizando permisos...</span>
+                  </div>
+                )}
+                {rolePermissionsError && (
+                  <div
+                    style={{
+                      border: '1px solid rgba(239, 68, 68, 0.35)',
+                      borderRadius: 8,
+                      padding: 10,
+                      fontSize: 12,
+                      color: '#fecaca',
+                      background: 'rgba(239, 68, 68, 0.12)',
+                    }}
+                  >
+                    {rolePermissionsError}
                   </div>
                 )}
                 {permissions.length === 0 && (

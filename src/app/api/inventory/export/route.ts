@@ -1,9 +1,43 @@
 import { NextResponse } from 'next/server';
+import { createRouteHandlerClient } from '@supabase/auth-helpers-nextjs';
+import { cookies } from 'next/headers';
+import { getAuthenticatedProfile } from '@/lib/auth/warehouse-permissions';
+import {
+  getEffectiveModuleAccess,
+  hasModuleAccess,
+  hasRolePermissionCode,
+} from '@/lib/auth/module-permissions';
 
 export const dynamic = 'force-dynamic';
 
 export async function GET(request: Request) {
   try {
+    const supabase = createRouteHandlerClient({ cookies });
+    const auth = await getAuthenticatedProfile(supabase);
+    if (!auth.ok) {
+      return NextResponse.json({ error: auth.error }, { status: auth.status });
+    }
+
+    const moduleAccess = await getEffectiveModuleAccess(supabase, auth.userId, auth.role);
+    if (!hasModuleAccess(moduleAccess, 'inventory')) {
+      return NextResponse.json({ error: 'No autorizado para este módulo' }, { status: 403 });
+    }
+
+    const { data: profileRow } = await (supabase as any)
+      .from('user_profiles')
+      .select('role')
+      .eq('id', auth.userId)
+      .maybeSingle();
+    const roleForPermission = String(profileRow?.role || auth.role || '').trim().toLowerCase();
+
+    const canExportInventory = await hasRolePermissionCode(supabase, roleForPermission, 'inventory.export');
+    if (!canExportInventory) {
+      return NextResponse.json(
+        { error: 'No tienes permiso para exportar inventario' },
+        { status: 403 }
+      );
+    }
+
     const { searchParams } = new URL(request.url);
     const format = (searchParams.get('format') || 'csv').toLowerCase();
 

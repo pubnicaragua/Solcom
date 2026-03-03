@@ -68,7 +68,9 @@ INSERT INTO public.permissions (code, name, module, description) VALUES
   ('settings.view', 'Ver Configuración',       'settings', 'Ver configuración del sistema'),
   ('settings.edit', 'Modificar Configuración', 'settings', 'Modificar configuración del sistema'),
   -- Agentes IA
-  ('ai-agents.use', 'Usar Agentes IA', 'ai-agents', 'Acceder y usar agentes de inteligencia artificial')
+  ('ai-agents.use', 'Usar Agentes IA', 'ai-agents', 'Acceder y usar agentes de inteligencia artificial'),
+  -- Branding
+  ('branding.view', 'Ver Logo de Marca', 'branding', 'Permite ver el logo de la marca en la navegación')
 ON CONFLICT (code) DO UPDATE SET
   name = EXCLUDED.name,
   description = EXCLUDED.description,
