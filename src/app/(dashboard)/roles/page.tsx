@@ -96,7 +96,7 @@ export default function RolesPage() {
   const [newUserEmail, setNewUserEmail] = useState('');
   const [newUserName, setNewUserName] = useState('');
   const [newUserPassword, setNewUserPassword] = useState('');
-  const [newUserRole, setNewUserRole] = useState<'admin' | 'manager' | 'operator' | 'auditor'>('operator');
+  const [newUserRole, setNewUserRole] = useState<string>('operator');
   const [showNewUserForm, setShowNewUserForm] = useState(false);
   const [loading, setLoading] = useState(true);
   const [usersError, setUsersError] = useState<string | null>(null);
@@ -247,7 +247,7 @@ export default function RolesPage() {
     }
   }
 
-  async function handleUpdateUserRole(userId: string, newRole: 'admin' | 'manager' | 'operator' | 'auditor') {
+  async function handleUpdateUserRole(userId: string, newRole: string) {
     try {
       const response = await fetch(`/api/users/${userId}`, {
         method: 'PATCH',
@@ -543,33 +543,31 @@ export default function RolesPage() {
 
   const allRoles: any[] = [];
   const baseRoleKeys = new Set(Object.keys(ROLE_DEFINITIONS).map((key) => key.toLowerCase()));
-  const seenDynamicRoleKeys = new Set<string>();
+  const seenRoleKeys = new Set<string>();
 
   dynamicRoles.forEach((role: any, index: number) => {
     const roleName = String(role?.name || '').trim();
     if (!roleName) return;
     const normalized = roleName.toLowerCase();
 
-    // Evita duplicar roles base (admin/manager/operator/auditor) ya renderizados en staticRoles
-    if (baseRoleKeys.has(normalized)) return;
-
-    // Evita duplicados por diferencias de mayúsculas/minúsculas en la tabla roles
-    if (seenDynamicRoleKeys.has(normalized)) return;
-    seenDynamicRoleKeys.add(normalized);
+    if (seenRoleKeys.has(normalized)) return;
+    seenRoleKeys.add(normalized);
 
     const defaultDef = ROLE_DEFINITIONS[normalized] || {};
     allRoles.push({
       id: roleName,
-      name: roleName,
+      name: baseRoleKeys.has(normalized) ? (defaultDef.name || roleName) : roleName,
       description: role.description || defaultDef.description || '',
-      color: CUSTOM_ROLE_COLORS[index % CUSTOM_ROLE_COLORS.length] || defaultDef.color || '#6366f1',
+      color: defaultDef.color || CUSTOM_ROLE_COLORS[index % CUSTOM_ROLE_COLORS.length] || '#6366f1',
       userCount: getRoleCount(roleName),
-      is_custom: role.is_custom !== false
+      is_custom: role.is_custom !== false && !baseRoleKeys.has(normalized)
     });
   });
 
   Object.entries(ROLE_DEFINITIONS).forEach(([roleKey, roleInfo]) => {
-    if (!dbRolesMap.has(roleKey.toLowerCase())) {
+    const normalized = roleKey.toLowerCase();
+    if (!seenRoleKeys.has(normalized)) {
+      seenRoleKeys.add(normalized);
       allRoles.push({
         id: roleKey,
         ...roleInfo,
@@ -610,7 +608,7 @@ export default function RolesPage() {
 
   return (
     <div style={{ display: 'grid', gap: 14 }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 10 }}>
         <div className="h-title">Roles y Permisos</div>
         <Button variant="primary" size="sm" onClick={() => setShowNewUserForm(!showNewUserForm)}>
           <UserPlus size={16} style={{ marginRight: 6 }} />
@@ -642,13 +640,8 @@ export default function RolesPage() {
               />
               <Select
                 value={newUserRole}
-                onChange={(e) => setNewUserRole(e.target.value as any)}
-                options={[
-                  { value: 'operator', label: 'Vendedor' },
-                  { value: 'manager', label: 'Gerente de Bodega' },
-                  { value: 'auditor', label: 'Auditor' },
-                  { value: 'admin', label: 'Administrador' }
-                ]}
+                onChange={(e) => setNewUserRole(e.target.value)}
+                options={allRoles.map(r => ({ value: r.id, label: r.name }))}
               />
               <div style={{ display: 'flex', gap: 8 }}>
                 <Button variant="primary" size="sm" onClick={handleCreateUser}>
@@ -665,7 +658,7 @@ export default function RolesPage() {
         </Card>
       )}
 
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 }}>
+      <div className="roles-layout-grid">
         <div style={{ display: 'grid', gap: 14, alignContent: 'start' }}>
           <Card>
             <div style={{ padding: 8 }}>
@@ -852,12 +845,7 @@ export default function RolesPage() {
                             <Select
                               value={editingUser.role}
                               onChange={(e) => setEditingUser({ ...editingUser, role: e.target.value as any })}
-                              options={[
-                                { value: 'operator', label: 'Vendedor' },
-                                { value: 'manager', label: 'Gerente de Bodega' },
-                                { value: 'auditor', label: 'Auditor' },
-                                { value: 'admin', label: 'Administrador' }
-                              ]}
+                              options={allRoles.map(r => ({ value: r.id, label: r.name }))}
                             />
                           </div>
                           <div style={{ display: 'flex', gap: 6 }}>
@@ -905,8 +893,8 @@ export default function RolesPage() {
                           </div>
                         </div>
                       ) : (
-                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                          <div style={{ flex: 1 }}>
+                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 10 }}>
+                          <div style={{ flex: 1, minWidth: 200 }}>
                             <div style={{ fontSize: 14, fontWeight: 600, marginBottom: 2 }}>{user.full_name || user.email}</div>
                             <div style={{ fontSize: 12, color: 'var(--muted)', marginBottom: 4 }}>{user.email}</div>
                             <Badge
@@ -916,7 +904,7 @@ export default function RolesPage() {
                               {ROLE_DEFINITIONS[user.role]?.name || user.role}
                             </Badge>
                           </div>
-                          <div style={{ display: 'flex', gap: 6 }}>
+                          <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
                             <button
                               onClick={() => openModulePermissions(user)}
                               title="Permisos por módulo"
@@ -1482,6 +1470,18 @@ export default function RolesPage() {
           await loadRoles();
         }}
       />
+      <style jsx>{`
+        .roles-layout-grid {
+          display: grid;
+          grid-template-columns: 1fr 1fr;
+          gap: 14px;
+        }
+        @media (max-width: 1024px) {
+          .roles-layout-grid {
+            grid-template-columns: 1fr;
+          }
+        }
+      `}</style>
     </div>
   );
 }
