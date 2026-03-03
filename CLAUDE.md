@@ -1,12 +1,12 @@
-# CLAUDE.md — Solis Comercial ERP
+# CLAUDE.md
 
-Guía de contexto para el asistente AI sobre este proyecto.
+This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
 ---
 
 ## Descripción del proyecto
 
-**Solis Comercial ERP** es un dashboard interno para la empresa Solis Comercial Nicaragua. Gestiona inventario, ventas, transferencias entre bodegas, reportes y usuarios con roles y permisos. Está sincronizado con **Zoho Inventory** vía webhooks y API.
+**Solis Comercial ERP** — Dashboard interno para Solis Comercial Nicaragua. Gestiona inventario, ventas, transferencias entre bodegas, reportes y usuarios con roles y permisos. Sincronizado con **Zoho Inventory** y **Zoho Books** vía webhooks y API.
 
 ---
 
@@ -15,12 +15,34 @@ Guía de contexto para el asistente AI sobre este proyecto.
 - **Framework**: Next.js 14 (App Router, Server Components)
 - **Lenguaje**: TypeScript
 - **Base de datos / Auth**: Supabase (PostgreSQL + RLS + Auth)
-- **Estilos**: Vanilla CSS (sin Tailwind en componentes propios) — Tailwind instalado pero no se usa activamente
+- **Estilos**: Vanilla CSS — Tailwind instalado pero **no se usa** en componentes propios
 - **Iconos**: `lucide-react`
 - **Exportación**: `xlsx` (Excel), `jspdf` + `jspdf-autotable` (PDF)
 - **Validación**: `zod`
+- **Fechas**: `date-fns`
 - **AI**: OpenAI + Groq SDK
-- **Dev server**: `npm run dev` (puerto 3000)
+
+---
+
+## Comandos
+
+```bash
+npm run dev              # Servidor de desarrollo (puerto 3000)
+npm run build            # Build de producción
+npm run type-check       # Verificar TypeScript sin compilar
+npm run lint             # ESLint
+npm run check:kpis       # Diagnóstico de KPIs (producción)
+npm run check:kpis:local # Diagnóstico de KPIs (local)
+```
+
+---
+
+## Path alias
+
+```ts
+"@/*" → "./src/*"
+// Ejemplo: import Button from '@/components/ui/Button'
+```
 
 ---
 
@@ -39,22 +61,20 @@ src/
 │   │   ├── settings/    # Configuración del sistema
 │   │   ├── ai-agents/   # Agentes IA
 │   │   └── fase2/       # Módulo en desarrollo
-│   ├── api/             # Route handlers (Next.js API)
+│   ├── api/             # ~70 route handlers (Next.js API)
 │   ├── cliente/         # Portal de cliente externo
 │   └── reuniones/       # Actas de reuniones (solo admins)
 ├── components/
-│   ├── dashboard/       # Sidebar, Topbar, PivotInventoryTable, etc.
+│   ├── dashboard/       # Sidebar, Topbar, PivotInventoryTable, KPIGrid, etc.
 │   ├── modals/          # Modales (editar producto, stock, transferencia)
 │   ├── ui/              # Componentes base (Button, Card, Input, Select, Badge)
 │   └── ventas/          # InvoicePreview, QuotePreview
 ├── hooks/
-│   └── useUserRole.ts   # Hook principal de autenticación y permisos
+│   └── useUserRole.ts   # Hook principal: role, loading, hasModuleAccess()
 ├── lib/
 │   ├── auth/
-│   │   ├── warehouse-permissions.ts  # getWarehouseAccessScope, requireAdminProfile
-│   │   └── module-permissions.ts     # MODULE_DEFINITIONS, ROLE_BASE_MODULES
-│   ├── supabase/        # Scripts SQL de migraciones
-│   └── zoho/            # Lógica de sincronización con Zoho
+│   │   ├── warehouse-permissions.ts  # getWarehouseAccessScope, requireAdminProfile, getAuthenticatedProfile
+│   │   └── module-permissions.ts     # MODULE_DEFINITIONS (13 módulos), ROLE_BASE_MODULES, hasRolePermissionCode
 ├── contexts/
 │   └── SidebarContext.tsx
 ├── middleware.ts         # Protección de rutas y verificación de módulos
@@ -66,16 +86,16 @@ src/
 
 ## Roles del sistema
 
-| Role key   | Nombre UI          | Acceso                                    |
-|------------|--------------------|-------------------------------------------|
-| `admin`    | Administrador      | Todo                                      |
-| `manager`  | Gerente de Bodega  | Inventario, Transferencias, Reportes      |
-| `operator` | Vendedor           | Inventario (lectura), Ventas              |
-| `auditor`  | Auditor            | Reportes                                  |
+| Role key   | Nombre UI         | Módulos                                          |
+|------------|-------------------|--------------------------------------------------|
+| `admin`    | Administrador     | Todos (13 módulos)                               |
+| `manager`  | Gerente de Bodega | inventory, ventas, reports, ai-agents, transfers |
+| `operator` | Vendedor          | inventory (lectura), ventas                      |
+| `auditor`  | Auditor           | reports                                          |
 
 Los roles custom se crean dinámicamente en la tabla `roles` de Supabase. Sus permisos se guardan en `role_permissions` usando el **nombre** del rol (no el UUID) como clave.
 
-> ⚠️ La tabla `role_permissions` **no debe** tener CHECK constraint en la columna `role`. Si existe, hay que eliminarlo con:
+> ⚠️ La tabla `role_permissions` **no debe** tener CHECK constraint en la columna `role`. Si existe, eliminarlo con:
 > ```sql
 > ALTER TABLE role_permissions DROP CONSTRAINT IF EXISTS role_permissions_role_check;
 > ```
@@ -85,53 +105,54 @@ Los roles custom se crean dinámicamente en la tabla `roles` de Supabase. Sus pe
 ## Sistema de permisos
 
 ### Módulos (`module-permissions.ts`)
-- `MODULE_DEFINITIONS`: lista de módulos con sus rutas
-- `ROLE_BASE_MODULES`: qué módulos tiene cada rol base
-- El Sidebar oculta módulos sin acceso **durante y después** del loading (`loading || !hasModuleAccess(module)`)
+- `MODULE_DEFINITIONS`: 13 módulos con sus rutas
+- `ROLE_BASE_MODULES`: módulos base por rol
+- El Sidebar oculta módulos sin acceso **durante y después** del loading: `loading || !hasModuleAccess(module)`
+- `hasRolePermissionCode(supabase, role, code)`: chequea un permiso granular contra `role_permissions`
 
-### Permisos granulares (`role_permissions` tabla)
-- Tabla: `permissions` (code, name, module)
-- Tabla: `role_permissions` (role TEXT, permission_code TEXT)
+### Permisos granulares
+- Tabla `permissions`: `(code, name, module)`
+- Tabla `role_permissions`: `(role TEXT, permission_code TEXT)`
 - API: `GET/POST/DELETE /api/role-permissions`
 - El frontend envía `{ role: string, permission_code: string }` (singular, no array)
 
 ### Módulo de Reuniones
 - Solo visible para admins
-- No debe estar en `publicRoutes` del middleware
+- **No** debe estar en `publicRoutes` del middleware
 
 ---
 
 ## Tablas principales en Supabase
 
-| Tabla                      | Descripción                                  |
-|----------------------------|----------------------------------------------|
-| `user_profiles`            | Perfil con `role` (admin/manager/operator/auditor) |
-| `roles`                    | Roles custom creados dinámicamente           |
-| `permissions`              | Catálogo de permisos granulares              |
-| `role_permissions`         | Asignación permiso→rol                       |
-| `user_module_permissions`  | Override de módulos por usuario              |
-| `user_warehouse_settings`  | Config de bodegas por usuario                |
-| `user_warehouse_permissions` | Bodegas específicas por usuario            |
-| `inventory_items`          | Productos sincronizados desde Zoho           |
-| `inventory_balance`        | Stock por bodega                             |
-| `warehouses`               | Bodegas                                      |
-| `invoices` / `quotes`      | Facturas y cotizaciones                      |
-| `transfers`                | Transferencias entre bodegas                 |
+| Tabla                        | Descripción                                        |
+|------------------------------|----------------------------------------------------|
+| `user_profiles`              | Perfil con `role` (admin/manager/operator/auditor) |
+| `roles`                      | Roles custom creados dinámicamente                 |
+| `permissions`                | Catálogo de permisos granulares                    |
+| `role_permissions`           | Asignación permiso→rol (usa nombre, no UUID)       |
+| `user_module_permissions`    | Override de módulos por usuario                    |
+| `user_warehouse_settings`    | Config de bodegas por usuario (flag all_warehouses)|
+| `user_warehouse_permissions` | Bodegas específicas por usuario                    |
+| `inventory_items`            | Productos sincronizados desde Zoho                 |
+| `inventory_balance`          | Stock por bodega                                   |
+| `warehouses`                 | Bodegas                                            |
+| `invoices` / `quotes`        | Facturas y cotizaciones                            |
+| `transfers`                  | Transferencias entre bodegas                       |
 
 ---
 
 ## Convenciones importantes
 
 ### API Routes
-- Siempre usar `createRouteHandlerClient({ cookies })` para Supabase en route handlers
+- Usar `createRouteHandlerClient({ cookies })` de `@supabase/auth-helpers-nextjs` en route handlers
 - Usar `requireAdminProfile()` o `getAuthenticatedProfile()` desde `@/lib/auth/warehouse-permissions`
 - Validar payloads con `zod`
 - Retornar errores amigables en español
 
 ### Componentes
-- Todos los estilos van inline o en `globals.css` con variables CSS (`var(--brand-primary)`, `var(--muted)`, etc.)
-- No usar Tailwind en componentes nuevos
-- Componentes UI base están en `src/components/ui/`
+- Estilos van inline o en `globals.css` con variables CSS (`var(--brand-primary)`, etc.)
+- **No usar Tailwind** en componentes nuevos
+- Componentes UI base en `src/components/ui/`
 
 ### CSS Variables principales
 ```css
@@ -148,6 +169,25 @@ Los roles custom se crean dinámicamente en la tabla `roles` de Supabase. Sus pe
 
 ---
 
+## Variables de entorno requeridas
+
+```
+NEXT_PUBLIC_SUPABASE_URL
+NEXT_PUBLIC_SUPABASE_ANON_KEY
+SUPABASE_SERVICE_ROLE_KEY        # Solo server-side
+ZOHO_CLIENT_ID
+ZOHO_CLIENT_SECRET
+ZOHO_REFRESH_TOKEN
+ZOHO_BOOKS_CLIENT_ID             # Integración Zoho Books (separada)
+ZOHO_BOOKS_CLIENT_SECRET
+ZOHO_BOOKS_REFRESH_TOKEN
+ZOHO_BOOKS_ORGANIZATION_ID
+OPENAI_API_KEY
+GROQ_API_KEY
+```
+
+---
+
 ## Credenciales de desarrollo
 
 - **Admin dev**: `devjairsebas0110@gmail.com` / `123456`
@@ -155,21 +195,12 @@ Los roles custom se crean dinámicamente en la tabla `roles` de Supabase. Sus pe
 
 ---
 
-## Comandos útiles
-
-```bash
-npm run dev          # Servidor de desarrollo (puerto 3000)
-npm run build        # Build de producción
-npm run type-check   # Verificar TypeScript sin compilar
-npm run lint         # ESLint
-```
-
----
-
 ## Notas de arquitectura
 
-- El **middleware** (`src/middleware.ts`) protege todas las rutas y verifica permisos por módulo antes de renderizar la página
-- El **`useUserRole` hook** hace 2 queries a Supabase al montar (profile + module overrides) — hay un delay intencional de 1-2s en el Sidebar mientras carga
-- La exportación de inventario a Excel/PDF usa `window.open('/api/inventory/export?...')` que abre en nueva pestaña
-- Los roles custom usan su **nombre** (no UUID) como key en `role_permissions`
-- Zoho Inventory es la fuente de verdad para productos; se sincroniza via cron y webhooks
+- **Flujo de auth**: `middleware.ts` → `useUserRole` hook → chequeos a nivel componente con `hasModuleAccess()`
+- **`useUserRole`** hace 2 queries a Supabase al montar (profile + module overrides). Incluye cleanup/abort para remounts rápidos en dev.
+- **`getWarehouseAccessScope()`**: admin ve todas las bodegas; otros tienen scope explícito via `user_warehouse_settings` y `user_warehouse_permissions`
+- **Portal cliente**: usuario especial hardcodeado (`8abe3739-ba0d-4b5b-9e67-a1d9b5e6c588`) con rutas `/cliente/*`
+- **Exportación de inventario**: usa `window.open('/api/inventory/export?...')` — abre en nueva pestaña
+- **Zoho Inventory** es la fuente de verdad para productos; sincronizado via cron (`/api/cron/sync-inventory`) y webhooks (`/api/webhooks/zoho`)
+- **Zoho Books** maneja facturas/cotizaciones de ventas (integración separada)
