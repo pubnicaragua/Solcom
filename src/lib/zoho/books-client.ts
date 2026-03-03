@@ -273,6 +273,44 @@ export class ZohoBooksClient {
         return this.request('GET', '/books/v3/warehouses');
     }
 
+    async createSalesOrder(data: {
+        customer_id: string;
+        date: string;
+        shipment_date?: string;
+        reference_number?: string;
+        notes?: string;
+        discount?: number;
+        is_discount_before_tax?: boolean;
+        shipping_charge?: number;
+        salesperson_name?: string;
+        location_id?: string;
+        line_items: Array<{
+            item_id: string;
+            quantity: number;
+            rate: number;
+        }>;
+    }): Promise<{ salesorder_id: string; salesorder_number: string }> {
+        const result = await this.request('POST', '/books/v3/salesorders', data);
+        if (result.code !== 0) {
+            throw new Error(result.message || 'Error al crear orden de venta en Zoho');
+        }
+        return {
+            salesorder_id: result.salesorder.salesorder_id,
+            salesorder_number: result.salesorder.salesorder_number,
+        };
+    }
+
+    async convertSalesOrderToInvoice(salesorderId: string): Promise<{ invoice_id: string; invoice_number: string }> {
+        const result = await this.request('POST', `/books/v3/invoices/fromsalesorder?salesorder_id=${salesorderId}`);
+        if (result.code !== 0) {
+            throw new Error(result.message || 'Error al convertir orden de venta a factura en Zoho');
+        }
+        return {
+            invoice_id: result.invoice.invoice_id,
+            invoice_number: result.invoice.invoice_number,
+        };
+    }
+
     async createEstimate(data: {
         customer_id: string;
         date: string;

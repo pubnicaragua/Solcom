@@ -38,6 +38,8 @@ export interface WarehouseRecord {
   code: string;
   name: string;
   active: boolean;
+  warehouse_type?: string | null;
+  parent_warehouse_id?: string | null;
 }
 
 const VALID_ROLES: AppRole[] = ['admin', 'manager', 'operator', 'auditor'];
@@ -219,18 +221,22 @@ export function isWarehouseAllowed(scope: WarehouseAccessScope, warehouseId: str
 export async function listWarehousesForScope(
   supabase: SupabaseRouteClient,
   scope: WarehouseAccessScope,
-  options?: { activeOnly?: boolean }
+  options?: { activeOnly?: boolean; warehouseType?: string }
 ): Promise<WarehouseRecord[]> {
   if (!scope.canViewStock) return [];
 
   const activeOnly = options?.activeOnly ?? false;
   let query = supabase
     .from('warehouses')
-    .select('id, code, name, active')
+    .select('id, code, name, active, warehouse_type, parent_warehouse_id')
     .order('code', { ascending: true });
 
   if (activeOnly) {
     query = query.eq('active', true);
+  }
+
+  if (options?.warehouseType) {
+    query = query.eq('warehouse_type', options.warehouseType);
   }
 
   if (!scope.allWarehouses) {
@@ -246,5 +252,7 @@ export async function listWarehousesForScope(
     code: row.code,
     name: row.name,
     active: Boolean(row.active),
+    warehouse_type: row.warehouse_type || null,
+    parent_warehouse_id: row.parent_warehouse_id || null,
   }));
 }

@@ -37,6 +37,7 @@ export async function GET(request: Request) {
         const { searchParams } = new URL(request.url);
         const search = sanitizeSearchTerm(searchParams.get('search') || '');
         const warehouse = (searchParams.get('warehouse') || '').trim();
+        const parentWarehouse = (searchParams.get('parent_warehouse') || '').trim();
         const state = searchParams.get('state') || '';
         const category = searchParams.get('category') || '';
         const marca = searchParams.get('marca') || searchParams.get('brand') || '';
@@ -94,6 +95,30 @@ export async function GET(request: Request) {
                 totalBeforeFilter: 0,
                 selectedWarehouse: null,
             });
+        }
+
+        // ─── Parent warehouse (family) mode ───
+        // When parent_warehouse is set, we combine stock from parent + child warehouses
+        // into a single column, useful for the cart's empresarial warehouse view.
+        let familyMode = false;
+        let familyIds: string[] = [];
+        let familyParentCode = '';
+        let familyParentName = '';
+
+        if (parentWarehouse) {
+            const { data: familyRows, error: familyErr } = await supabase
+                .from('warehouses')
+                .select('id, code, name, warehouse_type, parent_warehouse_id')
+                .or(`id.eq.${parentWarehouse},parent_warehouse_id.eq.${parentWarehouse}`)
+                .eq('active', true);
+
+            if (!familyErr && familyRows && familyRows.length > 0) {
+                familyMode = true;
+                familyIds = familyRows.map((w: any) => w.id);
+                const parent = familyRows.find((w: any) => w.id === parentWarehouse);
+                familyParentCode = parent?.code || familyRows[0]?.code || 'FAM';
+                familyParentName = parent?.name || familyRows[0]?.name || 'Familia';
+            }
         }
 
         // 2) Fetch items with filters (search precision-first)
@@ -520,6 +545,46 @@ export async function GET(request: Request) {
 
         // Optionally filter out only zero-stock items (keep negatives visible).
         const finalItems = showZeroStock ? itemsAfterStockLevel : itemsAfterStockLevel.filter(i => i.total !== 0);
+
+        // ─── Family mode: collapse all warehouse columns into one parent column ───
+        if (familyMode && familyIds.length > 0) {
+            const familyIdSet = new Set(familyIds);
+            const familyItems = items.map((item: any) => {
+                let combinedStock = 0;
+                for (const w of allWarehouses) {
+                    if (familyIdSet.has(w.id)) {
+                        const key = `${item.id}__${w.id}`;
+                        combinedStock += latestSnap.get(key) ?? 0;
+                    }
+                }
+                return {
+                    id: item.id,
+                    sku: item.sku,
+                    name: item.name,
+                    zoho_item_id: item.zoho_item_id ?? null,
+                    color: item.color || null,
+                    color_hex: item.color_hex || null,
+                    state: normalizeItemState(item.state),
+                    brand: item.marca || null,
+                    category: item.category || null,
+                    price: item.price ?? 0,
+                    warehouseQty: { [familyParentCode]: combinedStock },
+                    total: combinedStock,
+                    daysInStock: lotAgeByItem.get(item.id) ?? null,
+                    hasSnapshots: itemsWithBreakdown.has(item.id),
+                };
+            }).filter(i => i.total > 0);
+
+            return NextResponse.json({
+                warehouses: [{ code: familyParentCode, name: familyParentName }],
+                items: familyItems,
+                totalBeforeFilter: familyItems.length,
+                model: usingBalanceModel ? 'inventory_balance' : 'stock_snapshots',
+                usedSnapshotGapFill,
+                selectedWarehouse: null,
+                familyMode: true,
+            });
+        }
 
         return NextResponse.json({
             warehouses: activeWarehouses.map((w: any) => ({ code: w.code, name: w.name })),

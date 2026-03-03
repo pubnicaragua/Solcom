@@ -10,8 +10,11 @@ import { getEffectiveModuleAccess, hasModuleAccess } from '@/lib/auth/module-per
 
 export const dynamic = 'force-dynamic';
 
-export async function GET() {
+export async function GET(request: Request) {
   try {
+    const { searchParams } = new URL(request.url);
+    const warehouseType = searchParams.get('type') || '';
+
     const supabase = createRouteHandlerClient({ cookies });
     const auth = await getAuthenticatedProfile(supabase);
     if (!auth.ok) {
@@ -24,7 +27,10 @@ export async function GET() {
     }
 
     const scope = await getWarehouseAccessScope(supabase, auth.userId, auth.role);
-    const data = await listWarehousesForScope(supabase, scope, { activeOnly: true });
+    const data = await listWarehousesForScope(supabase, scope, {
+      activeOnly: true,
+      warehouseType: warehouseType || undefined,
+    });
 
     return NextResponse.json(data || []);
   } catch (error) {

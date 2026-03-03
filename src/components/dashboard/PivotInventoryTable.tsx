@@ -46,6 +46,7 @@ interface PivotInventoryTableProps {
     filters?: any;
     cartMode?: boolean;
     onAddToCart?: (item: PivotItem) => void;
+    parentWarehouseId?: string | null;
 }
 
 /* ───── hierarchy builder ───── */
@@ -202,7 +203,7 @@ function ensureTooltipCSS() {
 }
 
 /* ───── component ───── */
-export default function PivotInventoryTable({ filters, cartMode, onAddToCart }: PivotInventoryTableProps) {
+export default function PivotInventoryTable({ filters, cartMode, onAddToCart, parentWarehouseId }: PivotInventoryTableProps) {
     const [data, setData] = useState<PivotData | null>(null);
     const [loading, setLoading] = useState(true);
     const [collapsedGroups, setCollapsedGroups] = useState<Set<string>>(new Set());
@@ -261,6 +262,9 @@ export default function PivotInventoryTable({ filters, cartMode, onAddToCart }: 
             if (hideZeroStock) {
                 params.set('showZeroStock', 'false');
             }
+            if (parentWarehouseId) {
+                params.set('parent_warehouse', parentWarehouseId);
+            }
             const queryKey = params.toString();
             const now = Date.now();
             const cachedEntry = pivotCacheRef.current.get(queryKey);
@@ -310,7 +314,7 @@ export default function PivotInventoryTable({ filters, cartMode, onAddToCart }: 
                 setLoading(false);
             }
         }
-    }, [filters, hideZeroStock]);
+    }, [filters, hideZeroStock, parentWarehouseId]);
 
     useEffect(() => {
         void fetchPivotData();

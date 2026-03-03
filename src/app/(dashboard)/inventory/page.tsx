@@ -67,6 +67,7 @@ export default function InventoryPage() {
   const [cartItems, setCartItems] = useState<CartItem[]>([]);
   const [cartMode, setCartMode] = useState(false);
   const [cartOpen, setCartOpen] = useState(false);
+  const [parentWarehouseId, setParentWarehouseId] = useState<string | null>(null);
   const [isMobileView, setIsMobileView] = useState(false);
   const [cartToast, setCartToast] = useState<{ name: string; qty: number } | null>(null);
   const [cartPulse, setCartPulse] = useState(false);
@@ -581,6 +582,7 @@ export default function InventoryPage() {
         filters={filters}
         cartMode={cartMode}
         onAddToCart={addToCart}
+        parentWarehouseId={cartMode ? parentWarehouseId : undefined}
       />
 
       <Card>
@@ -635,9 +637,10 @@ export default function InventoryPage() {
           onUpdateQuantity={updateCartQty}
           onRemoveItem={removeFromCart}
           onClearCart={clearCart}
-          onQuoteCreated={() => {
+          onDocumentCreated={() => {
             setCartMode(false);
           }}
+          onParentWarehouseChange={(id) => setParentWarehouseId(id)}
         />
       )}
 

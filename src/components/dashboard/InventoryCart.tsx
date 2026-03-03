@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect, useRef, useCallback } from 'react';
-import { X, Trash2, Plus, Minus, ShoppingCart, FileText, Package, Loader2, Search, ChevronDown, ChevronUp, Calendar, MapPin, User } from 'lucide-react';
+import { X, Trash2, Plus, Minus, ShoppingCart, FileText, Package, Loader2, Search, ChevronDown, ChevronUp, Calendar, MapPin, User, ClipboardList, Receipt } from 'lucide-react';
 import Link from 'next/link';
 
 /* ───── Types ───── */
@@ -13,6 +13,8 @@ export interface CartItem {
     brand: string | null;
     quantity: number;
 }
+
+type CartType = 'cotizacion' | 'factura' | 'orden_venta';
 
 interface Customer {
     id: string;
@@ -28,6 +30,7 @@ interface Warehouse {
     id: string;
     code: string;
     name: string;
+    warehouse_type?: string | null;
 }
 
 interface InventoryCartProps {
@@ -37,7 +40,8 @@ interface InventoryCartProps {
     onUpdateQuantity: (itemId: string, qty: number) => void;
     onRemoveItem: (itemId: string) => void;
     onClearCart: () => void;
-    onQuoteCreated: () => void;
+    onDocumentCreated: () => void;
+    onParentWarehouseChange?: (warehouseId: string | null) => void;
 }
 
 /* ───── Helpers ───── */
@@ -50,6 +54,39 @@ function todayPlusDays(days: number): string {
     d.setDate(d.getDate() + days);
     return d.toISOString().slice(0, 10);
 }
+
+const CART_TYPE_CONFIG: Record<CartType, { label: string; color: string; bg: string; border: string; icon: any; successLabel: string; successLink: string; successLinkLabel: string }> = {
+    cotizacion: {
+        label: 'Cotización',
+        color: '#60A5FA',
+        bg: 'rgba(59,130,246,0.15)',
+        border: 'rgba(59,130,246,0.4)',
+        icon: FileText,
+        successLabel: '¡Cotización creada!',
+        successLink: '/ventas/cotizaciones',
+        successLinkLabel: 'Ver Cotizaciones',
+    },
+    factura: {
+        label: 'Factura',
+        color: '#34D399',
+        bg: 'rgba(16,185,129,0.15)',
+        border: 'rgba(16,185,129,0.4)',
+        icon: Receipt,
+        successLabel: '¡Factura creada!',
+        successLink: '/ventas',
+        successLinkLabel: 'Ver Facturas',
+    },
+    orden_venta: {
+        label: 'Orden de Venta',
+        color: '#A78BFA',
+        bg: 'rgba(139,92,246,0.15)',
+        border: 'rgba(139,92,246,0.4)',
+        icon: ClipboardList,
+        successLabel: '¡Orden de Venta creada!',
+        successLink: '/ventas',
+        successLinkLabel: 'Ver Órdenes',
+    },
+};
 
 /* ───── Styles ───── */
 const inputStyle: React.CSSProperties = {
@@ -93,14 +130,16 @@ export default function InventoryCart({
     onUpdateQuantity,
     onRemoveItem,
     onClearCart,
-    onQuoteCreated,
+    onDocumentCreated,
+    onParentWarehouseChange,
 }: InventoryCartProps) {
+    const [cartType, setCartType] = useState<CartType>('cotizacion');
     const [creating, setCreating] = useState(false);
     const [error, setError] = useState('');
     const [success, setSuccess] = useState(false);
-    const [createdQuoteNumber, setCreatedQuoteNumber] = useState('');
+    const [createdDocNumber, setCreatedDocNumber] = useState('');
 
-    // Quote data fields
+    // Shared fields
     const [customers, setCustomers] = useState<Customer[]>([]);
     const [customerSearch, setCustomerSearch] = useState('');
     const [showCustomerDropdown, setShowCustomerDropdown] = useState(false);
@@ -108,11 +147,22 @@ export default function InventoryCart({
     const [selectedCustomerName, setSelectedCustomerName] = useState('');
     const [loadingCustomers, setLoadingCustomers] = useState(false);
 
-    const [warehouses, setWarehouses] = useState<Warehouse[]>([]);
+    const [parentWarehouses, setParentWarehouses] = useState<Warehouse[]>([]);
     const [warehouseId, setWarehouseId] = useState('');
 
-    const [quoteDate, setQuoteDate] = useState(todayStr);
+    const [docDate, setDocDate] = useState(todayStr);
+
+    // Cotización specific
     const [validUntil, setValidUntil] = useState(() => todayPlusDays(7));
+
+    // Factura specific
+    const [dueDate, setDueDate] = useState(() => todayPlusDays(30));
+    const [paymentTerms, setPaymentTerms] = useState('30_dias');
+    const [salesperson, setSalesperson] = useState('');
+
+    // Orden de Venta specific
+    const [expectedDeliveryDate, setExpectedDeliveryDate] = useState(() => todayPlusDays(7));
+    const [ovNotes, setOvNotes] = useState('');
 
     const [formExpanded, setFormExpanded] = useState(true);
     const [validationErrors, setValidationErrors] = useState<Record<string, string>>({});
@@ -123,6 +173,7 @@ export default function InventoryCart({
 
     const totalItems = items.length;
     const totalUnits = items.reduce((sum, item) => sum + item.quantity, 0);
+    const config = CART_TYPE_CONFIG[cartType];
 
     // Fetch customers
     const fetchCustomers = useCallback(async (search: string) => {
@@ -138,14 +189,14 @@ export default function InventoryCart({
         }
     }, []);
 
-    // Fetch warehouses
-    const fetchWarehouses = useCallback(async () => {
+    // Fetch parent (empresarial) warehouses
+    const fetchParentWarehouses = useCallback(async () => {
         try {
-            const res = await fetch('/api/warehouses');
+            const res = await fetch('/api/warehouses?type=empresarial');
             const data = await res.json();
-            setWarehouses(Array.isArray(data) ? data : data?.warehouses || []);
+            setParentWarehouses(Array.isArray(data) ? data : data?.warehouses || []);
         } catch {
-            setWarehouses([]);
+            setParentWarehouses([]);
         }
     }, []);
 
@@ -153,9 +204,9 @@ export default function InventoryCart({
     useEffect(() => {
         if (isOpen) {
             fetchCustomers('');
-            fetchWarehouses();
+            fetchParentWarehouses();
         }
-    }, [isOpen, fetchCustomers, fetchWarehouses]);
+    }, [isOpen, fetchCustomers, fetchParentWarehouses]);
 
     // Cleanup blur timeout
     useEffect(() => {
@@ -198,16 +249,26 @@ export default function InventoryCart({
         }, 140);
     }
 
+    function handleWarehouseChange(id: string) {
+        setWarehouseId(id);
+        setValidationErrors((prev) => {
+            const next = { ...prev };
+            delete next.warehouse;
+            return next;
+        });
+        onParentWarehouseChange?.(id || null);
+    }
+
     function validate(): boolean {
         const errors: Record<string, string> = {};
         if (!selectedCustomerId) errors.customer = 'Selecciona un cliente';
-        if (!warehouseId) errors.warehouse = 'Selecciona una bodega';
-        if (!quoteDate) errors.date = 'Selecciona la fecha';
+        if (!warehouseId) errors.warehouse = 'Selecciona una ubicación';
+        if (!docDate) errors.date = 'Selecciona la fecha';
         setValidationErrors(errors);
         return Object.keys(errors).length === 0;
     }
 
-    async function handleCreateQuote() {
+    async function handleSubmit() {
         if (items.length === 0) return;
         if (!validate()) return;
 
@@ -216,7 +277,7 @@ export default function InventoryCart({
         setSuccess(false);
 
         try {
-            const quoteItems = items.map((item) => ({
+            const docItems = items.map((item) => ({
                 item_id: item.itemId,
                 description: `${item.name}${item.color ? ` — ${item.color}` : ''}${item.brand ? ` (${item.brand})` : ''}`,
                 quantity: item.quantity,
@@ -224,52 +285,107 @@ export default function InventoryCart({
                 discount_percent: 0,
             }));
 
-            const payload = {
-                customer_id: selectedCustomerId,
-                warehouse_id: warehouseId,
-                date: quoteDate,
-                valid_until: validUntil || null,
-                status: 'borrador',
-                tax_rate: 15,
-                discount_amount: 0,
-                notes: 'Cotización generada desde inventario — precios pendientes de asignación.',
-                template_key: null,
-                source: 'inventory_cart',
-                items: quoteItems,
-                sync_to_zoho: true,
-            };
+            let response: Response;
+            let docNumber = '';
 
-            const response = await fetch('/api/ventas/quotes', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(payload),
-            });
-
-            const data = await response.json().catch(() => ({}));
-            if (!response.ok) {
-                throw new Error(data?.error || 'No se pudo crear la cotización.');
+            if (cartType === 'cotizacion') {
+                const payload = {
+                    customer_id: selectedCustomerId,
+                    warehouse_id: warehouseId,
+                    date: docDate,
+                    valid_until: validUntil || null,
+                    status: 'borrador',
+                    tax_rate: 15,
+                    discount_amount: 0,
+                    notes: 'Cotización generada desde inventario — precios pendientes de asignación.',
+                    template_key: null,
+                    source: 'inventory_cart',
+                    items: docItems,
+                    sync_to_zoho: true,
+                };
+                response = await fetch('/api/ventas/quotes', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload),
+                });
+                const data = await response.json().catch(() => ({}));
+                if (!response.ok) throw new Error(data?.error || 'No se pudo crear la cotización.');
+                docNumber = data?.quote?.quote_number || '';
+            } else if (cartType === 'factura') {
+                const payload = {
+                    customer_id: selectedCustomerId,
+                    warehouse_id: warehouseId,
+                    date: docDate,
+                    due_date: dueDate || null,
+                    payment_terms: paymentTerms || null,
+                    salesperson_name: salesperson || null,
+                    status: 'enviada',
+                    tax_rate: 15,
+                    discount_amount: 0,
+                    notes: 'Factura generada desde inventario — precios pendientes de asignación.',
+                    source: 'inventory_cart',
+                    items: docItems,
+                    sync_to_zoho: true,
+                };
+                response = await fetch('/api/ventas/invoices', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload),
+                });
+                const data = await response.json().catch(() => ({}));
+                if (!response.ok) throw new Error(data?.error || 'No se pudo crear la factura.');
+                docNumber = data?.invoice?.invoice_number || '';
+            } else {
+                // orden_venta
+                const payload = {
+                    customer_id: selectedCustomerId,
+                    warehouse_id: warehouseId,
+                    date: docDate,
+                    expected_delivery_date: expectedDeliveryDate || null,
+                    salesperson_name: salesperson || null,
+                    status: 'borrador',
+                    tax_rate: 15,
+                    discount_amount: 0,
+                    notes: ovNotes || 'Orden de venta generada desde inventario — precios pendientes de asignación.',
+                    source: 'inventory_cart',
+                    items: docItems,
+                    sync_to_zoho: true,
+                };
+                response = await fetch('/api/ventas/sales-orders', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload),
+                });
+                const data = await response.json().catch(() => ({}));
+                if (!response.ok) throw new Error(data?.error || 'No se pudo crear la orden de venta.');
+                docNumber = data?.order?.order_number || '';
             }
 
-            setCreatedQuoteNumber(data?.quote?.quote_number || '');
+            setCreatedDocNumber(docNumber);
             setSuccess(true);
             onClearCart();
-            onQuoteCreated();
+            onDocumentCreated();
             // Reset form
             setSelectedCustomerId('');
             setSelectedCustomerName('');
             setCustomerSearch('');
-            setWarehouseId('');
-            setQuoteDate(todayStr());
+            setDocDate(todayStr());
             setValidUntil(todayPlusDays(7));
+            setDueDate(todayPlusDays(30));
+            setExpectedDeliveryDate(todayPlusDays(7));
+            setSalesperson('');
+            setOvNotes('');
             setValidationErrors({});
         } catch (err: any) {
-            setError(err?.message || 'Error al crear cotización.');
+            setError(err?.message || 'Error al crear documento.');
         } finally {
             setCreating(false);
         }
     }
 
     if (!isOpen) return null;
+
+    const CartTypeIcon = config.icon;
 
     return (
         <>
@@ -319,17 +435,17 @@ export default function InventoryCart({
                                 width: 36,
                                 height: 36,
                                 borderRadius: 10,
-                                background: 'rgba(16,185,129,0.15)',
+                                background: config.bg,
                                 display: 'flex',
                                 alignItems: 'center',
                                 justifyContent: 'center',
                             }}
                         >
-                            <ShoppingCart size={18} style={{ color: '#34d399' }} />
+                            <ShoppingCart size={18} style={{ color: config.color }} />
                         </div>
                         <div>
                             <div style={{ fontSize: 16, fontWeight: 800, color: 'var(--text, #e2e8f0)' }}>
-                                Carrito de Cotización
+                                Carrito
                             </div>
                             <div style={{ fontSize: 12, color: 'var(--muted, #64748b)' }}>
                                 {totalItems} producto{totalItems !== 1 ? 's' : ''} · {totalUnits} unidad{totalUnits !== 1 ? 'es' : ''}
@@ -355,6 +471,49 @@ export default function InventoryCart({
                     </button>
                 </div>
 
+                {/* Cart Type Toggle */}
+                <div style={{
+                    padding: '10px 18px',
+                    borderBottom: '1px solid rgba(255,255,255,0.06)',
+                    display: 'flex',
+                    gap: 6,
+                }}>
+                    {(['cotizacion', 'factura', 'orden_venta'] as CartType[]).map((type) => {
+                        const tc = CART_TYPE_CONFIG[type];
+                        const isActive = cartType === type;
+                        const Icon = tc.icon;
+                        return (
+                            <button
+                                key={type}
+                                onClick={() => {
+                                    setCartType(type);
+                                    setError('');
+                                    setSuccess(false);
+                                }}
+                                style={{
+                                    flex: 1,
+                                    padding: '7px 8px',
+                                    borderRadius: 8,
+                                    border: `1px solid ${isActive ? tc.border : 'rgba(255,255,255,0.08)'}`,
+                                    background: isActive ? tc.bg : 'transparent',
+                                    color: isActive ? tc.color : 'var(--muted, #64748b)',
+                                    fontSize: 11,
+                                    fontWeight: 700,
+                                    cursor: 'pointer',
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    justifyContent: 'center',
+                                    gap: 4,
+                                    transition: 'all 0.15s',
+                                }}
+                            >
+                                <Icon size={13} />
+                                {tc.label}
+                            </button>
+                        );
+                    })}
+                </div>
+
                 {/* Success State */}
                 {success && (
                     <div
@@ -362,8 +521,8 @@ export default function InventoryCart({
                             margin: 16,
                             padding: 18,
                             borderRadius: 12,
-                            background: 'rgba(16,185,129,0.1)',
-                            border: '1px solid rgba(16,185,129,0.3)',
+                            background: config.bg,
+                            border: `1px solid ${config.border}`,
                             textAlign: 'center',
                         }}
                     >
@@ -372,36 +531,36 @@ export default function InventoryCart({
                                 width: 48,
                                 height: 48,
                                 borderRadius: '50%',
-                                background: 'rgba(16,185,129,0.2)',
+                                background: config.bg,
                                 display: 'flex',
                                 alignItems: 'center',
                                 justifyContent: 'center',
                                 margin: '0 auto 12px',
                             }}
                         >
-                            <FileText size={24} style={{ color: '#34d399' }} />
+                            <CartTypeIcon size={24} style={{ color: config.color }} />
                         </div>
-                        <div style={{ fontSize: 16, fontWeight: 800, color: '#34d399', marginBottom: 4 }}>
-                            ¡Cotización creada!
+                        <div style={{ fontSize: 16, fontWeight: 800, color: config.color, marginBottom: 4 }}>
+                            {config.successLabel}
                         </div>
-                        {createdQuoteNumber && (
-                            <div style={{ fontSize: 13, color: '#6ee7b7', marginBottom: 4 }}>
-                                {createdQuoteNumber}
+                        {createdDocNumber && (
+                            <div style={{ fontSize: 13, color: config.color, marginBottom: 4, opacity: 0.8 }}>
+                                {createdDocNumber}
                             </div>
                         )}
-                        <div style={{ fontSize: 12, color: '#6ee7b7', marginBottom: 12 }}>
+                        <div style={{ fontSize: 12, color: config.color, marginBottom: 12, opacity: 0.7 }}>
                             Sincronizada con Zoho Books
                         </div>
                         <Link
-                            href="/ventas/cotizaciones"
+                            href={config.successLink}
                             style={{
                                 display: 'inline-flex',
                                 alignItems: 'center',
                                 gap: 6,
                                 padding: '10px 20px',
-                                background: 'rgba(16,185,129,0.2)',
-                                color: '#34d399',
-                                border: '1px solid rgba(16,185,129,0.4)',
+                                background: config.bg,
+                                color: config.color,
+                                border: `1px solid ${config.border}`,
                                 borderRadius: 10,
                                 fontSize: 13,
                                 fontWeight: 700,
@@ -410,8 +569,8 @@ export default function InventoryCart({
                                 transition: 'all 0.2s',
                             }}
                         >
-                            <FileText size={15} />
-                            Ver Cotizaciones
+                            <CartTypeIcon size={15} />
+                            {config.successLinkLabel}
                         </Link>
                         <div style={{ marginTop: 12 }}>
                             <button
@@ -449,10 +608,10 @@ export default function InventoryCart({
                     </div>
                 )}
 
-                {/* Quote Data Form + Items List */}
+                {/* Form + Items List */}
                 {!success && (
                     <div style={{ flex: 1, overflowY: 'auto', padding: '12px 16px' }}>
-                        {/* Quote Data Section */}
+                        {/* Form Section */}
                         {items.length > 0 && (
                             <div
                                 style={{
@@ -481,7 +640,10 @@ export default function InventoryCart({
                                         fontWeight: 700,
                                     }}
                                 >
-                                    <span>Datos de cotización</span>
+                                    <span style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                                        <CartTypeIcon size={13} style={{ color: config.color }} />
+                                        Datos de {config.label}
+                                    </span>
                                     {formExpanded ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
                                 </button>
 
@@ -607,29 +769,22 @@ export default function InventoryCart({
                                             </div>
                                         </div>
 
-                                        {/* Warehouse */}
+                                        {/* Parent Warehouse (Empresarial) */}
                                         <div style={fieldGroupStyle}>
                                             <label style={labelStyle}>
                                                 <MapPin size={11} />
-                                                Bodega *
+                                                Ubicación (Empresa) *
                                             </label>
                                             <select
                                                 value={warehouseId}
-                                                onChange={(e) => {
-                                                    setWarehouseId(e.target.value);
-                                                    setValidationErrors((prev) => {
-                                                        const next = { ...prev };
-                                                        delete next.warehouse;
-                                                        return next;
-                                                    });
-                                                }}
+                                                onChange={(e) => handleWarehouseChange(e.target.value)}
                                                 style={{
                                                     ...inputStyle,
                                                     borderColor: validationErrors.warehouse ? 'rgba(239,68,68,0.6)' : undefined,
                                                 }}
                                             >
-                                                <option value="">Seleccionar bodega...</option>
-                                                {warehouses.map((w) => (
+                                                <option value="">Seleccionar ubicación...</option>
+                                                {parentWarehouses.map((w) => (
                                                     <option key={w.id} value={w.id}>
                                                         {w.code} — {w.name}
                                                     </option>
@@ -640,46 +795,186 @@ export default function InventoryCart({
                                             )}
                                         </div>
 
-                                        {/* Dates Row */}
-                                        <div style={{ display: 'flex', gap: 10 }}>
-                                            <div style={{ ...fieldGroupStyle, flex: 1 }}>
-                                                <label style={labelStyle}>
-                                                    <Calendar size={11} />
-                                                    Fecha estimación *
-                                                </label>
-                                                <input
-                                                    type="date"
-                                                    value={quoteDate}
-                                                    onChange={(e) => {
-                                                        setQuoteDate(e.target.value);
-                                                        setValidationErrors((prev) => {
-                                                            const next = { ...prev };
-                                                            delete next.date;
-                                                            return next;
-                                                        });
-                                                    }}
-                                                    style={{
-                                                        ...inputStyle,
-                                                        borderColor: validationErrors.date ? 'rgba(239,68,68,0.6)' : undefined,
-                                                    }}
-                                                />
-                                                {validationErrors.date && (
-                                                    <div style={validationErrorStyle}>{validationErrors.date}</div>
-                                                )}
+                                        {/* Dynamic fields based on cart type */}
+                                        {cartType === 'cotizacion' && (
+                                            <div style={{ display: 'flex', gap: 10 }}>
+                                                <div style={{ ...fieldGroupStyle, flex: 1 }}>
+                                                    <label style={labelStyle}>
+                                                        <Calendar size={11} />
+                                                        Fecha *
+                                                    </label>
+                                                    <input
+                                                        type="date"
+                                                        value={docDate}
+                                                        onChange={(e) => {
+                                                            setDocDate(e.target.value);
+                                                            setValidationErrors((prev) => {
+                                                                const next = { ...prev };
+                                                                delete next.date;
+                                                                return next;
+                                                            });
+                                                        }}
+                                                        style={{
+                                                            ...inputStyle,
+                                                            borderColor: validationErrors.date ? 'rgba(239,68,68,0.6)' : undefined,
+                                                        }}
+                                                    />
+                                                    {validationErrors.date && (
+                                                        <div style={validationErrorStyle}>{validationErrors.date}</div>
+                                                    )}
+                                                </div>
+                                                <div style={{ ...fieldGroupStyle, flex: 1 }}>
+                                                    <label style={labelStyle}>
+                                                        <Calendar size={11} />
+                                                        Válido hasta
+                                                    </label>
+                                                    <input
+                                                        type="date"
+                                                        value={validUntil}
+                                                        onChange={(e) => setValidUntil(e.target.value)}
+                                                        style={inputStyle}
+                                                    />
+                                                </div>
                                             </div>
-                                            <div style={{ ...fieldGroupStyle, flex: 1 }}>
-                                                <label style={labelStyle}>
-                                                    <Calendar size={11} />
-                                                    Vencimiento
-                                                </label>
-                                                <input
-                                                    type="date"
-                                                    value={validUntil}
-                                                    onChange={(e) => setValidUntil(e.target.value)}
-                                                    style={inputStyle}
-                                                />
-                                            </div>
-                                        </div>
+                                        )}
+
+                                        {cartType === 'factura' && (
+                                            <>
+                                                <div style={{ display: 'flex', gap: 10 }}>
+                                                    <div style={{ ...fieldGroupStyle, flex: 1 }}>
+                                                        <label style={labelStyle}>
+                                                            <Calendar size={11} />
+                                                            Fecha *
+                                                        </label>
+                                                        <input
+                                                            type="date"
+                                                            value={docDate}
+                                                            onChange={(e) => {
+                                                                setDocDate(e.target.value);
+                                                                setValidationErrors((prev) => {
+                                                                    const next = { ...prev };
+                                                                    delete next.date;
+                                                                    return next;
+                                                                });
+                                                            }}
+                                                            style={{
+                                                                ...inputStyle,
+                                                                borderColor: validationErrors.date ? 'rgba(239,68,68,0.6)' : undefined,
+                                                            }}
+                                                        />
+                                                    </div>
+                                                    <div style={{ ...fieldGroupStyle, flex: 1 }}>
+                                                        <label style={labelStyle}>
+                                                            <Calendar size={11} />
+                                                            Vencimiento
+                                                        </label>
+                                                        <input
+                                                            type="date"
+                                                            value={dueDate}
+                                                            onChange={(e) => setDueDate(e.target.value)}
+                                                            style={inputStyle}
+                                                        />
+                                                    </div>
+                                                </div>
+                                                <div style={{ display: 'flex', gap: 10 }}>
+                                                    <div style={{ ...fieldGroupStyle, flex: 1 }}>
+                                                        <label style={labelStyle}>Términos de pago</label>
+                                                        <select
+                                                            value={paymentTerms}
+                                                            onChange={(e) => setPaymentTerms(e.target.value)}
+                                                            style={inputStyle}
+                                                        >
+                                                            <option value="contado">Contado</option>
+                                                            <option value="7_dias">7 días</option>
+                                                            <option value="15_dias">15 días</option>
+                                                            <option value="30_dias">30 días</option>
+                                                            <option value="45_dias">45 días</option>
+                                                            <option value="60_dias">60 días</option>
+                                                            <option value="90_dias">90 días</option>
+                                                        </select>
+                                                    </div>
+                                                    <div style={{ ...fieldGroupStyle, flex: 1 }}>
+                                                        <label style={labelStyle}>
+                                                            <User size={11} />
+                                                            Vendedor
+                                                        </label>
+                                                        <input
+                                                            type="text"
+                                                            value={salesperson}
+                                                            onChange={(e) => setSalesperson(e.target.value)}
+                                                            placeholder="Nombre vendedor"
+                                                            style={inputStyle}
+                                                        />
+                                                    </div>
+                                                </div>
+                                            </>
+                                        )}
+
+                                        {cartType === 'orden_venta' && (
+                                            <>
+                                                <div style={{ display: 'flex', gap: 10 }}>
+                                                    <div style={{ ...fieldGroupStyle, flex: 1 }}>
+                                                        <label style={labelStyle}>
+                                                            <Calendar size={11} />
+                                                            Fecha *
+                                                        </label>
+                                                        <input
+                                                            type="date"
+                                                            value={docDate}
+                                                            onChange={(e) => {
+                                                                setDocDate(e.target.value);
+                                                                setValidationErrors((prev) => {
+                                                                    const next = { ...prev };
+                                                                    delete next.date;
+                                                                    return next;
+                                                                });
+                                                            }}
+                                                            style={{
+                                                                ...inputStyle,
+                                                                borderColor: validationErrors.date ? 'rgba(239,68,68,0.6)' : undefined,
+                                                            }}
+                                                        />
+                                                    </div>
+                                                    <div style={{ ...fieldGroupStyle, flex: 1 }}>
+                                                        <label style={labelStyle}>
+                                                            <Calendar size={11} />
+                                                            Entrega esperada
+                                                        </label>
+                                                        <input
+                                                            type="date"
+                                                            value={expectedDeliveryDate}
+                                                            onChange={(e) => setExpectedDeliveryDate(e.target.value)}
+                                                            style={inputStyle}
+                                                        />
+                                                    </div>
+                                                </div>
+                                                <div style={{ display: 'flex', gap: 10 }}>
+                                                    <div style={{ ...fieldGroupStyle, flex: 1 }}>
+                                                        <label style={labelStyle}>
+                                                            <User size={11} />
+                                                            Vendedor
+                                                        </label>
+                                                        <input
+                                                            type="text"
+                                                            value={salesperson}
+                                                            onChange={(e) => setSalesperson(e.target.value)}
+                                                            placeholder="Nombre vendedor"
+                                                            style={inputStyle}
+                                                        />
+                                                    </div>
+                                                    <div style={{ ...fieldGroupStyle, flex: 1 }}>
+                                                        <label style={labelStyle}>Notas</label>
+                                                        <input
+                                                            type="text"
+                                                            value={ovNotes}
+                                                            onChange={(e) => setOvNotes(e.target.value)}
+                                                            placeholder="Notas adicionales"
+                                                            style={inputStyle}
+                                                        />
+                                                    </div>
+                                                </div>
+                                            </>
+                                        )}
                                     </div>
                                 )}
                             </div>
@@ -908,7 +1203,7 @@ export default function InventoryCart({
                             </button>
 
                             <button
-                                onClick={handleCreateQuote}
+                                onClick={handleSubmit}
                                 disabled={creating}
                                 style={{
                                     flex: 1,
@@ -916,8 +1211,8 @@ export default function InventoryCart({
                                     borderRadius: 10,
                                     border: 'none',
                                     background: creating
-                                        ? 'rgba(16,185,129,0.3)'
-                                        : 'linear-gradient(135deg, #10b981 0%, #059669 100%)',
+                                        ? config.bg
+                                        : `linear-gradient(135deg, ${config.color} 0%, ${config.color}dd 100%)`,
                                     color: 'white',
                                     fontSize: 14,
                                     fontWeight: 800,
@@ -926,7 +1221,7 @@ export default function InventoryCart({
                                     alignItems: 'center',
                                     justifyContent: 'center',
                                     gap: 8,
-                                    boxShadow: creating ? 'none' : '0 4px 16px rgba(16,185,129,0.3)',
+                                    boxShadow: creating ? 'none' : `0 4px 16px ${config.color}44`,
                                     transition: 'all 0.2s',
                                 }}
                             >
@@ -937,8 +1232,8 @@ export default function InventoryCart({
                                     </>
                                 ) : (
                                     <>
-                                        <FileText size={16} />
-                                        Crear Cotización
+                                        <CartTypeIcon size={16} />
+                                        Crear {config.label}
                                     </>
                                 )}
                             </button>

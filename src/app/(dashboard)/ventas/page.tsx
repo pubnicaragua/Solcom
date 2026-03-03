@@ -3,12 +3,13 @@
 import { useState, useEffect, useRef } from 'react';
 import Link from 'next/link';
 import {
-  FileText, Plus, Search, Filter, DollarSign, Clock,
+  FileText, Plus, Search, DollarSign, Clock,
   CheckCircle, AlertTriangle, XCircle, Eye, Trash2,
-  ChevronLeft, ChevronRight, Calendar, RefreshCw, ShoppingCart,
+  ChevronLeft, ChevronRight, RefreshCw, ShoppingCart, ClipboardList,
 } from 'lucide-react';
 import InvoiceForm from '@/components/ventas/InvoiceForm';
 import InvoicePreview from '@/components/ventas/InvoicePreview';
+import SalesOrderList from '@/components/ventas/SalesOrderList';
 
 interface Invoice {
   id: string;
@@ -78,6 +79,7 @@ const statusConfig: Record<string, { bg: string; text: string; label: string }> 
 const DRAFT_PAGE_SIZE = 80;
 
 export default function FacturacionPage() {
+  const [ventasModule, setVentasModule] = useState<'facturas' | 'ordenes'>('facturas');
   const [invoices, setInvoices] = useState<Invoice[]>([]);
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState('todas');
@@ -396,7 +398,9 @@ export default function FacturacionPage() {
             Ventas
           </h1>
           <p style={{ fontSize: '14px', color: 'var(--muted)' }}>
-            Gestiona tus facturas y cobros
+            {ventasModule === 'facturas'
+              ? 'Gestiona tus facturas y cobros'
+              : 'Acepta ordenes de venta y conviertelas a factura'}
           </p>
         </div>
         <div style={{ display: 'flex', gap: '10px', alignItems: 'center', flexWrap: 'wrap' }}>
@@ -413,33 +417,83 @@ export default function FacturacionPage() {
             Cotizaciones
           </Link>
 
-          <button
-            onClick={() => {
-              setInvoicePrefill(null);
-              setShowInvoiceForm(true);
-            }}
-            style={{
-              display: 'flex', alignItems: 'center', gap: '8px',
-              padding: '12px 24px', background: 'var(--brand-primary)', color: 'white',
-              border: 'none', borderRadius: '10px', fontSize: '14px', fontWeight: 700,
-              cursor: 'pointer', boxShadow: '0 4px 14px rgba(220,38,38,0.3)',
-              transition: 'transform 0.15s, box-shadow 0.15s',
-            }}
-            onMouseEnter={(e) => {
-              e.currentTarget.style.transform = 'translateY(-2px)';
-              e.currentTarget.style.boxShadow = '0 6px 20px rgba(220,38,38,0.4)';
-            }}
-            onMouseLeave={(e) => {
-              e.currentTarget.style.transform = 'translateY(0)';
-              e.currentTarget.style.boxShadow = '0 4px 14px rgba(220,38,38,0.3)';
-            }}
-          >
-            <Plus size={18} />
-            Nueva Factura
-          </button>
+          {ventasModule === 'facturas' && (
+            <button
+              onClick={() => {
+                setInvoicePrefill(null);
+                setShowInvoiceForm(true);
+              }}
+              style={{
+                display: 'flex', alignItems: 'center', gap: '8px',
+                padding: '12px 24px', background: 'var(--brand-primary)', color: 'white',
+                border: 'none', borderRadius: '10px', fontSize: '14px', fontWeight: 700,
+                cursor: 'pointer', boxShadow: '0 4px 14px rgba(220,38,38,0.3)',
+                transition: 'transform 0.15s, box-shadow 0.15s',
+              }}
+              onMouseEnter={(e) => {
+                e.currentTarget.style.transform = 'translateY(-2px)';
+                e.currentTarget.style.boxShadow = '0 6px 20px rgba(220,38,38,0.4)';
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.transform = 'translateY(0)';
+                e.currentTarget.style.boxShadow = '0 4px 14px rgba(220,38,38,0.3)';
+              }}
+            >
+              <Plus size={18} />
+              Nueva Factura
+            </button>
+          )}
         </div>
       </div>
 
+      {/* Ventas Tabs */}
+      <div
+        style={{
+          display: 'inline-flex',
+          gap: 4,
+          marginBottom: 20,
+          padding: 4,
+          borderRadius: 12,
+          border: '1px solid var(--border)',
+          background: 'var(--card)',
+        }}
+      >
+        {[
+          { key: 'facturas' as const, label: 'Facturas', icon: FileText },
+          { key: 'ordenes' as const, label: 'Ordenes de Venta', icon: ClipboardList },
+        ].map((tab) => {
+          const Icon = tab.icon;
+          const active = ventasModule === tab.key;
+          return (
+            <button
+              key={tab.key}
+              type="button"
+              onClick={() => setVentasModule(tab.key)}
+              style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: 6,
+                padding: '8px 12px',
+                border: 'none',
+                borderRadius: 8,
+                background: active ? 'var(--brand-primary)' : 'transparent',
+                color: active ? '#fff' : 'var(--muted)',
+                fontSize: 12,
+                fontWeight: 700,
+                cursor: 'pointer',
+              }}
+            >
+              <Icon size={14} />
+              {tab.label}
+            </button>
+          );
+        })}
+      </div>
+
+      {ventasModule === 'ordenes' ? (
+        <SalesOrderList />
+      ) : (
+        <>
       {/* KPI Cards */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '16px', marginBottom: '28px' }}>
         {kpiCards.map((kpi, i) => {
@@ -1031,6 +1085,8 @@ export default function FacturacionPage() {
         onClose={() => { setShowPreview(false); setPreviewInvoiceId(null); }}
         onStatusChange={refreshAll}
       />
+        </>
+      )}
     </div>
   );
 }
