@@ -539,17 +539,17 @@ export default function InventoryPage() {
                     padding: '8px 10px',
                     borderRadius: 8,
                     border: parentWarehouseId ? '1px solid rgba(16,185,129,0.35)' : '1px solid rgba(255,255,255,0.12)',
-                    background: 'rgba(255,255,255,0.04)',
+                    background: '#1a1d23',
                     color: 'var(--text)',
                     fontSize: 13,
                     fontWeight: 600,
                   }}
                 >
-                  <option value="">
+                  <option value="" style={{ background: '#1a1d23', color: 'var(--text)' }}>
                     {loadingParentWarehouses ? 'Cargando bodegas...' : 'Seleccionar bodega empresarial...'}
                   </option>
                   {parentWarehouses.map((warehouse) => (
-                    <option key={warehouse.id} value={warehouse.id}>
+                    <option key={warehouse.id} value={warehouse.id} style={{ background: '#1a1d23', color: 'var(--text)' }}>
                       {warehouse.code} — {warehouse.name}
                     </option>
                   ))}
