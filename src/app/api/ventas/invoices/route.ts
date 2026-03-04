@@ -1,11 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server';
-
-
-export const dynamic = 'force-dynamic';import { createRouteHandlerClient } from '@supabase/auth-helpers-nextjs';
+import { createRouteHandlerClient } from '@supabase/auth-helpers-nextjs';
 import { cookies } from 'next/headers';
 import { deterministicUuidFromExternalId, normalizeSalespersonId } from '@/lib/identifiers';
 import { getZohoAccessToken } from '@/lib/zoho/inventory-utils';
 import { fetchZohoSalespeople } from '@/lib/zoho/salespeople';
+import { validateWarehouseFamilyStock } from '@/lib/ventas/stock-validation';
+
+export const dynamic = 'force-dynamic';
 
 const TERMS_DAYS_MAP: Record<string, number> = {
     '1_dia': 1,
@@ -36,6 +37,14 @@ function normalizeNumber(value: unknown, fallback = 0): number {
 
 function normalizeTrimmed(value: unknown): string {
     return typeof value === 'string' ? value.trim() : '';
+}
+
+function normalizeUuid(value: unknown): string | null {
+    const text = normalizeTrimmed(value);
+    if (!text) return null;
+    return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(text)
+        ? text
+        : null;
 }
 
 function equalsIgnoreCase(a: string, b: string): boolean {
@@ -579,11 +588,47 @@ export async function POST(req: NextRequest) {
             credit_detail,
             cancellation_reason_id,
             cancellation_comments,
+            source_sales_order_id,
         } = body;
         const normalizedSalespersonId = normalizeSalespersonId(salesperson_id);
+        const normalizedSourceSalesOrderId = normalizeUuid(source_sales_order_id);
 
         if (!items || items.length === 0) {
             return NextResponse.json({ error: 'La factura debe tener al menos un artículo' }, { status: 400 });
+        }
+
+        const normalizedTaxRate = Math.max(0, normalizeNumber(tax_rate, 15));
+        const normalizedDiscountAmount = Math.max(0, normalizeNumber(discount_amount, 0));
+        const normalizedShippingCharge = Math.max(0, normalizeNumber(shipping_charge, 0));
+
+        const normalizedItems = items.map((item: any) => ({
+            item_id: item?.item_id || null,
+            description: String(item?.description || item?.name || 'Artículo').trim(),
+            quantity: normalizeNumber(item?.quantity, NaN),
+            unit_price: Math.max(0, normalizeNumber(item?.unit_price, 0)),
+            discount_percent: Math.max(0, Math.min(100, normalizeNumber(item?.discount_percent, 0))),
+            serial_number_value: normalizeSerialInput(
+                item?.serial_number_value ?? item?.serial_numbers ?? item?.serials
+            ) || null,
+        }));
+
+        const invalidQuantityIndex = normalizedItems.findIndex(
+            (item: any) => !Number.isFinite(item.quantity) || item.quantity <= 0
+        );
+        if (invalidQuantityIndex >= 0) {
+            return NextResponse.json(
+                { error: `Cantidad inválida en la línea ${invalidQuantityIndex + 1}.` },
+                { status: 400 }
+            );
+        }
+
+        const stockValidation = await validateWarehouseFamilyStock({
+            supabase,
+            warehouseId: warehouse_id,
+            items: normalizedItems,
+        });
+        if (!stockValidation.ok) {
+            return NextResponse.json({ error: stockValidation.error }, { status: 400 });
         }
 
         // Generate invoice number
@@ -601,13 +646,13 @@ export async function POST(req: NextRequest) {
         }
 
         // Calculate totals (shipping included)
-        const subtotal = items.reduce((sum: number, item: any) => {
+        const subtotal = normalizedItems.reduce((sum: number, item: any) => {
             const lineSubtotal = item.quantity * item.unit_price * (1 - (item.discount_percent || 0) / 100);
             return sum + lineSubtotal;
         }, 0);
 
-        const tax_amount = subtotal * (tax_rate / 100);
-        const total = subtotal + tax_amount + (shipping_charge || 0) - (discount_amount || 0);
+        const tax_amount = subtotal * (normalizedTaxRate / 100);
+        const total = subtotal + tax_amount + normalizedShippingCharge - normalizedDiscountAmount;
 
         // Insert invoice with all fields
         const insertData: any = {
@@ -617,10 +662,10 @@ export async function POST(req: NextRequest) {
             due_date: due_date || null,
             status,
             subtotal: Math.round(subtotal * 100) / 100,
-            tax_rate,
+            tax_rate: normalizedTaxRate,
             tax_amount: Math.round(tax_amount * 100) / 100,
-            discount_amount: Math.round((discount_amount || 0) * 100) / 100,
-            shipping_charge: Math.round((shipping_charge || 0) * 100) / 100,
+            discount_amount: Math.round(normalizedDiscountAmount * 100) / 100,
+            shipping_charge: Math.round(normalizedShippingCharge * 100) / 100,
             total: Math.round(total * 100) / 100,
             payment_method: payment_method || null,
             notes: notes || null,
@@ -646,7 +691,7 @@ export async function POST(req: NextRequest) {
         }
 
         // Insert line items
-        const lineItems = items.map((item: any, index: number) => ({
+        const lineItems = normalizedItems.map((item: any, index: number) => ({
             invoice_id: invoice.id,
             item_id: item.item_id || null,
             description: item.description || item.name || 'Artículo',
@@ -686,9 +731,9 @@ export async function POST(req: NextRequest) {
                     salespersonLocalId: normalizedSalespersonId,
                     salespersonZohoId: salesperson_zoho_id || null,
                     salespersonName: salesperson_name || null,
-                    shippingCharge: normalizeNumber(shipping_charge, 0),
-                    discountAmount: normalizeNumber(discount_amount, 0),
-                    items,
+                    shippingCharge: normalizedShippingCharge,
+                    discountAmount: normalizedDiscountAmount,
+                    items: normalizedItems,
                 });
             } catch (zohoError: any) {
                 await supabase.from('sales_invoices').delete().eq('id', invoice.id);
@@ -696,7 +741,26 @@ export async function POST(req: NextRequest) {
             }
         }
 
-        return NextResponse.json({ invoice, zoho: zohoSync }, { status: 201 });
+        let salesOrderLinkWarning: string | null = null;
+        if (normalizedSourceSalesOrderId && status === 'enviada') {
+            const orderUpdate = await supabase
+                .from('sales_orders')
+                .update({
+                    status: 'convertida',
+                    converted_invoice_id: invoice.id,
+                    updated_at: new Date().toISOString(),
+                })
+                .eq('id', normalizedSourceSalesOrderId);
+
+            if (orderUpdate.error) {
+                salesOrderLinkWarning = `Factura creada, pero no se pudo actualizar la OV origen: ${orderUpdate.error.message}`;
+            }
+        }
+
+        return NextResponse.json(
+            { invoice, zoho: zohoSync, warning: salesOrderLinkWarning },
+            { status: 201 }
+        );
     } catch (error: any) {
         return NextResponse.json({ error: error.message }, { status: 500 });
     }

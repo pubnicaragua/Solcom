@@ -11,7 +11,9 @@ export interface CartItem {
     name: string;
     color: string | null;
     brand: string | null;
+    unitPrice?: number;
     quantity: number;
+    maxAvailableQty?: number | null;
 }
 
 export type CartType = 'cotizacion' | 'factura' | 'orden_venta';
@@ -31,6 +33,15 @@ interface Warehouse {
     code: string;
     name: string;
     warehouse_type?: string | null;
+}
+
+interface Salesperson {
+    id: string;
+    zoho_user_id?: string;
+    zoho_salesperson_id?: string;
+    name: string;
+    email: string;
+    role: string;
 }
 
 interface InventoryCartProps {
@@ -171,7 +182,8 @@ export default function InventoryCart({
     // Factura specific
     const [dueDate, setDueDate] = useState(() => todayPlusDays(30));
     const [paymentTerms, setPaymentTerms] = useState('30_dias');
-    const [salesperson, setSalesperson] = useState('');
+    const [salespeople, setSalespeople] = useState<Salesperson[]>([]);
+    const [selectedSalespersonId, setSelectedSalespersonId] = useState('');
 
     // Orden de Venta specific
     const [expectedDeliveryDate, setExpectedDeliveryDate] = useState(() => todayPlusDays(7));
@@ -221,6 +233,18 @@ export default function InventoryCart({
         }
     }, []);
 
+    const fetchSalespeople = useCallback(async () => {
+        try {
+            const res = await fetch('/api/ventas/salespeople', { cache: 'no-store' });
+            const data = await res.json().catch(() => ({}));
+            if (!res.ok) throw new Error(data?.error || 'No se pudieron cargar vendedores');
+            const parsedSalespeople = Array.isArray(data?.salespeople) ? data.salespeople : [];
+            setSalespeople(parsedSalespeople);
+        } catch {
+            setSalespeople([]);
+        }
+    }, []);
+
     // Fetch parent (empresarial) warehouses
     const fetchParentWarehouses = useCallback(async () => {
         if (controlledParentWarehouses) return;
@@ -233,13 +257,42 @@ export default function InventoryCart({
         }
     }, [controlledParentWarehouses]);
 
+    const fetchFamilyWarehouses = useCallback(async (parentWarehouseId: string) => {
+        if (controlledFamilyWarehouses) return;
+        if (!parentWarehouseId) {
+            setInternalFamilyWarehouses([]);
+            return;
+        }
+        try {
+            const res = await fetch(`/api/warehouses?family_of=${encodeURIComponent(parentWarehouseId)}`, {
+                cache: 'no-store',
+            });
+            const data = await res.json().catch(() => []);
+            setInternalFamilyWarehouses(Array.isArray(data) ? data : data?.warehouses || []);
+        } catch {
+            setInternalFamilyWarehouses([]);
+        }
+    }, [controlledFamilyWarehouses]);
+
     // Load data when cart opens
     useEffect(() => {
         if (isOpen) {
             fetchCustomers('');
             fetchParentWarehouses();
+            fetchSalespeople();
         }
-    }, [isOpen, fetchCustomers, fetchParentWarehouses]);
+    }, [isOpen, fetchCustomers, fetchParentWarehouses, fetchSalespeople]);
+
+    useEffect(() => {
+        if (!isOpen) return;
+        if (!warehouseId) {
+            if (!controlledFamilyWarehouses) {
+                setInternalFamilyWarehouses([]);
+            }
+            return;
+        }
+        void fetchFamilyWarehouses(warehouseId);
+    }, [isOpen, warehouseId, fetchFamilyWarehouses, controlledFamilyWarehouses]);
 
     // Cleanup blur timeout
     useEffect(() => {
@@ -284,6 +337,13 @@ export default function InventoryCart({
 
     function handleWarehouseChange(id: string) {
         setWarehouseId(id);
+        if (!controlledFamilyWarehouses) {
+            if (!id) {
+                setInternalFamilyWarehouses([]);
+            } else {
+                void fetchFamilyWarehouses(id);
+            }
+        }
         setValidationErrors((prev) => {
             const next = { ...prev };
             delete next.warehouse;
@@ -292,11 +352,61 @@ export default function InventoryCart({
         onParentWarehouseChange?.(id || null);
     }
 
+    function getItemMaxQty(item: CartItem): number | null {
+        const parsed = Number(item.maxAvailableQty);
+        if (!Number.isFinite(parsed)) return null;
+        return Math.max(0, Math.floor(parsed));
+    }
+
+    function clampItemQuantity(item: CartItem, rawQty: number): number {
+        const normalized = Number.isFinite(rawQty) ? Math.floor(rawQty) : 1;
+        const atLeastOne = Math.max(1, normalized);
+        const maxQty = getItemMaxQty(item);
+        if (maxQty == null) return atLeastOne;
+        if (maxQty <= 0) return 1;
+        return Math.min(atLeastOne, maxQty);
+    }
+
+    function applyItemQuantityChange(item: CartItem, rawQty: number) {
+        const nextQty = clampItemQuantity(item, rawQty);
+        const maxQty = getItemMaxQty(item);
+        if (maxQty != null && Math.floor(rawQty) > maxQty) {
+            setValidationErrors((prev) => ({
+                ...prev,
+                items: `Cantidad ajustada para "${item.sku || item.name}". Máximo disponible: ${maxQty}.`,
+            }));
+        } else {
+            setValidationErrors((prev) => {
+                if (!prev.items) return prev;
+                const next = { ...prev };
+                delete next.items;
+                return next;
+            });
+        }
+        onUpdateQuantity(item.itemId, nextQty);
+    }
+
     function validate(): boolean {
         const errors: Record<string, string> = {};
         if (!selectedCustomerId) errors.customer = 'Selecciona un cliente';
         if (!warehouseId) errors.warehouse = 'Selecciona una ubicación';
         if (!docDate) errors.date = 'Selecciona la fecha';
+        if (items.length === 0) {
+            errors.items = 'Agrega al menos un producto.';
+        } else {
+            for (const item of items) {
+                const quantity = Number(item.quantity);
+                if (!Number.isFinite(quantity) || quantity <= 0 || !Number.isInteger(quantity)) {
+                    errors.items = `Cantidad inválida para "${item.sku || item.name}".`;
+                    break;
+                }
+                const maxQty = getItemMaxQty(item);
+                if (maxQty != null && quantity > maxQty) {
+                    errors.items = `La cantidad de "${item.sku || item.name}" supera el disponible (${maxQty}).`;
+                    break;
+                }
+            }
+        }
         setValidationErrors(errors);
         return Object.keys(errors).length === 0;
     }
@@ -310,11 +420,12 @@ export default function InventoryCart({
         setSuccess(false);
 
         try {
+            const selectedSalesperson = salespeople.find((seller) => seller.id === selectedSalespersonId) || null;
             const docItems = items.map((item) => ({
                 item_id: item.itemId,
                 description: `${item.name}${item.color ? ` — ${item.color}` : ''}${item.brand ? ` (${item.brand})` : ''}`,
                 quantity: item.quantity,
-                unit_price: 0,
+                unit_price: Math.max(0, Number(item.unitPrice ?? 0) || 0),
                 discount_percent: 0,
             }));
 
@@ -351,7 +462,9 @@ export default function InventoryCart({
                     date: docDate,
                     due_date: dueDate || null,
                     payment_terms: paymentTerms || null,
-                    salesperson_name: salesperson || null,
+                    salesperson_id: selectedSalesperson?.id || null,
+                    salesperson_zoho_id: selectedSalesperson?.zoho_salesperson_id || selectedSalesperson?.zoho_user_id || null,
+                    salesperson_name: selectedSalesperson?.name || null,
                     status: 'enviada',
                     tax_rate: 15,
                     discount_amount: 0,
@@ -375,7 +488,8 @@ export default function InventoryCart({
                     warehouse_id: warehouseId,
                     date: docDate,
                     expected_delivery_date: expectedDeliveryDate || null,
-                    salesperson_name: salesperson || null,
+                    salesperson_id: selectedSalesperson?.id || null,
+                    salesperson_name: selectedSalesperson?.name || null,
                     status: 'borrador',
                     tax_rate: 15,
                     discount_amount: 0,
@@ -409,7 +523,7 @@ export default function InventoryCart({
             setValidUntil(todayPlusDays(7));
             setDueDate(todayPlusDays(30));
             setExpectedDeliveryDate(todayPlusDays(7));
-            setSalesperson('');
+            setSelectedSalespersonId('');
             setOvNotes('');
             setValidationErrors({});
         } catch (err: any) {
@@ -517,11 +631,20 @@ export default function InventoryCart({
                     {(['cotizacion', 'factura', 'orden_venta'] as CartType[]).map((type) => {
                         const tc = CART_TYPE_CONFIG[type];
                         const isActive = cartType === type;
+                        const disabled = !warehouseId;
                         const Icon = tc.icon;
                         return (
                             <button
                                 key={type}
+                                disabled={disabled}
                                 onClick={() => {
+                                    if (!warehouseId) {
+                                        setValidationErrors((prev) => ({
+                                            ...prev,
+                                            warehouse: prev.warehouse || 'Selecciona una bodega empresarial',
+                                        }));
+                                        return;
+                                    }
                                     setCartType(type);
                                     setError('');
                                     setSuccess(false);
@@ -535,7 +658,8 @@ export default function InventoryCart({
                                     color: isActive ? tc.color : 'var(--muted, #64748b)',
                                     fontSize: 11,
                                     fontWeight: 700,
-                                    cursor: 'pointer',
+                                    cursor: disabled ? 'not-allowed' : 'pointer',
+                                    opacity: disabled ? 0.6 : 1,
                                     display: 'flex',
                                     alignItems: 'center',
                                     justifyContent: 'center',
@@ -809,7 +933,7 @@ export default function InventoryCart({
                                         <div style={fieldGroupStyle}>
                                             <label style={labelStyle}>
                                                 <MapPin size={11} />
-                                                Ubicación (Empresa) *
+                                                Bodega empresarial *
                                             </label>
                                             <select
                                                 value={warehouseId}
@@ -819,7 +943,7 @@ export default function InventoryCart({
                                                     borderColor: validationErrors.warehouse ? 'rgba(239,68,68,0.6)' : undefined,
                                                 }}
                                             >
-                                                <option value="">Seleccionar ubicación...</option>
+                                                <option value="">Seleccionar bodega empresarial...</option>
                                                 {parentWarehouses.map((w) => (
                                                     <option key={w.id} value={w.id}>
                                                         {w.code} — {w.name}
@@ -828,6 +952,50 @@ export default function InventoryCart({
                                             </select>
                                             {validationErrors.warehouse && (
                                                 <div style={validationErrorStyle}>{validationErrors.warehouse}</div>
+                                            )}
+                                            {warehouseId && (
+                                                <div
+                                                    style={{
+                                                        marginTop: 7,
+                                                        padding: '7px 8px',
+                                                        borderRadius: 8,
+                                                        border: '1px solid rgba(16,185,129,0.2)',
+                                                        background: 'rgba(16,185,129,0.05)',
+                                                        display: 'flex',
+                                                        flexWrap: 'wrap',
+                                                        gap: 5,
+                                                    }}
+                                                >
+                                                    {familyWarehouses.length > 0 ? (
+                                                        familyWarehouses.map((w) => {
+                                                            const isParent = w.id === warehouseId;
+                                                            return (
+                                                                <span
+                                                                    key={w.id}
+                                                                    style={{
+                                                                        fontSize: 10,
+                                                                        fontWeight: 800,
+                                                                        padding: '2px 6px',
+                                                                        borderRadius: 999,
+                                                                        border: isParent
+                                                                            ? '1px solid rgba(16,185,129,0.45)'
+                                                                            : '1px solid rgba(96,165,250,0.35)',
+                                                                        background: isParent
+                                                                            ? 'rgba(16,185,129,0.15)'
+                                                                            : 'rgba(59,130,246,0.12)',
+                                                                        color: isParent ? '#34d399' : '#93C5FD',
+                                                                    }}
+                                                                >
+                                                                    {w.code} {isParent ? '(Padre)' : '(Hijo)'}
+                                                                </span>
+                                                            );
+                                                        })
+                                                    ) : (
+                                                        <span style={{ fontSize: 11, color: 'var(--muted)' }}>
+                                                            No hay almacenes hijos vinculados para esta bodega padre.
+                                                        </span>
+                                                    )}
+                                                </div>
                                             )}
                                         </div>
 
@@ -934,13 +1102,23 @@ export default function InventoryCart({
                                                             <User size={11} />
                                                             Vendedor
                                                         </label>
-                                                        <input
-                                                            type="text"
-                                                            value={salesperson}
-                                                            onChange={(e) => setSalesperson(e.target.value)}
-                                                            placeholder="Nombre vendedor"
+                                                        <select
+                                                            value={selectedSalespersonId}
+                                                            onChange={(e) => setSelectedSalespersonId(e.target.value)}
                                                             style={inputStyle}
-                                                        />
+                                                        >
+                                                            <option value="">Seleccionar vendedor...</option>
+                                                            {salespeople.length === 0 && (
+                                                                <option value="" disabled>
+                                                                    Sin vendedores disponibles
+                                                                </option>
+                                                            )}
+                                                            {salespeople.map((seller) => (
+                                                                <option key={seller.id} value={seller.id}>
+                                                                    {seller.name} — {seller.role}
+                                                                </option>
+                                                            ))}
+                                                        </select>
                                                     </div>
                                                 </div>
                                             </>
@@ -990,13 +1168,23 @@ export default function InventoryCart({
                                                             <User size={11} />
                                                             Vendedor
                                                         </label>
-                                                        <input
-                                                            type="text"
-                                                            value={salesperson}
-                                                            onChange={(e) => setSalesperson(e.target.value)}
-                                                            placeholder="Nombre vendedor"
+                                                        <select
+                                                            value={selectedSalespersonId}
+                                                            onChange={(e) => setSelectedSalespersonId(e.target.value)}
                                                             style={inputStyle}
-                                                        />
+                                                        >
+                                                            <option value="">Seleccionar vendedor...</option>
+                                                            {salespeople.length === 0 && (
+                                                                <option value="" disabled>
+                                                                    Sin vendedores disponibles
+                                                                </option>
+                                                            )}
+                                                            {salespeople.map((seller) => (
+                                                                <option key={seller.id} value={seller.id}>
+                                                                    {seller.name} — {seller.role}
+                                                                </option>
+                                                            ))}
+                                                        </select>
                                                     </div>
                                                     <div style={{ ...fieldGroupStyle, flex: 1 }}>
                                                         <label style={labelStyle}>Notas</label>
@@ -1035,17 +1223,20 @@ export default function InventoryCart({
                             </div>
                         ) : (
                             <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-                                {items.map((item) => (
-                                    <div
-                                        key={item.itemId}
-                                        style={{
-                                            padding: '12px 14px',
-                                            borderRadius: 10,
-                                            border: '1px solid rgba(255,255,255,0.06)',
-                                            background: 'rgba(255,255,255,0.02)',
-                                            transition: 'background 0.15s',
-                                        }}
-                                    >
+                                {items.map((item) => {
+                                    const maxQty = getItemMaxQty(item);
+                                    const atMaxQty = maxQty != null && item.quantity >= maxQty;
+                                    return (
+                                        <div
+                                            key={item.itemId}
+                                            style={{
+                                                padding: '12px 14px',
+                                                borderRadius: 10,
+                                                border: '1px solid rgba(255,255,255,0.06)',
+                                                background: 'rgba(255,255,255,0.02)',
+                                                transition: 'background 0.15s',
+                                            }}
+                                        >
                                         <div
                                             style={{
                                                 display: 'flex',
@@ -1127,7 +1318,7 @@ export default function InventoryCart({
                                                 }}
                                             >
                                                 <button
-                                                    onClick={() => onUpdateQuantity(item.itemId, Math.max(1, item.quantity - 1))}
+                                                    onClick={() => applyItemQuantityChange(item, item.quantity - 1)}
                                                     style={{
                                                         width: 30,
                                                         height: 30,
@@ -1145,10 +1336,12 @@ export default function InventoryCart({
                                                 <input
                                                     type="number"
                                                     min={1}
+                                                    max={maxQty != null ? maxQty : undefined}
                                                     value={item.quantity}
                                                     onChange={(e) => {
                                                         const val = parseInt(e.target.value, 10);
-                                                        if (val > 0) onUpdateQuantity(item.itemId, val);
+                                                        if (!Number.isFinite(val)) return;
+                                                        if (val > 0) applyItemQuantityChange(item, val);
                                                     }}
                                                     style={{
                                                         width: 50,
@@ -1164,14 +1357,16 @@ export default function InventoryCart({
                                                     }}
                                                 />
                                                 <button
-                                                    onClick={() => onUpdateQuantity(item.itemId, item.quantity + 1)}
+                                                    onClick={() => applyItemQuantityChange(item, item.quantity + 1)}
+                                                    disabled={atMaxQty}
                                                     style={{
                                                         width: 30,
                                                         height: 30,
                                                         border: 'none',
                                                         background: 'rgba(255,255,255,0.05)',
                                                         color: 'var(--muted, #94a3b8)',
-                                                        cursor: 'pointer',
+                                                        cursor: atMaxQty ? 'not-allowed' : 'pointer',
+                                                        opacity: atMaxQty ? 0.5 : 1,
                                                         display: 'flex',
                                                         alignItems: 'center',
                                                         justifyContent: 'center',
@@ -1180,9 +1375,20 @@ export default function InventoryCart({
                                                     <Plus size={13} />
                                                 </button>
                                             </div>
+                                            {maxQty != null && (
+                                                <span style={{ fontSize: 10, color: atMaxQty ? '#fbbf24' : 'var(--muted, #64748b)' }}>
+                                                    Máx: {maxQty}
+                                                </span>
+                                            )}
                                         </div>
+                                        </div>
+                                    );
+                                })}
+                                {validationErrors.items && (
+                                    <div style={{ ...validationErrorStyle, marginTop: 2 }}>
+                                        {validationErrors.items}
                                     </div>
-                                ))}
+                                )}
                             </div>
                         )}
                     </div>

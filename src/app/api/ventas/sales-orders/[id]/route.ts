@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createRouteHandlerClient } from '@supabase/auth-helpers-nextjs';
 import { cookies } from 'next/headers';
+import { createZohoBooksClient } from '@/lib/zoho/books-client';
 
 const ORDER_STATUSES = new Set(['borrador', 'confirmada', 'convertida', 'cancelada']);
 
@@ -11,6 +12,21 @@ function normalizeNumber(value: unknown, fallback = 0): number {
 
 function normalizeText(value: unknown): string {
     return typeof value === 'string' ? value.trim() : '';
+}
+
+function normalizeSerialInput(value: unknown): string {
+    if (Array.isArray(value)) {
+        return value
+            .map((entry) => String(entry ?? '').trim())
+            .filter(Boolean)
+            .join(',');
+    }
+    return String(value ?? '')
+        .replace(/[\n;]/g, ',')
+        .split(',')
+        .map((entry) => entry.trim())
+        .filter(Boolean)
+        .join(',');
 }
 
 function normalizeStatus(value: unknown, fallback = 'borrador'): string {
@@ -25,6 +41,54 @@ function extractMissingColumn(message: string): string | null {
     match = text.match(/column "?([a-zA-Z0-9_]+)"? does not exist/i);
     if (match?.[1]) return match[1];
     return null;
+}
+
+function isMissingRelationshipBetween(message: string, left: string, right: string): boolean {
+    const text = String(message || '').toLowerCase();
+    return (
+        text.includes('could not find a relationship between') &&
+        text.includes(String(left || '').toLowerCase()) &&
+        text.includes(String(right || '').toLowerCase())
+    );
+}
+
+async function insertSalesOrderItemsWithColumnFallback(supabase: any, rows: any[]): Promise<{ error: any }> {
+    if (!Array.isArray(rows) || rows.length === 0) {
+        return { error: null };
+    }
+
+    const mutableRows = rows.map((row) => ({ ...row }));
+    let retry = 0;
+    while (retry < 12) {
+        const result = await supabase
+            .from('sales_order_items')
+            .insert(mutableRows);
+
+        if (!result.error) {
+            return { error: null };
+        }
+
+        const missingColumn = extractMissingColumn(result.error?.message || '');
+        if (!missingColumn) {
+            return { error: result.error };
+        }
+
+        let removed = false;
+        for (const row of mutableRows) {
+            if (Object.prototype.hasOwnProperty.call(row, missingColumn)) {
+                delete row[missingColumn];
+                removed = true;
+            }
+        }
+
+        if (!removed) {
+            return { error: result.error };
+        }
+
+        retry += 1;
+    }
+
+    return { error: new Error('No se pudieron insertar los items por columnas faltantes') };
 }
 
 function calculateTotals(items: any[], taxRate: number, discountAmount: number) {
@@ -60,7 +124,31 @@ export async function GET(
             return NextResponse.json({ error: 'No autorizado' }, { status: 401 });
         }
 
-        const { data: order, error } = await supabase
+        const withItemsRelation = await supabase
+            .from('sales_orders')
+            .select(`
+                *,
+                customer:customers(id, name, email, phone, ruc, address),
+                warehouse:warehouses(id, code, name),
+                items:sales_order_items(*, item:items(id, name, sku, zoho_item_id))
+            `)
+            .eq('id', params.id)
+            .order('sort_order', { referencedTable: 'sales_order_items', ascending: true })
+            .single();
+
+        if (!withItemsRelation.error && withItemsRelation.data) {
+            return NextResponse.json({ order: withItemsRelation.data });
+        }
+
+        if (!isMissingRelationshipBetween(withItemsRelation.error?.message || '', 'sales_order_items', 'items')) {
+            return NextResponse.json(
+                { error: withItemsRelation.error?.message || 'No se pudo cargar la orden de venta' },
+                { status: withItemsRelation.error?.code === 'PGRST116' ? 404 : 500 }
+            );
+        }
+
+        // Fallback when PostgREST schema cache does not know sales_order_items -> items relation.
+        const orderFallbackRes = await supabase
             .from('sales_orders')
             .select(`
                 *,
@@ -72,11 +160,43 @@ export async function GET(
             .order('sort_order', { referencedTable: 'sales_order_items', ascending: true })
             .single();
 
-        if (error) {
-            return NextResponse.json({ error: error.message }, { status: error.code === 'PGRST116' ? 404 : 500 });
+        if (orderFallbackRes.error || !orderFallbackRes.data) {
+            return NextResponse.json(
+                { error: orderFallbackRes.error?.message || 'No se pudo cargar la orden de venta' },
+                { status: orderFallbackRes.error?.code === 'PGRST116' ? 404 : 500 }
+            );
         }
 
-        return NextResponse.json({ order });
+        const orderFallback = orderFallbackRes.data as any;
+        const itemIds = Array.from(new Set(
+            (Array.isArray(orderFallback.items) ? orderFallback.items : [])
+                .map((line: any) => String(line?.item_id || '').trim())
+                .filter(Boolean)
+        ));
+
+        let itemMap = new Map<string, any>();
+        if (itemIds.length > 0) {
+            const itemLookup = await supabase
+                .from('items')
+                .select('id, name, sku, zoho_item_id')
+                .in('id', itemIds);
+
+            if (!itemLookup.error) {
+                itemMap = new Map(
+                    (itemLookup.data || []).map((row: any) => [String(row.id), row])
+                );
+            }
+        }
+
+        const mergedOrder = {
+            ...orderFallback,
+            items: (Array.isArray(orderFallback.items) ? orderFallback.items : []).map((line: any) => ({
+                ...line,
+                item: itemMap.get(String(line?.item_id || '').trim()) || null,
+            })),
+        };
+
+        return NextResponse.json({ order: mergedOrder });
     } catch (error: any) {
         return NextResponse.json({ error: error.message || 'Error interno' }, { status: 500 });
     }
@@ -102,6 +222,41 @@ export async function PUT(
         // Status-only update (e.g., confirmar, cancelar)
         if (body?.status && Object.keys(body).length === 1) {
             const normalizedStatus = normalizeStatus(body.status, 'borrador');
+
+            const { data: currentOrder, error: currentOrderError } = await supabase
+                .from('sales_orders')
+                .select('id, status, zoho_salesorder_id')
+                .eq('id', params.id)
+                .single();
+
+            if (currentOrderError || !currentOrder) {
+                return NextResponse.json({ error: currentOrderError?.message || 'Orden no encontrada' }, { status: 404 });
+            }
+
+            const zohoSalesOrderId = normalizeText((currentOrder as any)?.zoho_salesorder_id);
+            if (zohoSalesOrderId && (normalizedStatus === 'confirmada' || normalizedStatus === 'cancelada')) {
+                const zohoClient = createZohoBooksClient();
+                if (!zohoClient) {
+                    return NextResponse.json(
+                        { error: 'No se pudo sincronizar estado en Zoho: configuración ZOHO_BOOKS_* incompleta.' },
+                        { status: 500 }
+                    );
+                }
+
+                try {
+                    if (normalizedStatus === 'confirmada') {
+                        await zohoClient.confirmSalesOrder(zohoSalesOrderId);
+                    } else if (normalizedStatus === 'cancelada') {
+                        await zohoClient.voidSalesOrder(zohoSalesOrderId);
+                    }
+                } catch (zohoError: any) {
+                    return NextResponse.json(
+                        { error: `No se pudo actualizar la OV en Zoho: ${zohoError?.message || 'Error desconocido'}` },
+                        { status: 400 }
+                    );
+                }
+            }
+
             const { data, error } = await supabase
                 .from('sales_orders')
                 .update({ status: normalizedStatus, updated_at: new Date().toISOString() })
@@ -193,14 +348,17 @@ export async function PUT(
                     quantity,
                     unit_price: unitPrice,
                     discount_percent: discountPercent,
+                    serial_number_value: normalizeSerialInput(
+                        item?.serial_number_value ?? item?.serial_numbers ?? item?.serials
+                    ) || null,
+                    line_warehouse_id: normalizeText(item?.line_warehouse_id) || null,
+                    line_zoho_warehouse_id: normalizeText(item?.line_zoho_warehouse_id) || null,
                     subtotal: Math.round(quantity * unitPrice * (1 - discountPercent / 100) * 100) / 100,
                     sort_order: index,
                 };
             });
 
-            const { error: itemsError } = await supabase
-                .from('sales_order_items')
-                .insert(orderItems);
+            const { error: itemsError } = await insertSalesOrderItemsWithColumnFallback(supabase, orderItems);
 
             if (itemsError) {
                 return NextResponse.json({ error: itemsError.message }, { status: 500 });

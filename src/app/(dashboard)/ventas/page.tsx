@@ -47,6 +47,12 @@ interface PivotItem {
 }
 
 interface InvoicePrefillData {
+  source_sales_order_id?: string | null;
+  source_order_number?: string | null;
+  customer_id?: string | null;
+  customer_name?: string | null;
+  salesperson_id?: string | null;
+  salesperson_name?: string | null;
   warehouse_id: string;
   items: Array<{
     item_id: string;
@@ -56,6 +62,7 @@ interface InvoicePrefillData {
     available_qty?: number;
     unit_price: number;
     discount_percent: number;
+    serial_number_value?: string | null;
   }>;
 }
 
@@ -77,6 +84,22 @@ const statusConfig: Record<string, { bg: string; text: string; label: string }> 
 };
 
 const DRAFT_PAGE_SIZE = 80;
+
+function formatInvoiceListDate(dateValue: string): string {
+  const normalized = String(dateValue || '').trim();
+  if (!normalized) return '—';
+  try {
+    const asLocalMidnight = new Date(`${normalized}T00:00:00`);
+    if (Number.isNaN(asLocalMidnight.getTime())) return normalized;
+    return asLocalMidnight.toLocaleDateString('es-NI', {
+      month: 'short',
+      day: 'numeric',
+      year: '2-digit',
+    });
+  } catch {
+    return normalized;
+  }
+}
 
 export default function FacturacionPage() {
   const [ventasModule, setVentasModule] = useState<'facturas' | 'ordenes'>('facturas');
@@ -348,6 +371,67 @@ export default function FacturacionPage() {
     setDraftError('');
   };
 
+  const openInvoiceFromSalesOrder = async (orderId: string) => {
+    const response = await fetch(`/api/ventas/sales-orders/${orderId}`, { cache: 'no-store' });
+    const payload = await response.json().catch(() => ({}));
+    if (!response.ok) {
+      throw new Error(payload?.error || 'No se pudo cargar la orden de venta para facturar.');
+    }
+
+    const order = payload?.order;
+    if (!order) {
+      throw new Error('No se encontró la orden de venta.');
+    }
+
+    const normalizedItems = Array.isArray(order.items)
+      ? order.items
+        .map((line: any) => {
+          const itemId = String(line?.item_id || '').trim();
+          const description = String(line?.description || '').trim();
+          const quantity = Math.max(1, Math.floor(Number(line?.quantity ?? 1) || 1));
+          const unitPrice = Math.max(0, Number(line?.unit_price ?? 0) || 0);
+          const discountPercent = Math.max(0, Math.min(100, Number(line?.discount_percent ?? 0) || 0));
+
+          if (!itemId || !description) return null;
+
+          return {
+            item_id: itemId,
+            zoho_item_id: String(line?.item?.zoho_item_id || '').trim() || null,
+            description,
+            quantity,
+            available_qty: quantity,
+            unit_price: unitPrice,
+            discount_percent: discountPercent,
+            serial_number_value: String(line?.serial_number_value || '').trim() || null,
+          };
+        })
+        .filter(Boolean)
+      : [];
+
+    if (normalizedItems.length === 0) {
+      throw new Error('La orden no tiene líneas válidas para facturar.');
+    }
+
+    const prefill: InvoicePrefillData = {
+      source_sales_order_id: String(order.id || '').trim() || null,
+      source_order_number: String(order.order_number || '').trim() || null,
+      customer_id: String(order.customer_id || '').trim() || null,
+      customer_name: String(order?.customer?.name || '').trim() || null,
+      salesperson_id: String(order.salesperson_id || '').trim() || null,
+      salesperson_name: String(order.salesperson_name || '').trim() || null,
+      warehouse_id: String(order.warehouse_id || '').trim(),
+      items: normalizedItems as InvoicePrefillData['items'],
+    };
+
+    if (!prefill.warehouse_id) {
+      throw new Error('La orden no tiene bodega asignada para preparar la factura.');
+    }
+
+    setInvoicePrefill(prefill);
+    setVentasModule('facturas');
+    setShowInvoiceForm(true);
+  };
+
   const kpiCards = [
     {
       label: 'Facturado Total',
@@ -491,7 +575,7 @@ export default function FacturacionPage() {
       </div>
 
       {ventasModule === 'ordenes' ? (
-        <SalesOrderList />
+        <SalesOrderList onStartInvoiceFromOrder={openInvoiceFromSalesOrder} />
       ) : (
         <>
       {/* KPI Cards */}
@@ -971,7 +1055,7 @@ export default function FacturacionPage() {
                 onMouseLeave={(e) => e.currentTarget.style.background = 'transparent'}
               >
                 <div style={{ fontSize: '13px', color: 'var(--muted)' }}>
-                  {new Date(inv.date).toLocaleDateString('es-NI', { month: 'short', day: 'numeric', year: '2-digit' })}
+                  {formatInvoiceListDate(inv.date)}
                 </div>
                 <div>
                   <div style={{ fontSize: '14px', fontWeight: 600, color: 'var(--text)' }}>

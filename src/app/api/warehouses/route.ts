@@ -39,13 +39,27 @@ export async function GET(request: Request) {
         return NextResponse.json([], { status: 200 });
       }
 
-      const family = data
+      let family = data
         .filter((warehouse) => warehouse.id === familyOf || warehouse.parent_warehouse_id === familyOf)
-        .sort((a, b) => {
-          if (a.id === familyOf) return -1;
-          if (b.id === familyOf) return 1;
-          return String(a.code || '').localeCompare(String(b.code || ''));
-        });
+        ;
+
+      if (family.length <= 1) {
+        const { data: familyRows, error: familyError } = await supabase
+          .from('warehouses')
+          .select('id, code, name, active, zoho_warehouse_id, warehouse_type, parent_warehouse_id')
+          .or(`id.eq.${familyOf},parent_warehouse_id.eq.${familyOf}`)
+          .eq('active', true);
+
+        if (!familyError && Array.isArray(familyRows) && familyRows.length > 0) {
+          family = familyRows;
+        }
+      }
+
+      family = family.sort((a, b) => {
+        if (a.id === familyOf) return -1;
+        if (b.id === familyOf) return 1;
+        return String(a.code || '').localeCompare(String(b.code || ''));
+      });
 
       return NextResponse.json(family, { status: 200 });
     }

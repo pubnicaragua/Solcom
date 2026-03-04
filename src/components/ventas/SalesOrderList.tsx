@@ -46,7 +46,11 @@ const statusConfig: Record<OrderStatus, { bg: string; text: string; label: strin
     cancelada: { bg: 'rgba(239,68,68,0.15)', text: '#F87171', label: 'Cancelada' },
 };
 
-export default function SalesOrderList() {
+interface SalesOrderListProps {
+    onStartInvoiceFromOrder?: (orderId: string) => Promise<void> | void;
+}
+
+export default function SalesOrderList({ onStartInvoiceFromOrder }: SalesOrderListProps) {
     const [orders, setOrders] = useState<SalesOrder[]>([]);
     const [loading, setLoading] = useState(true);
     const [activeTab, setActiveTab] = useState<'todas' | OrderStatus>('todas');
@@ -89,7 +93,7 @@ export default function SalesOrderList() {
             params.set('page', String(page));
             params.set('per_page', '20');
 
-            const res = await fetch(`/api/ventas/sales-orders?${params.toString()}`);
+            const res = await fetch(`/api/ventas/sales-orders?${params.toString()}`, { cache: 'no-store' });
             const data = await res.json();
 
             if (!res.ok) throw new Error(data?.error || 'Error al cargar órdenes');
@@ -106,14 +110,14 @@ export default function SalesOrderList() {
 
     async function fetchKPIs() {
         try {
-            const res = await fetch('/api/ventas/sales-orders?per_page=1');
+            const res = await fetch('/api/ventas/sales-orders?per_page=1', { cache: 'no-store' });
             const data = await res.json();
 
             // Fetch all statuses for KPI counts
             const [borradorRes, confirmadaRes, convertidaRes] = await Promise.all([
-                fetch('/api/ventas/sales-orders?status=borrador&per_page=1'),
-                fetch('/api/ventas/sales-orders?status=confirmada&per_page=1'),
-                fetch('/api/ventas/sales-orders?status=convertida&per_page=1'),
+                fetch('/api/ventas/sales-orders?status=borrador&per_page=1', { cache: 'no-store' }),
+                fetch('/api/ventas/sales-orders?status=confirmada&per_page=1', { cache: 'no-store' }),
+                fetch('/api/ventas/sales-orders?status=convertida&per_page=1', { cache: 'no-store' }),
             ]);
 
             const [borradorData, confirmadaData, convertidaData] = await Promise.all([
@@ -157,6 +161,10 @@ export default function SalesOrderList() {
     async function handleConvert(orderId: string) {
         setActionLoading(orderId);
         try {
+            if (onStartInvoiceFromOrder) {
+                await onStartInvoiceFromOrder(orderId);
+                return;
+            }
             const res = await fetch(`/api/ventas/sales-orders/${orderId}/convert`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
@@ -168,7 +176,7 @@ export default function SalesOrderList() {
             await fetchOrders();
             await fetchKPIs();
         } catch (err: any) {
-            setError(err?.message || 'Error al convertir orden a factura');
+            setError(err?.message || 'Error al preparar factura desde la orden');
         } finally {
             setActionLoading(null);
         }
@@ -484,7 +492,7 @@ export default function SalesOrderList() {
                                                         <button
                                                             onClick={() => handleConvert(order.id)}
                                                             disabled={isLoading}
-                                                            title="Convertir a factura"
+                                                            title="Preparar factura"
                                                             style={{
                                                                 padding: '5px 8px',
                                                                 borderRadius: 6,

@@ -1,9 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server';
-
-
-export const dynamic = 'force-dynamic';import { createRouteHandlerClient } from '@supabase/auth-helpers-nextjs';
+import { createRouteHandlerClient } from '@supabase/auth-helpers-nextjs';
 import { cookies } from 'next/headers';
 import { createZohoBooksClient } from '@/lib/zoho/books-client';
+import { validateWarehouseFamilyStock } from '@/lib/ventas/stock-validation';
+
+export const dynamic = 'force-dynamic';
 
 const QUOTE_STATUSES = new Set(['borrador', 'enviada', 'aceptada', 'rechazada', 'vencida', 'convertida']);
 
@@ -359,6 +360,38 @@ export async function POST(req: NextRequest) {
             return NextResponse.json({ error: 'La cotización debe tener al menos un artículo' }, { status: 400 });
         }
 
+        const normalizedItems = items.map((item: any) => {
+            const quantity = normalizeNumber(item?.quantity, NaN);
+            const unitPrice = Math.max(0, normalizeNumber(item?.unit_price, 0));
+            const discountPercent = Math.max(0, Math.min(100, normalizeNumber(item?.discount_percent, 0)));
+            return {
+                item_id: item?.item_id || null,
+                description: String(item?.description || item?.name || 'Artículo').trim(),
+                quantity,
+                unit_price: unitPrice,
+                discount_percent: discountPercent,
+            };
+        });
+
+        const invalidQuantityIndex = normalizedItems.findIndex(
+            (item: any) => !Number.isFinite(item.quantity) || item.quantity <= 0
+        );
+        if (invalidQuantityIndex >= 0) {
+            return NextResponse.json(
+                { error: `Cantidad inválida en la línea ${invalidQuantityIndex + 1}.` },
+                { status: 400 }
+            );
+        }
+
+        const stockValidation = await validateWarehouseFamilyStock({
+            supabase,
+            warehouseId: warehouse_id,
+            items: normalizedItems,
+        });
+        if (!stockValidation.ok) {
+            return NextResponse.json({ error: stockValidation.error }, { status: 400 });
+        }
+
         // Resolve warehouse code for quote number format
         let warehouseCode: string | undefined;
         if (warehouse_id) {
@@ -376,7 +409,7 @@ export async function POST(req: NextRequest) {
 
         const normalizedTaxRate = Math.max(0, normalizeNumber(tax_rate, 15));
         const normalizedDiscount = Math.max(0, normalizeNumber(discount_amount, 0));
-        const totals = calculateTotals(items, normalizedTaxRate, normalizedDiscount);
+        const totals = calculateTotals(normalizedItems, normalizedTaxRate, normalizedDiscount);
 
         const insertQuote = {
             quote_number: quoteNumber,
@@ -427,7 +460,7 @@ export async function POST(req: NextRequest) {
             return NextResponse.json({ error: lastError?.message || 'No se pudo crear la cotización' }, { status: 500 });
         }
 
-        const quoteItems = items.map((item: any, index: number) => {
+        const quoteItems = normalizedItems.map((item: any, index: number) => {
             const quantity = Math.max(0, normalizeNumber(item?.quantity, 0));
             const unitPrice = Math.max(0, normalizeNumber(item?.unit_price, 0));
             const discountPercent = Math.max(0, Math.min(100, normalizeNumber(item?.discount_percent, 0)));
@@ -466,7 +499,7 @@ export async function POST(req: NextRequest) {
                     validUntil: valid_until || null,
                     discountAmount: normalizedDiscount,
                     notes: notes || null,
-                    items,
+                    items: normalizedItems,
                 });
             } catch (zohoError: any) {
                 // Rollback: delete local quote + items on Zoho failure

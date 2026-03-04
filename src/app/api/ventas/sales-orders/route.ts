@@ -4,6 +4,7 @@ export const dynamic = 'force-dynamic';
 import { createRouteHandlerClient } from '@supabase/auth-helpers-nextjs';
 import { cookies } from 'next/headers';
 import { createZohoBooksClient } from '@/lib/zoho/books-client';
+import { validateWarehouseFamilyStock } from '@/lib/ventas/stock-validation';
 
 const ORDER_STATUSES = new Set(['borrador', 'confirmada', 'convertida', 'cancelada']);
 
@@ -14,6 +15,21 @@ function normalizeNumber(value: unknown, fallback = 0): number {
 
 function normalizeText(value: unknown): string {
     return typeof value === 'string' ? value.trim() : '';
+}
+
+function normalizeSerialInput(value: unknown): string {
+    if (Array.isArray(value)) {
+        return value
+            .map((entry) => String(entry ?? '').trim())
+            .filter(Boolean)
+            .join(',');
+    }
+    return String(value ?? '')
+        .replace(/[\n;]/g, ',')
+        .split(',')
+        .map((entry) => entry.trim())
+        .filter(Boolean)
+        .join(',');
 }
 
 function normalizeStatus(value: unknown, fallback = 'borrador'): string {
@@ -33,6 +49,45 @@ function extractMissingColumn(message: string): string | null {
     match = text.match(/column "?([a-zA-Z0-9_]+)"? does not exist/i);
     if (match?.[1]) return match[1];
     return null;
+}
+
+async function insertSalesOrderItemsWithColumnFallback(supabase: any, rows: any[]): Promise<{ error: any }> {
+    if (!Array.isArray(rows) || rows.length === 0) {
+        return { error: null };
+    }
+
+    const mutableRows = rows.map((row) => ({ ...row }));
+    let retry = 0;
+    while (retry < 12) {
+        const result = await supabase
+            .from('sales_order_items')
+            .insert(mutableRows);
+
+        if (!result.error) {
+            return { error: null };
+        }
+
+        const missingColumn = extractMissingColumn(result.error?.message || '');
+        if (!missingColumn) {
+            return { error: result.error };
+        }
+
+        let removed = false;
+        for (const row of mutableRows) {
+            if (Object.prototype.hasOwnProperty.call(row, missingColumn)) {
+                delete row[missingColumn];
+                removed = true;
+            }
+        }
+
+        if (!removed) {
+            return { error: result.error };
+        }
+
+        retry += 1;
+    }
+
+    return { error: new Error('No se pudieron insertar los items por columnas faltantes') };
 }
 
 function calculateTotals(items: any[], taxRate: number, discountAmount: number) {
@@ -110,9 +165,10 @@ async function syncSalesOrderToZoho(params: {
     discountAmount: number;
     notes: string | null;
     salespersonName: string | null;
+    status?: string;
     items: any[];
 }): Promise<{ zoho_salesorder_id: string; zoho_salesorder_number: string }> {
-    const { supabase, orderId, orderNumber, customerId, warehouseId, date, expectedDeliveryDate, discountAmount, notes, salespersonName, items } = params;
+    const { supabase, orderId, orderNumber, customerId, warehouseId, date, expectedDeliveryDate, discountAmount, notes, salespersonName, status, items } = params;
 
     const zohoClient = createZohoBooksClient();
     if (!zohoClient) {
@@ -237,6 +293,12 @@ async function syncSalesOrderToZoho(params: {
 
     // Create sales order in Zoho
     const result = await zohoClient.createSalesOrder(orderPayload);
+
+    // If local status is confirmada, mirror status in Zoho.
+    const normalizedStatus = normalizeStatus(status, 'borrador');
+    if (normalizedStatus === 'confirmada' && result.salesorder_id) {
+        await zohoClient.confirmSalesOrder(result.salesorder_id);
+    }
 
     // Save Zoho metadata back to local order
     if (result.salesorder_id || result.salesorder_number) {
@@ -368,6 +430,43 @@ export async function POST(req: NextRequest) {
             return NextResponse.json({ error: 'La orden de venta debe tener al menos un artículo' }, { status: 400 });
         }
 
+        const normalizedItems = items.map((item: any) => {
+            const quantity = normalizeNumber(item?.quantity, NaN);
+            const unitPrice = Math.max(0, normalizeNumber(item?.unit_price, 0));
+            const discountPercent = Math.max(0, Math.min(100, normalizeNumber(item?.discount_percent, 0)));
+            return {
+                item_id: item?.item_id || null,
+                description: String(item?.description || item?.name || 'Artículo').trim(),
+                quantity,
+                unit_price: unitPrice,
+                discount_percent: discountPercent,
+                serial_number_value: normalizeSerialInput(
+                    item?.serial_number_value ?? item?.serial_numbers ?? item?.serials
+                ) || null,
+                line_warehouse_id: normalizeText(item?.line_warehouse_id) || null,
+                line_zoho_warehouse_id: normalizeText(item?.line_zoho_warehouse_id) || null,
+            };
+        });
+
+        const invalidQuantityIndex = normalizedItems.findIndex(
+            (item: any) => !Number.isFinite(item.quantity) || item.quantity <= 0
+        );
+        if (invalidQuantityIndex >= 0) {
+            return NextResponse.json(
+                { error: `Cantidad inválida en la línea ${invalidQuantityIndex + 1}.` },
+                { status: 400 }
+            );
+        }
+
+        const stockValidation = await validateWarehouseFamilyStock({
+            supabase,
+            warehouseId: warehouse_id,
+            items: normalizedItems,
+        });
+        if (!stockValidation.ok) {
+            return NextResponse.json({ error: stockValidation.error }, { status: 400 });
+        }
+
         // Resolve warehouse code for order number format
         let warehouseCode: string | undefined;
         if (warehouse_id) {
@@ -385,7 +484,7 @@ export async function POST(req: NextRequest) {
 
         const normalizedTaxRate = Math.max(0, normalizeNumber(tax_rate, 15));
         const normalizedDiscount = Math.max(0, normalizeNumber(discount_amount, 0));
-        const totals = calculateTotals(items, normalizedTaxRate, normalizedDiscount);
+        const totals = calculateTotals(normalizedItems, normalizedTaxRate, normalizedDiscount);
 
         const insertOrder = {
             order_number: orderNumber,
@@ -458,7 +557,7 @@ export async function POST(req: NextRequest) {
             return NextResponse.json({ error: lastError?.message || 'No se pudo crear la orden de venta' }, { status: 500 });
         }
 
-        const orderItems = items.map((item: any, index: number) => {
+        const orderItems = normalizedItems.map((item: any, index: number) => {
             const quantity = Math.max(0, normalizeNumber(item?.quantity, 0));
             const unitPrice = Math.max(0, normalizeNumber(item?.unit_price, 0));
             const discountPercent = Math.max(0, Math.min(100, normalizeNumber(item?.discount_percent, 0)));
@@ -469,14 +568,15 @@ export async function POST(req: NextRequest) {
                 quantity,
                 unit_price: unitPrice,
                 discount_percent: discountPercent,
+                serial_number_value: normalizeSerialInput(item?.serial_number_value) || null,
+                line_warehouse_id: normalizeText(item?.line_warehouse_id) || null,
+                line_zoho_warehouse_id: normalizeText(item?.line_zoho_warehouse_id) || null,
                 subtotal: Math.round(quantity * unitPrice * (1 - discountPercent / 100) * 100) / 100,
                 sort_order: index,
             };
         });
 
-        const { error: itemsError } = await supabase
-            .from('sales_order_items')
-            .insert(orderItems);
+        const { error: itemsError } = await insertSalesOrderItemsWithColumnFallback(supabase, orderItems);
 
         if (itemsError) {
             await supabase.from('sales_orders').delete().eq('id', order.id);
@@ -485,6 +585,7 @@ export async function POST(req: NextRequest) {
 
         // Sync to Zoho if requested
         let zohoSync: { zoho_salesorder_id: string; zoho_salesorder_number: string } | null = null;
+        let zohoWarning: string | null = null;
         if (sync_to_zoho) {
             try {
                 zohoSync = await syncSalesOrderToZoho({
@@ -498,19 +599,16 @@ export async function POST(req: NextRequest) {
                     discountAmount: normalizedDiscount,
                     notes: notes || null,
                     salespersonName: salesperson_name || null,
-                    items,
+                    status: normalizeStatus(status, 'borrador'),
+                    items: normalizedItems,
                 });
             } catch (zohoError: any) {
-                await supabase.from('sales_order_items').delete().eq('order_id', order.id);
-                await supabase.from('sales_orders').delete().eq('id', order.id);
-                return NextResponse.json(
-                    { error: zohoError?.message || 'No se pudo crear la orden de venta en Zoho' },
-                    { status: 400 }
-                );
+                zohoWarning = zohoError?.message || 'No se pudo crear la orden de venta en Zoho';
+                console.warn(`[sales-orders] OV local creada sin sincronizar en Zoho (${order.id}): ${zohoWarning}`);
             }
         }
 
-        return NextResponse.json({ order, zoho: zohoSync }, { status: 201 });
+        return NextResponse.json({ order, zoho: zohoSync, warning: zohoWarning }, { status: 201 });
     } catch (error: any) {
         return NextResponse.json({ error: error.message || 'Error interno' }, { status: 500 });
     }

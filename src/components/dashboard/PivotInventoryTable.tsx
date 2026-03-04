@@ -25,6 +25,7 @@ export interface PivotItem {
     id: string;
     sku: string;
     name: string;
+    price?: number;
     color: string | null;
     color_hex?: string | null;
     state: string | null;

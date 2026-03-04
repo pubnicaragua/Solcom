@@ -68,9 +68,16 @@ interface InvoicePrefillItem {
     available_qty?: number | null;
     unit_price?: number;
     discount_percent?: number;
+    serial_number_value?: string | null;
 }
 
 interface InvoicePrefillData {
+    source_sales_order_id?: string | null;
+    source_order_number?: string | null;
+    customer_id?: string | null;
+    customer_name?: string | null;
+    salesperson_id?: string | null;
+    salesperson_name?: string | null;
     warehouse_id?: string | null;
     items?: InvoicePrefillItem[];
 }
@@ -95,6 +102,10 @@ const TERMS_OPTIONS = [
     { value: 'contado', label: 'Contado' },
 ];
 
+function equalsIgnoreCase(a: string, b: string): boolean {
+    return a.localeCompare(b, 'es', { sensitivity: 'base' }) === 0;
+}
+
 export default function InvoiceForm({ isOpen, onClose, onSaved, editInvoice, prefillData = null }: InvoiceFormProps) {
     // Customer
     const [customers, setCustomers] = useState<Customer[]>([]);
@@ -107,6 +118,7 @@ export default function InvoiceForm({ isOpen, onClose, onSaved, editInvoice, pre
     const [invoiceDate, setInvoiceDate] = useState(new Date().toISOString().slice(0, 10));
     const [dueDate, setDueDate] = useState('');
     const [orderNumber, setOrderNumber] = useState('');
+    const [sourceSalesOrderId, setSourceSalesOrderId] = useState<string | null>(null);
     const [terms, setTerms] = useState('');
     const [notes, setNotes] = useState('');
     const [creditDetail, setCreditDetail] = useState('');
@@ -160,6 +172,9 @@ export default function InvoiceForm({ isOpen, onClose, onSaved, editInvoice, pre
 
     const customerRef = useRef<HTMLDivElement>(null);
     const productRef = useRef<HTMLDivElement>(null);
+    const lineSerialSourceKey = lineItems
+        .map((line, idx) => `${idx}:${String(line.item_id || '')}:${String(line.zoho_item_id || '')}`)
+        .join('|');
 
     useEffect(() => {
         if (isOpen) {
@@ -190,7 +205,7 @@ export default function InvoiceForm({ isOpen, onClose, onSaved, editInvoice, pre
                         max_available_qty: maxAvailable,
                         unit_price: Math.max(0, Number(item?.unit_price ?? 0) || 0),
                         discount_percent: Math.max(0, Math.min(100, Number(item?.discount_percent ?? 0) || 0)),
-                        serial_number_value: '',
+                        serial_number_value: normalizeSerialInput(item?.serial_number_value || ''),
                         available_serials: [],
                         loading_serials: false,
                     };
@@ -200,6 +215,31 @@ export default function InvoiceForm({ isOpen, onClose, onSaved, editInvoice, pre
 
         if (prefillData.warehouse_id) {
             setWarehouseId(prefillData.warehouse_id);
+        }
+        if (prefillData.source_order_number) {
+            setOrderNumber(prefillData.source_order_number);
+        }
+        setSourceSalesOrderId(
+            String(prefillData.source_sales_order_id || '').trim() || null
+        );
+        const prefilledCustomerId = String(prefillData.customer_id || '').trim();
+        const prefilledCustomerName = String(prefillData.customer_name || '').trim();
+        if (prefilledCustomerId || prefilledCustomerName) {
+            const selected: Customer = {
+                id: prefilledCustomerId || '',
+                name: prefilledCustomerName || 'Cliente seleccionado',
+                email: null,
+                phone: null,
+                ruc: null,
+                source: 'supabase',
+            };
+            setSelectedCustomer(selected);
+            setCustomerSearch(selected.name);
+        }
+
+        const prefilledSalespersonId = String(prefillData.salesperson_id || '').trim();
+        if (prefilledSalespersonId) {
+            setSalespersonId(prefilledSalespersonId);
         }
 
         setLineItems(
@@ -220,6 +260,20 @@ export default function InvoiceForm({ isOpen, onClose, onSaved, editInvoice, pre
         );
         setError('');
     }, [isOpen, editInvoice, prefillData]);
+
+    useEffect(() => {
+        if (!isOpen || editInvoice || !prefillData) return;
+        if (salespersonId) return;
+        const prefilledSalespersonName = String(prefillData.salesperson_name || '').trim();
+        if (!prefilledSalespersonName) return;
+
+        const match = salespeople.find((seller) =>
+            equalsIgnoreCase(String(seller.name || '').trim(), prefilledSalespersonName)
+        );
+        if (match) {
+            setSalespersonId(match.id);
+        }
+    }, [isOpen, editInvoice, prefillData, salespeople, salespersonId]);
 
     // Auto-calc due date from terms
     useEffect(() => {
@@ -352,7 +406,6 @@ export default function InvoiceForm({ isOpen, onClose, onSaved, editInvoice, pre
                 max_available_qty: null,
                 available_serials: [],
                 loading_serials: false,
-                serial_number_value: '',
             })));
             return;
         }
@@ -362,16 +415,19 @@ export default function InvoiceForm({ isOpen, onClose, onSaved, editInvoice, pre
             ...line,
             available_serials: [],
             loading_serials: false,
-            serial_number_value: '',
         })));
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [warehouseId, isOpen]);
 
+    useEffect(() => {
+        if (!isOpen || !warehouseId) return;
         lineItems.forEach((line, idx) => {
             if (line.zoho_item_id) {
                 fetchLineSerials(idx, line.zoho_item_id);
             }
         });
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [warehouseId, isOpen]);
+    }, [isOpen, warehouseId, lineSerialSourceKey]);
 
     const fetchWarehouses = async () => {
         try {
@@ -677,6 +733,7 @@ export default function InvoiceForm({ isOpen, onClose, onSaved, editInvoice, pre
                 credit_detail: creditDetail || null,
                 cancellation_reason_id: cancellationReasonId || null,
                 cancellation_comments: cancellationComments || null,
+                source_sales_order_id: sourceSalesOrderId || null,
                 items: lineItems.filter(item => item.description.trim()).map(item => ({
                     item_id: item.item_id,
                     description: item.description,
@@ -713,6 +770,7 @@ export default function InvoiceForm({ isOpen, onClose, onSaved, editInvoice, pre
         setInvoiceDate(new Date().toISOString().slice(0, 10));
         setDueDate('');
         setOrderNumber('');
+        setSourceSalesOrderId(null);
         setTerms('');
         setNotes('');
         setCreditDetail('');
