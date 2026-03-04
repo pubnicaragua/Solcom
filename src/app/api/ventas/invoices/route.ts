@@ -5,6 +5,14 @@ import { deterministicUuidFromExternalId, normalizeSalespersonId } from '@/lib/i
 import { getZohoAccessToken } from '@/lib/zoho/inventory-utils';
 import { fetchZohoSalespeople } from '@/lib/zoho/salespeople';
 import { validateWarehouseFamilyStock } from '@/lib/ventas/stock-validation';
+import {
+    applyReservedSerialsToItems,
+    assertSerialsReservedForOrder,
+    buildReservationLines,
+    consumeOrderSerialReservations,
+    getActiveOrderSerialReservations,
+    SerialReservationError,
+} from '@/lib/ventas/serial-reservations';
 
 export const dynamic = 'force-dynamic';
 
@@ -611,6 +619,7 @@ export async function POST(req: NextRequest) {
                 item?.serial_number_value ?? item?.serial_numbers ?? item?.serials
             ) || null,
         }));
+        let itemsForInvoice = normalizedItems;
 
         const invalidQuantityIndex = normalizedItems.findIndex(
             (item: any) => !Number.isFinite(item.quantity) || item.quantity <= 0
@@ -631,6 +640,65 @@ export async function POST(req: NextRequest) {
             return NextResponse.json({ error: stockValidation.error }, { status: 400 });
         }
 
+        if (normalizedSourceSalesOrderId) {
+            try {
+                const activeReservations = await getActiveOrderSerialReservations({
+                    supabase,
+                    orderId: normalizedSourceSalesOrderId,
+                });
+
+                itemsForInvoice = applyReservedSerialsToItems({
+                    items: normalizedItems,
+                    reservations: activeReservations,
+                });
+
+                if (activeReservations.length > 0) {
+                    const reservedKeySet = new Set(
+                        activeReservations.map((reservation) =>
+                            `${String(reservation.item_id)}::${String(reservation.serial_code)}`
+                        )
+                    );
+                    const providedKeySet = new Set(
+                        buildReservationLines(itemsForInvoice).map(
+                            (line) => `${String(line.item_id)}::${String(line.serial_code)}`
+                        )
+                    );
+
+                    const mismatch = reservedKeySet.size !== providedKeySet.size
+                        || Array.from(reservedKeySet).some((key) => !providedKeySet.has(key));
+
+                    if (mismatch) {
+                        throw new SerialReservationError(
+                            'Los seriales de la OV ya no coinciden con la reserva activa. Vuelve a seleccionar seriales.',
+                            'SERIAL_NOT_RESERVED',
+                            409
+                        );
+                    }
+                }
+
+                await assertSerialsReservedForOrder({
+                    supabase,
+                    orderId: normalizedSourceSalesOrderId,
+                    items: itemsForInvoice,
+                });
+            } catch (reservationError: any) {
+                if (reservationError instanceof SerialReservationError) {
+                    return NextResponse.json(
+                        {
+                            error: reservationError.message,
+                            code: reservationError.code,
+                            details: reservationError.details || null,
+                        },
+                        { status: reservationError.status || 409 }
+                    );
+                }
+                return NextResponse.json(
+                    { error: reservationError?.message || 'No se pudieron validar reservas de seriales.' },
+                    { status: 500 }
+                );
+            }
+        }
+
         // Generate invoice number
         const { data: numData, error: numError } = await supabase.rpc('generate_invoice_number');
 
@@ -646,7 +714,7 @@ export async function POST(req: NextRequest) {
         }
 
         // Calculate totals (shipping included)
-        const subtotal = normalizedItems.reduce((sum: number, item: any) => {
+        const subtotal = itemsForInvoice.reduce((sum: number, item: any) => {
             const lineSubtotal = item.quantity * item.unit_price * (1 - (item.discount_percent || 0) / 100);
             return sum + lineSubtotal;
         }, 0);
@@ -691,13 +759,14 @@ export async function POST(req: NextRequest) {
         }
 
         // Insert line items
-        const lineItems = normalizedItems.map((item: any, index: number) => ({
+        const lineItems = itemsForInvoice.map((item: any, index: number) => ({
             invoice_id: invoice.id,
             item_id: item.item_id || null,
             description: item.description || item.name || 'Artículo',
             quantity: item.quantity || 1,
             unit_price: item.unit_price || 0,
             discount_percent: item.discount_percent || 0,
+            serial_number_value: item.serial_number_value || null,
             subtotal: Math.round(
                 (item.quantity || 1) * (item.unit_price || 0) * (1 - (item.discount_percent || 0) / 100) * 100
             ) / 100,
@@ -733,7 +802,7 @@ export async function POST(req: NextRequest) {
                     salespersonName: salesperson_name || null,
                     shippingCharge: normalizedShippingCharge,
                     discountAmount: normalizedDiscountAmount,
-                    items: normalizedItems,
+                    items: itemsForInvoice,
                 });
             } catch (zohoError: any) {
                 await supabase.from('sales_invoices').delete().eq('id', invoice.id);
@@ -742,6 +811,7 @@ export async function POST(req: NextRequest) {
         }
 
         let salesOrderLinkWarning: string | null = null;
+        let reservationWarning: string | null = null;
         if (normalizedSourceSalesOrderId && status === 'enviada') {
             const orderUpdate = await supabase
                 .from('sales_orders')
@@ -754,11 +824,25 @@ export async function POST(req: NextRequest) {
 
             if (orderUpdate.error) {
                 salesOrderLinkWarning = `Factura creada, pero no se pudo actualizar la OV origen: ${orderUpdate.error.message}`;
+            } else {
+                try {
+                    await consumeOrderSerialReservations({
+                        supabase,
+                        orderId: normalizedSourceSalesOrderId,
+                        invoiceId: invoice.id,
+                    });
+                } catch (consumeError: any) {
+                    reservationWarning = `Factura creada, pero no se pudieron consumir reservas de seriales: ${consumeError?.message || 'Error desconocido'}`;
+                }
             }
         }
 
         return NextResponse.json(
-            { invoice, zoho: zohoSync, warning: salesOrderLinkWarning },
+            {
+                invoice,
+                zoho: zohoSync,
+                warning: [salesOrderLinkWarning, reservationWarning].filter(Boolean).join(' | ') || null,
+            },
             { status: 201 }
         );
     } catch (error: any) {

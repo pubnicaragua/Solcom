@@ -2,6 +2,13 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createRouteHandlerClient } from '@supabase/auth-helpers-nextjs';
 import { cookies } from 'next/headers';
 import { createZohoBooksClient } from '@/lib/zoho/books-client';
+import {
+    applyReservedSerialsToItems,
+    assertSerialsReservedForOrder,
+    consumeOrderSerialReservations,
+    getActiveOrderSerialReservations,
+    SerialReservationError,
+} from '@/lib/ventas/serial-reservations';
 
 function normalizeNumber(value: unknown, fallback = 0): number {
     const parsed = Number(value);
@@ -316,99 +323,51 @@ async function tryCreateZohoInvoiceDirect(params: {
                 throw new Error(`El artículo "${mappedName}" requiere seriales y la OV no tiene ubicación Zoho válida.`);
             }
 
-            if (serials.length > 0) {
-                if (serials.length !== expectedSerialCount) {
-                    throw new Error(
-                        `Seriales inválidos para "${mappedName}": cantidad ${expectedSerialCount}, seriales ${serials.length}.`
-                    );
-                }
-
-                // Permite seriales en múltiples bodegas de la misma familia: se divide la línea por ubicación.
-                const byLocation = new Map<string, string[]>();
-                for (const serial of serials) {
-                    let foundLocationForSerial = '';
-                    for (const locationId of locationCandidates) {
-                        const pool = await fetchSerialPool(zohoItemId, locationId);
-                        const idx = pool.indexOf(serial);
-                        if (idx >= 0) {
-                            pool.splice(idx, 1);
-                            foundLocationForSerial = locationId;
-                            break;
-                        }
-                    }
-
-                    if (!foundLocationForSerial) {
-                        throw new Error(
-                            `El serial "${serial}" del artículo "${mappedName}" no está disponible en la familia seleccionada.`
-                        );
-                    }
-
-                    if (!byLocation.has(foundLocationForSerial)) {
-                        byLocation.set(foundLocationForSerial, []);
-                    }
-                    byLocation.get(foundLocationForSerial)!.push(serial);
-                }
-
-                for (const [locationId, serialList] of byLocation.entries()) {
-                    const clonedLine: any = {
-                        item_id: line.item_id,
-                        quantity: serialList.length,
-                        rate: line.rate,
-                        serial_number_value: serialList.join(','),
-                        serial_numbers: serialList,
-                        __resolvedLineLocationId: locationId,
-                    };
-                    zohoLineItems.push(clonedLine);
-                }
-                continue;
-            } else {
-                let remaining = expectedSerialCount;
-                const byLocation = new Map<string, string[]>();
-                for (const locationId of locationCandidates) {
-                    if (remaining <= 0) break;
-                    const pool = await fetchSerialPool(zohoItemId, locationId);
-                    if (pool.length <= 0) continue;
-                    const toTake = Math.min(pool.length, remaining);
-                    const taken = pool.splice(0, toTake);
-                    if (taken.length > 0) {
-                        byLocation.set(locationId, taken);
-                        remaining -= taken.length;
-                    }
-                }
-
-                if (remaining > 0) {
-                    let totalAvailable = 0;
-                    for (const locationId of locationCandidates) {
-                        const pool = await fetchSerialPool(zohoItemId, locationId);
-                        totalAvailable += pool.length;
-                    }
-                    throw new Error(
-                        `El artículo "${mappedName}" requiere ${expectedSerialCount} serial(es) y solo hay ${totalAvailable} disponible(s) en la familia seleccionada.`
-                    );
-                }
-
-                if (byLocation.size > 1) {
-                    for (const [locationId, serialList] of byLocation.entries()) {
-                        const clonedLine: any = {
-                            item_id: line.item_id,
-                            quantity: serialList.length,
-                            rate: line.rate,
-                            serial_number_value: serialList.join(','),
-                            serial_numbers: serialList,
-                            __resolvedLineLocationId: locationId,
-                        };
-                        zohoLineItems.push(clonedLine);
-                    }
-                    continue;
-                }
-
-                const firstAllocation = Array.from(byLocation.entries())[0];
-                if (firstAllocation) {
-                    const [locationId, serialList] = firstAllocation;
-                    resolvedLineLocationId = locationId;
-                    serials = serialList;
-                }
+            if (serials.length !== expectedSerialCount) {
+                throw new Error(
+                    `El artículo "${mappedName}" requiere ${expectedSerialCount} serial(es) reservado(s). ` +
+                    `Seleccionados: ${serials.length}.`
+                );
             }
+
+            // Permite seriales en múltiples bodegas de la misma familia: se divide la línea por ubicación.
+            const byLocation = new Map<string, string[]>();
+            for (const serial of serials) {
+                let foundLocationForSerial = '';
+                for (const locationId of locationCandidates) {
+                    const pool = await fetchSerialPool(zohoItemId, locationId);
+                    const idx = pool.indexOf(serial);
+                    if (idx >= 0) {
+                        pool.splice(idx, 1);
+                        foundLocationForSerial = locationId;
+                        break;
+                    }
+                }
+
+                if (!foundLocationForSerial) {
+                    throw new Error(
+                        `El serial "${serial}" del artículo "${mappedName}" no está disponible en la familia seleccionada.`
+                    );
+                }
+
+                if (!byLocation.has(foundLocationForSerial)) {
+                    byLocation.set(foundLocationForSerial, []);
+                }
+                byLocation.get(foundLocationForSerial)!.push(serial);
+            }
+
+            for (const [locationId, serialList] of byLocation.entries()) {
+                const clonedLine: any = {
+                    item_id: line.item_id,
+                    quantity: serialList.length,
+                    rate: line.rate,
+                    serial_number_value: serialList.join(','),
+                    serial_numbers: serialList,
+                    __resolvedLineLocationId: locationId,
+                };
+                zohoLineItems.push(clonedLine);
+            }
+            continue;
         } else if (serials.length > 0 && serials.length !== expectedSerialCount) {
             throw new Error(
                 `Seriales inválidos para "${mappedName}": cantidad ${expectedSerialCount}, seriales ${serials.length}.`
@@ -552,6 +511,44 @@ export async function POST(
             return NextResponse.json({ error: 'La orden no tiene líneas para convertir.' }, { status: 400 });
         }
 
+        const orderSerialReservations = await getActiveOrderSerialReservations({
+            supabase,
+            orderId: params.id,
+        });
+
+        const serialAwareItems = applyReservedSerialsToItems({
+            items: orderItems,
+            reservations: orderSerialReservations,
+        });
+
+        try {
+            await assertSerialsReservedForOrder({
+                supabase,
+                orderId: params.id,
+                items: serialAwareItems,
+            });
+        } catch (reservationError: any) {
+            if (reservationError instanceof SerialReservationError) {
+                return NextResponse.json(
+                    {
+                        error: reservationError.message,
+                        code: reservationError.code,
+                        details: reservationError.details || null,
+                    },
+                    { status: reservationError.status || 409 }
+                );
+            }
+            return NextResponse.json(
+                { error: reservationError?.message || 'No se pudieron validar reservas de seriales para facturar.' },
+                { status: 500 }
+            );
+        }
+
+        const orderForInvoice = {
+            ...order,
+            items: serialAwareItems,
+        };
+
         const year = new Date().getFullYear();
         let invoiceNumber = `FAC-OV-${year}-${Date.now().toString(36).toUpperCase()}`;
 
@@ -614,13 +611,14 @@ export async function POST(
             return NextResponse.json({ error: invoiceError?.message || 'No se pudo crear la factura local' }, { status: 500 });
         }
 
-        const invoiceItems = orderItems.map((item: any, index: number) => ({
+        const invoiceItems = serialAwareItems.map((item: any, index: number) => ({
             invoice_id: invoice.id,
             item_id: item.item_id || null,
             description: item.description || 'Artículo',
             quantity: normalizeNumber(item.quantity, 0),
             unit_price: normalizeNumber(item.unit_price, 0),
             discount_percent: normalizeNumber(item.discount_percent, 0),
+            serial_number_value: normalizeText(item.serial_number_value) || null,
             subtotal: normalizeNumber(item.subtotal, 0),
             sort_order: index,
         }));
@@ -652,16 +650,16 @@ export async function POST(
             // Prefer direct invoice creation to keep ERP prices and serial logic aligned.
             zohoInvoice = await tryCreateZohoInvoiceDirect({
                 supabase,
-                order,
+                order: orderForInvoice,
                 fallbackReference: invoice.invoice_number,
             });
         } catch (error: any) {
             directError = error;
         }
 
-        if (!zohoInvoice && normalizeText(order.zoho_salesorder_id)) {
+        if (!zohoInvoice && normalizeText(orderForInvoice.zoho_salesorder_id)) {
             try {
-                zohoInvoice = await zohoClient.convertSalesOrderToInvoice(order.zoho_salesorder_id);
+                zohoInvoice = await zohoClient.convertSalesOrderToInvoice(orderForInvoice.zoho_salesorder_id);
             } catch (error: any) {
                 convertError = error;
             }
@@ -764,6 +762,35 @@ export async function POST(
             );
         }
 
+        try {
+            await consumeOrderSerialReservations({
+                supabase,
+                orderId: params.id,
+                invoiceId: invoice.id,
+            });
+        } catch (consumeError: any) {
+            if (consumeError instanceof SerialReservationError) {
+                return NextResponse.json(
+                    {
+                        error: `Factura creada (${invoice.invoice_number}) pero no se pudieron consumir reservas: ${consumeError.message}`,
+                        code: consumeError.code,
+                        details: consumeError.details || null,
+                        invoice_id: invoice.id,
+                        invoice_number: invoice.invoice_number,
+                    },
+                    { status: 500 }
+                );
+            }
+            return NextResponse.json(
+                {
+                    error: `Factura creada (${invoice.invoice_number}) pero no se pudieron consumir reservas: ${consumeError?.message || 'Error desconocido'}`,
+                    invoice_id: invoice.id,
+                    invoice_number: invoice.invoice_number,
+                },
+                { status: 500 }
+            );
+        }
+
         return NextResponse.json({
             success: true,
             order_id: params.id,
@@ -772,6 +799,16 @@ export async function POST(
             zoho: zohoInvoice,
         });
     } catch (error: any) {
+        if (error instanceof SerialReservationError) {
+            return NextResponse.json(
+                {
+                    error: error.message,
+                    code: error.code,
+                    details: error.details || null,
+                },
+                { status: error.status || 409 }
+            );
+        }
         return NextResponse.json({ error: error.message || 'Error interno' }, { status: 500 });
     }
 }

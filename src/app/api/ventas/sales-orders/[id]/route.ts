@@ -2,6 +2,11 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createRouteHandlerClient } from '@supabase/auth-helpers-nextjs';
 import { cookies } from 'next/headers';
 import { createZohoBooksClient } from '@/lib/zoho/books-client';
+import {
+    releaseOrderSerialReservations,
+    replaceOrderSerialReservations,
+    SerialReservationError,
+} from '@/lib/ventas/serial-reservations';
 
 const ORDER_STATUSES = new Set(['borrador', 'confirmada', 'convertida', 'cancelada']);
 
@@ -257,6 +262,31 @@ export async function PUT(
                 }
             }
 
+            if (normalizedStatus === 'cancelada') {
+                try {
+                    await releaseOrderSerialReservations({
+                        supabase,
+                        orderId: params.id,
+                        reason: 'order_cancelled',
+                    });
+                } catch (reservationError: any) {
+                    if (reservationError instanceof SerialReservationError) {
+                        return NextResponse.json(
+                            {
+                                error: reservationError.message,
+                                code: reservationError.code,
+                                details: reservationError.details || null,
+                            },
+                            { status: reservationError.status || 409 }
+                        );
+                    }
+                    return NextResponse.json(
+                        { error: reservationError?.message || 'No se pudieron liberar reservas de seriales.' },
+                        { status: 500 }
+                    );
+                }
+            }
+
             const { data, error } = await supabase
                 .from('sales_orders')
                 .update({ status: normalizedStatus, updated_at: new Date().toISOString() })
@@ -323,6 +353,22 @@ export async function PUT(
         if (salesperson_name !== undefined) updateData.salesperson_name = salesperson_name || null;
 
         if (Array.isArray(items) && items.length > 0) {
+            const previousItemsResult = await supabase
+                .from('sales_order_items')
+                .select('*')
+                .eq('order_id', params.id)
+                .order('sort_order', { ascending: true });
+
+            if (previousItemsResult.error) {
+                return NextResponse.json(
+                    { error: `No se pudieron cargar líneas actuales para actualizar OV: ${previousItemsResult.error.message}` },
+                    { status: 500 }
+                );
+            }
+            const previousItemsSnapshot = Array.isArray(previousItemsResult.data)
+                ? previousItemsResult.data.map((line: any) => ({ ...line }))
+                : [];
+
             const taxRateForCalc = updateData.tax_rate !== undefined
                 ? updateData.tax_rate
                 : Math.max(0, normalizeNumber(currentOrder.tax_rate, 15));
@@ -335,7 +381,17 @@ export async function PUT(
             updateData.tax_amount = totals.tax_amount;
             updateData.total = totals.total;
 
-            await supabase.from('sales_order_items').delete().eq('order_id', params.id);
+            const deleteItemsResult = await supabase
+                .from('sales_order_items')
+                .delete()
+                .eq('order_id', params.id);
+
+            if (deleteItemsResult.error) {
+                return NextResponse.json(
+                    { error: `No se pudieron reemplazar líneas de la orden: ${deleteItemsResult.error.message}` },
+                    { status: 500 }
+                );
+            }
 
             const orderItems = items.map((item: any, index: number) => {
                 const quantity = Math.max(0, normalizeNumber(item?.quantity, 0));
@@ -361,7 +417,80 @@ export async function PUT(
             const { error: itemsError } = await insertSalesOrderItemsWithColumnFallback(supabase, orderItems);
 
             if (itemsError) {
+                await supabase.from('sales_order_items').delete().eq('order_id', params.id);
+                if (previousItemsSnapshot.length > 0) {
+                    await insertSalesOrderItemsWithColumnFallback(
+                        supabase,
+                        previousItemsSnapshot.map((line: any) => {
+                            const restored = { ...line };
+                            delete restored.id;
+                            return restored;
+                        })
+                    );
+                }
                 return NextResponse.json({ error: itemsError.message }, { status: 500 });
+            }
+
+            try {
+                await replaceOrderSerialReservations({
+                    supabase,
+                    orderId: params.id,
+                    userId: user.id || null,
+                    items: orderItems,
+                });
+            } catch (reservationError: any) {
+                await supabase.from('sales_order_items').delete().eq('order_id', params.id);
+                if (previousItemsSnapshot.length > 0) {
+                    const restoreItemsResult = await insertSalesOrderItemsWithColumnFallback(
+                        supabase,
+                        previousItemsSnapshot.map((line: any) => {
+                            const restored = { ...line };
+                            delete restored.id;
+                            return restored;
+                        })
+                    );
+
+                    if (restoreItemsResult.error) {
+                        return NextResponse.json(
+                            {
+                                error: `Falló la reserva de seriales y no se pudieron restaurar líneas previas: ${restoreItemsResult.error.message}`,
+                            },
+                            { status: 500 }
+                        );
+                    }
+                }
+
+                try {
+                    await replaceOrderSerialReservations({
+                        supabase,
+                        orderId: params.id,
+                        userId: user.id || null,
+                        items: previousItemsSnapshot,
+                    });
+                } catch (restoreReservationError: any) {
+                    return NextResponse.json(
+                        {
+                            error: `Falló la reserva de seriales y no se pudieron restaurar reservas previas: ${restoreReservationError?.message || 'Error desconocido'}`,
+                        },
+                        { status: 500 }
+                    );
+                }
+
+                if (reservationError instanceof SerialReservationError) {
+                    return NextResponse.json(
+                        {
+                            error: reservationError.message,
+                            code: reservationError.code,
+                            details: reservationError.details || null,
+                        },
+                        { status: reservationError.status || 409 }
+                    );
+                }
+
+                return NextResponse.json(
+                    { error: reservationError?.message || 'No se pudieron reservar seriales para la orden.' },
+                    { status: 500 }
+                );
             }
         }
 
@@ -394,6 +523,31 @@ export async function PUT(
 
         if (error) {
             return NextResponse.json({ error: error.message }, { status: 500 });
+        }
+
+        if (normalizeText(data?.status) === 'cancelada') {
+            try {
+                await releaseOrderSerialReservations({
+                    supabase,
+                    orderId: params.id,
+                    reason: 'order_cancelled',
+                });
+            } catch (reservationError: any) {
+                if (reservationError instanceof SerialReservationError) {
+                    return NextResponse.json(
+                        {
+                            error: reservationError.message,
+                            code: reservationError.code,
+                            details: reservationError.details || null,
+                        },
+                        { status: reservationError.status || 409 }
+                    );
+                }
+                return NextResponse.json(
+                    { error: reservationError?.message || 'No se pudieron liberar reservas de seriales.' },
+                    { status: 500 }
+                );
+            }
         }
 
         return NextResponse.json({ order: data });
@@ -431,6 +585,29 @@ export async function DELETE(
             return NextResponse.json(
                 { error: 'No se puede eliminar una orden convertida a factura' },
                 { status: 400 }
+            );
+        }
+
+        try {
+            await releaseOrderSerialReservations({
+                supabase,
+                orderId: params.id,
+                reason: 'order_deleted',
+            });
+        } catch (reservationError: any) {
+            if (reservationError instanceof SerialReservationError) {
+                return NextResponse.json(
+                    {
+                        error: reservationError.message,
+                        code: reservationError.code,
+                        details: reservationError.details || null,
+                    },
+                    { status: reservationError.status || 409 }
+                );
+            }
+            return NextResponse.json(
+                { error: reservationError?.message || 'No se pudieron liberar reservas de seriales.' },
+                { status: 500 }
             );
         }
 

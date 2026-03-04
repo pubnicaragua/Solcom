@@ -5,6 +5,10 @@ import { createRouteHandlerClient } from '@supabase/auth-helpers-nextjs';
 import { cookies } from 'next/headers';
 import { createZohoBooksClient } from '@/lib/zoho/books-client';
 import { validateWarehouseFamilyStock } from '@/lib/ventas/stock-validation';
+import {
+    replaceOrderSerialReservations,
+    SerialReservationError,
+} from '@/lib/ventas/serial-reservations';
 
 const ORDER_STATUSES = new Set(['borrador', 'confirmada', 'convertida', 'cancelada']);
 
@@ -581,6 +585,31 @@ export async function POST(req: NextRequest) {
         if (itemsError) {
             await supabase.from('sales_orders').delete().eq('id', order.id);
             return NextResponse.json({ error: itemsError.message }, { status: 500 });
+        }
+
+        try {
+            await replaceOrderSerialReservations({
+                supabase,
+                orderId: order.id,
+                userId: user.id || null,
+                items: orderItems,
+            });
+        } catch (reservationError: any) {
+            await supabase.from('sales_orders').delete().eq('id', order.id);
+            if (reservationError instanceof SerialReservationError) {
+                return NextResponse.json(
+                    {
+                        error: reservationError.message,
+                        code: reservationError.code,
+                        details: reservationError.details || null,
+                    },
+                    { status: reservationError.status || 409 }
+                );
+            }
+            return NextResponse.json(
+                { error: reservationError?.message || 'No se pudo reservar seriales para la orden.' },
+                { status: 500 }
+            );
         }
 
         // Sync to Zoho if requested

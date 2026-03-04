@@ -423,7 +423,7 @@ export default function InvoiceForm({ isOpen, onClose, onSaved, editInvoice, pre
         if (!isOpen || !warehouseId) return;
         lineItems.forEach((line, idx) => {
             if (line.zoho_item_id) {
-                fetchLineSerials(idx, line.zoho_item_id);
+                fetchLineSerials(idx, line.zoho_item_id, line.item_id);
             }
         });
         // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -504,7 +504,11 @@ export default function InvoiceForm({ isOpen, onClose, onSaved, editInvoice, pre
         setShowCustomerDropdown(false);
     };
 
-    const fetchLineSerials = async (rowIndex: number, zohoItemId: string | null) => {
+    const fetchLineSerials = async (
+        rowIndex: number,
+        zohoItemId: string | null,
+        localItemId: string | null = null
+    ) => {
         if (!zohoItemId || !warehouseId) {
             setLineItems((current) => current.map((line, idx) => (
                 idx === rowIndex
@@ -535,6 +539,12 @@ export default function InvoiceForm({ isOpen, onClose, onSaved, editInvoice, pre
             const params = new URLSearchParams();
             params.set('item_id', zohoItemId);
             params.set('warehouse_id', zohoWarehouseId);
+            if (localItemId) {
+                params.set('local_item_id', String(localItemId));
+            }
+            if (sourceSalesOrderId) {
+                params.set('sales_order_id', String(sourceSalesOrderId));
+            }
 
             const res = await fetch(`/api/zoho/item-serials?${params.toString()}`);
             const data = await res.json();
@@ -607,7 +617,7 @@ export default function InvoiceForm({ isOpen, onClose, onSaved, editInvoice, pre
         setActiveProductRow(null);
         setProductSearch('');
         setProducts([]);
-        fetchLineSerials(rowIndex, zohoItemId);
+        fetchLineSerials(rowIndex, zohoItemId, product.item_id);
     };
 
     const updateLineItem = (index: number, field: keyof InvoiceFormItem, value: any) => {
@@ -752,7 +762,22 @@ export default function InvoiceForm({ isOpen, onClose, onSaved, editInvoice, pre
             });
 
             const data = await res.json();
-            if (!res.ok) throw new Error(data.error);
+            if (!res.ok) {
+                if (res.status === 409 && data?.code === 'SERIAL_NOT_RESERVED') {
+                    throw new Error(data?.error || 'Serial reservado por otra OV o vendido fuera del sistema. Re-selecciona seriales.');
+                }
+                if (res.status === 409 && data?.code === 'SERIAL_RESERVATION_EXPIRED') {
+                    throw new Error(data?.error || 'Reserva vencida, vuelve a seleccionar seriales.');
+                }
+                if (res.status === 409 && data?.code === 'SERIAL_ALREADY_RESERVED') {
+                    const serial = String(data?.details?.serial || '').trim();
+                    const ovNumber = String(data?.details?.conflict_order_number || '').trim();
+                    if (serial && ovNumber) {
+                        throw new Error(`Serial ${serial} reservado por OV ${ovNumber}.`);
+                    }
+                }
+                throw new Error(data?.error || 'No se pudo crear la factura');
+            }
 
             onSaved();
             onClose();

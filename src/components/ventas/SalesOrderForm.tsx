@@ -246,6 +246,7 @@ export default function SalesOrderForm({ isOpen, orderId, onClose, onSaved }: Sa
     async function fetchLineSerials(
         rowIndex: number,
         zohoItemId: string | null,
+        localItemId: string | null,
         family: WarehouseOption[] = familyWarehouses
     ) {
         const normalizedItemId = String(zohoItemId || '').trim();
@@ -287,6 +288,12 @@ export default function SalesOrderForm({ isOpen, orderId, onClose, onSaved }: Sa
                     const params = new URLSearchParams();
                     params.set('item_id', normalizedItemId);
                     params.set('warehouse_id', String(warehouse.zoho_warehouse_id || ''));
+                    if (localItemId) {
+                        params.set('local_item_id', String(localItemId));
+                    }
+                    if (orderId) {
+                        params.set('sales_order_id', String(orderId));
+                    }
                     const response = await fetch(`/api/zoho/item-serials?${params.toString()}`, {
                         cache: 'no-store',
                     });
@@ -390,7 +397,7 @@ export default function SalesOrderForm({ isOpen, orderId, onClose, onSaved }: Sa
         setFamilyWarehouses(family);
         items.forEach((line, index) => {
             if (line.zoho_item_id) {
-                void fetchLineSerials(index, line.zoho_item_id, family);
+                void fetchLineSerials(index, line.zoho_item_id, line.item_id, family);
             }
         });
     }
@@ -499,7 +506,7 @@ export default function SalesOrderForm({ isOpen, orderId, onClose, onSaved }: Sa
             setFamilyWarehouses(family);
             normalizedLines.forEach((line, index) => {
                 if (line.zoho_item_id) {
-                    void fetchLineSerials(index, line.zoho_item_id, family);
+                    void fetchLineSerials(index, line.zoho_item_id, line.item_id, family);
                 }
             });
 
@@ -712,6 +719,16 @@ export default function SalesOrderForm({ isOpen, orderId, onClose, onSaved }: Sa
             });
             const data = await res.json().catch(() => ({}));
             if (!res.ok) {
+                if (res.status === 409 && data?.code === 'SERIAL_ALREADY_RESERVED') {
+                    const serial = String(data?.details?.serial || '').trim();
+                    const ovNumber = String(data?.details?.conflict_order_number || '').trim();
+                    if (serial && ovNumber) {
+                        throw new Error(`Serial ${serial} reservado por OV ${ovNumber}.`);
+                    }
+                    if (serial) {
+                        throw new Error(`Serial ${serial} reservado por otra OV.`);
+                    }
+                }
                 throw new Error(data?.error || 'No se pudo guardar la orden');
             }
 
