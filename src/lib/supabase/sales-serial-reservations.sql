@@ -1,7 +1,4 @@
--- ============================================================
--- SALES SERIAL RESERVATIONS
--- Bloqueo transaccional de seriales por OV (borrador/confirmada)
--- ============================================================
+
 
 CREATE TABLE IF NOT EXISTS public.sales_order_serial_reservations (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),

@@ -114,6 +114,209 @@ function calculateTotals(items: any[], taxRate: number, discountAmount: number) 
     };
 }
 
+async function syncUpdatedSalesOrderToZoho(params: {
+    supabase: any;
+    orderId: string;
+}) {
+    const { supabase, orderId } = params;
+    const zohoClient = createZohoBooksClient();
+    if (!zohoClient) {
+        throw new Error('No se pudo sincronizar en Zoho: configuración ZOHO_BOOKS_* incompleta.');
+    }
+
+    const orderLookup = await supabase
+        .from('sales_orders')
+        .select(`
+            id,
+            order_number,
+            customer_id,
+            warehouse_id,
+            date,
+            expected_delivery_date,
+            discount_amount,
+            notes,
+            salesperson_name,
+            status,
+            zoho_salesorder_id
+        `)
+        .eq('id', orderId)
+        .single();
+
+    if (orderLookup.error || !orderLookup.data) {
+        throw new Error(`No se pudo leer orden para Zoho: ${orderLookup.error?.message || 'Orden no encontrada'}`);
+    }
+
+    const order = orderLookup.data as any;
+    const zohoSalesOrderId = normalizeText(order?.zoho_salesorder_id);
+    if (!zohoSalesOrderId) return;
+
+    const normalizedStatus = normalizeStatus(order?.status, 'borrador');
+    if (normalizedStatus === 'cancelada') {
+        await zohoClient.voidSalesOrder(zohoSalesOrderId);
+        return;
+    }
+
+    const orderItemsLookup = await supabase
+        .from('sales_order_items')
+        .select('item_id, quantity, unit_price, discount_percent')
+        .eq('order_id', orderId)
+        .order('sort_order', { ascending: true });
+
+    if (orderItemsLookup.error) {
+        throw new Error(`No se pudieron leer líneas para Zoho: ${orderItemsLookup.error.message}`);
+    }
+
+    const orderItems = Array.isArray(orderItemsLookup.data) ? orderItemsLookup.data : [];
+    if (orderItems.length === 0) {
+        throw new Error('La OV no tiene líneas válidas para sincronizar en Zoho.');
+    }
+
+    const customerId = normalizeText(order?.customer_id);
+    if (!customerId) {
+        throw new Error('La OV no tiene cliente. Zoho requiere customer_id.');
+    }
+
+    const customerLookup = await supabase
+        .from('customers')
+        .select('id, name, zoho_contact_id')
+        .eq('id', customerId)
+        .single();
+
+    if (customerLookup.error) {
+        throw new Error(`No se pudo leer cliente para Zoho: ${customerLookup.error.message}`);
+    }
+
+    const zohoCustomerId = normalizeText(customerLookup.data?.zoho_contact_id);
+    if (!zohoCustomerId) {
+        const customerName = normalizeText(customerLookup.data?.name) || 'cliente';
+        throw new Error(`El cliente "${customerName}" no está vinculado con Zoho.`);
+    }
+
+    const uniqueLocalItemIds = Array.from(new Set(
+        orderItems
+            .map((line: any) => normalizeText(line?.item_id))
+            .filter(Boolean)
+    ));
+
+    const mappedItems = new Map<string, { name: string; sku: string; zoho_item_id: string | null }>();
+    if (uniqueLocalItemIds.length > 0) {
+        const itemLookup = await supabase
+            .from('items')
+            .select('id, name, sku, zoho_item_id')
+            .in('id', uniqueLocalItemIds);
+
+        if (itemLookup.error) {
+            throw new Error(`No se pudo leer catálogo local para Zoho: ${itemLookup.error.message}`);
+        }
+
+        for (const row of itemLookup.data || []) {
+            mappedItems.set(row.id, {
+                name: row.name || row.sku || row.id,
+                sku: row.sku || '',
+                zoho_item_id: row.zoho_item_id || null,
+            });
+        }
+    }
+
+    const zohoLineItems = orderItems.map((line: any, index: number) => {
+        const localItemId = normalizeText(line?.item_id);
+        if (!localItemId) {
+            throw new Error(`La línea ${index + 1} no está vinculada a un producto del catálogo.`);
+        }
+
+        const mapped = mappedItems.get(localItemId);
+        if (!mapped) {
+            throw new Error(`No se encontró el artículo local ${localItemId} para sincronizar en Zoho.`);
+        }
+
+        const zohoItemId = normalizeText(mapped.zoho_item_id);
+        if (!zohoItemId) {
+            throw new Error(`El artículo "${mapped.name}" (${mapped.sku || localItemId}) no tiene zoho_item_id.`);
+        }
+
+        const quantity = Math.max(0.01, normalizeNumber(line?.quantity, 1));
+        const unitPrice = Math.max(0, normalizeNumber(line?.unit_price, 0));
+        const discountPercent = Math.max(0, Math.min(100, normalizeNumber(line?.discount_percent, 0)));
+        const effectiveRate = Math.max(0, unitPrice * (1 - discountPercent / 100));
+
+        return {
+            item_id: zohoItemId,
+            quantity,
+            rate: Number(effectiveRate.toFixed(6)),
+        };
+    });
+
+    let zohoLocationId: string | undefined;
+    const warehouseId = normalizeText(order?.warehouse_id);
+    if (warehouseId) {
+        const warehouseLookup = await supabase
+            .from('warehouses')
+            .select('id, zoho_warehouse_id')
+            .eq('id', warehouseId)
+            .maybeSingle();
+
+        if (warehouseLookup.error) {
+            throw new Error(`No se pudo leer bodega para Zoho: ${warehouseLookup.error.message}`);
+        }
+
+        const zohoWarehouseId = normalizeText(warehouseLookup.data?.zoho_warehouse_id);
+        if (zohoWarehouseId) {
+            zohoLocationId = zohoWarehouseId;
+        }
+    }
+
+    const payload: any = {
+        customer_id: zohoCustomerId,
+        date: normalizeText(order?.date) || new Date().toISOString().slice(0, 10),
+        line_items: zohoLineItems,
+        reference_number: normalizeText(order?.order_number) || undefined,
+    };
+
+    const shipmentDate = normalizeText(order?.expected_delivery_date);
+    if (shipmentDate) payload.shipment_date = shipmentDate;
+
+    const notes = normalizeText(order?.notes);
+    if (notes) payload.notes = notes;
+
+    const salespersonName = normalizeText(order?.salesperson_name);
+    if (salespersonName) payload.salesperson_name = salespersonName;
+
+    const discountAmount = Math.max(0, normalizeNumber(order?.discount_amount, 0));
+    if (discountAmount > 0) {
+        payload.discount = Number(discountAmount.toFixed(2));
+        payload.is_discount_before_tax = true;
+    }
+
+    if (zohoLocationId) {
+        payload.location_id = zohoLocationId;
+    }
+
+    await zohoClient.updateSalesOrder(zohoSalesOrderId, payload);
+
+    if (normalizedStatus === 'confirmada') {
+        await zohoClient.confirmSalesOrder(zohoSalesOrderId);
+    }
+}
+
+async function restoreOrderItemsSnapshot(params: {
+    supabase: any;
+    orderId: string;
+    previousItemsSnapshot: any[];
+}) {
+    const { supabase, orderId, previousItemsSnapshot } = params;
+    await supabase.from('sales_order_items').delete().eq('order_id', orderId);
+    if (previousItemsSnapshot.length > 0) {
+        await insertSalesOrderItemsWithColumnFallback(
+            supabase,
+            previousItemsSnapshot.map((line: any) => {
+                const restored = { ...line };
+                delete restored.id;
+                return restored;
+            })
+        );
+    }
+}
+
 // GET /api/ventas/sales-orders/[id] — detail
 export async function GET(
     req: NextRequest,
@@ -321,7 +524,29 @@ export async function PUT(
 
         const { data: currentOrder, error: currentError } = await supabase
             .from('sales_orders')
-            .select('id, status, tax_rate, discount_amount')
+            .select(`
+                id,
+                order_number,
+                customer_id,
+                warehouse_id,
+                date,
+                expected_delivery_date,
+                reference_number,
+                payment_terms,
+                delivery_method,
+                shipping_zone,
+                status,
+                subtotal,
+                tax_rate,
+                tax_amount,
+                discount_amount,
+                total,
+                notes,
+                salesperson_id,
+                salesperson_name,
+                source,
+                zoho_salesorder_id
+            `)
             .eq('id', params.id)
             .single();
 
@@ -332,6 +557,8 @@ export async function PUT(
         if (currentOrder.status === 'convertida') {
             return NextResponse.json({ error: 'No se puede editar una orden convertida' }, { status: 400 });
         }
+
+        const previousOrderSnapshot = { ...(currentOrder as any) };
 
         const updateData: any = {
             updated_at: new Date().toISOString(),
@@ -352,22 +579,23 @@ export async function PUT(
         if (salesperson_id !== undefined) updateData.salesperson_id = normalizeText(salesperson_id) || null;
         if (salesperson_name !== undefined) updateData.salesperson_name = salesperson_name || null;
 
-        if (Array.isArray(items) && items.length > 0) {
-            const previousItemsResult = await supabase
-                .from('sales_order_items')
-                .select('*')
-                .eq('order_id', params.id)
-                .order('sort_order', { ascending: true });
+        const previousItemsResult = await supabase
+            .from('sales_order_items')
+            .select('*')
+            .eq('order_id', params.id)
+            .order('sort_order', { ascending: true });
 
-            if (previousItemsResult.error) {
-                return NextResponse.json(
-                    { error: `No se pudieron cargar líneas actuales para actualizar OV: ${previousItemsResult.error.message}` },
-                    { status: 500 }
-                );
-            }
-            const previousItemsSnapshot = Array.isArray(previousItemsResult.data)
-                ? previousItemsResult.data.map((line: any) => ({ ...line }))
-                : [];
+        if (previousItemsResult.error) {
+            return NextResponse.json(
+                { error: `No se pudieron cargar líneas actuales para actualizar OV: ${previousItemsResult.error.message}` },
+                { status: 500 }
+            );
+        }
+        const previousItemsSnapshot = Array.isArray(previousItemsResult.data)
+            ? previousItemsResult.data.map((line: any) => ({ ...line }))
+            : [];
+
+        if (Array.isArray(items) && items.length > 0) {
 
             const taxRateForCalc = updateData.tax_rate !== undefined
                 ? updateData.tax_rate
@@ -417,17 +645,11 @@ export async function PUT(
             const { error: itemsError } = await insertSalesOrderItemsWithColumnFallback(supabase, orderItems);
 
             if (itemsError) {
-                await supabase.from('sales_order_items').delete().eq('order_id', params.id);
-                if (previousItemsSnapshot.length > 0) {
-                    await insertSalesOrderItemsWithColumnFallback(
-                        supabase,
-                        previousItemsSnapshot.map((line: any) => {
-                            const restored = { ...line };
-                            delete restored.id;
-                            return restored;
-                        })
-                    );
-                }
+                await restoreOrderItemsSnapshot({
+                    supabase,
+                    orderId: params.id,
+                    previousItemsSnapshot,
+                });
                 return NextResponse.json({ error: itemsError.message }, { status: 500 });
             }
 
@@ -439,26 +661,11 @@ export async function PUT(
                     items: orderItems,
                 });
             } catch (reservationError: any) {
-                await supabase.from('sales_order_items').delete().eq('order_id', params.id);
-                if (previousItemsSnapshot.length > 0) {
-                    const restoreItemsResult = await insertSalesOrderItemsWithColumnFallback(
-                        supabase,
-                        previousItemsSnapshot.map((line: any) => {
-                            const restored = { ...line };
-                            delete restored.id;
-                            return restored;
-                        })
-                    );
-
-                    if (restoreItemsResult.error) {
-                        return NextResponse.json(
-                            {
-                                error: `Falló la reserva de seriales y no se pudieron restaurar líneas previas: ${restoreItemsResult.error.message}`,
-                            },
-                            { status: 500 }
-                        );
-                    }
-                }
+                await restoreOrderItemsSnapshot({
+                    supabase,
+                    orderId: params.id,
+                    previousItemsSnapshot,
+                });
 
                 try {
                     await replaceOrderSerialReservations({
@@ -523,6 +730,67 @@ export async function PUT(
 
         if (error) {
             return NextResponse.json({ error: error.message }, { status: 500 });
+        }
+
+        const existingZohoSalesOrderId = normalizeText(previousOrderSnapshot.zoho_salesorder_id);
+        if (existingZohoSalesOrderId) {
+            try {
+                await syncUpdatedSalesOrderToZoho({
+                    supabase,
+                    orderId: params.id,
+                });
+            } catch (zohoSyncError: any) {
+                const rollbackOrderPayload: any = {
+                    customer_id: previousOrderSnapshot.customer_id || null,
+                    warehouse_id: previousOrderSnapshot.warehouse_id || null,
+                    date: previousOrderSnapshot.date || null,
+                    expected_delivery_date: previousOrderSnapshot.expected_delivery_date || null,
+                    reference_number: previousOrderSnapshot.reference_number || null,
+                    payment_terms: previousOrderSnapshot.payment_terms || null,
+                    delivery_method: previousOrderSnapshot.delivery_method || null,
+                    shipping_zone: previousOrderSnapshot.shipping_zone || null,
+                    status: normalizeStatus(previousOrderSnapshot.status, 'borrador'),
+                    subtotal: normalizeNumber(previousOrderSnapshot.subtotal, 0),
+                    tax_rate: Math.max(0, normalizeNumber(previousOrderSnapshot.tax_rate, 0)),
+                    tax_amount: normalizeNumber(previousOrderSnapshot.tax_amount, 0),
+                    discount_amount: Math.max(0, normalizeNumber(previousOrderSnapshot.discount_amount, 0)),
+                    total: normalizeNumber(previousOrderSnapshot.total, 0),
+                    notes: previousOrderSnapshot.notes || null,
+                    salesperson_id: previousOrderSnapshot.salesperson_id || null,
+                    salesperson_name: previousOrderSnapshot.salesperson_name || null,
+                    source: previousOrderSnapshot.source || null,
+                    updated_at: new Date().toISOString(),
+                };
+
+                await supabase
+                    .from('sales_orders')
+                    .update(rollbackOrderPayload)
+                    .eq('id', params.id);
+
+                await restoreOrderItemsSnapshot({
+                    supabase,
+                    orderId: params.id,
+                    previousItemsSnapshot,
+                });
+
+                try {
+                    await replaceOrderSerialReservations({
+                        supabase,
+                        orderId: params.id,
+                        userId: user.id || null,
+                        items: previousItemsSnapshot,
+                    });
+                } catch {
+                    // Si no se pudo restaurar la reserva, igual devolvemos error principal de Zoho.
+                }
+
+                return NextResponse.json(
+                    {
+                        error: `Zoho rechazó la actualización de la OV: ${zohoSyncError?.message || 'Error desconocido'}. Se revirtió el cambio local.`,
+                    },
+                    { status: 400 }
+                );
+            }
         }
 
         if (normalizeText(data?.status) === 'cancelada') {

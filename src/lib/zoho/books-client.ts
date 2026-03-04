@@ -300,6 +300,36 @@ export class ZohoBooksClient {
         };
     }
 
+    async updateSalesOrder(
+        salesorderId: string,
+        data: {
+            customer_id: string;
+            date: string;
+            shipment_date?: string;
+            reference_number?: string;
+            notes?: string;
+            discount?: number;
+            is_discount_before_tax?: boolean;
+            shipping_charge?: number;
+            salesperson_name?: string;
+            location_id?: string;
+            line_items: Array<{
+                item_id: string;
+                quantity: number;
+                rate: number;
+            }>;
+        }
+    ): Promise<{ salesorder_id: string; salesorder_number: string }> {
+        const result = await this.request('PUT', `/books/v3/salesorders/${salesorderId}`, data);
+        if (result.code !== 0) {
+            throw new Error(result.message || 'Error al actualizar orden de venta en Zoho');
+        }
+        return {
+            salesorder_id: result.salesorder?.salesorder_id || salesorderId,
+            salesorder_number: result.salesorder?.salesorder_number || '',
+        };
+    }
+
     private isAlreadyStatusMessage(error: any, statusKeyword: 'open' | 'void'): boolean {
         const message = String(error?.message || '').toLowerCase();
         return message.includes('already') && message.includes(statusKeyword);
