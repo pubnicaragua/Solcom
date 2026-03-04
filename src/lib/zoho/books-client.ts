@@ -300,6 +300,55 @@ export class ZohoBooksClient {
         };
     }
 
+    private isAlreadyStatusMessage(error: any, statusKeyword: 'open' | 'void'): boolean {
+        const message = String(error?.message || '').toLowerCase();
+        return message.includes('already') && message.includes(statusKeyword);
+    }
+
+    async confirmSalesOrder(salesorderId: string): Promise<void> {
+        const base = `/books/v3/salesorders/${salesorderId}`;
+        const attempts = [
+            `${base}/status/open`,
+            `${base}/submit`,
+            `${base}/approve`,
+            `${base}/status/open`,
+        ];
+
+        const errors: string[] = [];
+        for (const endpoint of attempts) {
+            try {
+                const result = await this.request('POST', endpoint);
+                if (result?.code === 0 || result?.code === undefined) {
+                    return;
+                }
+                errors.push(`${endpoint}: ${String(result?.message || `code ${result?.code}`)}`);
+            } catch (error: any) {
+                if (this.isAlreadyStatusMessage(error, 'open')) {
+                    return;
+                }
+                errors.push(`${endpoint}: ${String(error?.message || 'Error desconocido')}`);
+            }
+        }
+
+        throw new Error(`No se pudo confirmar la OV en Zoho. ${errors.slice(0, 4).join(' | ')}`);
+    }
+
+    async voidSalesOrder(salesorderId: string): Promise<void> {
+        const endpoint = `/books/v3/salesorders/${salesorderId}/status/void`;
+        try {
+            const result = await this.request('POST', endpoint);
+            if (result?.code === 0 || result?.code === undefined) {
+                return;
+            }
+            throw new Error(String(result?.message || `code ${result?.code || 'desconocido'}`));
+        } catch (error: any) {
+            if (this.isAlreadyStatusMessage(error, 'void')) {
+                return;
+            }
+            throw error;
+        }
+    }
+
     async createInvoice(data: {
         customer_id: string;
         date: string;

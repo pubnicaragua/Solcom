@@ -164,9 +164,10 @@ async function syncSalesOrderToZoho(params: {
     discountAmount: number;
     notes: string | null;
     salespersonName: string | null;
+    status?: string;
     items: any[];
 }): Promise<{ zoho_salesorder_id: string; zoho_salesorder_number: string }> {
-    const { supabase, orderId, orderNumber, customerId, warehouseId, date, expectedDeliveryDate, discountAmount, notes, salespersonName, items } = params;
+    const { supabase, orderId, orderNumber, customerId, warehouseId, date, expectedDeliveryDate, discountAmount, notes, salespersonName, status, items } = params;
 
     const zohoClient = createZohoBooksClient();
     if (!zohoClient) {
@@ -291,6 +292,12 @@ async function syncSalesOrderToZoho(params: {
 
     // Create sales order in Zoho
     const result = await zohoClient.createSalesOrder(orderPayload);
+
+    // If local status is confirmada, mirror status in Zoho.
+    const normalizedStatus = normalizeStatus(status, 'borrador');
+    if (normalizedStatus === 'confirmada' && result.salesorder_id) {
+        await zohoClient.confirmSalesOrder(result.salesorder_id);
+    }
 
     // Save Zoho metadata back to local order
     if (result.salesorder_id || result.salesorder_number) {
@@ -556,6 +563,7 @@ export async function POST(req: NextRequest) {
                     discountAmount: normalizedDiscount,
                     notes: notes || null,
                     salespersonName: salesperson_name || null,
+                    status: normalizeStatus(status, 'borrador'),
                     items,
                 });
             } catch (zohoError: any) {

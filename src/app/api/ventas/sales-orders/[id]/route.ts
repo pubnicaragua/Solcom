@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createRouteHandlerClient } from '@supabase/auth-helpers-nextjs';
 import { cookies } from 'next/headers';
+import { createZohoBooksClient } from '@/lib/zoho/books-client';
 
 const ORDER_STATUSES = new Set(['borrador', 'confirmada', 'convertida', 'cancelada']);
 
@@ -221,6 +222,41 @@ export async function PUT(
         // Status-only update (e.g., confirmar, cancelar)
         if (body?.status && Object.keys(body).length === 1) {
             const normalizedStatus = normalizeStatus(body.status, 'borrador');
+
+            const { data: currentOrder, error: currentOrderError } = await supabase
+                .from('sales_orders')
+                .select('id, status, zoho_salesorder_id')
+                .eq('id', params.id)
+                .single();
+
+            if (currentOrderError || !currentOrder) {
+                return NextResponse.json({ error: currentOrderError?.message || 'Orden no encontrada' }, { status: 404 });
+            }
+
+            const zohoSalesOrderId = normalizeText((currentOrder as any)?.zoho_salesorder_id);
+            if (zohoSalesOrderId && (normalizedStatus === 'confirmada' || normalizedStatus === 'cancelada')) {
+                const zohoClient = createZohoBooksClient();
+                if (!zohoClient) {
+                    return NextResponse.json(
+                        { error: 'No se pudo sincronizar estado en Zoho: configuración ZOHO_BOOKS_* incompleta.' },
+                        { status: 500 }
+                    );
+                }
+
+                try {
+                    if (normalizedStatus === 'confirmada') {
+                        await zohoClient.confirmSalesOrder(zohoSalesOrderId);
+                    } else if (normalizedStatus === 'cancelada') {
+                        await zohoClient.voidSalesOrder(zohoSalesOrderId);
+                    }
+                } catch (zohoError: any) {
+                    return NextResponse.json(
+                        { error: `No se pudo actualizar la OV en Zoho: ${zohoError?.message || 'Error desconocido'}` },
+                        { status: 400 }
+                    );
+                }
+            }
+
             const { data, error } = await supabase
                 .from('sales_orders')
                 .update({ status: normalizedStatus, updated_at: new Date().toISOString() })

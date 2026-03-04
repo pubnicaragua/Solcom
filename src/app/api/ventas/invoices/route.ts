@@ -38,6 +38,14 @@ function normalizeTrimmed(value: unknown): string {
     return typeof value === 'string' ? value.trim() : '';
 }
 
+function normalizeUuid(value: unknown): string | null {
+    const text = normalizeTrimmed(value);
+    if (!text) return null;
+    return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(text)
+        ? text
+        : null;
+}
+
 function equalsIgnoreCase(a: string, b: string): boolean {
     return a.localeCompare(b, 'es', { sensitivity: 'base' }) === 0;
 }
@@ -579,8 +587,10 @@ export async function POST(req: NextRequest) {
             credit_detail,
             cancellation_reason_id,
             cancellation_comments,
+            source_sales_order_id,
         } = body;
         const normalizedSalespersonId = normalizeSalespersonId(salesperson_id);
+        const normalizedSourceSalesOrderId = normalizeUuid(source_sales_order_id);
 
         if (!items || items.length === 0) {
             return NextResponse.json({ error: 'La factura debe tener al menos un artículo' }, { status: 400 });
@@ -696,7 +706,26 @@ export async function POST(req: NextRequest) {
             }
         }
 
-        return NextResponse.json({ invoice, zoho: zohoSync }, { status: 201 });
+        let salesOrderLinkWarning: string | null = null;
+        if (normalizedSourceSalesOrderId && status === 'enviada') {
+            const orderUpdate = await supabase
+                .from('sales_orders')
+                .update({
+                    status: 'convertida',
+                    converted_invoice_id: invoice.id,
+                    updated_at: new Date().toISOString(),
+                })
+                .eq('id', normalizedSourceSalesOrderId);
+
+            if (orderUpdate.error) {
+                salesOrderLinkWarning = `Factura creada, pero no se pudo actualizar la OV origen: ${orderUpdate.error.message}`;
+            }
+        }
+
+        return NextResponse.json(
+            { invoice, zoho: zohoSync, warning: salesOrderLinkWarning },
+            { status: 201 }
+        );
     } catch (error: any) {
         return NextResponse.json({ error: error.message }, { status: 500 });
     }

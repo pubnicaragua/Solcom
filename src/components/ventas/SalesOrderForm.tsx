@@ -266,6 +266,7 @@ export default function SalesOrderForm({ isOpen, orderId, onClose, onSaved }: Sa
             .filter((warehouse) => warehouse.zoho_warehouse_id);
 
         if (usableWarehouses.length === 0) {
+            setError('Las bodegas de esta familia no tienen ubicación Zoho configurada. Sincroniza ubicaciones para poder elegir seriales.');
             setItems((current) => current.map((line, idx) => (
                 idx === rowIndex
                     ? { ...line, loading_serials: false, available_serials: [] }
@@ -281,7 +282,7 @@ export default function SalesOrderForm({ isOpen, orderId, onClose, onSaved }: Sa
         )));
 
         try {
-            const serialBuckets = await Promise.all(
+            const serialResults = await Promise.all(
                 usableWarehouses.map(async (warehouse) => {
                     const params = new URLSearchParams();
                     params.set('item_id', normalizedItemId);
@@ -289,11 +290,19 @@ export default function SalesOrderForm({ isOpen, orderId, onClose, onSaved }: Sa
                     const response = await fetch(`/api/zoho/item-serials?${params.toString()}`, {
                         cache: 'no-store',
                     });
-                    if (!response.ok) return [];
                     const data = await response.json().catch(() => ({}));
+                    if (!response.ok) {
+                        return {
+                            warehouse,
+                            serials: [],
+                            error: String(data?.error || `Error ${response.status}`),
+                        };
+                    }
                     const rows = Array.isArray(data?.serials) ? data.serials : [];
-                    return rows
-                        .map((row: any) => ({
+                    return {
+                        warehouse,
+                        serials: rows
+                            .map((row: any) => ({
                             serial_id: String(row?.serial_id || ''),
                             serial_code: String(row?.serial_code || '').trim(),
                             warehouse_id: warehouse.id,
@@ -301,19 +310,28 @@ export default function SalesOrderForm({ isOpen, orderId, onClose, onSaved }: Sa
                             warehouse_name: warehouse.name,
                             zoho_warehouse_id: String(warehouse.zoho_warehouse_id || ''),
                         }))
-                        .filter((row: any) => row.serial_code.length > 0);
+                            .filter((row: any) => row.serial_code.length > 0),
+                        error: '',
+                    };
                 })
             );
 
             const serialMap = new Map<string, OrderLine['available_serials'][number]>();
-            for (const bucket of serialBuckets) {
-                for (const serial of bucket) {
+            for (const result of serialResults) {
+                for (const serial of result.serials) {
                     if (!serialMap.has(serial.serial_code)) {
                         serialMap.set(serial.serial_code, serial);
                     }
                 }
             }
             const availableSerials = Array.from(serialMap.values());
+            if (availableSerials.length === 0) {
+                const failedResults = serialResults.filter((result) => result.error);
+                if (failedResults.length === serialResults.length && failedResults.length > 0) {
+                    const firstFailure = failedResults[0];
+                    setError(`No se pudieron cargar seriales en Zoho para ${firstFailure.warehouse.code}: ${firstFailure.error}`);
+                }
+            }
 
             setItems((current) => current.map((line, idx) => {
                 if (idx !== rowIndex) return line;
@@ -335,8 +353,12 @@ export default function SalesOrderForm({ isOpen, orderId, onClose, onSaved }: Sa
                     loading_serials: false,
                     available_serials: availableSerials,
                     serial_number_value: limitedSelected.join(','),
-                    line_warehouse_id: warehouseResolution.lineWarehouseId ?? line.line_warehouse_id,
-                    line_zoho_warehouse_id: warehouseResolution.lineZohoWarehouseId ?? line.line_zoho_warehouse_id,
+                    line_warehouse_id: warehouseResolution.mixed
+                        ? null
+                        : (warehouseResolution.lineWarehouseId ?? line.line_warehouse_id),
+                    line_zoho_warehouse_id: warehouseResolution.mixed
+                        ? null
+                        : (warehouseResolution.lineZohoWarehouseId ?? line.line_zoho_warehouse_id),
                 };
             }));
         } catch {
@@ -506,7 +528,10 @@ export default function SalesOrderForm({ isOpen, orderId, onClose, onSaved }: Sa
                 nextLine.serial_number_value = normalizeSerialInput(patch.serial_number_value);
                 const selected = serialArray(nextLine.serial_number_value);
                 const warehouseResolution = resolveLineWarehouseFromSerials(selected, nextLine.available_serials);
-                if (!warehouseResolution.mixed) {
+                if (warehouseResolution.mixed) {
+                    nextLine.line_warehouse_id = null;
+                    nextLine.line_zoho_warehouse_id = null;
+                } else {
                     nextLine.line_warehouse_id = warehouseResolution.lineWarehouseId;
                     nextLine.line_zoho_warehouse_id = warehouseResolution.lineZohoWarehouseId;
                 }
@@ -519,7 +544,10 @@ export default function SalesOrderForm({ isOpen, orderId, onClose, onSaved }: Sa
                     const trimmed = selected.slice(0, maxByQty);
                     nextLine.serial_number_value = trimmed.join(',');
                     const warehouseResolution = resolveLineWarehouseFromSerials(trimmed, nextLine.available_serials);
-                    if (!warehouseResolution.mixed) {
+                    if (warehouseResolution.mixed) {
+                        nextLine.line_warehouse_id = null;
+                        nextLine.line_zoho_warehouse_id = null;
+                    } else {
                         nextLine.line_warehouse_id = warehouseResolution.lineWarehouseId;
                         nextLine.line_zoho_warehouse_id = warehouseResolution.lineZohoWarehouseId;
                     }
@@ -562,33 +590,16 @@ export default function SalesOrderForm({ isOpen, orderId, onClose, onSaved }: Sa
                 if (maxByQty > 0 && nextSelected.length >= maxByQty) {
                     return line;
                 }
-
-                const serialRow = line.available_serials.find((serial) => serial.serial_code === serialCode) || null;
-                const selectedWarehouses = new Set(
-                    nextSelected
-                        .map((code) => line.available_serials.find((serial) => serial.serial_code === code)?.warehouse_id || '')
-                        .filter(Boolean)
-                );
-
-                if (selectedWarehouses.size > 0 && serialRow?.warehouse_id && !selectedWarehouses.has(serialRow.warehouse_id)) {
-                    setError('No mezcles seriales de diferentes bodegas en la misma línea. Divide el producto en dos líneas.');
-                    return line;
-                }
-
                 nextSelected.push(serialCode);
             }
 
             const warehouseResolution = resolveLineWarehouseFromSerials(nextSelected, line.available_serials);
-            if (warehouseResolution.mixed) {
-                setError('No mezcles seriales de diferentes bodegas en la misma línea.');
-                return line;
-            }
 
             return {
                 ...line,
                 serial_number_value: nextSelected.join(','),
-                line_warehouse_id: warehouseResolution.lineWarehouseId,
-                line_zoho_warehouse_id: warehouseResolution.lineZohoWarehouseId,
+                line_warehouse_id: warehouseResolution.mixed ? null : warehouseResolution.lineWarehouseId,
+                line_zoho_warehouse_id: warehouseResolution.mixed ? null : warehouseResolution.lineZohoWarehouseId,
             };
         }));
     }
@@ -1002,6 +1013,11 @@ export default function SalesOrderForm({ isOpen, orderId, onClose, onSaved }: Sa
                                     * (1 - Math.max(0, Math.min(100, normalizeNumber(line.discount_percent, 0))) / 100);
                                 const selectedSerials = serialArray(line.serial_number_value);
                                 const lineWarehouseCode = familyWarehouses.find((warehouse) => warehouse.id === line.line_warehouse_id)?.code || '';
+                                const selectedWarehouseCodes = Array.from(new Set(
+                                    selectedSerials
+                                        .map((serialCode) => line.available_serials.find((serial) => serial.serial_code === serialCode)?.warehouse_code || '')
+                                        .filter(Boolean)
+                                ));
                                 return (
                                     <div
                                         key={`${line.id || 'new'}-${index}`}
@@ -1032,7 +1048,11 @@ export default function SalesOrderForm({ isOpen, orderId, onClose, onSaved }: Sa
                                                             {line.available_serials.length > 0 && (
                                                                 <div style={serialPanelStyle}>
                                                                     <div style={serialPanelHeaderStyle}>
-                                                                        <span>Seriales ({lineWarehouseCode || 'familia'})</span>
+                                                                        <span>
+                                                                            Seriales ({selectedWarehouseCodes.length > 0
+                                                                                ? selectedWarehouseCodes.join(', ')
+                                                                                : (lineWarehouseCode || 'familia')})
+                                                                        </span>
                                                                         <span>{selectedSerials.length} / {Math.max(0, Math.round(normalizeNumber(line.quantity, 0)))}</span>
                                                                     </div>
                                                                     <div style={serialGridStyle}>
@@ -1051,7 +1071,7 @@ export default function SalesOrderForm({ isOpen, orderId, onClose, onSaved }: Sa
                                                                                     }}
                                                                                     title={`${serial.serial_code} · ${serial.warehouse_code}`}
                                                                                 >
-                                                                                    {serial.serial_code}
+                                                                                    {serial.serial_code} · {serial.warehouse_code}
                                                                                 </button>
                                                                             );
                                                                         })}
@@ -1066,6 +1086,11 @@ export default function SalesOrderForm({ isOpen, orderId, onClose, onSaved }: Sa
                                                                 placeholder="Seriales (SN1,SN2,...)"
                                                                 style={{ ...inputStyle, fontSize: 11, padding: '6px 8px' }}
                                                             />
+                                                            {line.available_serials.length === 0 && (
+                                                                <div style={{ fontSize: 11, color: 'var(--muted)' }}>
+                                                                    Zoho no reporta seriales activos para este artículo en la familia seleccionada.
+                                                                </div>
+                                                            )}
                                                         </>
                                                     )}
                                                 </div>

@@ -52,6 +52,17 @@ function parseSerialInput(value: unknown): string[] {
         .filter(Boolean);
 }
 
+function shouldRetryZohoLocationVariant(error: any): boolean {
+    const message = String(error?.message || '').toLowerCase();
+    return (
+        message.includes('warehouse_id') ||
+        message.includes('location_id') ||
+        message.includes('sucursal') ||
+        message.includes('branch') ||
+        message.includes('does not belong to the specified')
+    );
+}
+
 async function tryCreateZohoInvoiceDirect(params: {
     supabase: any;
     order: any;
@@ -84,9 +95,10 @@ async function tryCreateZohoInvoiceDirect(params: {
         throw new Error(`El cliente "${customerName}" no está vinculado con Zoho.`);
     }
 
-    let defaultZohoLocationId: string | undefined;
+    let parentZohoLocationId: string | undefined;       // Siempre el padre empresarial (transaction-level location_id)
+    let defaultChildWarehouseId: string | undefined;     // Bodega hija para line items sin warehouse explícito
     const localWarehouseToZoho = new Map<string, string>();
-    const familyZohoLocations: Array<{ id: string; code: string; name: string; zohoWarehouseId: string }> = [];
+    const familyZohoLocations: Array<{ id: string; code: string; name: string; zohoWarehouseId: string; isParent: boolean }> = [];
     const warehouseId = normalizeText(order?.warehouse_id);
     if (warehouseId) {
         const whLookup = await supabase
@@ -102,21 +114,36 @@ async function tryCreateZohoInvoiceDirect(params: {
         const selectedWarehouse = whLookup.data || null;
         const selectedZohoWarehouseId = normalizeText(selectedWarehouse?.zoho_warehouse_id);
         if (selectedZohoWarehouseId) {
-            defaultZohoLocationId = selectedZohoWarehouseId;
             localWarehouseToZoho.set(String(selectedWarehouse?.id || ''), selectedZohoWarehouseId);
-            familyZohoLocations.push({
-                id: String(selectedWarehouse?.id || ''),
-                code: String(selectedWarehouse?.code || ''),
-                name: String(selectedWarehouse?.name || ''),
-                zohoWarehouseId: selectedZohoWarehouseId,
-            });
+
+            if (selectedWarehouse?.warehouse_type === 'empresarial') {
+                // El warehouse seleccionado ES el padre empresarial
+                parentZohoLocationId = selectedZohoWarehouseId;
+                familyZohoLocations.push({
+                    id: String(selectedWarehouse?.id || ''),
+                    code: String(selectedWarehouse?.code || ''),
+                    name: String(selectedWarehouse?.name || ''),
+                    zohoWarehouseId: selectedZohoWarehouseId,
+                    isParent: true,
+                });
+            } else {
+                // El warehouse seleccionado es un hijo (almacen) — usar como default para line items
+                defaultChildWarehouseId = selectedZohoWarehouseId;
+                familyZohoLocations.push({
+                    id: String(selectedWarehouse?.id || ''),
+                    code: String(selectedWarehouse?.code || ''),
+                    name: String(selectedWarehouse?.name || ''),
+                    zohoWarehouseId: selectedZohoWarehouseId,
+                    isParent: false,
+                });
+            }
         }
 
         const familyRootWarehouseId = normalizeText(selectedWarehouse?.parent_warehouse_id) || String(selectedWarehouse?.id || '');
         if (familyRootWarehouseId) {
             const familyLookup = await supabase
                 .from('warehouses')
-                .select('id, code, name, zoho_warehouse_id')
+                .select('id, code, name, warehouse_type, zoho_warehouse_id')
                 .or(`id.eq.${familyRootWarehouseId},parent_warehouse_id.eq.${familyRootWarehouseId}`)
                 .eq('active', true);
 
@@ -125,20 +152,27 @@ async function tryCreateZohoInvoiceDirect(params: {
                     const zohoId = normalizeText(row?.zoho_warehouse_id);
                     if (!zohoId) continue;
                     localWarehouseToZoho.set(String(row?.id || ''), zohoId);
+                    const rowIsParent = row.warehouse_type === 'empresarial' || row.id === familyRootWarehouseId;
                     if (!familyZohoLocations.some((entry) => entry.id === row.id)) {
                         familyZohoLocations.push({
                             id: String(row?.id || ''),
                             code: String(row?.code || ''),
                             name: String(row?.name || ''),
                             zohoWarehouseId: zohoId,
+                            isParent: rowIsParent,
                         });
+                    }
+                    // Asignar parentZohoLocationId desde el padre de la familia
+                    if (rowIsParent && !parentZohoLocationId) {
+                        parentZohoLocationId = zohoId;
                     }
                 }
             }
 
-            if (!defaultZohoLocationId) {
-                const familyParent = familyZohoLocations.find((entry) => entry.id === familyRootWarehouseId) || familyZohoLocations[0];
-                defaultZohoLocationId = familyParent?.zohoWarehouseId;
+            // Fallback: si aún no hay defaultChildWarehouseId, usar el primer hijo de la familia
+            if (!defaultChildWarehouseId) {
+                const firstChild = familyZohoLocations.find((entry) => !entry.isParent);
+                defaultChildWarehouseId = firstChild?.zohoWarehouseId;
             }
         }
     }
@@ -188,7 +222,7 @@ async function tryCreateZohoInvoiceDirect(params: {
         return pool;
     };
 
-    const zohoLineItems = (order.items || []).map((line: any, index: number) => {
+    const rawZohoLineItems = (order.items || []).map((line: any, index: number) => {
         const localItemId = normalizeText(line?.item_id);
         if (!localItemId) {
             throw new Error(`La línea ${index + 1} no está vinculada a un producto local.`);
@@ -206,8 +240,13 @@ async function tryCreateZohoInvoiceDirect(params: {
 
         const quantity = Math.max(0.01, normalizeNumber(line?.quantity, 1));
         const lineUnitPrice = Math.max(0, normalizeNumber(line?.unit_price, 0));
-        const unitPrice = lineUnitPrice > 0 ? lineUnitPrice : Math.max(0, normalizeNumber(mapped.price, 0));
         const discountPercent = Math.max(0, Math.min(100, normalizeNumber(line?.discount_percent, 0)));
+        const lineSubtotal = Math.max(0, normalizeNumber(line?.subtotal, 0));
+        const fallbackRateFromSubtotal = quantity > 0 ? lineSubtotal / quantity : 0;
+        const fallbackCatalogRate = Math.max(0, normalizeNumber(mapped.price, 0)) * (1 - discountPercent / 100);
+        const effectiveRate = lineUnitPrice > 0
+            ? (lineUnitPrice * (1 - discountPercent / 100))
+            : (fallbackRateFromSubtotal > 0 ? fallbackRateFromSubtotal : fallbackCatalogRate);
         const expectedSerialCount = Math.round(quantity);
         let serials = parseSerialInput(
             line?.serial_number_value ?? line?.serial_numbers ?? line?.serials
@@ -218,7 +257,7 @@ async function tryCreateZohoInvoiceDirect(params: {
         return {
             item_id: zohoItemId,
             quantity,
-            rate: Number((unitPrice * (1 - discountPercent / 100)).toFixed(6)),
+            rate: Number(effectiveRate.toFixed(6)),
             __serials: serials,
             __expectedSerialCount: expectedSerialCount,
             __mappedName: mapped.name,
@@ -228,19 +267,22 @@ async function tryCreateZohoInvoiceDirect(params: {
         } as any;
     });
 
+    const zohoLineItems: any[] = [];
     // Resolve serial-tracking metadata + serialize line payload.
-    for (const line of zohoLineItems as any[]) {
+    for (const line of rawZohoLineItems as any[]) {
         const zohoItemId = line.__zohoItemId as string;
         const mappedName = line.__mappedName as string;
         const explicitLineWarehouseId = normalizeText(line.__lineWarehouseId);
         const explicitLineZohoWarehouseId = normalizeText(line.__lineZohoWarehouseId);
 
+        // Candidatos de ubicación para validar/autoasignar seriales en bodegas hijas de la familia.
         const locationCandidates = Array.from(
             new Set(
                 [
                     explicitLineZohoWarehouseId,
                     explicitLineWarehouseId ? normalizeText(localWarehouseToZoho.get(explicitLineWarehouseId)) : '',
-                    defaultZohoLocationId || '',
+                    parentZohoLocationId || '',
+                    defaultChildWarehouseId || '',
                     ...familyZohoLocations.map((entry) => entry.zohoWarehouseId),
                 ].filter(Boolean)
             )
@@ -260,7 +302,10 @@ async function tryCreateZohoInvoiceDirect(params: {
         const quantity = normalizeNumber(line.quantity, 0);
         const expectedSerialCount = normalizeNumber(line.__expectedSerialCount, 0);
         let serials: string[] = Array.isArray(line.__serials) ? line.__serials : [];
-        let resolvedLineLocationId = locationCandidates[0] || '';
+        const explicitLineLocationId = explicitLineZohoWarehouseId
+            || (explicitLineWarehouseId ? normalizeText(localWarehouseToZoho.get(explicitLineWarehouseId)) : '')
+            || '';
+        let resolvedLineLocationId = explicitLineLocationId || locationCandidates[0] || '';
 
         if (serialTracked && !Number.isInteger(quantity)) {
             throw new Error(`El artículo "${mappedName}" usa seriales y requiere cantidad entera.`);
@@ -278,38 +323,60 @@ async function tryCreateZohoInvoiceDirect(params: {
                     );
                 }
 
-                let foundLocation = '';
-                for (const locationId of locationCandidates) {
-                    const pool = await fetchSerialPool(zohoItemId, locationId);
-                    const isAvailableInLocation = serials.every((serial) => pool.includes(serial));
-                    if (!isAvailableInLocation) continue;
-
-                    for (const serial of serials) {
+                // Permite seriales en múltiples bodegas de la misma familia: se divide la línea por ubicación.
+                const byLocation = new Map<string, string[]>();
+                for (const serial of serials) {
+                    let foundLocationForSerial = '';
+                    for (const locationId of locationCandidates) {
+                        const pool = await fetchSerialPool(zohoItemId, locationId);
                         const idx = pool.indexOf(serial);
                         if (idx >= 0) {
                             pool.splice(idx, 1);
+                            foundLocationForSerial = locationId;
+                            break;
                         }
                     }
-                    foundLocation = locationId;
-                    break;
+
+                    if (!foundLocationForSerial) {
+                        throw new Error(
+                            `El serial "${serial}" del artículo "${mappedName}" no está disponible en la familia seleccionada.`
+                        );
+                    }
+
+                    if (!byLocation.has(foundLocationForSerial)) {
+                        byLocation.set(foundLocationForSerial, []);
+                    }
+                    byLocation.get(foundLocationForSerial)!.push(serial);
                 }
 
-                if (!foundLocation) {
-                    throw new Error(
-                        `Los seriales seleccionados para "${mappedName}" no están disponibles en la misma bodega de la familia.`
-                    );
+                for (const [locationId, serialList] of byLocation.entries()) {
+                    const clonedLine: any = {
+                        item_id: line.item_id,
+                        quantity: serialList.length,
+                        rate: line.rate,
+                        serial_number_value: serialList.join(','),
+                        serial_numbers: serialList,
+                        __resolvedLineLocationId: locationId,
+                    };
+                    zohoLineItems.push(clonedLine);
                 }
-                resolvedLineLocationId = foundLocation;
+                continue;
             } else {
-                let foundLocation = '';
+                let remaining = expectedSerialCount;
+                const byLocation = new Map<string, string[]>();
                 for (const locationId of locationCandidates) {
+                    if (remaining <= 0) break;
                     const pool = await fetchSerialPool(zohoItemId, locationId);
-                    if (pool.length < expectedSerialCount) continue;
-                    serials = pool.splice(0, expectedSerialCount);
-                    foundLocation = locationId;
-                    break;
+                    if (pool.length <= 0) continue;
+                    const toTake = Math.min(pool.length, remaining);
+                    const taken = pool.splice(0, toTake);
+                    if (taken.length > 0) {
+                        byLocation.set(locationId, taken);
+                        remaining -= taken.length;
+                    }
                 }
-                if (!foundLocation) {
+
+                if (remaining > 0) {
                     let totalAvailable = 0;
                     for (const locationId of locationCandidates) {
                         const pool = await fetchSerialPool(zohoItemId, locationId);
@@ -319,7 +386,28 @@ async function tryCreateZohoInvoiceDirect(params: {
                         `El artículo "${mappedName}" requiere ${expectedSerialCount} serial(es) y solo hay ${totalAvailable} disponible(s) en la familia seleccionada.`
                     );
                 }
-                resolvedLineLocationId = foundLocation;
+
+                if (byLocation.size > 1) {
+                    for (const [locationId, serialList] of byLocation.entries()) {
+                        const clonedLine: any = {
+                            item_id: line.item_id,
+                            quantity: serialList.length,
+                            rate: line.rate,
+                            serial_number_value: serialList.join(','),
+                            serial_numbers: serialList,
+                            __resolvedLineLocationId: locationId,
+                        };
+                        zohoLineItems.push(clonedLine);
+                    }
+                    continue;
+                }
+
+                const firstAllocation = Array.from(byLocation.entries())[0];
+                if (firstAllocation) {
+                    const [locationId, serialList] = firstAllocation;
+                    resolvedLineLocationId = locationId;
+                    serials = serialList;
+                }
             }
         } else if (serials.length > 0 && serials.length !== expectedSerialCount) {
             throw new Error(
@@ -327,13 +415,13 @@ async function tryCreateZohoInvoiceDirect(params: {
             );
         }
 
-        if (resolvedLineLocationId) {
-            line.location_id = resolvedLineLocationId;
-        }
-
         if (serials.length > 0) {
             line.serial_number_value = serials.join(',');
             line.serial_numbers = serials;
+        }
+
+        if (resolvedLineLocationId) {
+            line.__resolvedLineLocationId = resolvedLineLocationId;
         }
 
         delete line.__serials;
@@ -342,6 +430,7 @@ async function tryCreateZohoInvoiceDirect(params: {
         delete line.__zohoItemId;
         delete line.__lineWarehouseId;
         delete line.__lineZohoWarehouseId;
+        zohoLineItems.push(line);
     }
 
     if (zohoLineItems.length === 0) {
@@ -350,28 +439,75 @@ async function tryCreateZohoInvoiceDirect(params: {
 
     const invoiceDate = normalizeText(order?.date) || new Date().toISOString().slice(0, 10);
     const discountAmount = Math.max(0, normalizeNumber(order?.discount_amount, 0));
-    const payload: any = {
+    const payloadBase: any = {
         customer_id: zohoCustomerId,
         date: invoiceDate,
-        line_items: zohoLineItems,
         reference_number: normalizeText(order?.order_number) || fallbackReference,
     };
 
     const notes = normalizeText(order?.notes);
-    if (notes) payload.notes = notes;
+    if (notes) payloadBase.notes = notes;
     if (discountAmount > 0) {
-        payload.discount = Number(discountAmount.toFixed(2));
-        payload.is_discount_before_tax = true;
+        payloadBase.discount = Number(discountAmount.toFixed(2));
+        payloadBase.is_discount_before_tax = true;
     }
-    const hasLineLocation = zohoLineItems.some((line: any) => normalizeText(line?.location_id));
-    if (!hasLineLocation && defaultZohoLocationId) {
-        payload.location_id = defaultZohoLocationId;
-    }
-
     const salespersonName = normalizeText(order?.salesperson_name);
-    if (salespersonName) payload.salesperson_name = salespersonName;
+    if (salespersonName) payloadBase.salesperson_name = salespersonName;
 
-    return zohoClient.createInvoice(payload);
+    const hasLineLocation = zohoLineItems.some((line) => Boolean(normalizeText(line?.__resolvedLineLocationId)));
+    const buildLineItems = (lineFieldMode: 'warehouse_id' | 'location_id' | 'none') =>
+        zohoLineItems.map((line) => {
+            const locationId = normalizeText(line?.__resolvedLineLocationId);
+            const nextLine: any = { ...line };
+            delete nextLine.__resolvedLineLocationId;
+            if (locationId && lineFieldMode === 'warehouse_id') {
+                nextLine.warehouse_id = locationId;
+            }
+            if (locationId && lineFieldMode === 'location_id') {
+                nextLine.location_id = locationId;
+            }
+            return nextLine;
+        });
+
+    const attempts = hasLineLocation
+        ? [
+            { mode: 'warehouse_id' as const, includeParentLocation: true, label: 'line.warehouse_id + location_id padre' },
+            { mode: 'location_id' as const, includeParentLocation: true, label: 'line.location_id + location_id padre' },
+            { mode: 'warehouse_id' as const, includeParentLocation: false, label: 'line.warehouse_id sin location padre' },
+            { mode: 'location_id' as const, includeParentLocation: false, label: 'line.location_id sin location padre' },
+            { mode: 'none' as const, includeParentLocation: true, label: 'sin ubicación por línea + location_id padre' },
+            { mode: 'none' as const, includeParentLocation: false, label: 'sin ubicación por línea y sin padre' },
+        ]
+        : [
+            { mode: 'none' as const, includeParentLocation: true, label: 'solo location_id padre' },
+            { mode: 'none' as const, includeParentLocation: false, label: 'sin location_id padre' },
+        ];
+
+    const errors: string[] = [];
+    for (const attempt of attempts) {
+        const payload: any = {
+            ...payloadBase,
+            line_items: buildLineItems(attempt.mode),
+        };
+
+        if (attempt.includeParentLocation && parentZohoLocationId) {
+            payload.location_id = parentZohoLocationId;
+        } else {
+            delete payload.location_id;
+        }
+
+        try {
+            return await zohoClient.createInvoice(payload);
+        } catch (error: any) {
+            const message = normalizeText(error?.message) || 'Error desconocido';
+            errors.push(`${attempt.label}: ${message}`);
+            if (!shouldRetryZohoLocationVariant(error)) {
+                throw error;
+            }
+        }
+    }
+
+    throw new Error(errors.slice(0, 4).join(' | ') || 'Zoho rechazó la factura con todas las variantes de ubicación.');
 }
 
 // POST /api/ventas/sales-orders/[id]/convert — convert to invoice
@@ -537,8 +673,16 @@ export async function POST(
 
             const firstError = normalizeText(directError?.message);
             const secondError = normalizeText(convertError?.message);
+            const secondErrorLower = secondError.toLowerCase();
+            const ovConvertUnsupportedByZoho = secondErrorLower.includes('"code":1000')
+                || secondErrorLower.includes('no se puede convertir')
+                || secondErrorLower.includes('cannot be converted');
             const combinedError = firstError && secondError
-                ? `Zoho rechazó la creación directa (${firstError}) y también la conversión por OV (${secondError}).`
+                ? (
+                    ovConvertUnsupportedByZoho
+                        ? `Zoho rechazó la creación directa (${firstError}). Nota: Zoho no permite convertir automáticamente OV con artículos serializados/lotes.`
+                        : `Zoho rechazó la creación directa (${firstError}) y también la conversión por OV (${secondError}).`
+                )
                 : firstError || secondError || 'No se pudo crear factura en Zoho.';
 
             return NextResponse.json({ error: combinedError }, { status: 400 });
