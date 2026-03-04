@@ -144,6 +144,20 @@ export default function InventoryPage() {
     setCartSelectorError('');
   }
 
+  function resolveMaxAvailableQty(value: unknown): number | null {
+    const parsed = Number(value);
+    if (!Number.isFinite(parsed)) return null;
+    return Math.max(0, Math.floor(parsed));
+  }
+
+  function clampCartQty(qty: number, maxAvailableQty: number | null): number {
+    const normalized = Number.isFinite(qty) ? Math.floor(qty) : 1;
+    const atLeastOne = Math.max(1, normalized);
+    if (maxAvailableQty == null) return atLeastOne;
+    if (maxAvailableQty <= 0) return 1;
+    return Math.min(atLeastOne, maxAvailableQty);
+  }
+
   function addToCart(item: PivotItem) {
     if (!cartMode) return;
 
@@ -153,13 +167,32 @@ export default function InventoryPage() {
       return;
     }
 
+    const maxAvailableQty = resolveMaxAvailableQty(item.total);
+    if (maxAvailableQty != null && maxAvailableQty <= 0) {
+      setCartSelectorError('No hay stock disponible para este producto en la familia de bodegas seleccionada.');
+      setCartOpen(true);
+      return;
+    }
+
     let newQty = 1;
+    let hitMax = false;
+    let hitMaxMessage = '';
     setCartItems((prev) => {
       const existing = prev.find((c) => c.itemId === item.id);
+      const previousMax = existing ? resolveMaxAvailableQty(existing.maxAvailableQty) : null;
+      const lineMax = maxAvailableQty ?? previousMax;
+
       if (existing) {
-        newQty = existing.quantity + 1;
+        const nextQty = clampCartQty(existing.quantity + 1, lineMax);
+        newQty = nextQty;
+        hitMax = nextQty <= existing.quantity;
+        if (hitMax && lineMax != null) {
+          hitMaxMessage = `Stock máximo alcanzado (${lineMax}) para ${item.sku || item.name}.`;
+        }
         return prev.map((c) =>
-          c.itemId === item.id ? { ...c, quantity: c.quantity + 1 } : c
+          c.itemId === item.id
+            ? { ...c, quantity: nextQty, maxAvailableQty: lineMax ?? c.maxAvailableQty }
+            : c
         );
       }
       return [
@@ -171,10 +204,18 @@ export default function InventoryPage() {
           color: item.color,
           brand: item.brand,
           unitPrice: Math.max(0, Number(item.price ?? 0) || 0),
-          quantity: 1,
+          quantity: clampCartQty(1, lineMax),
+          maxAvailableQty: lineMax,
         },
       ];
     });
+
+    if (hitMax) {
+      setCartSelectorError(hitMaxMessage || 'Stock máximo alcanzado para este producto.');
+      setCartOpen(true);
+      return;
+    }
+
     // Auto-open cart on first add
     if (cartItems.length === 0) setCartOpen(true);
     setCartSelectorError('');
@@ -194,9 +235,23 @@ export default function InventoryPage() {
   }
 
   function updateCartQty(itemId: string, qty: number) {
+    let validationMessage = '';
     setCartItems((prev) =>
-      prev.map((c) => (c.itemId === itemId ? { ...c, quantity: Math.max(1, qty) } : c))
+      prev.map((c) => {
+        if (c.itemId !== itemId) return c;
+        const lineMax = resolveMaxAvailableQty(c.maxAvailableQty);
+        const nextQty = clampCartQty(qty, lineMax);
+        if (lineMax != null && Number.isFinite(qty) && Math.floor(qty) > lineMax) {
+          validationMessage = `Cantidad ajustada al stock disponible (${lineMax}) para ${c.sku || c.name}.`;
+        }
+        return { ...c, quantity: nextQty };
+      })
     );
+    if (validationMessage) {
+      setCartSelectorError(validationMessage);
+    } else {
+      setCartSelectorError('');
+    }
   }
 
   function clearCart() {

@@ -13,6 +13,7 @@ export interface CartItem {
     brand: string | null;
     unitPrice?: number;
     quantity: number;
+    maxAvailableQty?: number | null;
 }
 
 export type CartType = 'cotizacion' | 'factura' | 'orden_venta';
@@ -351,11 +352,61 @@ export default function InventoryCart({
         onParentWarehouseChange?.(id || null);
     }
 
+    function getItemMaxQty(item: CartItem): number | null {
+        const parsed = Number(item.maxAvailableQty);
+        if (!Number.isFinite(parsed)) return null;
+        return Math.max(0, Math.floor(parsed));
+    }
+
+    function clampItemQuantity(item: CartItem, rawQty: number): number {
+        const normalized = Number.isFinite(rawQty) ? Math.floor(rawQty) : 1;
+        const atLeastOne = Math.max(1, normalized);
+        const maxQty = getItemMaxQty(item);
+        if (maxQty == null) return atLeastOne;
+        if (maxQty <= 0) return 1;
+        return Math.min(atLeastOne, maxQty);
+    }
+
+    function applyItemQuantityChange(item: CartItem, rawQty: number) {
+        const nextQty = clampItemQuantity(item, rawQty);
+        const maxQty = getItemMaxQty(item);
+        if (maxQty != null && Math.floor(rawQty) > maxQty) {
+            setValidationErrors((prev) => ({
+                ...prev,
+                items: `Cantidad ajustada para "${item.sku || item.name}". Máximo disponible: ${maxQty}.`,
+            }));
+        } else {
+            setValidationErrors((prev) => {
+                if (!prev.items) return prev;
+                const next = { ...prev };
+                delete next.items;
+                return next;
+            });
+        }
+        onUpdateQuantity(item.itemId, nextQty);
+    }
+
     function validate(): boolean {
         const errors: Record<string, string> = {};
         if (!selectedCustomerId) errors.customer = 'Selecciona un cliente';
         if (!warehouseId) errors.warehouse = 'Selecciona una ubicación';
         if (!docDate) errors.date = 'Selecciona la fecha';
+        if (items.length === 0) {
+            errors.items = 'Agrega al menos un producto.';
+        } else {
+            for (const item of items) {
+                const quantity = Number(item.quantity);
+                if (!Number.isFinite(quantity) || quantity <= 0 || !Number.isInteger(quantity)) {
+                    errors.items = `Cantidad inválida para "${item.sku || item.name}".`;
+                    break;
+                }
+                const maxQty = getItemMaxQty(item);
+                if (maxQty != null && quantity > maxQty) {
+                    errors.items = `La cantidad de "${item.sku || item.name}" supera el disponible (${maxQty}).`;
+                    break;
+                }
+            }
+        }
         setValidationErrors(errors);
         return Object.keys(errors).length === 0;
     }
@@ -1172,17 +1223,20 @@ export default function InventoryCart({
                             </div>
                         ) : (
                             <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-                                {items.map((item) => (
-                                    <div
-                                        key={item.itemId}
-                                        style={{
-                                            padding: '12px 14px',
-                                            borderRadius: 10,
-                                            border: '1px solid rgba(255,255,255,0.06)',
-                                            background: 'rgba(255,255,255,0.02)',
-                                            transition: 'background 0.15s',
-                                        }}
-                                    >
+                                {items.map((item) => {
+                                    const maxQty = getItemMaxQty(item);
+                                    const atMaxQty = maxQty != null && item.quantity >= maxQty;
+                                    return (
+                                        <div
+                                            key={item.itemId}
+                                            style={{
+                                                padding: '12px 14px',
+                                                borderRadius: 10,
+                                                border: '1px solid rgba(255,255,255,0.06)',
+                                                background: 'rgba(255,255,255,0.02)',
+                                                transition: 'background 0.15s',
+                                            }}
+                                        >
                                         <div
                                             style={{
                                                 display: 'flex',
@@ -1264,7 +1318,7 @@ export default function InventoryCart({
                                                 }}
                                             >
                                                 <button
-                                                    onClick={() => onUpdateQuantity(item.itemId, Math.max(1, item.quantity - 1))}
+                                                    onClick={() => applyItemQuantityChange(item, item.quantity - 1)}
                                                     style={{
                                                         width: 30,
                                                         height: 30,
@@ -1282,10 +1336,12 @@ export default function InventoryCart({
                                                 <input
                                                     type="number"
                                                     min={1}
+                                                    max={maxQty != null ? maxQty : undefined}
                                                     value={item.quantity}
                                                     onChange={(e) => {
                                                         const val = parseInt(e.target.value, 10);
-                                                        if (val > 0) onUpdateQuantity(item.itemId, val);
+                                                        if (!Number.isFinite(val)) return;
+                                                        if (val > 0) applyItemQuantityChange(item, val);
                                                     }}
                                                     style={{
                                                         width: 50,
@@ -1301,14 +1357,16 @@ export default function InventoryCart({
                                                     }}
                                                 />
                                                 <button
-                                                    onClick={() => onUpdateQuantity(item.itemId, item.quantity + 1)}
+                                                    onClick={() => applyItemQuantityChange(item, item.quantity + 1)}
+                                                    disabled={atMaxQty}
                                                     style={{
                                                         width: 30,
                                                         height: 30,
                                                         border: 'none',
                                                         background: 'rgba(255,255,255,0.05)',
                                                         color: 'var(--muted, #94a3b8)',
-                                                        cursor: 'pointer',
+                                                        cursor: atMaxQty ? 'not-allowed' : 'pointer',
+                                                        opacity: atMaxQty ? 0.5 : 1,
                                                         display: 'flex',
                                                         alignItems: 'center',
                                                         justifyContent: 'center',
@@ -1317,9 +1375,20 @@ export default function InventoryCart({
                                                     <Plus size={13} />
                                                 </button>
                                             </div>
+                                            {maxQty != null && (
+                                                <span style={{ fontSize: 10, color: atMaxQty ? '#fbbf24' : 'var(--muted, #64748b)' }}>
+                                                    Máx: {maxQty}
+                                                </span>
+                                            )}
                                         </div>
+                                        </div>
+                                    );
+                                })}
+                                {validationErrors.items && (
+                                    <div style={{ ...validationErrorStyle, marginTop: 2 }}>
+                                        {validationErrors.items}
                                     </div>
-                                ))}
+                                )}
                             </div>
                         )}
                     </div>

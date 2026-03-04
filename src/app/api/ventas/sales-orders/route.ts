@@ -4,6 +4,7 @@ export const dynamic = 'force-dynamic';
 import { createRouteHandlerClient } from '@supabase/auth-helpers-nextjs';
 import { cookies } from 'next/headers';
 import { createZohoBooksClient } from '@/lib/zoho/books-client';
+import { validateWarehouseFamilyStock } from '@/lib/ventas/stock-validation';
 
 const ORDER_STATUSES = new Set(['borrador', 'confirmada', 'convertida', 'cancelada']);
 
@@ -429,6 +430,43 @@ export async function POST(req: NextRequest) {
             return NextResponse.json({ error: 'La orden de venta debe tener al menos un artículo' }, { status: 400 });
         }
 
+        const normalizedItems = items.map((item: any) => {
+            const quantity = normalizeNumber(item?.quantity, NaN);
+            const unitPrice = Math.max(0, normalizeNumber(item?.unit_price, 0));
+            const discountPercent = Math.max(0, Math.min(100, normalizeNumber(item?.discount_percent, 0)));
+            return {
+                item_id: item?.item_id || null,
+                description: String(item?.description || item?.name || 'Artículo').trim(),
+                quantity,
+                unit_price: unitPrice,
+                discount_percent: discountPercent,
+                serial_number_value: normalizeSerialInput(
+                    item?.serial_number_value ?? item?.serial_numbers ?? item?.serials
+                ) || null,
+                line_warehouse_id: normalizeText(item?.line_warehouse_id) || null,
+                line_zoho_warehouse_id: normalizeText(item?.line_zoho_warehouse_id) || null,
+            };
+        });
+
+        const invalidQuantityIndex = normalizedItems.findIndex(
+            (item: any) => !Number.isFinite(item.quantity) || item.quantity <= 0
+        );
+        if (invalidQuantityIndex >= 0) {
+            return NextResponse.json(
+                { error: `Cantidad inválida en la línea ${invalidQuantityIndex + 1}.` },
+                { status: 400 }
+            );
+        }
+
+        const stockValidation = await validateWarehouseFamilyStock({
+            supabase,
+            warehouseId: warehouse_id,
+            items: normalizedItems,
+        });
+        if (!stockValidation.ok) {
+            return NextResponse.json({ error: stockValidation.error }, { status: 400 });
+        }
+
         // Resolve warehouse code for order number format
         let warehouseCode: string | undefined;
         if (warehouse_id) {
@@ -446,7 +484,7 @@ export async function POST(req: NextRequest) {
 
         const normalizedTaxRate = Math.max(0, normalizeNumber(tax_rate, 15));
         const normalizedDiscount = Math.max(0, normalizeNumber(discount_amount, 0));
-        const totals = calculateTotals(items, normalizedTaxRate, normalizedDiscount);
+        const totals = calculateTotals(normalizedItems, normalizedTaxRate, normalizedDiscount);
 
         const insertOrder = {
             order_number: orderNumber,
@@ -519,7 +557,7 @@ export async function POST(req: NextRequest) {
             return NextResponse.json({ error: lastError?.message || 'No se pudo crear la orden de venta' }, { status: 500 });
         }
 
-        const orderItems = items.map((item: any, index: number) => {
+        const orderItems = normalizedItems.map((item: any, index: number) => {
             const quantity = Math.max(0, normalizeNumber(item?.quantity, 0));
             const unitPrice = Math.max(0, normalizeNumber(item?.unit_price, 0));
             const discountPercent = Math.max(0, Math.min(100, normalizeNumber(item?.discount_percent, 0)));
@@ -530,9 +568,7 @@ export async function POST(req: NextRequest) {
                 quantity,
                 unit_price: unitPrice,
                 discount_percent: discountPercent,
-                serial_number_value: normalizeSerialInput(
-                    item?.serial_number_value ?? item?.serial_numbers ?? item?.serials
-                ) || null,
+                serial_number_value: normalizeSerialInput(item?.serial_number_value) || null,
                 line_warehouse_id: normalizeText(item?.line_warehouse_id) || null,
                 line_zoho_warehouse_id: normalizeText(item?.line_zoho_warehouse_id) || null,
                 subtotal: Math.round(quantity * unitPrice * (1 - discountPercent / 100) * 100) / 100,
@@ -564,7 +600,7 @@ export async function POST(req: NextRequest) {
                     notes: notes || null,
                     salespersonName: salesperson_name || null,
                     status: normalizeStatus(status, 'borrador'),
-                    items,
+                    items: normalizedItems,
                 });
             } catch (zohoError: any) {
                 zohoWarning = zohoError?.message || 'No se pudo crear la orden de venta en Zoho';
