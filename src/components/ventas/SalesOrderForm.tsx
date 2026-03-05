@@ -206,7 +206,9 @@ export default function SalesOrderForm({ isOpen, orderId, onClose, onSaved }: Sa
             if (!response.ok) {
                 throw new Error(data?.error || 'No se pudieron cargar impuestos');
             }
-            const parsed: TaxOption[] = Array.isArray(data?.taxes) ? data.taxes : [];
+            const parsed: TaxOption[] = Array.isArray(data)
+                ? data
+                : (Array.isArray(data?.taxes) ? data.taxes : []);
             setTaxOptions(parsed);
             return parsed;
         } catch {
@@ -337,13 +339,13 @@ export default function SalesOrderForm({ isOpen, orderId, onClose, onSaved }: Sa
                         warehouse,
                         serials: rows
                             .map((row: any) => ({
-                            serial_id: String(row?.serial_id || ''),
-                            serial_code: String(row?.serial_code || '').trim(),
-                            warehouse_id: warehouse.id,
-                            warehouse_code: warehouse.code,
-                            warehouse_name: warehouse.name,
-                            zoho_warehouse_id: String(warehouse.zoho_warehouse_id || ''),
-                        }))
+                                serial_id: String(row?.serial_id || ''),
+                                serial_code: String(row?.serial_code || '').trim(),
+                                warehouse_id: warehouse.id,
+                                warehouse_code: warehouse.code,
+                                warehouse_name: warehouse.name,
+                                zoho_warehouse_id: String(warehouse.zoho_warehouse_id || ''),
+                            }))
                             .filter((row: any) => row.serial_code.length > 0),
                         error: '',
                     };
@@ -534,22 +536,11 @@ export default function SalesOrderForm({ isOpen, orderId, onClose, onSaved }: Sa
                     line_warehouse_id: null,
                     line_zoho_warehouse_id: null,
                 }];
-            const defaultTax = loadedTaxes[0] || null;
-            const linesWithTaxFallback = normalizedLines.map((line) => {
-                if (line.tax_id) return line;
-                if (!defaultTax) return line;
-                return {
-                    ...line,
-                    tax_id: defaultTax.tax_id,
-                    tax_name: defaultTax.tax_name,
-                    tax_percentage: normalizeNumber(defaultTax.tax_percentage, 0),
-                };
-            });
-            setItems(linesWithTaxFallback);
+            setItems(normalizedLines);
 
             const family = await fetchFamilyWarehouses(order.warehouse_id || '');
             setFamilyWarehouses(family);
-            linesWithTaxFallback.forEach((line, index) => {
+            normalizedLines.forEach((line, index) => {
                 if (line.zoho_item_id) {
                     void fetchLineSerials(index, line.zoho_item_id, line.item_id, family);
                 }
@@ -611,7 +602,6 @@ export default function SalesOrderForm({ isOpen, orderId, onClose, onSaved }: Sa
     }
 
     function addLine() {
-        const defaultTax = taxOptions[0] || null;
         setItems((prev) => [
             ...prev,
             {
@@ -621,9 +611,9 @@ export default function SalesOrderForm({ isOpen, orderId, onClose, onSaved }: Sa
                 quantity: 1,
                 unit_price: 0,
                 discount_percent: 0,
-                tax_id: defaultTax?.tax_id || '',
-                tax_name: defaultTax?.tax_name || '',
-                tax_percentage: normalizeNumber(defaultTax?.tax_percentage, 0),
+                tax_id: '',
+                tax_name: '',
+                tax_percentage: 0,
                 warranty: '',
                 serial_number_value: '',
                 available_serials: [],
@@ -755,10 +745,6 @@ export default function SalesOrderForm({ isOpen, orderId, onClose, onSaved }: Sa
                 setError(`Seriales inválidos para "${line.description}": cantidad ${expectedSerialCount}, seriales ${selectedSerials.length}.`);
                 return;
             }
-            if (!line.tax_id) {
-                setError(`Selecciona impuesto en la línea "${line.description}".`);
-                return;
-            }
         }
 
         setSaving(true);
@@ -821,51 +807,78 @@ export default function SalesOrderForm({ isOpen, orderId, onClose, onSaved }: Sa
             position: 'fixed',
             inset: 0,
             zIndex: 2200,
-            background: 'rgba(0,0,0,0.62)',
-            backdropFilter: 'blur(3px)',
-            padding: '22px 14px',
+            background: 'rgba(0,0,0,0.65)',
+            backdropFilter: 'blur(6px)',
+            padding: '24px 16px',
             overflowY: 'auto',
         }}>
             <div style={{
                 maxWidth: 1080,
                 margin: '0 auto',
-                borderRadius: 14,
-                border: '1px solid var(--border)',
+                borderRadius: 16,
+                border: '1px solid rgba(255,255,255,0.08)',
                 background: 'var(--card)',
                 overflow: 'hidden',
-                boxShadow: '0 26px 48px rgba(0,0,0,0.5)',
+                boxShadow: '0 32px 64px rgba(0,0,0,0.55), 0 0 0 1px rgba(255,255,255,0.04)',
             }}>
                 <div style={{
                     display: 'flex',
                     justifyContent: 'space-between',
                     alignItems: 'center',
-                    gap: 10,
-                    padding: '14px 18px',
-                    borderBottom: '1px solid var(--border)',
+                    gap: 12,
+                    padding: '18px 24px',
+                    borderBottom: '1px solid rgba(255,255,255,0.06)',
+                    background: 'linear-gradient(135deg, rgba(16,185,129,0.06) 0%, rgba(59,130,246,0.04) 100%)',
                 }}>
-                    <div>
-                        <div style={{ fontSize: 18, fontWeight: 800, color: 'var(--text)' }}>
-                            Editar Orden de Venta
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
+                        <div style={{
+                            width: 42,
+                            height: 42,
+                            borderRadius: 12,
+                            background: 'linear-gradient(135deg, rgba(16,185,129,0.15), rgba(59,130,246,0.12))',
+                            border: '1px solid rgba(16,185,129,0.2)',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            flexShrink: 0,
+                        }}>
+                            <Save size={18} style={{ color: '#10B981' }} />
                         </div>
-                        <div style={{ fontSize: 12, color: 'var(--muted)' }}>
-                            {orderNumber || 'Cargando...'}
+                        <div>
+                            <div style={{ fontSize: 18, fontWeight: 800, color: 'var(--text)', letterSpacing: '-0.01em' }}>
+                                Editar Orden de Venta
+                            </div>
+                            <div style={{
+                                fontSize: 12,
+                                color: 'var(--muted)',
+                                marginTop: 2,
+                                fontFamily: 'monospace',
+                                background: 'rgba(255,255,255,0.04)',
+                                padding: '2px 8px',
+                                borderRadius: 4,
+                                display: 'inline-block',
+                            }}>
+                                {orderNumber || 'Cargando...'}
+                            </div>
                         </div>
                     </div>
                     <button
                         type="button"
                         onClick={onClose}
                         style={{
-                            background: 'transparent',
-                            border: 'none',
+                            background: 'rgba(255,255,255,0.04)',
+                            border: '1px solid rgba(255,255,255,0.08)',
+                            borderRadius: 8,
                             color: 'var(--muted)',
                             cursor: 'pointer',
-                            padding: 2,
+                            padding: 6,
                             display: 'flex',
                             alignItems: 'center',
                             justifyContent: 'center',
+                            transition: 'all 0.2s ease',
                         }}
                     >
-                        <X size={22} />
+                        <X size={18} />
                     </button>
                 </div>
 
@@ -875,7 +888,7 @@ export default function SalesOrderForm({ isOpen, orderId, onClose, onSaved }: Sa
                         Cargando datos de la orden...
                     </div>
                 ) : (
-                    <div style={{ padding: 16, display: 'grid', gap: 14 }}>
+                    <div style={{ padding: '20px 24px', display: 'grid', gap: 20 }}>
                         {error && (
                             <div style={{
                                 padding: '10px 12px',
@@ -893,7 +906,11 @@ export default function SalesOrderForm({ isOpen, orderId, onClose, onSaved }: Sa
                         <div style={{
                             display: 'grid',
                             gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))',
-                            gap: 10,
+                            gap: 12,
+                            background: 'rgba(255,255,255,0.015)',
+                            border: '1px solid rgba(255,255,255,0.06)',
+                            borderRadius: 12,
+                            padding: '16px 18px',
                         }}>
                             <Field label="Cliente *">
                                 <div ref={customerRef} style={{ position: 'relative' }}>
@@ -1045,41 +1062,57 @@ export default function SalesOrderForm({ isOpen, orderId, onClose, onSaved }: Sa
                                     />
                                 </div>
                             </Field>
-                            <Field label="Impuestos y descuentos">
-                                <div style={{ ...inputStyle, opacity: 0.85 }}>
-                                    Se calculan por línea (impuesto obligatorio por artículo y descuento por línea).
-                                </div>
-                            </Field>
                         </div>
 
-                        <Field label="Notas">
-                            <textarea
-                                value={notes}
-                                onChange={(e) => setNotes(e.target.value)}
-                                rows={3}
-                                style={{ ...inputStyle, minHeight: 72, resize: 'vertical' }}
-                                placeholder="Notas internas/comerciales..."
-                            />
-                        </Field>
-
-                        <div style={{ border: '1px solid var(--border)', borderRadius: 10, overflow: 'hidden' }}>
+                        {/* Vendedor + Nota de impuestos */}
+                        <div style={{
+                            display: 'grid',
+                            gridTemplateColumns: '1fr 1fr',
+                            gap: 12,
+                            background: 'rgba(255,255,255,0.015)',
+                            border: '1px solid rgba(255,255,255,0.06)',
+                            borderRadius: 12,
+                            padding: '16px 18px',
+                        }}>
+                            <Field label="Notas">
+                                <textarea
+                                    value={notes}
+                                    onChange={(e) => setNotes(e.target.value)}
+                                    rows={2}
+                                    style={{ ...inputStyle, minHeight: 56, resize: 'vertical' }}
+                                    placeholder="Notas internas/comerciales..."
+                                />
+                            </Field>
                             <div style={{
-                                display: 'grid',
-                                gridTemplateColumns: '1.8fr 100px 120px 100px 130px 38px',
-                                padding: '10px 12px',
+                                display: 'flex',
+                                alignItems: 'center',
+                                padding: '10px 14px',
+                                borderRadius: 10,
+                                background: 'rgba(59,130,246,0.06)',
+                                border: '1px solid rgba(59,130,246,0.12)',
                                 fontSize: 11,
-                                fontWeight: 700,
-                                color: 'var(--muted)',
-                                textTransform: 'uppercase',
-                                borderBottom: '1px solid var(--border)',
-                                background: 'rgba(255,255,255,0.03)',
+                                color: 'rgba(147,197,253,0.9)',
+                                lineHeight: 1.5,
                             }}>
-                                <div>Descripción</div>
-                                <div style={{ textAlign: 'right' }}>Cant.</div>
-                                <div style={{ textAlign: 'right' }}>P. Unitario</div>
-                                <div style={{ textAlign: 'right' }}>Desc. %</div>
-                                <div style={{ textAlign: 'right' }}>Subtotal</div>
-                                <div />
+                                💡 Impuesto y descuento se calculan por línea individual (impuesto opcional por artículo).
+                            </div>
+                        </div>
+
+                        {/* Líneas de artículos — card-based layout */}
+                        <div style={{ display: 'grid', gap: 10 }}>
+                            <div style={{
+                                display: 'flex',
+                                alignItems: 'center',
+                                justifyContent: 'space-between',
+                                padding: '0 4px',
+                            }}>
+                                <span style={{
+                                    fontSize: 10,
+                                    fontWeight: 800,
+                                    textTransform: 'uppercase',
+                                    letterSpacing: '0.08em',
+                                    color: 'var(--muted)',
+                                }}>Artículos ({items.length})</span>
                             </div>
 
                             {items.map((line, index) => {
@@ -1097,81 +1130,168 @@ export default function SalesOrderForm({ isOpen, orderId, onClose, onSaved }: Sa
                                     <div
                                         key={`${line.id || 'new'}-${index}`}
                                         style={{
-                                            display: 'grid',
-                                            gridTemplateColumns: '1.8fr 100px 120px 100px 130px 38px',
-                                            gap: 8,
-                                            alignItems: 'center',
-                                            padding: '8px 12px',
-                                            borderBottom: '1px solid var(--border)',
+                                            border: '1px solid rgba(255,255,255,0.08)',
+                                            borderRadius: 12,
+                                            background: 'rgba(255,255,255,0.015)',
+                                            overflow: 'hidden',
+                                            transition: 'border-color 0.2s ease',
                                         }}
                                     >
-                                        <div style={{ display: 'grid', gap: 6 }}>
+                                        {/* Fila 1: Descripción + Subtotal + Eliminar */}
+                                        <div style={{
+                                            display: 'flex',
+                                            alignItems: 'center',
+                                            gap: 10,
+                                            padding: '12px 16px',
+                                            borderBottom: '1px solid rgba(255,255,255,0.05)',
+                                            background: 'rgba(255,255,255,0.02)',
+                                        }}>
                                             <input
                                                 type="text"
                                                 value={line.description}
                                                 onChange={(e) => updateLine(index, { description: e.target.value })}
                                                 placeholder="Descripción del artículo"
-                                                style={inputStyle}
+                                                style={{ ...inputStyle, flex: 1, fontWeight: 600 }}
                                             />
+                                            <div style={{
+                                                fontSize: 14,
+                                                fontWeight: 800,
+                                                color: '#10B981',
+                                                fontFamily: 'monospace',
+                                                whiteSpace: 'nowrap',
+                                                minWidth: 70,
+                                                textAlign: 'right',
+                                            }}>
+                                                {lineSubtotal.toFixed(2)}
+                                            </div>
+                                            <button
+                                                type="button"
+                                                onClick={() => removeLine(index)}
+                                                style={{
+                                                    width: 32,
+                                                    height: 32,
+                                                    borderRadius: 8,
+                                                    border: '1px solid rgba(239,68,68,0.3)',
+                                                    background: 'rgba(239,68,68,0.08)',
+                                                    color: '#F87171',
+                                                    cursor: items.length <= 1 ? 'default' : 'pointer',
+                                                    opacity: items.length <= 1 ? 0.35 : 1,
+                                                    display: 'flex',
+                                                    alignItems: 'center',
+                                                    justifyContent: 'center',
+                                                    flexShrink: 0,
+                                                    transition: 'all 0.15s ease',
+                                                }}
+                                                disabled={items.length <= 1}
+                                            >
+                                                <Trash2 size={14} />
+                                            </button>
+                                        </div>
 
-                                            {line.item_id && line.zoho_item_id && (
-                                                <div style={{ display: 'grid', gap: 6 }}>
-                                                    {line.loading_serials ? (
-                                                        <div style={serialInfoStyle}>Buscando seriales...</div>
-                                                    ) : (
-                                                        <>
-                                                            {line.available_serials.length > 0 && (
-                                                                <div style={serialPanelStyle}>
-                                                                    <div style={serialPanelHeaderStyle}>
-                                                                        <span>
-                                                                            Seriales ({selectedWarehouseCodes.length > 0
-                                                                                ? selectedWarehouseCodes.join(', ')
-                                                                                : (lineWarehouseCode || 'familia')})
-                                                                        </span>
-                                                                        <span>{selectedSerials.length} / {Math.max(0, Math.round(normalizeNumber(line.quantity, 0)))}</span>
-                                                                    </div>
-                                                                    <div style={serialGridStyle}>
-                                                                        {line.available_serials.map((serial) => {
-                                                                            const isSelected = selectedSerials.includes(serial.serial_code);
-                                                                            return (
-                                                                                <button
-                                                                                    key={`${line.id || index}-${serial.serial_code}`}
-                                                                                    type="button"
-                                                                                    onClick={() => toggleLineSerial(index, serial.serial_code)}
-                                                                                    style={{
-                                                                                        ...serialChipStyle,
-                                                                                        borderColor: isSelected ? 'rgba(220,38,38,0.65)' : 'var(--border)',
-                                                                                        background: isSelected ? 'rgba(220,38,38,0.18)' : 'rgba(255,255,255,0.03)',
-                                                                                        color: isSelected ? '#FCA5A5' : 'var(--muted)',
-                                                                                    }}
-                                                                                    title={`${serial.serial_code} · ${serial.warehouse_code}`}
-                                                                                >
-                                                                                    {serial.serial_code} · {serial.warehouse_code}
-                                                                                </button>
-                                                                            );
-                                                                        })}
-                                                                    </div>
+                                        {/* Fila 2: Seriales (si aplica) */}
+                                        {line.item_id && line.zoho_item_id && (
+                                            <div style={{
+                                                padding: '10px 16px',
+                                                borderBottom: '1px solid rgba(255,255,255,0.05)',
+                                            }}>
+                                                {line.loading_serials ? (
+                                                    <div style={serialInfoStyle}>Buscando seriales...</div>
+                                                ) : (
+                                                    <div style={{ display: 'grid', gap: 8 }}>
+                                                        {line.available_serials.length > 0 && (
+                                                            <div style={serialPanelStyle}>
+                                                                <div style={serialPanelHeaderStyle}>
+                                                                    <span>
+                                                                        Seriales ({selectedWarehouseCodes.length > 0
+                                                                            ? selectedWarehouseCodes.join(', ')
+                                                                            : (lineWarehouseCode || 'familia')})
+                                                                    </span>
+                                                                    <span>{selectedSerials.length} / {Math.max(0, Math.round(normalizeNumber(line.quantity, 0)))}</span>
                                                                 </div>
-                                                            )}
-
-                                                            <input
-                                                                type="text"
-                                                                value={line.serial_number_value}
-                                                                onChange={(e) => updateLine(index, { serial_number_value: e.target.value })}
-                                                                placeholder="Seriales (SN1,SN2,...)"
-                                                                style={{ ...inputStyle, fontSize: 11, padding: '6px 8px' }}
-                                                            />
-                                                            {line.available_serials.length === 0 && (
-                                                                <div style={{ fontSize: 11, color: 'var(--muted)' }}>
-                                                                    Zoho no reporta seriales activos para este artículo en la familia seleccionada.
+                                                                <div style={{
+                                                                    ...serialGridStyle,
+                                                                    gridTemplateColumns: 'repeat(auto-fill, minmax(140px, 1fr))',
+                                                                }}>
+                                                                    {line.available_serials.map((serial) => {
+                                                                        const isSelected = selectedSerials.includes(serial.serial_code);
+                                                                        return (
+                                                                            <button
+                                                                                key={`${line.id || index}-${serial.serial_code}`}
+                                                                                type="button"
+                                                                                onClick={() => toggleLineSerial(index, serial.serial_code)}
+                                                                                style={{
+                                                                                    ...serialChipStyle,
+                                                                                    borderColor: isSelected ? 'rgba(16,185,129,0.55)' : 'rgba(255,255,255,0.1)',
+                                                                                    background: isSelected ? 'rgba(16,185,129,0.15)' : 'rgba(255,255,255,0.03)',
+                                                                                    color: isSelected ? '#6EE7B7' : 'var(--muted)',
+                                                                                    boxShadow: isSelected ? '0 0 8px rgba(16,185,129,0.12)' : 'none',
+                                                                                }}
+                                                                                title={`${serial.serial_code} · ${serial.warehouse_code}`}
+                                                                            >
+                                                                                {serial.serial_code} · {serial.warehouse_code}
+                                                                            </button>
+                                                                        );
+                                                                    })}
                                                                 </div>
-                                                            )}
-                                                        </>
-                                                    )}
-                                                </div>
-                                            )}
+                                                            </div>
+                                                        )}
 
-                                            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 6 }}>
+                                                        <input
+                                                            type="text"
+                                                            value={line.serial_number_value}
+                                                            onChange={(e) => updateLine(index, { serial_number_value: e.target.value })}
+                                                            placeholder="Seriales (SN1,SN2,...)"
+                                                            style={{ ...inputStyle, fontSize: 11, padding: '7px 10px' }}
+                                                        />
+                                                        {line.available_serials.length === 0 && (
+                                                            <div style={{ fontSize: 11, color: 'var(--muted)' }}>
+                                                                Zoho no reporta seriales activos para este artículo en la familia seleccionada.
+                                                            </div>
+                                                        )}
+                                                    </div>
+                                                )}
+                                            </div>
+                                        )}
+
+                                        {/* Fila 3: Campos numéricos + Impuesto + Garantía */}
+                                        <div style={{
+                                            display: 'grid',
+                                            gridTemplateColumns: 'repeat(5, 1fr)',
+                                            gap: 8,
+                                            padding: '10px 16px',
+                                        }}>
+                                            <Field label="Cantidad">
+                                                <input
+                                                    type="number"
+                                                    min={0}
+                                                    step={0.01}
+                                                    value={line.quantity}
+                                                    onChange={(e) => updateLine(index, { quantity: normalizeNumber(e.target.value, 0) })}
+                                                    style={{ ...inputStyle, textAlign: 'center', fontSize: 13, fontWeight: 600 }}
+                                                />
+                                            </Field>
+                                            <Field label="P. Unitario">
+                                                <input
+                                                    type="number"
+                                                    min={0}
+                                                    step={0.01}
+                                                    value={line.unit_price}
+                                                    onChange={(e) => updateLine(index, { unit_price: normalizeNumber(e.target.value, 0) })}
+                                                    style={{ ...inputStyle, textAlign: 'center', fontSize: 13, fontWeight: 600 }}
+                                                />
+                                            </Field>
+                                            <Field label="Desc. %">
+                                                <input
+                                                    type="number"
+                                                    min={0}
+                                                    max={100}
+                                                    step={0.01}
+                                                    value={line.discount_percent}
+                                                    onChange={(e) => updateLine(index, { discount_percent: normalizeNumber(e.target.value, 0) })}
+                                                    style={{ ...inputStyle, textAlign: 'center', fontSize: 13, fontWeight: 600 }}
+                                                />
+                                            </Field>
+                                            <Field label="Impuesto (opcional)">
                                                 <select
                                                     value={line.tax_id}
                                                     onChange={(e) => {
@@ -1182,78 +1302,32 @@ export default function SalesOrderForm({ isOpen, orderId, onClose, onSaved }: Sa
                                                             tax_percentage: normalizeNumber(selectedTax?.tax_percentage, 0),
                                                         });
                                                     }}
-                                                    style={{ ...inputStyle, fontSize: 11, padding: '6px 8px' }}
+                                                    style={{ ...inputStyle, fontSize: 12, padding: '9px 8px' }}
                                                 >
-                                                    <option value="">Impuesto *</option>
+                                                    <option value="">Seleccionar...</option>
                                                     {taxOptions.map((tax) => (
                                                         <option key={tax.tax_id} value={tax.tax_id}>
                                                             {tax.tax_name} ({Number(tax.tax_percentage || 0).toFixed(2)}%)
                                                         </option>
                                                     ))}
                                                 </select>
+                                            </Field>
+                                            <Field label="Garantía">
                                                 <input
                                                     type="text"
                                                     value={line.warranty || ''}
                                                     onChange={(e) => updateLine(index, { warranty: e.target.value })}
-                                                    placeholder="Garantía (ej. 3 meses)"
-                                                    style={{ ...inputStyle, fontSize: 11, padding: '6px 8px' }}
+                                                    placeholder="ej. 3 meses"
+                                                    style={{ ...inputStyle, fontSize: 12, padding: '9px 8px' }}
                                                 />
-                                            </div>
+                                            </Field>
                                         </div>
-                                        <input
-                                            type="number"
-                                            min={0}
-                                            step={0.01}
-                                            value={line.quantity}
-                                            onChange={(e) => updateLine(index, { quantity: normalizeNumber(e.target.value, 0) })}
-                                            style={{ ...inputStyle, textAlign: 'right' }}
-                                        />
-                                        <input
-                                            type="number"
-                                            min={0}
-                                            step={0.01}
-                                            value={line.unit_price}
-                                            onChange={(e) => updateLine(index, { unit_price: normalizeNumber(e.target.value, 0) })}
-                                            style={{ ...inputStyle, textAlign: 'right' }}
-                                        />
-                                        <input
-                                            type="number"
-                                            min={0}
-                                            max={100}
-                                            step={0.01}
-                                            value={line.discount_percent}
-                                            onChange={(e) => updateLine(index, { discount_percent: normalizeNumber(e.target.value, 0) })}
-                                            style={{ ...inputStyle, textAlign: 'right' }}
-                                        />
-                                        <div style={{ fontSize: 12, fontWeight: 800, color: 'var(--text)', textAlign: 'right' }}>
-                                            {lineSubtotal.toFixed(2)}
-                                        </div>
-                                        <button
-                                            type="button"
-                                            onClick={() => removeLine(index)}
-                                            style={{
-                                                width: 30,
-                                                height: 30,
-                                                borderRadius: 8,
-                                                border: '1px solid rgba(239,68,68,0.4)',
-                                                background: 'rgba(239,68,68,0.12)',
-                                                color: '#F87171',
-                                                cursor: items.length <= 1 ? 'default' : 'pointer',
-                                                opacity: items.length <= 1 ? 0.5 : 1,
-                                                display: 'flex',
-                                                alignItems: 'center',
-                                                justifyContent: 'center',
-                                            }}
-                                            disabled={items.length <= 1}
-                                        >
-                                            <Trash2 size={14} />
-                                        </button>
                                     </div>
                                 );
                             })}
                         </div>
 
-                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 16, flexWrap: 'wrap' }}>
                             <button
                                 type="button"
                                 onClick={addLine}
@@ -1261,53 +1335,80 @@ export default function SalesOrderForm({ isOpen, orderId, onClose, onSaved }: Sa
                                     display: 'inline-flex',
                                     alignItems: 'center',
                                     gap: 6,
-                                    padding: '8px 12px',
-                                    borderRadius: 8,
-                                    border: '1px solid rgba(59,130,246,0.35)',
-                                    background: 'rgba(59,130,246,0.12)',
+                                    padding: '9px 16px',
+                                    borderRadius: 10,
+                                    border: '1px solid rgba(59,130,246,0.3)',
+                                    background: 'rgba(59,130,246,0.08)',
                                     color: '#60A5FA',
                                     fontSize: 12,
                                     fontWeight: 700,
                                     cursor: 'pointer',
+                                    transition: 'all 0.2s ease',
                                 }}
                             >
                                 <Plus size={14} />
                                 Agregar línea
                             </button>
 
-                            <div style={{ display: 'grid', gap: 4, fontSize: 12, color: 'var(--muted)', minWidth: 240 }}>
+                            <div style={{
+                                display: 'grid',
+                                gap: 6,
+                                fontSize: 12,
+                                color: 'var(--muted)',
+                                minWidth: 260,
+                                background: 'rgba(255,255,255,0.02)',
+                                border: '1px solid rgba(255,255,255,0.06)',
+                                borderRadius: 12,
+                                padding: '14px 18px',
+                            }}>
                                 <div style={{ display: 'flex', justifyContent: 'space-between' }}>
                                     <span>Subtotal</span>
-                                    <span>{totals.subtotal.toFixed(2)}</span>
+                                    <span style={{ fontFamily: 'monospace' }}>{totals.subtotal.toFixed(2)}</span>
                                 </div>
                                 <div style={{ display: 'flex', justifyContent: 'space-between' }}>
                                     <span>Impuestos (por línea)</span>
-                                    <span>{totals.taxAmount.toFixed(2)}</span>
+                                    <span style={{ fontFamily: 'monospace' }}>{totals.taxAmount.toFixed(2)}</span>
                                 </div>
                                 <div style={{ display: 'flex', justifyContent: 'space-between' }}>
                                     <span>Descuento aplicado</span>
-                                    <span>-{totals.discountTotal.toFixed(2)}</span>
+                                    <span style={{ fontFamily: 'monospace', color: '#F87171' }}>-{totals.discountTotal.toFixed(2)}</span>
                                 </div>
-                                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 15, fontWeight: 800, color: 'var(--text)' }}>
+                                <div style={{
+                                    display: 'flex',
+                                    justifyContent: 'space-between',
+                                    fontSize: 16,
+                                    fontWeight: 800,
+                                    color: 'var(--text)',
+                                    borderTop: '1px solid rgba(255,255,255,0.08)',
+                                    paddingTop: 8,
+                                    marginTop: 4,
+                                }}>
                                     <span>Total</span>
-                                    <span>{totals.total.toFixed(2)}</span>
+                                    <span style={{ fontFamily: 'monospace', color: '#10B981' }}>{totals.total.toFixed(2)}</span>
                                 </div>
                             </div>
                         </div>
 
-                        <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8 }}>
+                        <div style={{
+                            display: 'flex',
+                            justifyContent: 'flex-end',
+                            gap: 10,
+                            borderTop: '1px solid rgba(255,255,255,0.06)',
+                            paddingTop: 16,
+                        }}>
                             <button
                                 type="button"
                                 onClick={onClose}
                                 style={{
-                                    padding: '10px 16px',
-                                    borderRadius: 8,
-                                    border: '1px solid var(--border)',
-                                    background: 'transparent',
+                                    padding: '10px 20px',
+                                    borderRadius: 10,
+                                    border: '1px solid rgba(255,255,255,0.1)',
+                                    background: 'rgba(255,255,255,0.04)',
                                     color: 'var(--muted)',
                                     fontSize: 13,
                                     fontWeight: 700,
                                     cursor: 'pointer',
+                                    transition: 'all 0.2s ease',
                                 }}
                             >
                                 Cancelar
@@ -1317,17 +1418,19 @@ export default function SalesOrderForm({ isOpen, orderId, onClose, onSaved }: Sa
                                 onClick={() => void handleSave()}
                                 disabled={saving}
                                 style={{
-                                    padding: '10px 16px',
-                                    borderRadius: 8,
+                                    padding: '10px 22px',
+                                    borderRadius: 10,
                                     border: 'none',
-                                    background: saving ? 'rgba(16,185,129,0.18)' : 'linear-gradient(135deg, #10B981, #059669)',
+                                    background: saving ? 'rgba(16,185,129,0.18)' : 'linear-gradient(135deg, #10B981 0%, #059669 100%)',
                                     color: 'white',
                                     fontSize: 13,
                                     fontWeight: 800,
                                     cursor: saving ? 'default' : 'pointer',
                                     display: 'inline-flex',
                                     alignItems: 'center',
-                                    gap: 6,
+                                    gap: 7,
+                                    transition: 'all 0.2s ease',
+                                    boxShadow: saving ? 'none' : '0 4px 14px rgba(16,185,129,0.25)',
                                 }}
                             >
                                 {saving ? <Loader2 size={15} style={{ animation: 'spin 1s linear infinite' }} /> : <Save size={15} />}
@@ -1343,8 +1446,14 @@ export default function SalesOrderForm({ isOpen, orderId, onClose, onSaved }: Sa
 
 function Field({ label, children }: { label: string; children: ReactNode }) {
     return (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 5 }}>
-            <label style={{ fontSize: 11, color: 'var(--muted)', fontWeight: 700 }}>{label}</label>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+            <label style={{
+                fontSize: 10,
+                color: 'var(--muted)',
+                fontWeight: 700,
+                textTransform: 'uppercase',
+                letterSpacing: '0.06em',
+            }}>{label}</label>
             {children}
         </div>
     );
@@ -1352,13 +1461,14 @@ function Field({ label, children }: { label: string; children: ReactNode }) {
 
 const inputStyle: CSSProperties = {
     width: '100%',
-    padding: '8px 10px',
+    padding: '9px 12px',
     borderRadius: 8,
-    border: '1px solid rgba(255,255,255,0.12)',
+    border: '1px solid rgba(255,255,255,0.1)',
     background: 'rgba(255,255,255,0.04)',
     color: 'var(--text)',
     fontSize: 13,
     outline: 'none',
+    transition: 'border-color 0.2s ease, box-shadow 0.2s ease',
 };
 
 const serialInfoStyle: CSSProperties = {
@@ -1371,52 +1481,57 @@ const serialInfoStyle: CSSProperties = {
 };
 
 const serialPanelStyle: CSSProperties = {
-    border: '1px solid var(--border)',
-    borderRadius: 8,
+    border: '1px solid rgba(255,255,255,0.08)',
+    borderRadius: 10,
     background: 'rgba(255,255,255,0.02)',
-    padding: '6px 8px',
+    padding: '8px 10px',
 };
 
 const serialPanelHeaderStyle: CSSProperties = {
     display: 'flex',
     justifyContent: 'space-between',
     alignItems: 'center',
-    fontSize: 11,
+    fontSize: 10,
+    fontWeight: 700,
     color: 'var(--muted)',
-    marginBottom: 6,
+    marginBottom: 8,
+    textTransform: 'uppercase',
+    letterSpacing: '0.04em',
 };
 
 const serialGridStyle: CSSProperties = {
     display: 'grid',
     gridTemplateColumns: 'repeat(2, minmax(0, 1fr))',
-    gap: 4,
-    maxHeight: 90,
+    gap: 5,
+    maxHeight: 100,
     overflowY: 'auto',
 };
 
 const serialChipStyle: CSSProperties = {
-    border: '1px solid var(--border)',
-    borderRadius: 6,
-    padding: '5px 6px',
+    border: '1px solid rgba(255,255,255,0.1)',
+    borderRadius: 8,
+    padding: '6px 8px',
     fontSize: 10,
     fontFamily: 'monospace',
     cursor: 'pointer',
     textAlign: 'left',
+    transition: 'all 0.15s ease',
+    background: 'transparent',
 };
 
 const customerDropdownStyle: CSSProperties = {
     position: 'absolute',
-    top: 'calc(100% + 4px)',
+    top: 'calc(100% + 6px)',
     left: 0,
     right: 0,
     maxHeight: 220,
     overflowY: 'auto',
-    borderRadius: 10,
-    border: '1px solid rgba(255,255,255,0.12)',
+    borderRadius: 12,
+    border: '1px solid rgba(255,255,255,0.1)',
     background: 'var(--card)',
     zIndex: 20,
-    boxShadow: '0 12px 24px rgba(0,0,0,0.35)',
-    padding: 4,
+    boxShadow: '0 16px 32px rgba(0,0,0,0.4)',
+    padding: 6,
 };
 
 const customerOptionStyle: CSSProperties = {

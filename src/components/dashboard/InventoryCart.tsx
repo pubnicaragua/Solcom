@@ -44,6 +44,21 @@ interface Salesperson {
     role: string;
 }
 
+interface TaxOption {
+    tax_id: string;
+    tax_name: string;
+    tax_percentage: number;
+    active: boolean;
+    is_editable: boolean;
+}
+
+interface ItemFiscalInput {
+    tax_id: string;
+    tax_name: string;
+    tax_percentage: number;
+    warranty: string;
+}
+
 interface InventoryCartProps {
     isOpen: boolean;
     onClose: () => void;
@@ -184,6 +199,8 @@ export default function InventoryCart({
     const [paymentTerms, setPaymentTerms] = useState('30_dias');
     const [salespeople, setSalespeople] = useState<Salesperson[]>([]);
     const [selectedSalespersonId, setSelectedSalespersonId] = useState('');
+    const [taxOptions, setTaxOptions] = useState<TaxOption[]>([]);
+    const [itemFiscalByItemId, setItemFiscalByItemId] = useState<Record<string, ItemFiscalInput>>({});
 
     // Orden de Venta specific
     const [expectedDeliveryDate, setExpectedDeliveryDate] = useState(() => todayPlusDays(7));
@@ -204,6 +221,33 @@ export default function InventoryCart({
     const totalItems = items.length;
     const totalUnits = items.reduce((sum, item) => sum + item.quantity, 0);
     const config = CART_TYPE_CONFIG[cartType];
+
+    function getItemFiscal(itemId: string): ItemFiscalInput {
+        return itemFiscalByItemId[itemId] || {
+            tax_id: '',
+            tax_name: '',
+            tax_percentage: 0,
+            warranty: '',
+        };
+    }
+
+    function updateItemFiscal(itemId: string, patch: Partial<ItemFiscalInput>) {
+        setItemFiscalByItemId((prev) => {
+            const current = prev[itemId] || {
+                tax_id: '',
+                tax_name: '',
+                tax_percentage: 0,
+                warranty: '',
+            };
+            return {
+                ...prev,
+                [itemId]: {
+                    ...current,
+                    ...patch,
+                },
+            };
+        });
+    }
 
     function setCartType(nextType: CartType) {
         if (controlledCartType == null) {
@@ -245,6 +289,20 @@ export default function InventoryCart({
         }
     }, []);
 
+    const fetchTaxes = useCallback(async () => {
+        try {
+            const res = await fetch('/api/zoho/taxes', { cache: 'no-store' });
+            const data = await res.json().catch(() => ([]));
+            if (!res.ok) throw new Error(data?.error || 'No se pudieron cargar impuestos');
+            const parsedTaxes: TaxOption[] = Array.isArray(data)
+                ? data
+                : (Array.isArray(data?.taxes) ? data.taxes : []);
+            setTaxOptions(parsedTaxes);
+        } catch {
+            setTaxOptions([]);
+        }
+    }, []);
+
     // Fetch parent (empresarial) warehouses
     const fetchParentWarehouses = useCallback(async () => {
         if (controlledParentWarehouses) return;
@@ -280,8 +338,24 @@ export default function InventoryCart({
             fetchCustomers('');
             fetchParentWarehouses();
             fetchSalespeople();
+            fetchTaxes();
         }
-    }, [isOpen, fetchCustomers, fetchParentWarehouses, fetchSalespeople]);
+    }, [isOpen, fetchCustomers, fetchParentWarehouses, fetchSalespeople, fetchTaxes]);
+
+    useEffect(() => {
+        setItemFiscalByItemId((prev) => {
+            const next: Record<string, ItemFiscalInput> = {};
+            for (const item of items) {
+                next[item.itemId] = prev[item.itemId] || {
+                    tax_id: '',
+                    tax_name: '',
+                    tax_percentage: 0,
+                    warranty: '',
+                };
+            }
+            return next;
+        });
+    }, [items]);
 
     useEffect(() => {
         if (!isOpen) return;
@@ -421,13 +495,20 @@ export default function InventoryCart({
 
         try {
             const selectedSalesperson = salespeople.find((seller) => seller.id === selectedSalespersonId) || null;
-            const docItems = items.map((item) => ({
+            const docItems = items.map((item) => {
+                const fiscal = getItemFiscal(item.itemId);
+                return {
                 item_id: item.itemId,
                 description: `${item.name}${item.color ? ` — ${item.color}` : ''}${item.brand ? ` (${item.brand})` : ''}`,
                 quantity: item.quantity,
                 unit_price: Math.max(0, Number(item.unitPrice ?? 0) || 0),
                 discount_percent: 0,
-            }));
+                    tax_id: String(fiscal.tax_id || '').trim(),
+                    tax_name: String(fiscal.tax_name || '').trim(),
+                    tax_percentage: Math.max(0, Number(fiscal.tax_percentage || 0)),
+                    warranty: String(fiscal.warranty || '').trim() || null,
+                };
+            });
 
             let response: Response;
             let docNumber = '';
@@ -439,7 +520,6 @@ export default function InventoryCart({
                     date: docDate,
                     valid_until: validUntil || null,
                     status: 'borrador',
-                    tax_rate: 15,
                     discount_amount: 0,
                     notes: 'Cotización generada desde inventario — precios pendientes de asignación.',
                     template_key: null,
@@ -466,7 +546,6 @@ export default function InventoryCart({
                     salesperson_zoho_id: selectedSalesperson?.zoho_salesperson_id || selectedSalesperson?.zoho_user_id || null,
                     salesperson_name: selectedSalesperson?.name || null,
                     status: 'enviada',
-                    tax_rate: 15,
                     discount_amount: 0,
                     notes: 'Factura generada desde inventario — precios pendientes de asignación.',
                     source: 'inventory_cart',
@@ -491,7 +570,6 @@ export default function InventoryCart({
                     salesperson_id: selectedSalesperson?.id || null,
                     salesperson_name: selectedSalesperson?.name || null,
                     status: 'borrador',
-                    tax_rate: 15,
                     discount_amount: 0,
                     notes: ovNotes || 'Orden de venta generada desde inventario — precios pendientes de asignación.',
                     source: 'inventory_cart',
@@ -1380,6 +1458,45 @@ export default function InventoryCart({
                                                     Máx: {maxQty}
                                                 </span>
                                             )}
+                                        </div>
+
+                                        {/* Fiscal Controls */}
+                                        <div style={{ display: 'grid', gap: 6, marginTop: 8 }}>
+                                            <select
+                                                value={getItemFiscal(item.itemId).tax_id}
+                                                onChange={(e) => {
+                                                    const selectedTax = taxOptions.find((tax) => tax.tax_id === e.target.value) || null;
+                                                    updateItemFiscal(item.itemId, {
+                                                        tax_id: selectedTax?.tax_id || '',
+                                                        tax_name: selectedTax?.tax_name || '',
+                                                        tax_percentage: Math.max(0, Number(selectedTax?.tax_percentage || 0)),
+                                                    });
+                                                    setValidationErrors((prev) => {
+                                                        if (!prev.items) return prev;
+                                                        const next = { ...prev };
+                                                        delete next.items;
+                                                        return next;
+                                                    });
+                                                }}
+                                                style={{
+                                                    ...inputStyle,
+                                                    fontSize: 12,
+                                                }}
+                                            >
+                                                <option value="">Impuesto (opcional)</option>
+                                                {taxOptions.map((tax) => (
+                                                    <option key={tax.tax_id} value={tax.tax_id}>
+                                                        {tax.tax_name} ({Number(tax.tax_percentage || 0).toFixed(2)}%)
+                                                    </option>
+                                                ))}
+                                            </select>
+                                            <input
+                                                type="text"
+                                                value={getItemFiscal(item.itemId).warranty}
+                                                onChange={(e) => updateItemFiscal(item.itemId, { warranty: e.target.value })}
+                                                placeholder="Garantía (opcional)"
+                                                style={{ ...inputStyle, fontSize: 12 }}
+                                            />
                                         </div>
                                         </div>
                                     );

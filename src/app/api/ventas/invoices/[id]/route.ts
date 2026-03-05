@@ -3,6 +3,12 @@ import { createRouteHandlerClient } from '@supabase/auth-helpers-nextjs';
 import { cookies } from 'next/headers';
 import { normalizeSalespersonId } from '@/lib/identifiers';
 import { getZohoAccessToken } from '@/lib/zoho/inventory-utils';
+import { buildTaxCatalogMap, getZohoTaxCatalog } from '@/lib/zoho/tax-catalog';
+import {
+    computeFiscalTotals,
+    FiscalValidationError,
+    normalizeFiscalLine,
+} from '@/lib/ventas/fiscal';
 
 function parseErrorMessage(raw: string): string {
     try {
@@ -22,6 +28,62 @@ function normalizeTrimmed(value: unknown): string {
 function normalizeNumber(value: unknown, fallback = 0): number {
     const parsed = Number(value);
     return Number.isFinite(parsed) ? parsed : fallback;
+}
+
+function normalizeSerialInput(value: unknown): string {
+    if (Array.isArray(value)) {
+        return value
+            .map((entry) => String(entry ?? '').trim())
+            .filter(Boolean)
+            .join(',');
+    }
+    return String(value ?? '')
+        .replace(/[\n;]/g, ',')
+        .split(',')
+        .map((entry) => entry.trim())
+        .filter(Boolean)
+        .join(',');
+}
+
+function normalizeWarranty(value: unknown): string | null {
+    const text = normalizeTrimmed(value);
+    return text || null;
+}
+
+function extractMissingColumn(message: string): string | null {
+    const text = String(message || '');
+    let match = text.match(/Could not find the '([^']+)' column/i);
+    if (match?.[1]) return match[1];
+    match = text.match(/column \"?([a-zA-Z0-9_]+)\"? does not exist/i);
+    if (match?.[1]) return match[1];
+    return null;
+}
+
+async function insertInvoiceItemsWithColumnFallback(supabase: any, rows: any[]): Promise<{ error: any }> {
+    if (!Array.isArray(rows) || rows.length === 0) return { error: null };
+
+    const mutableRows = rows.map((row) => ({ ...row }));
+    let retry = 0;
+    while (retry < 12) {
+        const result = await supabase.from('sales_invoice_items').insert(mutableRows);
+        if (!result.error) return { error: null };
+
+        const missingColumn = extractMissingColumn(result.error?.message || '');
+        if (!missingColumn) return { error: result.error };
+
+        let removed = false;
+        for (const row of mutableRows) {
+            if (Object.prototype.hasOwnProperty.call(row, missingColumn)) {
+                delete row[missingColumn];
+                removed = true;
+            }
+        }
+
+        if (!removed) return { error: result.error };
+        retry += 1;
+    }
+
+    return { error: new Error('No se pudieron insertar lineas de factura por columnas faltantes.') };
 }
 
 function normalizeZohoPaymentMode(value: unknown): string {
@@ -572,56 +634,122 @@ export async function PUT(
             date,
             due_date,
             status,
-            tax_rate,
             discount_amount,
+            shipping_charge,
             payment_method,
             notes,
             salesperson_id,
             items,
         } = body;
 
+        const { data: currentInvoice, error: currentInvoiceError } = await supabase
+            .from('sales_invoices')
+            .select('id, shipping_charge, subtotal, tax_amount')
+            .eq('id', id)
+            .single();
+
+        if (currentInvoiceError || !currentInvoice) {
+            return NextResponse.json({ error: currentInvoiceError?.message || 'Factura no encontrada' }, { status: 404 });
+        }
+
+        const normalizedDiscountAmount = Math.max(0, normalizeNumber(discount_amount, 0));
+        if (discount_amount !== undefined && normalizedDiscountAmount > 0) {
+            return NextResponse.json(
+                { error: 'El descuento global está deshabilitado en este flujo.', code: 'GLOBAL_DISCOUNT_DISABLED' },
+                { status: 400 }
+            );
+        }
+
+        const normalizedShippingCharge = shipping_charge !== undefined
+            ? Math.max(0, normalizeNumber(shipping_charge, 0))
+            : Math.max(0, normalizeNumber((currentInvoice as any).shipping_charge, 0));
+
         const updateData: any = { updated_at: new Date().toISOString() };
         if (customer_id !== undefined) updateData.customer_id = customer_id || null;
         if (date !== undefined) updateData.date = date;
         if (due_date !== undefined) updateData.due_date = due_date || null;
         if (status !== undefined) updateData.status = status;
-        if (tax_rate !== undefined) updateData.tax_rate = tax_rate;
-        if (discount_amount !== undefined) updateData.discount_amount = discount_amount;
+        if (discount_amount !== undefined) updateData.discount_amount = 0;
+        if (shipping_charge !== undefined) updateData.shipping_charge = Math.round(normalizedShippingCharge * 100) / 100;
         if (payment_method !== undefined) updateData.payment_method = payment_method || null;
         if (notes !== undefined) updateData.notes = notes || null;
         if (salesperson_id !== undefined) updateData.salesperson_id = normalizeSalespersonId(salesperson_id);
 
         // Recalculate totals if items provided
-        if (items && items.length > 0) {
-            const subtotal = items.reduce((sum: number, item: any) => {
-                return sum + (item.quantity || 1) * (item.unit_price || 0) * (1 - (item.discount_percent || 0) / 100);
-            }, 0);
-            const tr = tax_rate !== undefined ? tax_rate : 15;
-            const tax_amount = subtotal * (tr / 100);
-            const da = discount_amount !== undefined ? discount_amount : 0;
-            const total = subtotal + tax_amount - da;
+        if (Array.isArray(items) && items.length > 0) {
+            const taxCatalog = await getZohoTaxCatalog();
+            const taxCatalogMap = buildTaxCatalogMap(
+                (taxCatalog || []).filter((tax) => tax.active && tax.is_editable)
+            );
 
-            updateData.subtotal = Math.round(subtotal * 100) / 100;
-            updateData.tax_amount = Math.round(tax_amount * 100) / 100;
-            updateData.total = Math.round(total * 100) / 100;
+            const normalizedItems = items.map((item: any, index: number) => ({
+                ...normalizeFiscalLine({
+                    line: {
+                        item_id: item?.item_id || null,
+                        description: item?.description || item?.name || 'Artículo',
+                        quantity: normalizeNumber(item?.quantity, Number.NaN),
+                        unit_price: Math.max(0, normalizeNumber(item?.unit_price, 0)),
+                        discount_percent: item?.discount_percent,
+                        tax_id: item?.tax_id || null,
+                        tax_name: item?.tax_name || null,
+                        tax_percentage: item?.tax_percentage,
+                        warranty: item?.warranty ?? null,
+                    },
+                    taxCatalogMap,
+                    lineIndex: index,
+                }),
+                serial_number_value: normalizeSerialInput(
+                    item?.serial_number_value ?? item?.serial_numbers ?? item?.serials
+                ) || null,
+            }));
 
-            // Replace line items
-            await supabase.from('sales_invoice_items').delete().eq('invoice_id', id);
+            const totals = computeFiscalTotals(normalizedItems, normalizedShippingCharge);
 
-            const lineItems = items.map((item: any, index: number) => ({
+            updateData.subtotal = totals.subtotal;
+            updateData.tax_rate = totals.tax_rate;
+            updateData.tax_amount = totals.tax_amount;
+            updateData.total = totals.total;
+            updateData.discount_amount = 0;
+
+            const deleteResult = await supabase
+                .from('sales_invoice_items')
+                .delete()
+                .eq('invoice_id', id);
+
+            if (deleteResult.error) {
+                return NextResponse.json(
+                    { error: `No se pudieron reemplazar líneas de la factura: ${deleteResult.error.message}` },
+                    { status: 500 }
+                );
+            }
+
+            const lineItems = normalizedItems.map((item: any, index: number) => ({
                 invoice_id: id,
                 item_id: item.item_id || null,
-                description: item.description || item.name || 'Artículo',
-                quantity: item.quantity || 1,
-                unit_price: item.unit_price || 0,
-                discount_percent: item.discount_percent || 0,
-                subtotal: Math.round(
-                    (item.quantity || 1) * (item.unit_price || 0) * (1 - (item.discount_percent || 0) / 100) * 100
-                ) / 100,
+                description: item.description || 'Artículo',
+                quantity: Math.max(0, normalizeNumber(item.quantity, 0)),
+                unit_price: Math.max(0, normalizeNumber(item.unit_price, 0)),
+                discount_percent: Math.max(0, Math.min(100, normalizeNumber(item.discount_percent, 0))),
+                tax_id: normalizeTrimmed(item.tax_id) || null,
+                tax_name: normalizeTrimmed(item.tax_name) || null,
+                tax_percentage: Math.max(0, normalizeNumber(item.tax_percentage, 0)),
+                warranty: normalizeWarranty(item.warranty),
+                serial_number_value: normalizeSerialInput(item.serial_number_value) || null,
+                subtotal: Math.round(Math.max(0, normalizeNumber(item.line_taxable, item.subtotal || 0)) * 100) / 100,
                 sort_order: index,
             }));
 
-            await supabase.from('sales_invoice_items').insert(lineItems);
+            const { error: itemsError } = await insertInvoiceItemsWithColumnFallback(supabase, lineItems);
+            if (itemsError) {
+                return NextResponse.json({ error: itemsError.message }, { status: 500 });
+            }
+        } else if (shipping_charge !== undefined) {
+            // Keep header totals coherent when only shipping changed.
+            const currentSubtotal = Math.max(0, normalizeNumber((currentInvoice as any).subtotal, Number.NaN));
+            const currentTaxAmount = Math.max(0, normalizeNumber((currentInvoice as any).tax_amount, Number.NaN));
+            if (Number.isFinite(currentSubtotal) && Number.isFinite(currentTaxAmount)) {
+                updateData.total = Math.round((currentSubtotal + currentTaxAmount + normalizedShippingCharge) * 100) / 100;
+            }
         }
 
         const { data, error } = await supabase
@@ -640,6 +768,12 @@ export async function PUT(
 
         return NextResponse.json({ invoice: data });
     } catch (error: any) {
+        if (error instanceof FiscalValidationError) {
+            return NextResponse.json(
+                { error: error.message, code: error.code, details: error.details || null },
+                { status: error.status || 400 }
+            );
+        }
         return NextResponse.json({ error: error.message }, { status: 500 });
     }
 }

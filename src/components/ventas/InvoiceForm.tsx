@@ -273,6 +273,10 @@ export default function InvoiceForm({ isOpen, onClose, onSaved, editInvoice, pre
                     max_available_qty: null,
                     unit_price: 0,
                     discount_percent: 0,
+                    tax_id: '',
+                    tax_name: '',
+                    tax_percentage: 0,
+                    warranty: '',
                     serial_number_value: '',
                     available_serials: [],
                     loading_serials: false,
@@ -473,7 +477,9 @@ export default function InvoiceForm({ isOpen, onClose, onSaved, editInvoice, pre
         try {
             const res = await fetch('/api/zoho/taxes', { cache: 'no-store' });
             const data = await res.json();
-            const list: TaxOption[] = Array.isArray(data?.taxes) ? data.taxes : [];
+            const list: TaxOption[] = Array.isArray(data)
+                ? data
+                : (Array.isArray(data?.taxes) ? data.taxes : []);
             setTaxOptions(list);
             return list;
         } catch (err) {
@@ -630,7 +636,6 @@ export default function InvoiceForm({ isOpen, onClose, onSaved, editInvoice, pre
     const selectProduct = (product: Product, rowIndex: number) => {
         const zohoItemId = String(product.zoho_item_id || '').trim() || null;
         const maxAvailable = Math.max(0, Math.floor(Number(product.quantity) || 0));
-        const defaultTax = taxOptions[0] || null;
 
         setLineItems((current) => current.map((line, idx) => {
             if (idx !== rowIndex) return line;
@@ -642,11 +647,9 @@ export default function InvoiceForm({ isOpen, onClose, onSaved, editInvoice, pre
                 quantity: 1,
                 max_available_qty: maxAvailable > 0 ? maxAvailable : null,
                 unit_price: product.unit_price || 0,
-                tax_id: line.tax_id || defaultTax?.tax_id || '',
-                tax_name: line.tax_name || defaultTax?.tax_name || '',
-                tax_percentage: line.tax_id
-                    ? line.tax_percentage
-                    : Math.max(0, Number(defaultTax?.tax_percentage || 0)),
+                tax_id: line.tax_id || '',
+                tax_name: line.tax_name || '',
+                tax_percentage: line.tax_id ? line.tax_percentage : 0,
                 serial_number_value: '',
                 available_serials: [],
                 loading_serials: false,
@@ -697,7 +700,6 @@ export default function InvoiceForm({ isOpen, onClose, onSaved, editInvoice, pre
     };
 
     const addLineItem = () => {
-        const defaultTax = taxOptions[0] || null;
         setLineItems([
             ...lineItems,
             {
@@ -708,9 +710,9 @@ export default function InvoiceForm({ isOpen, onClose, onSaved, editInvoice, pre
                 max_available_qty: null,
                 unit_price: 0,
                 discount_percent: 0,
-                tax_id: defaultTax?.tax_id || '',
-                tax_name: defaultTax?.tax_name || '',
-                tax_percentage: Math.max(0, Number(defaultTax?.tax_percentage || 0)),
+                tax_id: '',
+                tax_name: '',
+                tax_percentage: 0,
                 warranty: '',
                 serial_number_value: '',
                 available_serials: [],
@@ -767,10 +769,6 @@ export default function InvoiceForm({ isOpen, onClose, onSaved, editInvoice, pre
             }
             if (selectedSerials.length > 0 && selectedSerials.length !== line.quantity) {
                 setError(`Seriales inválidos para "${line.description}": cantidad ${line.quantity}, seriales ${selectedSerials.length}.`);
-                return;
-            }
-            if (!String(line.tax_id || '').trim()) {
-                setError(`Selecciona impuesto en la línea "${line.description}".`);
                 return;
             }
         }
@@ -1271,7 +1269,7 @@ export default function InvoiceForm({ isOpen, onClose, onSaved, editInvoice, pre
                                                 }}
                                                 style={{ ...inputStyle, fontSize: '11px', padding: '6px 8px' }}
                                             >
-                                                <option value="">Impuesto *</option>
+                                                <option value="">Impuesto (opcional)</option>
                                                 {taxOptions.map((tax) => (
                                                     <option key={tax.tax_id} value={tax.tax_id}>
                                                         {tax.tax_name} ({Number(tax.tax_percentage || 0).toFixed(2)}%)

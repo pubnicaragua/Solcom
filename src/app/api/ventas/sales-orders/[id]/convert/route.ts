@@ -280,9 +280,6 @@ async function tryCreateZohoInvoiceDirect(params: {
             ? lineUnitPrice
             : (fallbackRateFromSubtotal > 0 ? fallbackRateFromSubtotal : fallbackCatalogRate);
         const taxId = normalizeText(line?.tax_id);
-        if (!taxId) {
-            throw new Error(`Impuesto requerido en la línea ${index + 1} para facturar en Zoho.`);
-        }
         const warranty = normalizeText(line?.warranty);
         const expectedSerialCount = Math.round(quantity);
         let serials = parseSerialInput(
@@ -295,7 +292,7 @@ async function tryCreateZohoInvoiceDirect(params: {
             item_id: zohoItemId,
             quantity,
             rate: Number(Math.max(0, resolvedUnitRate).toFixed(6)),
-            tax_id: taxId,
+            ...(taxId ? { tax_id: taxId } : {}),
             description: withWarrantyInDescription(normalizeText(line?.description || mapped.name), warranty || null),
             ...(discountPercent > 0 ? { discount: `${Number(discountPercent.toFixed(2))}%` } : {}),
             __serials: serials,

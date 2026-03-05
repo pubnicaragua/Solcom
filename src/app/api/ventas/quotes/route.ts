@@ -222,18 +222,18 @@ async function syncQuoteToZoho(params: {
         const unitPrice = Math.max(0, normalizeNumber(line?.unit_price, 0));
         const discountPercent = Math.max(0, Math.min(100, normalizeNumber(line?.discount_percent, 0)));
         const taxId = normalizeText(line?.tax_id);
-        if (!taxId) {
-            throw new Error(`Impuesto requerido en la línea ${index + 1} para sincronizar en Zoho.`);
-        }
         const warranty = normalizeWarranty(line?.warranty);
 
         const payloadLine: any = {
             item_id: zohoItemId,
             quantity,
             rate: Number(unitPrice.toFixed(6)),
-            tax_id: taxId,
             description: withWarrantyInDescription(normalizeText(line?.description || mapped.name), warranty),
         };
+
+        if (taxId) {
+            payloadLine.tax_id = taxId;
+        }
 
         if (discountPercent > 0) {
             payloadLine.discount = `${Number(discountPercent.toFixed(2))}%`;

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createRouteHandlerClient } from '@supabase/auth-helpers-nextjs';
 import { cookies } from 'next/headers';
+import { createZohoBooksClient } from '@/lib/zoho/books-client';
 import { buildTaxCatalogMap, getZohoTaxCatalog } from '@/lib/zoho/tax-catalog';
 import {
     computeFiscalTotals,
@@ -61,6 +62,187 @@ async function insertQuoteItemsWithColumnFallback(supabase: any, rows: any[]): P
         retry += 1;
     }
     return { error: new Error('No se pudieron insertar líneas de cotización por columnas faltantes.') };
+}
+
+async function syncUpdatedQuoteToZoho(params: {
+    supabase: any;
+    quoteId: string;
+}) {
+    const { supabase, quoteId } = params;
+    const zohoClient = createZohoBooksClient();
+    if (!zohoClient) {
+        throw new Error('No se pudo sincronizar en Zoho: configuración ZOHO_BOOKS_* incompleta.');
+    }
+
+    const quoteLookup = await supabase
+        .from('sales_quotes')
+        .select('id, quote_number, customer_id, warehouse_id, date, valid_until, notes, zoho_estimate_id')
+        .eq('id', quoteId)
+        .single();
+
+    if (quoteLookup.error || !quoteLookup.data) {
+        throw new Error(`No se pudo cargar cotización para Zoho: ${quoteLookup.error?.message || 'No encontrada'}`);
+    }
+
+    const quote = quoteLookup.data as any;
+    const zohoEstimateId = normalizeText(quote?.zoho_estimate_id);
+    if (!zohoEstimateId) return;
+
+    const customerId = normalizeText(quote?.customer_id);
+    if (!customerId) throw new Error('La cotización no tiene cliente para sincronizar en Zoho.');
+
+    const customerLookup = await supabase
+        .from('customers')
+        .select('id, name, zoho_contact_id')
+        .eq('id', customerId)
+        .single();
+
+    if (customerLookup.error) {
+        throw new Error(`No se pudo leer cliente para Zoho: ${customerLookup.error.message}`);
+    }
+
+    const zohoCustomerId = normalizeText(customerLookup.data?.zoho_contact_id);
+    if (!zohoCustomerId) {
+        const customerName = normalizeText(customerLookup.data?.name) || 'cliente';
+        throw new Error(`El cliente "${customerName}" no está vinculado con Zoho.`);
+    }
+
+    const quoteItemsLookup = await supabase
+        .from('sales_quote_items')
+        .select('item_id, description, quantity, unit_price, discount_percent, tax_id, warranty')
+        .eq('quote_id', quoteId)
+        .order('sort_order', { ascending: true });
+
+    if (quoteItemsLookup.error) {
+        throw new Error(`No se pudieron leer líneas de cotización para Zoho: ${quoteItemsLookup.error.message}`);
+    }
+
+    const quoteItems = Array.isArray(quoteItemsLookup.data) ? quoteItemsLookup.data : [];
+    if (quoteItems.length === 0) {
+        throw new Error('La cotización no tiene líneas válidas para sincronizar en Zoho.');
+    }
+
+    const localItemIds = Array.from(
+        new Set(
+            quoteItems
+                .map((line: any) => normalizeText(line?.item_id))
+                .filter(Boolean)
+        )
+    );
+
+    const mappedItems = new Map<string, { name: string; sku: string; zoho_item_id: string | null }>();
+    if (localItemIds.length > 0) {
+        const itemLookup = await supabase
+            .from('items')
+            .select('id, name, sku, zoho_item_id')
+            .in('id', localItemIds);
+
+        if (itemLookup.error) {
+            throw new Error(`No se pudo leer catálogo local para Zoho: ${itemLookup.error.message}`);
+        }
+
+        for (const row of itemLookup.data || []) {
+            mappedItems.set(row.id, {
+                name: row.name || row.sku || row.id,
+                sku: row.sku || '',
+                zoho_item_id: row.zoho_item_id || null,
+            });
+        }
+    }
+
+    let zohoLocationId: string | undefined;
+    const warehouseId = normalizeText(quote?.warehouse_id);
+    if (warehouseId) {
+        const warehouseLookup = await supabase
+            .from('warehouses')
+            .select('id, zoho_warehouse_id')
+            .eq('id', warehouseId)
+            .maybeSingle();
+        if (warehouseLookup.error) {
+            throw new Error(`No se pudo leer bodega para Zoho: ${warehouseLookup.error.message}`);
+        }
+        const zohoWarehouseId = normalizeText(warehouseLookup.data?.zoho_warehouse_id);
+        if (zohoWarehouseId) {
+            zohoLocationId = zohoWarehouseId;
+        }
+    }
+
+    const warrantyCustomFieldId = normalizeText(process.env.ZOHO_BOOKS_WARRANTY_CUSTOMFIELD_ID);
+    const buildZohoLineItems = (includeCustomFields: boolean) => quoteItems.map((line: any, index: number) => {
+        const localItemId = normalizeText(line?.item_id);
+        if (!localItemId) {
+            throw new Error(`La línea ${index + 1} no está vinculada a un producto del catálogo.`);
+        }
+
+        const mapped = mappedItems.get(localItemId);
+        if (!mapped) {
+            throw new Error(`No se encontró artículo local ${localItemId} para sincronizar en Zoho.`);
+        }
+
+        const zohoItemId = normalizeText(mapped.zoho_item_id);
+        if (!zohoItemId) {
+            throw new Error(`El artículo "${mapped.name}" (${mapped.sku || localItemId}) no tiene zoho_item_id.`);
+        }
+
+        const quantity = Math.max(0.01, normalizeNumber(line?.quantity, 1));
+        const unitPrice = Math.max(0, normalizeNumber(line?.unit_price, 0));
+        const discountPercent = Math.max(0, Math.min(100, normalizeNumber(line?.discount_percent, 0)));
+        const taxId = normalizeText(line?.tax_id);
+        const warranty = normalizeWarranty(line?.warranty);
+
+        const payloadLine: any = {
+            item_id: zohoItemId,
+            quantity,
+            rate: Number(unitPrice.toFixed(6)),
+            description: withWarrantyInDescription(normalizeText(line?.description || mapped.name), warranty),
+        };
+
+        if (taxId) {
+            payloadLine.tax_id = taxId;
+        }
+
+        if (discountPercent > 0) {
+            payloadLine.discount = `${Number(discountPercent.toFixed(2))}%`;
+        }
+        if (includeCustomFields && warrantyCustomFieldId && warranty) {
+            payloadLine.item_custom_fields = [
+                {
+                    customfield_id: warrantyCustomFieldId,
+                    value: warranty,
+                },
+            ];
+        }
+        return payloadLine;
+    });
+
+    const payload: any = {
+        estimate_id: zohoEstimateId,
+        customer_id: zohoCustomerId,
+        date: normalizeText(quote?.date) || new Date().toISOString().slice(0, 10),
+        line_items: buildZohoLineItems(true),
+        reference_number: normalizeText(quote?.quote_number) || undefined,
+        discount_type: 'item_level',
+        is_discount_before_tax: true,
+    };
+    const expiryDate = normalizeText(quote?.valid_until);
+    if (expiryDate) payload.expiry_date = expiryDate;
+    const notes = normalizeText(quote?.notes);
+    if (notes) payload.notes = notes;
+    if (zohoLocationId) payload.location_id = zohoLocationId;
+
+    try {
+        await zohoClient.updateEstimate(payload);
+    } catch (error: any) {
+        const message = String(error?.message || '').toLowerCase();
+        const customFieldRejected = message.includes('customfield')
+            || message.includes('item_custom_fields');
+        if (!customFieldRejected) throw error;
+
+        await zohoClient.updateEstimate({
+            ...payload,
+            line_items: buildZohoLineItems(false),
+        });
+    }
 }
 
 // GET /api/ventas/quotes/[id] — detail
@@ -211,10 +393,7 @@ export async function PUT(
                 return {
                     quote_id: params.id,
                     item_id: item?.item_id || null,
-                    description: withWarrantyInDescription(
-                        String(item?.description || item?.name || 'Artículo').trim(),
-                        normalizeWarranty(item?.warranty)
-                    ),
+                    description: String(item?.description || item?.name || 'Artículo').trim(),
                     quantity: Math.max(0, normalizeNumber(item?.quantity, 0)),
                     unit_price: Math.max(0, normalizeNumber(item?.unit_price, 0)),
                     discount_percent: Math.max(0, Math.min(100, normalizeNumber(item?.discount_percent, 0))),
@@ -249,7 +428,17 @@ export async function PUT(
             return NextResponse.json({ error: error.message }, { status: 500 });
         }
 
-        return NextResponse.json({ quote: data });
+        let zohoWarning: string | null = null;
+        try {
+            await syncUpdatedQuoteToZoho({
+                supabase,
+                quoteId: params.id,
+            });
+        } catch (zohoError: any) {
+            zohoWarning = zohoError?.message || 'No se pudo sincronizar la cotización actualizada en Zoho.';
+        }
+
+        return NextResponse.json({ quote: data, warning: zohoWarning });
     } catch (error: any) {
         if (error instanceof FiscalValidationError) {
             return NextResponse.json(

@@ -57,8 +57,20 @@ function normalizeNumber(value: unknown, fallback = 0): number {
     return Number.isFinite(parsed) ? parsed : fallback;
 }
 
-function normalizePercent(value: unknown): number {
-    return Math.max(0, Math.min(100, normalizeNumber(value, 0)));
+function normalizeDiscountPercent(value: unknown, lineIndex: number): number {
+    if (value === null || value === undefined || value === '') {
+        return 0;
+    }
+    const parsed = Number(value);
+    if (!Number.isFinite(parsed) || parsed < 0 || parsed > 100) {
+        throw new FiscalValidationError(
+            `Descuento inválido en la línea ${lineIndex + 1}. Debe estar entre 0 y 100.`,
+            'INVALID_DISCOUNT_PERCENT',
+            400,
+            { line_index: lineIndex, value }
+        );
+    }
+    return parsed;
 }
 
 export function normalizeWarranty(value: unknown): string | null {
@@ -86,14 +98,10 @@ export function normalizeFiscalLine(params: {
     }
 
     const unitPrice = Math.max(0, normalizeNumber(line.unit_price, 0));
-    const discountPercent = normalizePercent(line.discount_percent);
+    const discountPercent = normalizeDiscountPercent(line.discount_percent, lineIndex);
     const taxId = normalizeText(line.tax_id);
-    if (!taxId) {
-        throw new FiscalValidationError(`Selecciona impuesto en la línea ${lineIndex + 1}.`, 'TAX_REQUIRED', 400);
-    }
-
-    const tax = taxCatalogMap.get(taxId);
-    if (!tax) {
+    const tax = taxId ? taxCatalogMap.get(taxId) : null;
+    if (taxId && !tax) {
         throw new FiscalValidationError(`Impuesto inválido en la línea ${lineIndex + 1}.`, 'INVALID_TAX_ID', 400, {
             tax_id: taxId,
             line_index: lineIndex,
@@ -103,7 +111,7 @@ export function normalizeFiscalLine(params: {
     const lineBase = quantity * unitPrice;
     const lineDiscount = lineBase * (discountPercent / 100);
     const lineTaxable = lineBase - lineDiscount;
-    const taxPercentage = Math.max(0, normalizeNumber(tax.tax_percentage, 0));
+    const taxPercentage = Math.max(0, normalizeNumber(tax?.tax_percentage, 0));
     const lineTax = lineTaxable * (taxPercentage / 100);
     const lineTotal = lineTaxable + lineTax;
 
@@ -113,8 +121,8 @@ export function normalizeFiscalLine(params: {
         quantity,
         unit_price: unitPrice,
         discount_percent: discountPercent,
-        tax_id: tax.tax_id,
-        tax_name: tax.tax_name,
+        tax_id: tax?.tax_id || '',
+        tax_name: tax?.tax_name || '',
         tax_percentage: taxPercentage,
         warranty: normalizeWarranty(line.warranty),
         line_base: round2(lineBase),

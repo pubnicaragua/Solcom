@@ -137,7 +137,7 @@ export async function POST(
                 due_date: quote.valid_until || null,
                 status: 'borrador',
                 subtotal: Math.round(normalizeNumber(quote.subtotal, 0) * 100) / 100,
-                tax_rate: Math.round(normalizeNumber(quote.tax_rate, 15) * 100) / 100,
+                tax_rate: Math.round(normalizeNumber(quote.tax_rate, 0) * 100) / 100,
                 tax_amount: Math.round(normalizeNumber(quote.tax_amount, 0) * 100) / 100,
                 discount_amount: Math.round(normalizeNumber(quote.discount_amount, 0) * 100) / 100,
                 shipping_charge: 0,

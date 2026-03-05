@@ -485,6 +485,41 @@ export class ZohoBooksClient {
             estimate_number: result.estimate.estimate_number,
         };
     }
+
+    async updateEstimate(data: {
+        estimate_id: string;
+        customer_id: string;
+        date: string;
+        expiry_date?: string;
+        reference_number?: string;
+        notes?: string;
+        discount?: number;
+        is_discount_before_tax?: boolean;
+        location_id?: string;
+        discount_type?: 'item_level' | 'entity_level';
+        line_items: Array<{
+            item_id: string;
+            quantity: number;
+            rate: number;
+            discount?: string | number;
+            tax_id?: string;
+            description?: string;
+            item_custom_fields?: Array<{
+                customfield_id: string;
+                value: string | number;
+            }>;
+        }>;
+    }): Promise<{ estimate_id: string; estimate_number: string }> {
+        const { estimate_id, ...payload } = data;
+        const result = await this.request('PUT', `/books/v3/estimates/${estimate_id}`, payload);
+        if (result.code !== 0) {
+            throw new Error(result.message || 'Error al actualizar estimate en Zoho');
+        }
+        return {
+            estimate_id: result.estimate?.estimate_id || estimate_id,
+            estimate_number: result.estimate?.estimate_number || '',
+        };
+    }
 }
 
 export function createZohoBooksClient(): ZohoBooksClient | null {

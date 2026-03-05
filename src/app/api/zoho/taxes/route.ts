@@ -28,9 +28,10 @@ export async function GET(req: NextRequest) {
             return true;
         });
 
-        return NextResponse.json({
-            taxes: filtered,
-            total: filtered.length,
+        return NextResponse.json(filtered, {
+            headers: {
+                'Cache-Control': 'no-store, max-age=0',
+            },
         });
     } catch (error: any) {
         return NextResponse.json(

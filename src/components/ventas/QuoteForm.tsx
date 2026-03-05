@@ -26,12 +26,24 @@ interface Product {
     unit_price: number;
 }
 
+interface TaxOption {
+    tax_id: string;
+    tax_name: string;
+    tax_percentage: number;
+    active: boolean;
+    is_editable: boolean;
+}
+
 interface QuoteLine {
     item_id: string | null;
     description: string;
     quantity: number;
     unit_price: number;
     discount_percent: number;
+    tax_id: string;
+    tax_name: string;
+    tax_percentage: number;
+    warranty: string;
 }
 
 interface EditQuoteData {
@@ -52,6 +64,10 @@ interface EditQuoteData {
         quantity: number;
         unit_price: number;
         discount_percent: number;
+        tax_id?: string | null;
+        tax_name?: string | null;
+        tax_percentage?: number | null;
+        warranty?: string | null;
     }>;
 }
 
@@ -74,8 +90,10 @@ const TEMPLATE_OPTIONS = [
     { value: '', label: 'Sin plantilla' },
     { value: 'minorista_base', label: 'Minorista base' },
     { value: 'mayoreo_5', label: 'Mayoreo 5% descuento' },
-    { value: 'credito_30', label: 'Crédito 30 días' },
+    { value: 'credito_30', label: 'Credito 30 dias' },
 ];
+
+const WARRANTY_PRESETS = ['', '7 dias', '15 dias', '30 dias', '3 meses', '6 meses', '12 meses'];
 
 function formatDateYmd(date: Date): string {
     return date.toISOString().slice(0, 10);
@@ -92,6 +110,20 @@ function normalizeNumber(value: unknown, fallback = 0): number {
     return Number.isFinite(parsed) ? parsed : fallback;
 }
 
+function emptyLine(): QuoteLine {
+    return {
+        item_id: null,
+        description: '',
+        quantity: 1,
+        unit_price: 0,
+        discount_percent: 0,
+        tax_id: '',
+        tax_name: '',
+        tax_percentage: 0,
+        warranty: '',
+    };
+}
+
 export default function QuoteForm({ isOpen, onClose, onSaved, editQuote }: QuoteFormProps) {
     const [customers, setCustomers] = useState<Customer[]>([]);
     const [customerSearch, setCustomerSearch] = useState('');
@@ -104,18 +136,16 @@ export default function QuoteForm({ isOpen, onClose, onSaved, editQuote }: Quote
     const [products, setProducts] = useState<Product[]>([]);
     const [productSearch, setProductSearch] = useState('');
 
+    const [taxOptions, setTaxOptions] = useState<TaxOption[]>([]);
+
     const [quoteDate, setQuoteDate] = useState(formatDateYmd(new Date()));
     const [validUntil, setValidUntil] = useState(todayPlus(7));
     const [status, setStatus] = useState<QuoteStatus>('borrador');
     const [templateKey, setTemplateKey] = useState('');
 
-    const [taxRate, setTaxRate] = useState(15);
-    const [discountAmount, setDiscountAmount] = useState(0);
     const [notes, setNotes] = useState('');
 
-    const [lineItems, setLineItems] = useState<QuoteLine[]>([
-        { item_id: null, description: '', quantity: 1, unit_price: 0, discount_percent: 0 },
-    ]);
+    const [lineItems, setLineItems] = useState<QuoteLine[]>([emptyLine()]);
 
     const [saving, setSaving] = useState(false);
     const [error, setError] = useState('');
@@ -124,6 +154,7 @@ export default function QuoteForm({ isOpen, onClose, onSaved, editQuote }: Quote
         if (!isOpen) return;
         void fetchCustomers('');
         void fetchWarehouses();
+        void fetchTaxes();
     }, [isOpen]);
 
     useEffect(() => {
@@ -152,8 +183,6 @@ export default function QuoteForm({ isOpen, onClose, onSaved, editQuote }: Quote
         setValidUntil(editQuote.valid_until || '');
         setStatus(editQuote.status || 'borrador');
         setTemplateKey(editQuote.template_key || '');
-        setTaxRate(normalizeNumber(editQuote.tax_rate, 15));
-        setDiscountAmount(normalizeNumber(editQuote.discount_amount, 0));
         setNotes(editQuote.notes || '');
         setLineItems(
             Array.isArray(editQuote.items) && editQuote.items.length > 0
@@ -163,8 +192,12 @@ export default function QuoteForm({ isOpen, onClose, onSaved, editQuote }: Quote
                     quantity: Math.max(0, normalizeNumber(item.quantity, 1)),
                     unit_price: Math.max(0, normalizeNumber(item.unit_price, 0)),
                     discount_percent: Math.max(0, Math.min(100, normalizeNumber(item.discount_percent, 0))),
+                    tax_id: String(item.tax_id || '').trim(),
+                    tax_name: String(item.tax_name || '').trim(),
+                    tax_percentage: Math.max(0, normalizeNumber(item.tax_percentage, 0)),
+                    warranty: String(item.warranty || '').trim(),
                 }))
-                : [{ item_id: null, description: '', quantity: 1, unit_price: 0, discount_percent: 0 }]
+                : [emptyLine()]
         );
     }, [editQuote, isOpen]);
 
@@ -195,6 +228,21 @@ export default function QuoteForm({ isOpen, onClose, onSaved, editQuote }: Quote
         } catch (err: any) {
             setWarehouses([]);
             setError(err?.message || 'No se pudieron cargar bodegas.');
+        }
+    }
+
+    async function fetchTaxes() {
+        try {
+            const response = await fetch('/api/zoho/taxes', { cache: 'no-store' });
+            const data = await response.json().catch(() => ([]));
+            if (!response.ok) throw new Error(data?.error || 'No se pudieron cargar impuestos');
+            const normalizedTaxes = Array.isArray(data)
+                ? data
+                : (Array.isArray(data?.taxes) ? data.taxes : []);
+            setTaxOptions(normalizedTaxes);
+        } catch (err: any) {
+            setTaxOptions([]);
+            setError(err?.message || 'No se pudieron cargar impuestos.');
         }
     }
 
@@ -233,10 +281,8 @@ export default function QuoteForm({ isOpen, onClose, onSaved, editQuote }: Quote
         setValidUntil(todayPlus(7));
         setStatus('borrador');
         setTemplateKey('');
-        setTaxRate(15);
-        setDiscountAmount(0);
         setNotes('');
-        setLineItems([{ item_id: null, description: '', quantity: 1, unit_price: 0, discount_percent: 0 }]);
+        setLineItems([emptyLine()]);
         setSaving(false);
         setError('');
     }
@@ -244,37 +290,31 @@ export default function QuoteForm({ isOpen, onClose, onSaved, editQuote }: Quote
     function applyTemplate(nextTemplateKey: string) {
         setTemplateKey(nextTemplateKey);
         if (nextTemplateKey === 'minorista_base') {
-            setTaxRate(15);
-            setDiscountAmount(0);
             setValidUntil(todayPlus(7));
-            setNotes((prev) => prev || 'Cotización minorista estándar.');
+            setNotes((prev) => prev || 'Cotizacion minorista estandar.');
             return;
         }
         if (nextTemplateKey === 'mayoreo_5') {
-            setTaxRate(15);
-            setDiscountAmount(0);
             setValidUntil(todayPlus(15));
             setLineItems((prev) => prev.map((item) => ({ ...item, discount_percent: 5 })));
-            setNotes((prev) => prev || 'Cotización con descuento de mayoreo 5%.');
+            setNotes((prev) => prev || 'Cotizacion con descuento de mayoreo 5%.');
             return;
         }
         if (nextTemplateKey === 'credito_30') {
-            setTaxRate(15);
-            setDiscountAmount(0);
             setValidUntil(todayPlus(30));
-            setNotes((prev) => prev || 'Cotización con términos de crédito a 30 días.');
+            setNotes((prev) => prev || 'Cotizacion con terminos de credito a 30 dias.');
             return;
         }
     }
 
     function addLine() {
-        setLineItems((prev) => [...prev, { item_id: null, description: '', quantity: 1, unit_price: 0, discount_percent: 0 }]);
+        setLineItems((prev) => [...prev, emptyLine()]);
     }
 
     function removeLine(index: number) {
         setLineItems((prev) => {
             const next = prev.filter((_, i) => i !== index);
-            return next.length > 0 ? next : [{ item_id: null, description: '', quantity: 1, unit_price: 0, discount_percent: 0 }];
+            return next.length > 0 ? next : [emptyLine()];
         });
     }
 
@@ -307,36 +347,70 @@ export default function QuoteForm({ isOpen, onClose, onSaved, editQuote }: Quote
             const quantity = Math.max(0, normalizeNumber(item.quantity, 0));
             const unitPrice = Math.max(0, normalizeNumber(item.unit_price, 0));
             const discount = Math.max(0, Math.min(100, normalizeNumber(item.discount_percent, 0)));
-            return sum + quantity * unitPrice * (1 - discount / 100);
+            const lineBase = quantity * unitPrice;
+            const lineDiscount = lineBase * (discount / 100);
+            return sum + (lineBase - lineDiscount);
         }, 0);
 
-        const taxAmount = subtotal * (Math.max(0, normalizeNumber(taxRate, 0)) / 100);
-        const total = subtotal + taxAmount - Math.max(0, normalizeNumber(discountAmount, 0));
+        const taxAmount = lineItems.reduce((sum, item) => {
+            const quantity = Math.max(0, normalizeNumber(item.quantity, 0));
+            const unitPrice = Math.max(0, normalizeNumber(item.unit_price, 0));
+            const discount = Math.max(0, Math.min(100, normalizeNumber(item.discount_percent, 0)));
+            const lineBase = quantity * unitPrice;
+            const lineDiscount = lineBase * (discount / 100);
+            const lineTaxable = lineBase - lineDiscount;
+            return sum + (lineTaxable * (Math.max(0, normalizeNumber(item.tax_percentage, 0)) / 100));
+        }, 0);
+
+        const discountTotal = lineItems.reduce((sum, item) => {
+            const quantity = Math.max(0, normalizeNumber(item.quantity, 0));
+            const unitPrice = Math.max(0, normalizeNumber(item.unit_price, 0));
+            const discount = Math.max(0, Math.min(100, normalizeNumber(item.discount_percent, 0)));
+            return sum + (quantity * unitPrice * (discount / 100));
+        }, 0);
+
+        const total = subtotal + taxAmount;
+        const effectiveTaxRate = subtotal > 0 ? (taxAmount / subtotal) * 100 : 0;
 
         return {
             subtotal,
             taxAmount,
             total,
+            effectiveTaxRate,
+            discountTotal,
         };
-    }, [lineItems, taxRate, discountAmount]);
+    }, [lineItems]);
 
     async function handleSave() {
         setSaving(true);
         setError('');
 
         try {
-            const cleanedItems = lineItems
+            const candidateItems = lineItems
                 .map((item) => ({
                     item_id: item.item_id,
                     description: String(item.description || '').trim(),
                     quantity: Math.max(0, normalizeNumber(item.quantity, 0)),
                     unit_price: Math.max(0, normalizeNumber(item.unit_price, 0)),
-                    discount_percent: Math.max(0, Math.min(100, normalizeNumber(item.discount_percent, 0))),
+                    discount_percent: normalizeNumber(item.discount_percent, Number.NaN),
+                    tax_id: String(item.tax_id || '').trim(),
+                    tax_name: String(item.tax_name || '').trim(),
+                    tax_percentage: Math.max(0, normalizeNumber(item.tax_percentage, 0)),
+                    warranty: String(item.warranty || '').trim() || null,
                 }))
-                .filter((item) => item.description && item.quantity > 0);
+                .filter((item) => item.description.length > 0 || item.item_id);
 
-            if (cleanedItems.length === 0) {
-                throw new Error('Agrega al menos una línea válida para guardar la cotización.');
+            if (candidateItems.length === 0) {
+                throw new Error('Agrega al menos una linea valida para guardar la cotizacion.');
+            }
+
+            for (const item of candidateItems) {
+                if (!Number.isFinite(item.quantity) || item.quantity <= 0) {
+                    throw new Error(`Cantidad invalida en la linea "${item.description || 'Articulo'}".`);
+                }
+                if (!Number.isFinite(item.discount_percent) || item.discount_percent < 0 || item.discount_percent > 100) {
+                    throw new Error(`Descuento invalido en la linea "${item.description || 'Articulo'}".`);
+                }
             }
 
             const payload = {
@@ -345,11 +419,14 @@ export default function QuoteForm({ isOpen, onClose, onSaved, editQuote }: Quote
                 date: quoteDate,
                 valid_until: validUntil || null,
                 status,
-                tax_rate: Math.max(0, normalizeNumber(taxRate, 15)),
-                discount_amount: Math.max(0, normalizeNumber(discountAmount, 0)),
+                tax_rate: Math.max(0, normalizeNumber(computed.effectiveTaxRate, 0)),
+                discount_amount: 0,
                 notes: notes.trim() || null,
                 template_key: templateKey || null,
-                items: cleanedItems,
+                items: candidateItems.map((item) => ({
+                    ...item,
+                    discount_percent: Math.max(0, Math.min(100, item.discount_percent)),
+                })),
             };
 
             const endpoint = editQuote ? `/api/ventas/quotes/${editQuote.id}` : '/api/ventas/quotes';
@@ -362,7 +439,7 @@ export default function QuoteForm({ isOpen, onClose, onSaved, editQuote }: Quote
 
             const data = await response.json().catch(() => ({}));
             if (!response.ok) {
-                throw new Error(data?.error || 'No se pudo guardar la cotización.');
+                throw new Error(data?.error || 'No se pudo guardar la cotizacion.');
             }
 
             onSaved();
@@ -371,7 +448,7 @@ export default function QuoteForm({ isOpen, onClose, onSaved, editQuote }: Quote
                 resetForm();
             }
         } catch (err: any) {
-            setError(err?.message || 'No se pudo guardar la cotización.');
+            setError(err?.message || 'No se pudo guardar la cotizacion.');
         } finally {
             setSaving(false);
         }
@@ -394,7 +471,7 @@ export default function QuoteForm({ isOpen, onClose, onSaved, editQuote }: Quote
             padding: 16,
         }}>
             <div style={{
-                width: 'min(1100px, 98vw)',
+                width: 'min(1150px, 98vw)',
                 maxHeight: '92vh',
                 overflowY: 'auto',
                 borderRadius: 14,
@@ -411,10 +488,10 @@ export default function QuoteForm({ isOpen, onClose, onSaved, editQuote }: Quote
                 }}>
                     <div>
                         <h2 style={{ margin: 0, color: 'var(--text)', fontSize: 20, fontWeight: 800 }}>
-                            {editQuote ? 'Editar Cotización' : 'Nueva Cotización'}
+                            {editQuote ? 'Editar Cotizacion' : 'Nueva Cotizacion'}
                         </h2>
                         <div style={{ marginTop: 4, color: 'var(--muted)', fontSize: 13 }}>
-                            Crea cotizaciones personalizadas y conviértelas a factura.
+                            Impuesto y descuento por linea. Sin descuento global.
                         </div>
                     </div>
                     <button onClick={onClose} style={{ background: 'transparent', border: 'none', color: 'var(--muted)', cursor: 'pointer' }}>
@@ -513,7 +590,7 @@ export default function QuoteForm({ isOpen, onClose, onSaved, editQuote }: Quote
                         </div>
 
                         <div>
-                            <label style={{ fontSize: 12, color: 'var(--muted)', fontWeight: 700 }}>Ubicación (Bodega)</label>
+                            <label style={{ fontSize: 12, color: 'var(--muted)', fontWeight: 700 }}>Ubicacion (Bodega)</label>
                             <select
                                 value={warehouseId}
                                 onChange={(e) => setWarehouseId(e.target.value)}
@@ -526,7 +603,7 @@ export default function QuoteForm({ isOpen, onClose, onSaved, editQuote }: Quote
                             >
                                 <option value="">Seleccionar bodega...</option>
                                 {warehouses.map((warehouse) => (
-                                    <option key={warehouse.id} value={warehouse.id}>{warehouse.code} — {warehouse.name}</option>
+                                    <option key={warehouse.id} value={warehouse.id}>{warehouse.code} - {warehouse.name}</option>
                                 ))}
                             </select>
                         </div>
@@ -567,7 +644,7 @@ export default function QuoteForm({ isOpen, onClose, onSaved, editQuote }: Quote
                         </div>
 
                         <div>
-                            <label style={{ fontSize: 12, color: 'var(--muted)', fontWeight: 700 }}>Válida Hasta</label>
+                            <label style={{ fontSize: 12, color: 'var(--muted)', fontWeight: 700 }}>Valida Hasta</label>
                             <input
                                 type="date"
                                 value={validUntil}
@@ -621,7 +698,7 @@ export default function QuoteForm({ isOpen, onClose, onSaved, editQuote }: Quote
                     <div style={{ border: '1px solid var(--border)', borderRadius: 12, overflow: 'hidden' }}>
                         <div style={{
                             display: 'grid',
-                            gridTemplateColumns: '1.2fr 1.2fr 90px 120px 90px 120px 50px',
+                            gridTemplateColumns: '1.1fr 1.5fr 80px 110px 90px 120px 50px',
                             gap: 8,
                             padding: '10px 12px',
                             background: 'rgba(255,255,255,0.04)',
@@ -631,7 +708,7 @@ export default function QuoteForm({ isOpen, onClose, onSaved, editQuote }: Quote
                             color: 'var(--muted)',
                         }}>
                             <div>Producto</div>
-                            <div>Descripción</div>
+                            <div>Detalle Fiscal</div>
                             <div>Cant.</div>
                             <div>Precio</div>
                             <div>Desc. %</div>
@@ -645,12 +722,14 @@ export default function QuoteForm({ isOpen, onClose, onSaved, editQuote }: Quote
                                     * Math.max(0, normalizeNumber(line.unit_price, 0))
                                     * (1 - Math.max(0, Math.min(100, normalizeNumber(line.discount_percent, 0))) / 100);
 
+                                const selectedWarrantyPreset = WARRANTY_PRESETS.includes(line.warranty) ? line.warranty : '';
+
                                 return (
                                     <div
                                         key={index}
                                         style={{
                                             display: 'grid',
-                                            gridTemplateColumns: '1.2fr 1.2fr 90px 120px 90px 120px 50px',
+                                            gridTemplateColumns: '1.1fr 1.5fr 80px 110px 90px 120px 50px',
                                             gap: 8,
                                             alignItems: 'center',
                                         }}
@@ -668,7 +747,6 @@ export default function QuoteForm({ isOpen, onClose, onSaved, editQuote }: Quote
                                             }}
                                         >
                                             <option value="">Seleccionar producto...</option>
-                                            {/* Show current item as fallback if not in loaded products list */}
                                             {line.item_id && !products.find((p) => p.id === line.item_id) && (
                                                 <option value={line.item_id}>
                                                     {line.description || 'Producto seleccionado'}
@@ -681,19 +759,84 @@ export default function QuoteForm({ isOpen, onClose, onSaved, editQuote }: Quote
                                             ))}
                                         </select>
 
-                                        <input
-                                            value={line.description}
-                                            onChange={(e) => updateLine(index, { description: e.target.value })}
-                                            placeholder="Descripción"
-                                            style={{
-                                                width: '100%',
-                                                padding: '9px 10px',
-                                                borderRadius: 8,
-                                                border: '1px solid var(--border)',
-                                                background: 'var(--background)',
-                                                color: 'var(--text)',
-                                            }}
-                                        />
+                                        <div style={{ display: 'grid', gap: 6 }}>
+                                            <input
+                                                value={line.description}
+                                                onChange={(e) => updateLine(index, { description: e.target.value })}
+                                                placeholder="Descripcion"
+                                                style={{
+                                                    width: '100%',
+                                                    padding: '9px 10px',
+                                                    borderRadius: 8,
+                                                    border: '1px solid var(--border)',
+                                                    background: 'var(--background)',
+                                                    color: 'var(--text)',
+                                                }}
+                                            />
+                                            <div style={{ display: 'grid', gridTemplateColumns: '1.25fr 0.9fr 1fr', gap: 6 }}>
+                                                <select
+                                                    value={line.tax_id}
+                                                    onChange={(e) => {
+                                                        const selectedTax = taxOptions.find((tax) => tax.tax_id === e.target.value) || null;
+                                                        updateLine(index, {
+                                                            tax_id: selectedTax?.tax_id || '',
+                                                            tax_name: selectedTax?.tax_name || '',
+                                                            tax_percentage: Math.max(0, normalizeNumber(selectedTax?.tax_percentage, 0)),
+                                                        });
+                                                    }}
+                                                    style={{
+                                                        width: '100%',
+                                                        padding: '7px 8px',
+                                                        borderRadius: 8,
+                                                        border: '1px solid var(--border)',
+                                                        background: 'var(--background)',
+                                                        color: 'var(--text)',
+                                                        fontSize: 12,
+                                                    }}
+                                                >
+                                                    <option value="">Impuesto (opcional)</option>
+                                                    {taxOptions.map((tax) => (
+                                                        <option key={tax.tax_id} value={tax.tax_id}>
+                                                            {tax.tax_name} ({Number(tax.tax_percentage || 0).toFixed(2)}%)
+                                                        </option>
+                                                    ))}
+                                                </select>
+
+                                                <select
+                                                    value={selectedWarrantyPreset}
+                                                    onChange={(e) => updateLine(index, { warranty: e.target.value })}
+                                                    style={{
+                                                        width: '100%',
+                                                        padding: '7px 8px',
+                                                        borderRadius: 8,
+                                                        border: '1px solid var(--border)',
+                                                        background: 'var(--background)',
+                                                        color: 'var(--text)',
+                                                        fontSize: 12,
+                                                    }}
+                                                >
+                                                    <option value="">Garantia</option>
+                                                    {WARRANTY_PRESETS.filter(Boolean).map((preset) => (
+                                                        <option key={preset} value={preset}>{preset}</option>
+                                                    ))}
+                                                </select>
+
+                                                <input
+                                                    value={line.warranty}
+                                                    onChange={(e) => updateLine(index, { warranty: e.target.value })}
+                                                    placeholder="Garantia libre"
+                                                    style={{
+                                                        width: '100%',
+                                                        padding: '7px 8px',
+                                                        borderRadius: 8,
+                                                        border: '1px solid var(--border)',
+                                                        background: 'var(--background)',
+                                                        color: 'var(--text)',
+                                                        fontSize: 12,
+                                                    }}
+                                                />
+                                            </div>
+                                        </div>
 
                                         <input
                                             type="number"
@@ -787,7 +930,7 @@ export default function QuoteForm({ isOpen, onClose, onSaved, editQuote }: Quote
                                     width: 'fit-content',
                                 }}
                             >
-                                <Plus size={14} /> Agregar línea
+                                <Plus size={14} /> Agregar linea
                             </button>
                         </div>
                     </div>
@@ -825,50 +968,19 @@ export default function QuoteForm({ isOpen, onClose, onSaved, editQuote }: Quote
                                     <strong style={{ color: 'var(--text)' }}>${computed.subtotal.toFixed(2)}</strong>
                                 </div>
 
-                                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, color: 'var(--muted)', fontSize: 13 }}>
-                                    <span>IVA</span>
-                                    <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                                        <input
-                                            type="number"
-                                            min="0"
-                                            step="0.01"
-                                            value={taxRate}
-                                            onChange={(e) => setTaxRate(normalizeNumber(e.target.value, 0))}
-                                            style={{
-                                                width: 80,
-                                                padding: '7px 8px',
-                                                borderRadius: 8,
-                                                border: '1px solid var(--border)',
-                                                background: 'var(--background)',
-                                                color: 'var(--text)',
-                                            }}
-                                        />
-                                        <span>%</span>
-                                    </div>
-                                </div>
-
                                 <div style={{ display: 'flex', justifyContent: 'space-between', color: 'var(--muted)', fontSize: 13 }}>
-                                    <span>Impuesto</span>
+                                    <span>Impuestos (por linea)</span>
                                     <strong style={{ color: 'var(--text)' }}>${computed.taxAmount.toFixed(2)}</strong>
                                 </div>
 
-                                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, color: 'var(--muted)', fontSize: 13 }}>
-                                    <span>Descuento</span>
-                                    <input
-                                        type="number"
-                                        min="0"
-                                        step="0.01"
-                                        value={discountAmount}
-                                        onChange={(e) => setDiscountAmount(normalizeNumber(e.target.value, 0))}
-                                        style={{
-                                            width: 100,
-                                            padding: '7px 8px',
-                                            borderRadius: 8,
-                                            border: '1px solid var(--border)',
-                                            background: 'var(--background)',
-                                            color: 'var(--text)',
-                                        }}
-                                    />
+                                <div style={{ display: 'flex', justifyContent: 'space-between', color: 'var(--muted)', fontSize: 13 }}>
+                                    <span>Tasa efectiva</span>
+                                    <strong style={{ color: 'var(--text)' }}>{computed.effectiveTaxRate.toFixed(2)}%</strong>
+                                </div>
+
+                                <div style={{ display: 'flex', justifyContent: 'space-between', color: 'var(--muted)', fontSize: 13 }}>
+                                    <span>Descuento aplicado (lineas)</span>
+                                    <strong style={{ color: 'var(--text)' }}>-${computed.discountTotal.toFixed(2)}</strong>
                                 </div>
 
                                 <div style={{ borderTop: '1px solid var(--border)', paddingTop: 10, display: 'flex', justifyContent: 'space-between', color: 'var(--text)' }}>
@@ -919,7 +1031,7 @@ export default function QuoteForm({ isOpen, onClose, onSaved, editQuote }: Quote
                         }}
                     >
                         <Save size={16} />
-                        {saving ? 'Guardando...' : editQuote ? 'Actualizar Cotización' : 'Guardar Cotización'}
+                        {saving ? 'Guardando...' : editQuote ? 'Actualizar Cotizacion' : 'Guardar Cotizacion'}
                     </button>
                 </div>
             </div>
