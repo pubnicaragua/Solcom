@@ -17,6 +17,10 @@ interface InvoiceFormItem {
     max_available_qty: number | null;
     unit_price: number;
     discount_percent: number;
+    tax_id: string;
+    tax_name: string;
+    tax_percentage: number;
+    warranty: string;
     serial_number_value: string;
     available_serials: Array<{ serial_id: string; serial_code: string }>;
     loading_serials: boolean;
@@ -58,6 +62,14 @@ interface Salesperson {
     email: string;
     role: string;
     photo_url?: string | null;
+}
+
+interface TaxOption {
+    tax_id: string;
+    tax_name: string;
+    tax_percentage: number;
+    active: boolean;
+    is_editable: boolean;
 }
 
 interface InvoicePrefillItem {
@@ -130,6 +142,7 @@ export default function InvoiceForm({ isOpen, onClose, onSaved, editInvoice, pre
     // Salesperson (Vendedor)
     const [salespeople, setSalespeople] = useState<Salesperson[]>([]);
     const [salespersonId, setSalespersonId] = useState('');
+    const [taxOptions, setTaxOptions] = useState<TaxOption[]>([]);
 
     // Delivery
     const [deliveryRequested, setDeliveryRequested] = useState(false);
@@ -141,8 +154,6 @@ export default function InvoiceForm({ isOpen, onClose, onSaved, editInvoice, pre
     const [showCancellation, setShowCancellation] = useState(false);
 
     // Financials
-    const [taxRate, setTaxRate] = useState(15);
-    const [discountAmount, setDiscountAmount] = useState(0);
     const [shippingCharge, setShippingCharge] = useState(0);
 
     // Line items
@@ -155,6 +166,10 @@ export default function InvoiceForm({ isOpen, onClose, onSaved, editInvoice, pre
             max_available_qty: null,
             unit_price: 0,
             discount_percent: 0,
+            tax_id: '',
+            tax_name: '',
+            tax_percentage: 0,
+            warranty: '',
             serial_number_value: '',
             available_serials: [],
             loading_serials: false,
@@ -181,6 +196,7 @@ export default function InvoiceForm({ isOpen, onClose, onSaved, editInvoice, pre
             fetchCustomers();
             fetchWarehouses();
             fetchSalespeople();
+            fetchTaxes();
         }
     }, [isOpen]);
 
@@ -205,6 +221,10 @@ export default function InvoiceForm({ isOpen, onClose, onSaved, editInvoice, pre
                         max_available_qty: maxAvailable,
                         unit_price: Math.max(0, Number(item?.unit_price ?? 0) || 0),
                         discount_percent: Math.max(0, Math.min(100, Number(item?.discount_percent ?? 0) || 0)),
+                        tax_id: String((item as any)?.tax_id || '').trim(),
+                        tax_name: String((item as any)?.tax_name || '').trim(),
+                        tax_percentage: Math.max(0, Number((item as any)?.tax_percentage ?? 0) || 0),
+                        warranty: String((item as any)?.warranty || ''),
                         serial_number_value: normalizeSerialInput(item?.serial_number_value || ''),
                         available_serials: [],
                         loading_serials: false,
@@ -449,6 +469,20 @@ export default function InvoiceForm({ isOpen, onClose, onSaved, editInvoice, pre
         }
     };
 
+    const fetchTaxes = async () => {
+        try {
+            const res = await fetch('/api/zoho/taxes', { cache: 'no-store' });
+            const data = await res.json();
+            const list: TaxOption[] = Array.isArray(data?.taxes) ? data.taxes : [];
+            setTaxOptions(list);
+            return list;
+        } catch (err) {
+            console.error('Error fetching taxes:', err);
+            setTaxOptions([]);
+            return [];
+        }
+    };
+
     const filteredCustomers = customers;
 
     const serialArray = (value?: string): string[] => {
@@ -596,6 +630,7 @@ export default function InvoiceForm({ isOpen, onClose, onSaved, editInvoice, pre
     const selectProduct = (product: Product, rowIndex: number) => {
         const zohoItemId = String(product.zoho_item_id || '').trim() || null;
         const maxAvailable = Math.max(0, Math.floor(Number(product.quantity) || 0));
+        const defaultTax = taxOptions[0] || null;
 
         setLineItems((current) => current.map((line, idx) => {
             if (idx !== rowIndex) return line;
@@ -607,6 +642,11 @@ export default function InvoiceForm({ isOpen, onClose, onSaved, editInvoice, pre
                 quantity: 1,
                 max_available_qty: maxAvailable > 0 ? maxAvailable : null,
                 unit_price: product.unit_price || 0,
+                tax_id: line.tax_id || defaultTax?.tax_id || '',
+                tax_name: line.tax_name || defaultTax?.tax_name || '',
+                tax_percentage: line.tax_id
+                    ? line.tax_percentage
+                    : Math.max(0, Number(defaultTax?.tax_percentage || 0)),
                 serial_number_value: '',
                 available_serials: [],
                 loading_serials: false,
@@ -657,6 +697,7 @@ export default function InvoiceForm({ isOpen, onClose, onSaved, editInvoice, pre
     };
 
     const addLineItem = () => {
+        const defaultTax = taxOptions[0] || null;
         setLineItems([
             ...lineItems,
             {
@@ -667,6 +708,10 @@ export default function InvoiceForm({ isOpen, onClose, onSaved, editInvoice, pre
                 max_available_qty: null,
                 unit_price: 0,
                 discount_percent: 0,
+                tax_id: defaultTax?.tax_id || '',
+                tax_name: defaultTax?.tax_name || '',
+                tax_percentage: Math.max(0, Number(defaultTax?.tax_percentage || 0)),
+                warranty: '',
                 serial_number_value: '',
                 available_serials: [],
                 loading_serials: false,
@@ -691,8 +736,16 @@ export default function InvoiceForm({ isOpen, onClose, onSaved, editInvoice, pre
     // Calculations
     const getLineSubtotal = (item: InvoiceFormItem) => item.quantity * item.unit_price * (1 - item.discount_percent / 100);
     const subtotal = lineItems.reduce((sum, item) => sum + getLineSubtotal(item), 0);
-    const taxAmount = subtotal * (taxRate / 100);
-    const total = subtotal + taxAmount + shippingCharge - discountAmount;
+    const taxAmount = lineItems.reduce((sum, item) => {
+        const taxable = getLineSubtotal(item);
+        return sum + taxable * ((Number(item.tax_percentage) || 0) / 100);
+    }, 0);
+    const total = subtotal + taxAmount + shippingCharge;
+    const effectiveTaxRate = subtotal > 0 ? (taxAmount / subtotal) * 100 : 0;
+    const discountTotal = lineItems.reduce((sum, item) => {
+        const base = item.quantity * item.unit_price;
+        return sum + (base * ((Number(item.discount_percent) || 0) / 100));
+    }, 0);
 
     const handleSave = async (status: string = 'borrador') => {
         // Validations
@@ -716,6 +769,10 @@ export default function InvoiceForm({ isOpen, onClose, onSaved, editInvoice, pre
                 setError(`Seriales inválidos para "${line.description}": cantidad ${line.quantity}, seriales ${selectedSerials.length}.`);
                 return;
             }
+            if (!String(line.tax_id || '').trim()) {
+                setError(`Selecciona impuesto en la línea "${line.description}".`);
+                return;
+            }
         }
 
         setSaving(true);
@@ -728,8 +785,8 @@ export default function InvoiceForm({ isOpen, onClose, onSaved, editInvoice, pre
                 date: invoiceDate,
                 due_date: dueDate || null,
                 status,
-                tax_rate: taxRate,
-                discount_amount: discountAmount,
+                tax_rate: effectiveTaxRate,
+                discount_amount: 0,
                 shipping_charge: shippingCharge,
                 notes: notes || null,
                 warehouse_id: warehouseId || null,
@@ -750,6 +807,10 @@ export default function InvoiceForm({ isOpen, onClose, onSaved, editInvoice, pre
                     quantity: item.quantity,
                     unit_price: item.unit_price,
                     discount_percent: item.discount_percent,
+                    tax_id: item.tax_id,
+                    tax_name: item.tax_name,
+                    tax_percentage: item.tax_percentage,
+                    warranty: item.warranty || null,
                     serial_number_value: normalizeSerialInput(item.serial_number_value) || null,
                     serial_numbers: serialArray(item.serial_number_value),
                 })),
@@ -806,8 +867,6 @@ export default function InvoiceForm({ isOpen, onClose, onSaved, editInvoice, pre
         setCancellationReasonId(null);
         setCancellationComments('');
         setShowCancellation(false);
-        setTaxRate(15);
-        setDiscountAmount(0);
         setShippingCharge(0);
         setLineItems([{
             item_id: null,
@@ -817,6 +876,10 @@ export default function InvoiceForm({ isOpen, onClose, onSaved, editInvoice, pre
             max_available_qty: null,
             unit_price: 0,
             discount_percent: 0,
+            tax_id: '',
+            tax_name: '',
+            tax_percentage: 0,
+            warranty: '',
             serial_number_value: '',
             available_serials: [],
             loading_serials: false,
@@ -1189,6 +1252,40 @@ export default function InvoiceForm({ isOpen, onClose, onSaved, editInvoice, pre
                                                 style={{ ...inputStyle, marginTop: '6px', fontSize: '11px', padding: '6px 8px' }}
                                             />
                                         )}
+
+                                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '6px', marginTop: '6px' }}>
+                                            <select
+                                                value={item.tax_id}
+                                                onChange={(e) => {
+                                                    const selectedTax = taxOptions.find((tax) => tax.tax_id === e.target.value) || null;
+                                                    setLineItems((current) => current.map((line, idx) => (
+                                                        idx === index
+                                                            ? {
+                                                                ...line,
+                                                                tax_id: selectedTax?.tax_id || '',
+                                                                tax_name: selectedTax?.tax_name || '',
+                                                                tax_percentage: Number(selectedTax?.tax_percentage || 0),
+                                                            }
+                                                            : line
+                                                    )));
+                                                }}
+                                                style={{ ...inputStyle, fontSize: '11px', padding: '6px 8px' }}
+                                            >
+                                                <option value="">Impuesto *</option>
+                                                {taxOptions.map((tax) => (
+                                                    <option key={tax.tax_id} value={tax.tax_id}>
+                                                        {tax.tax_name} ({Number(tax.tax_percentage || 0).toFixed(2)}%)
+                                                    </option>
+                                                ))}
+                                            </select>
+                                            <input
+                                                type="text"
+                                                value={item.warranty || ''}
+                                                onChange={(e) => updateLineItem(index, 'warranty', e.target.value)}
+                                                placeholder="Garantía"
+                                                style={{ ...inputStyle, fontSize: '11px', padding: '6px 8px' }}
+                                            />
+                                        </div>
                                     </div>
                                     {item.item_id ? (
                                         <div
@@ -1263,12 +1360,10 @@ export default function InvoiceForm({ isOpen, onClose, onSaved, editInvoice, pre
 
                                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px', fontSize: '14px' }}>
                                     <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                                        <span style={{ color: 'var(--muted)' }}>IVA</span>
-                                        <input type="number" min="0" max="100" step="0.5" value={taxRate}
-                                            onChange={(e) => setTaxRate(parseFloat(e.target.value) || 0)}
-                                            style={{ width: '60px', padding: '4px 8px', background: 'var(--card)', color: 'var(--text)', border: '1px solid var(--border)', borderRadius: '6px', fontSize: '13px', textAlign: 'center' }}
-                                        />
-                                        <span style={{ color: 'var(--muted)', fontSize: '13px' }}>%</span>
+                                        <span style={{ color: 'var(--muted)' }}>Impuestos (por línea)</span>
+                                        <span style={{ color: 'var(--muted)', fontSize: '13px' }}>
+                                            {effectiveTaxRate.toFixed(2)}%
+                                        </span>
                                     </div>
                                     <span style={{ fontWeight: 600, color: 'var(--text)' }}>${taxAmount.toFixed(2)}</span>
                                 </div>
@@ -1289,14 +1384,8 @@ export default function InvoiceForm({ isOpen, onClose, onSaved, editInvoice, pre
                                 </div>
 
                                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px', fontSize: '14px' }}>
-                                    <span style={{ color: 'var(--muted)' }}>Descuento</span>
-                                    <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-                                        <span style={{ color: 'var(--muted)', fontSize: '13px' }}>$</span>
-                                        <input type="number" min="0" step="0.01" value={discountAmount}
-                                            onChange={(e) => setDiscountAmount(parseFloat(e.target.value) || 0)}
-                                            style={{ width: '80px', padding: '4px 8px', background: 'var(--card)', color: 'var(--text)', border: '1px solid var(--border)', borderRadius: '6px', fontSize: '13px', textAlign: 'right' }}
-                                        />
-                                    </div>
+                                    <span style={{ color: 'var(--muted)' }}>Descuento aplicado (líneas)</span>
+                                    <span style={{ fontWeight: 600, color: 'var(--text)' }}>-${discountTotal.toFixed(2)}</span>
                                 </div>
 
                                 <div style={{ borderTop: '2px solid var(--border)', paddingTop: '16px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>

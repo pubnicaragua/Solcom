@@ -29,6 +29,14 @@ interface SalespersonOption {
     role: string;
 }
 
+interface TaxOption {
+    tax_id: string;
+    tax_name: string;
+    tax_percentage: number;
+    active: boolean;
+    is_editable: boolean;
+}
+
 interface OrderLine {
     id?: string;
     item_id: string | null;
@@ -37,6 +45,10 @@ interface OrderLine {
     quantity: number;
     unit_price: number;
     discount_percent: number;
+    tax_id: string;
+    tax_name: string;
+    tax_percentage: number;
+    warranty: string;
     serial_number_value: string;
     available_serials: Array<{
         serial_id: string;
@@ -107,6 +119,7 @@ export default function SalesOrderForm({ isOpen, orderId, onClose, onSaved }: Sa
     const [warehouses, setWarehouses] = useState<WarehouseOption[]>([]);
     const [familyWarehouses, setFamilyWarehouses] = useState<WarehouseOption[]>([]);
     const [salespeople, setSalespeople] = useState<SalespersonOption[]>([]);
+    const [taxOptions, setTaxOptions] = useState<TaxOption[]>([]);
 
     const [orderNumber, setOrderNumber] = useState('');
     const [customerId, setCustomerId] = useState('');
@@ -119,8 +132,6 @@ export default function SalesOrderForm({ isOpen, orderId, onClose, onSaved }: Sa
     const [shippingZone, setShippingZone] = useState('');
     const [salespersonName, setSalespersonName] = useState('');
     const [salespersonId, setSalespersonId] = useState('');
-    const [taxRate, setTaxRate] = useState(15);
-    const [discountAmount, setDiscountAmount] = useState(0);
     const [notes, setNotes] = useState('');
     const [items, setItems] = useState<OrderLine[]>([]);
 
@@ -184,6 +195,22 @@ export default function SalesOrderForm({ isOpen, orderId, onClose, onSaved }: Sa
             return parsedSalespeople;
         } catch {
             setSalespeople([]);
+            return [];
+        }
+    }
+
+    async function fetchTaxes() {
+        try {
+            const response = await fetch('/api/zoho/taxes', { cache: 'no-store' });
+            const data = await response.json().catch(() => ({}));
+            if (!response.ok) {
+                throw new Error(data?.error || 'No se pudieron cargar impuestos');
+            }
+            const parsed: TaxOption[] = Array.isArray(data?.taxes) ? data.taxes : [];
+            setTaxOptions(parsed);
+            return parsed;
+        } catch {
+            setTaxOptions([]);
             return [];
         }
     }
@@ -431,10 +458,11 @@ export default function SalesOrderForm({ isOpen, orderId, onClose, onSaved }: Sa
         setLoading(true);
         setError('');
         try {
-            const [orderRes, warehousesRes, loadedSalespeople] = await Promise.all([
+            const [orderRes, warehousesRes, loadedSalespeople, loadedTaxes] = await Promise.all([
                 fetch(`/api/ventas/sales-orders/${id}`, { cache: 'no-store' }),
                 fetch('/api/warehouses?type=empresarial', { cache: 'no-store' }),
                 fetchSalespeople(),
+                fetchTaxes(),
             ]);
 
             const [orderData, warehousesData] = await Promise.all([
@@ -469,8 +497,6 @@ export default function SalesOrderForm({ isOpen, orderId, onClose, onSaved }: Sa
             const matchedSalesperson = matchedById || matchedByName;
             setSalespersonId(matchedSalesperson?.id || '');
             setSalespersonName(matchedSalesperson?.name || orderSalespersonName || '');
-            setTaxRate(normalizeNumber(order.tax_rate, 15));
-            setDiscountAmount(normalizeNumber(order.discount_amount, 0));
             setNotes(order.notes || '');
             const normalizedLines: OrderLine[] = Array.isArray(order.items) && order.items.length > 0
                 ? order.items.map((line: any) => ({
@@ -481,6 +507,10 @@ export default function SalesOrderForm({ isOpen, orderId, onClose, onSaved }: Sa
                     quantity: normalizeNumber(line.quantity, 1),
                     unit_price: normalizeNumber(line.unit_price, 0),
                     discount_percent: normalizeNumber(line.discount_percent, 0),
+                    tax_id: String(line.tax_id || '').trim(),
+                    tax_name: String(line.tax_name || '').trim(),
+                    tax_percentage: normalizeNumber(line.tax_percentage, 0),
+                    warranty: String(line.warranty || ''),
                     serial_number_value: normalizeSerialInput(line.serial_number_value || ''),
                     available_serials: [],
                     loading_serials: false,
@@ -494,17 +524,32 @@ export default function SalesOrderForm({ isOpen, orderId, onClose, onSaved }: Sa
                     quantity: 1,
                     unit_price: 0,
                     discount_percent: 0,
+                    tax_id: '',
+                    tax_name: '',
+                    tax_percentage: 0,
+                    warranty: '',
                     serial_number_value: '',
                     available_serials: [],
                     loading_serials: false,
                     line_warehouse_id: null,
                     line_zoho_warehouse_id: null,
                 }];
-            setItems(normalizedLines);
+            const defaultTax = loadedTaxes[0] || null;
+            const linesWithTaxFallback = normalizedLines.map((line) => {
+                if (line.tax_id) return line;
+                if (!defaultTax) return line;
+                return {
+                    ...line,
+                    tax_id: defaultTax.tax_id,
+                    tax_name: defaultTax.tax_name,
+                    tax_percentage: normalizeNumber(defaultTax.tax_percentage, 0),
+                };
+            });
+            setItems(linesWithTaxFallback);
 
             const family = await fetchFamilyWarehouses(order.warehouse_id || '');
             setFamilyWarehouses(family);
-            normalizedLines.forEach((line, index) => {
+            linesWithTaxFallback.forEach((line, index) => {
                 if (line.zoho_item_id) {
                     void fetchLineSerials(index, line.zoho_item_id, line.item_id, family);
                 }
@@ -566,6 +611,7 @@ export default function SalesOrderForm({ isOpen, orderId, onClose, onSaved }: Sa
     }
 
     function addLine() {
+        const defaultTax = taxOptions[0] || null;
         setItems((prev) => [
             ...prev,
             {
@@ -575,6 +621,10 @@ export default function SalesOrderForm({ isOpen, orderId, onClose, onSaved }: Sa
                 quantity: 1,
                 unit_price: 0,
                 discount_percent: 0,
+                tax_id: defaultTax?.tax_id || '',
+                tax_name: defaultTax?.tax_name || '',
+                tax_percentage: normalizeNumber(defaultTax?.tax_percentage, 0),
+                warranty: '',
                 serial_number_value: '',
                 available_serials: [],
                 loading_serials: false,
@@ -625,14 +675,29 @@ export default function SalesOrderForm({ isOpen, orderId, onClose, onSaved }: Sa
             const discount = Math.max(0, Math.min(100, normalizeNumber(line.discount_percent, 0)));
             return sum + qty * unit * (1 - discount / 100);
         }, 0);
-        const taxAmount = subtotal * (Math.max(0, taxRate) / 100);
-        const total = subtotal + taxAmount - Math.max(0, discountAmount);
+        const taxAmount = items.reduce((sum, line) => {
+            const qty = Math.max(0, normalizeNumber(line.quantity, 0));
+            const unit = Math.max(0, normalizeNumber(line.unit_price, 0));
+            const discount = Math.max(0, Math.min(100, normalizeNumber(line.discount_percent, 0)));
+            const taxable = qty * unit * (1 - discount / 100);
+            return sum + taxable * (Math.max(0, normalizeNumber(line.tax_percentage, 0)) / 100);
+        }, 0);
+        const discountTotal = items.reduce((sum, line) => {
+            const qty = Math.max(0, normalizeNumber(line.quantity, 0));
+            const unit = Math.max(0, normalizeNumber(line.unit_price, 0));
+            const discount = Math.max(0, Math.min(100, normalizeNumber(line.discount_percent, 0)));
+            return sum + (qty * unit * (discount / 100));
+        }, 0);
+        const total = subtotal + taxAmount;
+        const effectiveTaxRate = subtotal > 0 ? (taxAmount / subtotal) * 100 : 0;
         return {
             subtotal,
             taxAmount,
             total,
+            discountTotal,
+            effectiveTaxRate,
         };
-    }, [items, taxRate, discountAmount]);
+    }, [items]);
 
     async function handleSave() {
         if (!orderId) return;
@@ -662,6 +727,10 @@ export default function SalesOrderForm({ isOpen, orderId, onClose, onSaved }: Sa
                 quantity: Math.max(0, normalizeNumber(line.quantity, 0)),
                 unit_price: Math.max(0, normalizeNumber(line.unit_price, 0)),
                 discount_percent: Math.max(0, Math.min(100, normalizeNumber(line.discount_percent, 0))),
+                tax_id: String(line.tax_id || '').trim(),
+                tax_name: String(line.tax_name || '').trim(),
+                tax_percentage: Math.max(0, normalizeNumber(line.tax_percentage, 0)),
+                warranty: String(line.warranty || '').trim(),
                 serial_number_value: normalizeSerialInput(line.serial_number_value) || null,
                 line_warehouse_id: line.line_warehouse_id || null,
                 line_zoho_warehouse_id: line.line_zoho_warehouse_id || null,
@@ -686,6 +755,10 @@ export default function SalesOrderForm({ isOpen, orderId, onClose, onSaved }: Sa
                 setError(`Seriales inválidos para "${line.description}": cantidad ${expectedSerialCount}, seriales ${selectedSerials.length}.`);
                 return;
             }
+            if (!line.tax_id) {
+                setError(`Selecciona impuesto en la línea "${line.description}".`);
+                return;
+            }
         }
 
         setSaving(true);
@@ -703,8 +776,8 @@ export default function SalesOrderForm({ isOpen, orderId, onClose, onSaved }: Sa
                 shipping_zone: shippingZone || null,
                 salesperson_id: salespersonId || null,
                 salesperson_name: selectedSalesperson?.name || salespersonName || null,
-                tax_rate: Math.max(0, normalizeNumber(taxRate, 15)),
-                discount_amount: Math.max(0, normalizeNumber(discountAmount, 0)),
+                tax_rate: Math.max(0, normalizeNumber(totals.effectiveTaxRate, 0)),
+                discount_amount: 0,
                 notes: notes || null,
                 items: normalizedItems.map((line) => ({
                     ...line,
@@ -972,25 +1045,10 @@ export default function SalesOrderForm({ isOpen, orderId, onClose, onSaved }: Sa
                                     />
                                 </div>
                             </Field>
-                            <Field label="IVA %">
-                                <input
-                                    type="number"
-                                    min={0}
-                                    step={0.01}
-                                    value={taxRate}
-                                    onChange={(e) => setTaxRate(normalizeNumber(e.target.value, 0))}
-                                    style={inputStyle}
-                                />
-                            </Field>
-                            <Field label="Descuento global">
-                                <input
-                                    type="number"
-                                    min={0}
-                                    step={0.01}
-                                    value={discountAmount}
-                                    onChange={(e) => setDiscountAmount(normalizeNumber(e.target.value, 0))}
-                                    style={inputStyle}
-                                />
+                            <Field label="Impuestos y descuentos">
+                                <div style={{ ...inputStyle, opacity: 0.85 }}>
+                                    Se calculan por línea (impuesto obligatorio por artículo y descuento por línea).
+                                </div>
                             </Field>
                         </div>
 
@@ -1112,6 +1170,35 @@ export default function SalesOrderForm({ isOpen, orderId, onClose, onSaved }: Sa
                                                     )}
                                                 </div>
                                             )}
+
+                                            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 6 }}>
+                                                <select
+                                                    value={line.tax_id}
+                                                    onChange={(e) => {
+                                                        const selectedTax = taxOptions.find((tax) => tax.tax_id === e.target.value) || null;
+                                                        updateLine(index, {
+                                                            tax_id: selectedTax?.tax_id || '',
+                                                            tax_name: selectedTax?.tax_name || '',
+                                                            tax_percentage: normalizeNumber(selectedTax?.tax_percentage, 0),
+                                                        });
+                                                    }}
+                                                    style={{ ...inputStyle, fontSize: 11, padding: '6px 8px' }}
+                                                >
+                                                    <option value="">Impuesto *</option>
+                                                    {taxOptions.map((tax) => (
+                                                        <option key={tax.tax_id} value={tax.tax_id}>
+                                                            {tax.tax_name} ({Number(tax.tax_percentage || 0).toFixed(2)}%)
+                                                        </option>
+                                                    ))}
+                                                </select>
+                                                <input
+                                                    type="text"
+                                                    value={line.warranty || ''}
+                                                    onChange={(e) => updateLine(index, { warranty: e.target.value })}
+                                                    placeholder="Garantía (ej. 3 meses)"
+                                                    style={{ ...inputStyle, fontSize: 11, padding: '6px 8px' }}
+                                                />
+                                            </div>
                                         </div>
                                         <input
                                             type="number"
@@ -1194,12 +1281,12 @@ export default function SalesOrderForm({ isOpen, orderId, onClose, onSaved }: Sa
                                     <span>{totals.subtotal.toFixed(2)}</span>
                                 </div>
                                 <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                                    <span>IVA ({taxRate.toFixed(2)}%)</span>
+                                    <span>Impuestos (por línea)</span>
                                     <span>{totals.taxAmount.toFixed(2)}</span>
                                 </div>
                                 <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                                    <span>Descuento</span>
-                                    <span>-{discountAmount.toFixed(2)}</span>
+                                    <span>Descuento aplicado</span>
+                                    <span>-{totals.discountTotal.toFixed(2)}</span>
                                 </div>
                                 <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 15, fontWeight: 800, color: 'var(--text)' }}>
                                     <span>Total</span>

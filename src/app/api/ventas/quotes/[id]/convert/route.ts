@@ -7,6 +7,43 @@ function normalizeNumber(value: unknown, fallback = 0): number {
     return Number.isFinite(parsed) ? parsed : fallback;
 }
 
+function normalizeText(value: unknown): string {
+    return typeof value === 'string' ? value.trim() : '';
+}
+
+function extractMissingColumn(message: string): string | null {
+    const text = String(message || '');
+    let match = text.match(/Could not find the '([^']+)' column/i);
+    if (match?.[1]) return match[1];
+    match = text.match(/column "?([a-zA-Z0-9_]+)"? does not exist/i);
+    if (match?.[1]) return match[1];
+    return null;
+}
+
+async function insertInvoiceItemsWithColumnFallback(supabase: any, rows: any[]): Promise<{ error: any }> {
+    if (!Array.isArray(rows) || rows.length === 0) return { error: null };
+    const mutableRows = rows.map((row) => ({ ...row }));
+    let retry = 0;
+    while (retry < 12) {
+        const result = await supabase.from('sales_invoice_items').insert(mutableRows);
+        if (!result.error) return { error: null };
+
+        const missingColumn = extractMissingColumn(result.error?.message || '');
+        if (!missingColumn) return { error: result.error };
+
+        let removed = false;
+        for (const row of mutableRows) {
+            if (Object.prototype.hasOwnProperty.call(row, missingColumn)) {
+                delete row[missingColumn];
+                removed = true;
+            }
+        }
+        if (!removed) return { error: result.error };
+        retry += 1;
+    }
+    return { error: new Error('No se pudieron insertar items de factura por columnas faltantes.') };
+}
+
 async function generateInvoiceNumber(supabase: any): Promise<string> {
     const { data, error } = await supabase.rpc('generate_invoice_number');
     if (!error && data) {
@@ -138,15 +175,17 @@ export async function POST(
                 quantity,
                 unit_price: unitPrice,
                 discount_percent: discountPercent,
-                subtotal: Math.round(quantity * unitPrice * (1 - discountPercent / 100) * 100) / 100,
+                tax_id: normalizeText(item?.tax_id) || null,
+                tax_name: normalizeText(item?.tax_name) || null,
+                tax_percentage: Math.max(0, normalizeNumber(item?.tax_percentage, 0)),
+                warranty: normalizeText(item?.warranty) || null,
+                subtotal: Math.round(Math.max(0, normalizeNumber(item?.subtotal, quantity * unitPrice * (1 - discountPercent / 100))) * 100) / 100,
                 sort_order: index,
                 created_at: nowIso,
             };
         });
 
-        const { error: itemsError } = await supabase
-            .from('sales_invoice_items')
-            .insert(invoiceItems);
+        const { error: itemsError } = await insertInvoiceItemsWithColumnFallback(supabase, invoiceItems);
 
         if (itemsError) {
             await supabase.from('sales_invoices').delete().eq('id', invoice.id);

@@ -4,6 +4,13 @@ export const dynamic = 'force-dynamic';
 import { createRouteHandlerClient } from '@supabase/auth-helpers-nextjs';
 import { cookies } from 'next/headers';
 import { createZohoBooksClient } from '@/lib/zoho/books-client';
+import { buildTaxCatalogMap, getZohoTaxCatalog } from '@/lib/zoho/tax-catalog';
+import {
+    computeFiscalTotals,
+    FiscalValidationError,
+    normalizeFiscalLine,
+    withWarrantyInDescription,
+} from '@/lib/ventas/fiscal';
 import { validateWarehouseFamilyStock } from '@/lib/ventas/stock-validation';
 import {
     replaceOrderSerialReservations,
@@ -34,6 +41,11 @@ function normalizeSerialInput(value: unknown): string {
         .map((entry) => entry.trim())
         .filter(Boolean)
         .join(',');
+}
+
+function normalizeWarranty(value: unknown): string | null {
+    const text = normalizeText(value);
+    return text || null;
 }
 
 function normalizeStatus(value: unknown, fallback = 'borrador'): string {
@@ -94,25 +106,6 @@ async function insertSalesOrderItemsWithColumnFallback(supabase: any, rows: any[
     return { error: new Error('No se pudieron insertar los items por columnas faltantes') };
 }
 
-function calculateTotals(items: any[], taxRate: number, discountAmount: number) {
-    const subtotal = items.reduce((sum: number, item: any) => {
-        const quantity = Math.max(0, normalizeNumber(item?.quantity, 0));
-        const unitPrice = Math.max(0, normalizeNumber(item?.unit_price, 0));
-        const discountPercent = Math.max(0, Math.min(100, normalizeNumber(item?.discount_percent, 0)));
-        const lineSubtotal = quantity * unitPrice * (1 - discountPercent / 100);
-        return sum + lineSubtotal;
-    }, 0);
-
-    const taxAmount = subtotal * (Math.max(0, taxRate) / 100);
-    const total = subtotal + taxAmount - Math.max(0, discountAmount);
-
-    return {
-        subtotal: Math.round(subtotal * 100) / 100,
-        tax_amount: Math.round(taxAmount * 100) / 100,
-        total: Math.round(total * 100) / 100,
-    };
-}
-
 async function generateOrderNumber(supabase: any, warehouseCode?: string): Promise<string> {
     if (warehouseCode) {
         const prefix = `OV-${warehouseCode}-`;
@@ -166,13 +159,12 @@ async function syncSalesOrderToZoho(params: {
     warehouseId: string;
     date: string;
     expectedDeliveryDate: string | null;
-    discountAmount: number;
     notes: string | null;
     salespersonName: string | null;
     status?: string;
     items: any[];
 }): Promise<{ zoho_salesorder_id: string; zoho_salesorder_number: string }> {
-    const { supabase, orderId, orderNumber, customerId, warehouseId, date, expectedDeliveryDate, discountAmount, notes, salespersonName, status, items } = params;
+    const { supabase, orderId, orderNumber, customerId, warehouseId, date, expectedDeliveryDate, notes, salespersonName, status, items } = params;
 
     const zohoClient = createZohoBooksClient();
     if (!zohoClient) {
@@ -245,8 +237,8 @@ async function syncSalesOrderToZoho(params: {
         }
     }
 
-    // Build Zoho line items
-    const zohoLineItems = (items || []).map((line: any, index: number) => {
+    const warrantyCustomFieldId = normalizeText(process.env.ZOHO_BOOKS_WARRANTY_CUSTOMFIELD_ID);
+    const buildZohoLineItems = (includeCustomFields: boolean) => (items || []).map((line: any, index: number) => {
         const localItemId = String(line?.item_id || '').trim();
         if (!localItemId) {
             throw new Error(`La línea ${index + 1} no está vinculada a un producto del catálogo.`);
@@ -263,17 +255,39 @@ async function syncSalesOrderToZoho(params: {
         }
 
         const quantity = Math.max(0.01, normalizeNumber(line?.quantity, 1));
-        const unitPrice = normalizeNumber(line?.unit_price, 0);
+        const unitPrice = Math.max(0, normalizeNumber(line?.unit_price, 0));
         const discountPercent = Math.max(0, Math.min(100, normalizeNumber(line?.discount_percent, 0)));
-        const effectiveRate = Math.max(0, unitPrice * (1 - discountPercent / 100));
+        const taxId = normalizeText(line?.tax_id);
+        if (!taxId) {
+            throw new Error(`Impuesto requerido en la línea ${index + 1} para sincronizar en Zoho.`);
+        }
+        const warranty = normalizeWarranty(line?.warranty);
 
-        return {
+        const payloadLine: any = {
             item_id: zohoItemId,
             quantity,
-            rate: Number(effectiveRate.toFixed(6)),
+            rate: Number(unitPrice.toFixed(6)),
+            tax_id: taxId,
+            description: withWarrantyInDescription(normalizeText(line?.description || mapped.name), warranty),
         };
+
+        if (discountPercent > 0) {
+            payloadLine.discount = `${Number(discountPercent.toFixed(2))}%`;
+        }
+
+        if (includeCustomFields && warrantyCustomFieldId && warranty) {
+            payloadLine.item_custom_fields = [
+                {
+                    customfield_id: warrantyCustomFieldId,
+                    value: warranty,
+                },
+            ];
+        }
+
+        return payloadLine;
     });
 
+    const zohoLineItems = buildZohoLineItems(true);
     if (zohoLineItems.length === 0) {
         throw new Error('No hay líneas válidas para enviar a Zoho.');
     }
@@ -284,19 +298,30 @@ async function syncSalesOrderToZoho(params: {
         date,
         line_items: zohoLineItems,
         reference_number: orderNumber,
+        discount_type: 'item_level',
+        is_discount_before_tax: true,
     };
 
     if (expectedDeliveryDate) orderPayload.shipment_date = expectedDeliveryDate;
     if (notes && notes.trim()) orderPayload.notes = notes.trim();
     if (salespersonName && salespersonName.trim()) orderPayload.salesperson_name = salespersonName.trim();
-    if (discountAmount > 0) {
-        orderPayload.discount = Number(discountAmount.toFixed(2));
-        orderPayload.is_discount_before_tax = true;
-    }
     if (zohoLocationId) orderPayload.location_id = zohoLocationId;
 
-    // Create sales order in Zoho
-    const result = await zohoClient.createSalesOrder(orderPayload);
+    let result: { salesorder_id: string; salesorder_number: string };
+    try {
+        result = await zohoClient.createSalesOrder(orderPayload);
+    } catch (error: any) {
+        const message = String(error?.message || '').toLowerCase();
+        const customFieldRejected = message.includes('customfield')
+            || message.includes('item_custom_fields');
+        if (!customFieldRejected) throw error;
+
+        const retryPayload = {
+            ...orderPayload,
+            line_items: buildZohoLineItems(false),
+        };
+        result = await zohoClient.createSalesOrder(retryPayload);
+    }
 
     // If local status is confirmada, mirror status in Zoho.
     const normalizedStatus = normalizeStatus(status, 'borrador');
@@ -420,7 +445,6 @@ export async function POST(req: NextRequest) {
             delivery_method,
             shipping_zone,
             status = 'borrador',
-            tax_rate = 15,
             discount_amount = 0,
             notes,
             salesperson_id,
@@ -434,16 +458,38 @@ export async function POST(req: NextRequest) {
             return NextResponse.json({ error: 'La orden de venta debe tener al menos un artículo' }, { status: 400 });
         }
 
-        const normalizedItems = items.map((item: any) => {
-            const quantity = normalizeNumber(item?.quantity, NaN);
-            const unitPrice = Math.max(0, normalizeNumber(item?.unit_price, 0));
-            const discountPercent = Math.max(0, Math.min(100, normalizeNumber(item?.discount_percent, 0)));
+        const normalizedDiscount = Math.max(0, normalizeNumber(discount_amount, 0));
+        if (normalizedDiscount > 0) {
+            return NextResponse.json(
+                { error: 'El descuento global está deshabilitado en este flujo.', code: 'GLOBAL_DISCOUNT_DISABLED' },
+                { status: 400 }
+            );
+        }
+
+        const taxCatalog = await getZohoTaxCatalog();
+        const taxCatalogMap = buildTaxCatalogMap(
+            (taxCatalog || []).filter((tax) => tax.active && tax.is_editable)
+        );
+
+        const normalizedItems = items.map((item: any, index: number) => {
+            const normalized = normalizeFiscalLine({
+                line: {
+                    item_id: item?.item_id || null,
+                    description: item?.description || item?.name || 'Artículo',
+                    quantity: normalizeNumber(item?.quantity, NaN),
+                    unit_price: Math.max(0, normalizeNumber(item?.unit_price, 0)),
+                    discount_percent: Math.max(0, Math.min(100, normalizeNumber(item?.discount_percent, 0))),
+                    tax_id: item?.tax_id || null,
+                    tax_name: item?.tax_name || null,
+                    tax_percentage: item?.tax_percentage,
+                    warranty: item?.warranty ?? null,
+                },
+                taxCatalogMap,
+                lineIndex: index,
+            });
+
             return {
-                item_id: item?.item_id || null,
-                description: String(item?.description || item?.name || 'Artículo').trim(),
-                quantity,
-                unit_price: unitPrice,
-                discount_percent: discountPercent,
+                ...normalized,
                 serial_number_value: normalizeSerialInput(
                     item?.serial_number_value ?? item?.serial_numbers ?? item?.serials
                 ) || null,
@@ -486,9 +532,7 @@ export async function POST(req: NextRequest) {
 
         const orderNumber = await generateOrderNumber(supabase, warehouseCode);
 
-        const normalizedTaxRate = Math.max(0, normalizeNumber(tax_rate, 15));
-        const normalizedDiscount = Math.max(0, normalizeNumber(discount_amount, 0));
-        const totals = calculateTotals(normalizedItems, normalizedTaxRate, normalizedDiscount);
+        const totals = computeFiscalTotals(normalizedItems, 0);
 
         const insertOrder = {
             order_number: orderNumber,
@@ -502,9 +546,9 @@ export async function POST(req: NextRequest) {
             shipping_zone: normalizeText(shipping_zone) || null,
             status: normalizeStatus(status, 'borrador'),
             subtotal: totals.subtotal,
-            tax_rate: normalizedTaxRate,
+            tax_rate: totals.tax_rate,
             tax_amount: totals.tax_amount,
-            discount_amount: normalizedDiscount,
+            discount_amount: 0,
             total: totals.total,
             notes: notes || null,
             salesperson_id: normalizeText(salesperson_id) || null,
@@ -572,10 +616,14 @@ export async function POST(req: NextRequest) {
                 quantity,
                 unit_price: unitPrice,
                 discount_percent: discountPercent,
+                tax_id: normalizeText(item?.tax_id) || null,
+                tax_name: normalizeText(item?.tax_name) || null,
+                tax_percentage: Math.max(0, normalizeNumber(item?.tax_percentage, 0)),
+                warranty: normalizeWarranty(item?.warranty),
                 serial_number_value: normalizeSerialInput(item?.serial_number_value) || null,
                 line_warehouse_id: normalizeText(item?.line_warehouse_id) || null,
                 line_zoho_warehouse_id: normalizeText(item?.line_zoho_warehouse_id) || null,
-                subtotal: Math.round(quantity * unitPrice * (1 - discountPercent / 100) * 100) / 100,
+                subtotal: Math.round(Math.max(0, normalizeNumber(item?.line_taxable, quantity * unitPrice * (1 - discountPercent / 100))) * 100) / 100,
                 sort_order: index,
             };
         });
@@ -625,7 +673,6 @@ export async function POST(req: NextRequest) {
                     warehouseId: warehouse_id,
                     date: date || new Date().toISOString().slice(0, 10),
                     expectedDeliveryDate: expected_delivery_date || null,
-                    discountAmount: normalizedDiscount,
                     notes: notes || null,
                     salespersonName: salesperson_name || null,
                     status: normalizeStatus(status, 'borrador'),
@@ -639,6 +686,12 @@ export async function POST(req: NextRequest) {
 
         return NextResponse.json({ order, zoho: zohoSync, warning: zohoWarning }, { status: 201 });
     } catch (error: any) {
+        if (error instanceof FiscalValidationError) {
+            return NextResponse.json(
+                { error: error.message, code: error.code, details: error.details || null },
+                { status: error.status || 400 }
+            );
+        }
         return NextResponse.json({ error: error.message || 'Error interno' }, { status: 500 });
     }
 }

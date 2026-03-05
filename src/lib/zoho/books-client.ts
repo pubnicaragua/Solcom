@@ -284,10 +284,22 @@ export class ZohoBooksClient {
         shipping_charge?: number;
         salesperson_name?: string;
         location_id?: string;
+        discount_type?: 'item_level' | 'entity_level';
         line_items: Array<{
             item_id: string;
             quantity: number;
             rate: number;
+            discount?: string | number;
+            tax_id?: string;
+            description?: string;
+            serial_number_value?: string;
+            serial_numbers?: string[];
+            location_id?: string;
+            warehouse_id?: string;
+            item_custom_fields?: Array<{
+                customfield_id: string;
+                value: string | number;
+            }>;
         }>;
     }): Promise<{ salesorder_id: string; salesorder_number: string }> {
         const result = await this.request('POST', '/books/v3/salesorders', data);
@@ -313,10 +325,22 @@ export class ZohoBooksClient {
             shipping_charge?: number;
             salesperson_name?: string;
             location_id?: string;
+            discount_type?: 'item_level' | 'entity_level';
             line_items: Array<{
                 item_id: string;
                 quantity: number;
                 rate: number;
+                discount?: string | number;
+                tax_id?: string;
+                description?: string;
+                serial_number_value?: string;
+                serial_numbers?: string[];
+                location_id?: string;
+                warehouse_id?: string;
+                item_custom_fields?: Array<{
+                    customfield_id: string;
+                    value: string | number;
+                }>;
             }>;
         }
     ): Promise<{ salesorder_id: string; salesorder_number: string }> {
@@ -390,10 +414,22 @@ export class ZohoBooksClient {
         shipping_charge?: number;
         salesperson_name?: string;
         location_id?: string;
+        discount_type?: 'item_level' | 'entity_level';
         line_items: Array<{
             item_id: string;
             quantity: number;
             rate: number;
+            discount?: string | number;
+            tax_id?: string;
+            description?: string;
+            serial_number_value?: string;
+            serial_numbers?: string[];
+            location_id?: string;
+            warehouse_id?: string;
+            item_custom_fields?: Array<{
+                customfield_id: string;
+                value: string | number;
+            }>;
         }>;
     }): Promise<{ invoice_id: string; invoice_number: string }> {
         const result = await this.request('POST', '/books/v3/invoices', data);
@@ -426,10 +462,18 @@ export class ZohoBooksClient {
         discount?: number;
         is_discount_before_tax?: boolean;
         location_id?: string;
+        discount_type?: 'item_level' | 'entity_level';
         line_items: Array<{
             item_id: string;
             quantity: number;
             rate: number;
+            discount?: string | number;
+            tax_id?: string;
+            description?: string;
+            item_custom_fields?: Array<{
+                customfield_id: string;
+                value: string | number;
+            }>;
         }>;
     }): Promise<{ estimate_id: string; estimate_number: string }> {
         const result = await this.request('POST', '/books/v3/estimates', data);

@@ -409,6 +409,11 @@ export interface Database {
           quantity: number
           unit_price: number
           discount_percent: number
+          tax_id: string | null
+          tax_name: string | null
+          tax_percentage: number
+          warranty: string | null
+          serial_number_value: string | null
           subtotal: number
           sort_order: number
           created_at: string
@@ -421,6 +426,11 @@ export interface Database {
           quantity?: number
           unit_price?: number
           discount_percent?: number
+          tax_id?: string | null
+          tax_name?: string | null
+          tax_percentage?: number
+          warranty?: string | null
+          serial_number_value?: string | null
           subtotal?: number
           sort_order?: number
           created_at?: string
@@ -433,6 +443,11 @@ export interface Database {
           quantity?: number
           unit_price?: number
           discount_percent?: number
+          tax_id?: string | null
+          tax_name?: string | null
+          tax_percentage?: number
+          warranty?: string | null
+          serial_number_value?: string | null
           subtotal?: number
           sort_order?: number
           created_at?: string

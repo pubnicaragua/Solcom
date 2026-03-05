@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createRouteHandlerClient } from '@supabase/auth-helpers-nextjs';
 import { cookies } from 'next/headers';
 import { createZohoBooksClient } from '@/lib/zoho/books-client';
+import { withWarrantyInDescription } from '@/lib/ventas/fiscal';
 import {
     applyReservedSerialsToItems,
     assertSerialsReservedForOrder,
@@ -34,6 +35,30 @@ function extractMissingColumn(message: string): string | null {
     match = text.match(/column "?([a-zA-Z0-9_]+)"? does not exist/i);
     if (match?.[1]) return match[1];
     return null;
+}
+
+async function insertInvoiceItemsWithColumnFallback(supabase: any, rows: any[]): Promise<{ error: any }> {
+    if (!Array.isArray(rows) || rows.length === 0) return { error: null };
+    const mutableRows = rows.map((row) => ({ ...row }));
+    let retry = 0;
+    while (retry < 12) {
+        const result = await supabase.from('sales_invoice_items').insert(mutableRows);
+        if (!result.error) return { error: null };
+
+        const missingColumn = extractMissingColumn(result.error?.message || '');
+        if (!missingColumn) return { error: result.error };
+
+        let removed = false;
+        for (const row of mutableRows) {
+            if (Object.prototype.hasOwnProperty.call(row, missingColumn)) {
+                delete row[missingColumn];
+                removed = true;
+            }
+        }
+        if (!removed) return { error: result.error };
+        retry += 1;
+    }
+    return { error: new Error('No se pudieron insertar items de factura por columnas faltantes.') };
 }
 
 function isSerialTracked(detail: any): boolean {
@@ -250,10 +275,15 @@ async function tryCreateZohoInvoiceDirect(params: {
         const discountPercent = Math.max(0, Math.min(100, normalizeNumber(line?.discount_percent, 0)));
         const lineSubtotal = Math.max(0, normalizeNumber(line?.subtotal, 0));
         const fallbackRateFromSubtotal = quantity > 0 ? lineSubtotal / quantity : 0;
-        const fallbackCatalogRate = Math.max(0, normalizeNumber(mapped.price, 0)) * (1 - discountPercent / 100);
-        const effectiveRate = lineUnitPrice > 0
-            ? (lineUnitPrice * (1 - discountPercent / 100))
+        const fallbackCatalogRate = Math.max(0, normalizeNumber(mapped.price, 0));
+        const resolvedUnitRate = lineUnitPrice > 0
+            ? lineUnitPrice
             : (fallbackRateFromSubtotal > 0 ? fallbackRateFromSubtotal : fallbackCatalogRate);
+        const taxId = normalizeText(line?.tax_id);
+        if (!taxId) {
+            throw new Error(`Impuesto requerido en la línea ${index + 1} para facturar en Zoho.`);
+        }
+        const warranty = normalizeText(line?.warranty);
         const expectedSerialCount = Math.round(quantity);
         let serials = parseSerialInput(
             line?.serial_number_value ?? line?.serial_numbers ?? line?.serials
@@ -264,13 +294,17 @@ async function tryCreateZohoInvoiceDirect(params: {
         return {
             item_id: zohoItemId,
             quantity,
-            rate: Number(effectiveRate.toFixed(6)),
+            rate: Number(Math.max(0, resolvedUnitRate).toFixed(6)),
+            tax_id: taxId,
+            description: withWarrantyInDescription(normalizeText(line?.description || mapped.name), warranty || null),
+            ...(discountPercent > 0 ? { discount: `${Number(discountPercent.toFixed(2))}%` } : {}),
             __serials: serials,
             __expectedSerialCount: expectedSerialCount,
             __mappedName: mapped.name,
             __zohoItemId: zohoItemId,
             __lineWarehouseId: lineWarehouseId,
             __lineZohoWarehouseId: lineZohoWarehouseId,
+            __warranty: warranty,
         } as any;
     });
 
@@ -361,9 +395,13 @@ async function tryCreateZohoInvoiceDirect(params: {
                     item_id: line.item_id,
                     quantity: serialList.length,
                     rate: line.rate,
+                    tax_id: line.tax_id,
+                    description: line.description,
+                    ...(line.discount ? { discount: line.discount } : {}),
                     serial_number_value: serialList.join(','),
                     serial_numbers: serialList,
                     __resolvedLineLocationId: locationId,
+                    __warranty: line.__warranty,
                 };
                 zohoLineItems.push(clonedLine);
             }
@@ -397,33 +435,41 @@ async function tryCreateZohoInvoiceDirect(params: {
     }
 
     const invoiceDate = normalizeText(order?.date) || new Date().toISOString().slice(0, 10);
-    const discountAmount = Math.max(0, normalizeNumber(order?.discount_amount, 0));
+    const warrantyCustomFieldId = normalizeText(process.env.ZOHO_BOOKS_WARRANTY_CUSTOMFIELD_ID);
     const payloadBase: any = {
         customer_id: zohoCustomerId,
         date: invoiceDate,
         reference_number: normalizeText(order?.order_number) || fallbackReference,
+        discount_type: 'item_level',
+        is_discount_before_tax: true,
     };
 
     const notes = normalizeText(order?.notes);
     if (notes) payloadBase.notes = notes;
-    if (discountAmount > 0) {
-        payloadBase.discount = Number(discountAmount.toFixed(2));
-        payloadBase.is_discount_before_tax = true;
-    }
     const salespersonName = normalizeText(order?.salesperson_name);
     if (salespersonName) payloadBase.salesperson_name = salespersonName;
 
     const hasLineLocation = zohoLineItems.some((line) => Boolean(normalizeText(line?.__resolvedLineLocationId)));
-    const buildLineItems = (lineFieldMode: 'warehouse_id' | 'location_id' | 'none') =>
+    const buildLineItems = (lineFieldMode: 'warehouse_id' | 'location_id' | 'none', includeCustomFields: boolean) =>
         zohoLineItems.map((line) => {
             const locationId = normalizeText(line?.__resolvedLineLocationId);
             const nextLine: any = { ...line };
+            const warranty = normalizeText(line?.__warranty);
             delete nextLine.__resolvedLineLocationId;
+            delete nextLine.__warranty;
             if (locationId && lineFieldMode === 'warehouse_id') {
                 nextLine.warehouse_id = locationId;
             }
             if (locationId && lineFieldMode === 'location_id') {
                 nextLine.location_id = locationId;
+            }
+            if (includeCustomFields && warrantyCustomFieldId && warranty) {
+                nextLine.item_custom_fields = [
+                    {
+                        customfield_id: warrantyCustomFieldId,
+                        value: warranty,
+                    },
+                ];
             }
             return nextLine;
         });
@@ -446,7 +492,7 @@ async function tryCreateZohoInvoiceDirect(params: {
     for (const attempt of attempts) {
         const payload: any = {
             ...payloadBase,
-            line_items: buildLineItems(attempt.mode),
+            line_items: buildLineItems(attempt.mode, true),
         };
 
         if (attempt.includeParentLocation && parentZohoLocationId) {
@@ -460,6 +506,18 @@ async function tryCreateZohoInvoiceDirect(params: {
         } catch (error: any) {
             const message = normalizeText(error?.message) || 'Error desconocido';
             errors.push(`${attempt.label}: ${message}`);
+            const customFieldRejected = message.toLowerCase().includes('customfield')
+                || message.toLowerCase().includes('item_custom_fields');
+            if (customFieldRejected) {
+                try {
+                    return await zohoClient.createInvoice({
+                        ...payload,
+                        line_items: buildLineItems(attempt.mode, false),
+                    });
+                } catch {
+                    // Sigue flujo normal de variantes si falla sin custom fields.
+                }
+            }
             if (!shouldRetryZohoLocationVariant(error)) {
                 throw error;
             }
@@ -618,14 +676,16 @@ export async function POST(
             quantity: normalizeNumber(item.quantity, 0),
             unit_price: normalizeNumber(item.unit_price, 0),
             discount_percent: normalizeNumber(item.discount_percent, 0),
+            tax_id: normalizeText(item.tax_id) || null,
+            tax_name: normalizeText(item.tax_name) || null,
+            tax_percentage: Math.max(0, normalizeNumber(item.tax_percentage, 0)),
+            warranty: normalizeText(item.warranty) || null,
             serial_number_value: normalizeText(item.serial_number_value) || null,
             subtotal: normalizeNumber(item.subtotal, 0),
             sort_order: index,
         }));
 
-        const { error: itemsError } = await supabase
-            .from('sales_invoice_items')
-            .insert(invoiceItems);
+        const { error: itemsError } = await insertInvoiceItemsWithColumnFallback(supabase, invoiceItems);
 
         if (itemsError) {
             await supabase.from('sales_invoices').delete().eq('id', invoice.id);
