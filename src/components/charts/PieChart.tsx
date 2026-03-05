@@ -6,9 +6,10 @@ interface PieChartProps {
   data: Array<{ label: string; value: number; color: string }>;
   size?: number;
   showLegend?: boolean;
+  innerRadius?: number; // Added innerRadius prop
 }
 
-export default function PieChart({ data, size = 200, showLegend = true }: PieChartProps) {
+export default function PieChart({ data, size = 200, showLegend = true, innerRadius = 0 }: PieChartProps) {
   const [hoveredIndex, setHoveredIndex] = useState<number | null>(null);
 
   if (!data || data.length === 0) {
@@ -52,15 +53,27 @@ export default function PieChart({ data, size = 200, showLegend = true }: PieCha
     };
   }
 
-  function describeArc(x: number, y: number, radius: number, startAngle: number, endAngle: number) {
-    const start = polarToCartesian(x, y, radius, endAngle);
-    const end = polarToCartesian(x, y, radius, startAngle);
+  function describeArc(x: number, y: number, radius: number, innerR: number, startAngle: number, endAngle: number) {
+    const startOuter = polarToCartesian(x, y, radius, endAngle);
+    const endOuter = polarToCartesian(x, y, radius, startAngle);
+    const startInner = polarToCartesian(x, y, innerR, endAngle);
+    const endInner = polarToCartesian(x, y, innerR, startAngle);
     const largeArcFlag = endAngle - startAngle <= 180 ? '0' : '1';
 
+    if (innerR === 0) {
+      return [
+        'M', startOuter.x, startOuter.y,
+        'A', radius, radius, 0, largeArcFlag, 0, endOuter.x, endOuter.y,
+        'L', x, y,
+        'Z'
+      ].join(' ');
+    }
+
     return [
-      'M', start.x, start.y,
-      'A', radius, radius, 0, largeArcFlag, 0, end.x, end.y,
-      'L', x, y,
+      'M', startOuter.x, startOuter.y,
+      'A', radius, radius, 0, largeArcFlag, 0, endOuter.x, endOuter.y,
+      'L', endInner.x, endInner.y,
+      'A', innerR, innerR, 0, largeArcFlag, 1, startInner.x, startInner.y,
       'Z'
     ].join(' ');
   }
@@ -68,6 +81,7 @@ export default function PieChart({ data, size = 200, showLegend = true }: PieCha
   const centerX = size / 2;
   const centerY = size / 2;
   const radius = size / 2 - 10;
+  const actualInnerRadius = innerRadius > 0 ? (size / 2) * (innerRadius / 100) : 0;
 
   const formatValue = (value: number) => value.toLocaleString('es-NI');
 
@@ -80,11 +94,11 @@ export default function PieChart({ data, size = 200, showLegend = true }: PieCha
         style={{ maxWidth: '100%', height: 'auto' }}
       >
         {slices.map((slice) => {
-          // Calcular posición del texto en el centro del slice
+          // Calcular posición del texto en el centro del slice (entre innerRadius y radius)
           const midAngle = (slice.startAngle + slice.endAngle) / 2;
-          const labelRadius = radius * 0.7; // 70% del radio para posicionar el texto
+          const labelRadius = actualInnerRadius > 0 ? (radius + actualInnerRadius) / 2 : radius * 0.7; // Centro del aro o 70% del radio
           const labelPos = polarToCartesian(centerX, centerY, labelRadius, midAngle);
-          
+
           return (
             <g
               key={slice.index}
@@ -93,7 +107,7 @@ export default function PieChart({ data, size = 200, showLegend = true }: PieCha
               style={{ cursor: 'pointer' }}
             >
               <path
-                d={describeArc(centerX, centerY, radius, slice.startAngle, slice.endAngle)}
+                d={describeArc(centerX, centerY, radius, actualInnerRadius, slice.startAngle, slice.endAngle)}
                 fill={slice.color}
                 stroke="var(--card)"
                 strokeWidth="2"
@@ -125,6 +139,22 @@ export default function PieChart({ data, size = 200, showLegend = true }: PieCha
             </g>
           );
         })}
+        {actualInnerRadius > 0 && (
+          <text
+            x={centerX}
+            y={centerY}
+            textAnchor="middle"
+            dominantBaseline="middle"
+            style={{
+              fontSize: '16px',
+              fontWeight: 800,
+              fill: 'var(--text)',
+              pointerEvents: 'none'
+            }}
+          >
+            {formatValue(total)}
+          </text>
+        )}
       </svg>
 
       <div
@@ -136,7 +166,7 @@ export default function PieChart({ data, size = 200, showLegend = true }: PieCha
           width: '100%',
           maxWidth: size,
           textAlign: 'center',
-          minHeight:50,
+          minHeight: 50,
           display: 'flex',
           flexDirection: 'column',
           justifyContent: 'center',

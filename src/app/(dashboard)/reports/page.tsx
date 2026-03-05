@@ -922,7 +922,7 @@ export default function ReportsPage() {
       </div>
 
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(400px, 100%), 1fr))', gap: 14 }}>
-        <ChartCard title="Inventario por Categorías (Unids)">
+        <ChartCard title="Inventario por Categorías en Unidades">
           {loading ? (
             <div style={{ height: 300, background: 'var(--panel)', borderRadius: 4, animation: 'pulse 1.5s infinite' }} />
           ) : (() => {
@@ -935,7 +935,30 @@ export default function ReportsPage() {
           })()}
         </ChartCard>
 
-        <ChartCard title="Top Inventario por Marca (Unids)">
+        <ChartCard title="Inventario por Categoría al Costo $">
+          {loading ? (
+            <div style={{ height: 300, background: 'var(--panel)', borderRadius: 4, animation: 'pulse 1.5s infinite' }} />
+          ) : (() => {
+            const data = reportData?.moneyMakerCategories?.map((c: any) => ({ label: c.label, value: c.capital }));
+            const total = data?.reduce((sum: number, d: any) => sum + d.value, 0) || 0;
+            return data && data.length > 0 ? (
+              <HorizontalBarChart
+                data={data.map((d: any, i: number) => ({ ...d, color: generateColors(data.length)[i] }))}
+                height={300}
+                showValues={true}
+                showPercentage={true}
+                totalValue={total}
+                valueFormatter={(v) => '$' + v.toLocaleString('es-NI', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+              />
+            ) : (
+              <ReportPlaceholder title="Sin datos" height={300} />
+            );
+          })()}
+        </ChartCard>
+      </div>
+
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(400px, 100%), 1fr))', gap: 14 }}>
+        <ChartCard title="Top Inventario por Marcas en Unidades">
           {loading ? (
             <div style={{ height: 300, background: 'var(--panel)', borderRadius: 4, animation: 'pulse 1.5s infinite' }} />
           ) : (() => {
@@ -954,29 +977,50 @@ export default function ReportsPage() {
             );
           })()}
         </ChartCard>
+
+        <ChartCard title="Top Inventario por Marcas al Costo $">
+          {loading ? (
+            <div style={{ height: 300, background: 'var(--panel)', borderRadius: 4, animation: 'pulse 1.5s infinite' }} />
+          ) : (() => {
+            const data = reportData?.moneyMakerBrands?.map((c: any) => ({ label: c.label, value: c.capital }));
+            const total = data?.reduce((sum: number, d: any) => sum + d.value, 0) || 0;
+            return data && data.length > 0 ? (
+              <HorizontalBarChart
+                data={data.map((d: any, i: number) => ({ ...d, color: generateColors(data.length)[i] }))}
+                height={300}
+                showValues={true}
+                showPercentage={true}
+                totalValue={total}
+                valueFormatter={(v) => '$' + v.toLocaleString('es-NI', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+              />
+            ) : (
+              <ReportPlaceholder title="Sin datos" height={300} />
+            );
+          })()}
+        </ChartCard>
       </div>
 
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(400px, 100%), 1fr))', gap: 14 }}>
-        <ChartCard title="Participación de Inventario - Unids por Categoría">
+        <ChartCard title="Participación de Inventario - Unidades por Categoría">
           {loading ? (
             <div style={{ height: 300, background: 'var(--panel)', borderRadius: 4, animation: 'pulse 1.5s infinite' }} />
           ) : (() => {
             const data = charts?.categoryBreakdown;
             return data && data.length > 0 ? (
-              <PieChart data={data.map((d: any, i: number) => ({ ...d, color: generateColors(data.length)[i] }))} size={250} />
+              <PieChart data={data.map((d: any, i: number) => ({ ...d, color: generateColors(data.length)[i] }))} size={250} innerRadius={65} />
             ) : (
               <ReportPlaceholder title="Sin datos" height={300} />
             );
           })()}
         </ChartCard>
 
-        <ChartCard title="Participación de Inventario - Unids por Marca">
+        <ChartCard title="Participación de Inventario - Unidades por Marca">
           {loading ? (
             <div style={{ height: 300, background: 'var(--panel)', borderRadius: 4, animation: 'pulse 1.5s infinite' }} />
           ) : (() => {
             const data = charts?.brandBreakdown;
             return data && data.length > 0 ? (
-              <PieChart data={data.map((d: any, i: number) => ({ ...d, color: generateColors(data.length)[i] }))} size={250} />
+              <PieChart data={data.map((d: any, i: number) => ({ ...d, color: generateColors(data.length)[i] }))} size={250} innerRadius={65} />
             ) : (
               <ReportPlaceholder title="Sin datos" height={300} />
             );
@@ -1000,13 +1044,13 @@ export default function ReportsPage() {
           )}
         </ChartCard>
 
-        <ChartCard title="Participación de Inventario - Unids por Almacén">
+        <ChartCard title="Participación de Inventario - Unidades por Almacén">
           {warehouseLoading ? (
             <div style={{ height: 300, display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--muted)', gap: 8 }}>
               <Loader size={18} style={{ animation: 'spin 1s linear infinite' }} /> Cargando bodegas...
             </div>
           ) : warehouseData && warehouseData.length > 0 ? (
-            <PieChart data={warehouseData.map((d: any, i: number) => ({ ...d, color: generateColors(warehouseData.length)[i] }))} size={250} />
+            <PieChart data={warehouseData.map((d: any, i: number) => ({ ...d, color: generateColors(warehouseData.length)[i] }))} size={250} innerRadius={65} />
           ) : (
             <ReportPlaceholder title={warehouseData ? "Sin datos" : "Cargando..."} height={300} />
           )}
