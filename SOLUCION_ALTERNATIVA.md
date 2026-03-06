@@ -9,7 +9,7 @@ El error "Database error querying schema" en `/auth/v1/token` indica que **Supab
 En lugar de crear usuarios manualmente con SQL, vamos a usar el método oficial de Supabase.
 
 ---
-
+--
 ## OPCIÓN 1: Crear Usuarios desde Supabase Dashboard (Recomendado)
 
 ### Paso 1: Eliminar Usuarios Actuales
