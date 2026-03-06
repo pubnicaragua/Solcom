@@ -61,9 +61,15 @@ button {
 
 input,
 select,
-textarea {
+textarea,
+option {
   font-family: inherit;
   outline: none;
+}
+
+option {
+  background-color: var(--card);
+  color: var(--text);
 }
 
 a {
@@ -94,7 +100,7 @@ a {
   .h-title {
     font-size: 20px;
   }
-  
+
   .h-subtitle {
     font-size: 14px;
   }
@@ -104,15 +110,15 @@ a {
   body {
     font-size: 14px;
   }
-  
+
   .h-title {
     font-size: 18px;
   }
-  
+
   .h-subtitle {
     font-size: 13px;
   }
-  
+
   /* Ajustar padding en móviles */
   main {
     padding: 12px !important;
@@ -123,11 +129,11 @@ a {
   .h-title {
     font-size: 16px;
   }
-  
+
   .h-subtitle {
     font-size: 12px;
   }
-  
+
   main {
     padding: 8px !important;
   }
@@ -138,15 +144,19 @@ a {
   from {
     transform: rotate(0deg);
   }
+
   to {
     transform: rotate(360deg);
   }
 }
 
 @keyframes pulse {
-  0%, 100% {
+
+  0%,
+  100% {
     opacity: 1;
   }
+
   50% {
     opacity: 0.5;
   }
