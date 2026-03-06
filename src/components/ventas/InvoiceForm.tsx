@@ -5,6 +5,7 @@ import {
     X, Plus, Trash2, Search, UserPlus, FileText,
     MapPin, User, Truck, ChevronDown,
 } from 'lucide-react';
+import type { InvoicePrefillData } from '@/lib/ventas/invoice-prefill';
 import CustomerModal from './CustomerModal';
 import DeliverySelector from './DeliverySelector';
 import CancellationReasonSelector from './CancellationReasonSelector';
@@ -70,28 +71,6 @@ interface TaxOption {
     tax_percentage: number;
     active: boolean;
     is_editable: boolean;
-}
-
-interface InvoicePrefillItem {
-    item_id: string;
-    zoho_item_id?: string | null;
-    description: string;
-    quantity?: number;
-    available_qty?: number | null;
-    unit_price?: number;
-    discount_percent?: number;
-    serial_number_value?: string | null;
-}
-
-interface InvoicePrefillData {
-    source_sales_order_id?: string | null;
-    source_order_number?: string | null;
-    customer_id?: string | null;
-    customer_name?: string | null;
-    salesperson_id?: string | null;
-    salesperson_name?: string | null;
-    warehouse_id?: string | null;
-    items?: InvoicePrefillItem[];
 }
 
 interface InvoiceFormProps {
@@ -184,6 +163,7 @@ export default function InvoiceForm({ isOpen, onClose, onSaved, editInvoice, pre
 
     const [saving, setSaving] = useState(false);
     const [error, setError] = useState('');
+    const isEditing = Boolean(editInvoice?.id);
 
     const customerRef = useRef<HTMLDivElement>(null);
     const productRef = useRef<HTMLDivElement>(null);
@@ -284,6 +264,96 @@ export default function InvoiceForm({ isOpen, onClose, onSaved, editInvoice, pre
         );
         setError('');
     }, [isOpen, editInvoice, prefillData]);
+
+    useEffect(() => {
+        if (!isOpen || !editInvoice) return;
+
+        const normalizedItems = Array.isArray(editInvoice?.items)
+            ? editInvoice.items
+                .map((item: any) => {
+                    const quantity = Math.max(1, Math.floor(Number(item?.quantity ?? 1) || 1));
+                    return {
+                        item_id: String(item?.item_id || '').trim() || null,
+                        zoho_item_id: String(item?.zoho_item_id || '').trim() || null,
+                        description: String(item?.description || '').trim(),
+                        quantity,
+                        max_available_qty: null,
+                        unit_price: Math.max(0, Number(item?.unit_price ?? 0) || 0),
+                        discount_percent: Math.max(0, Math.min(100, Number(item?.discount_percent ?? 0) || 0)),
+                        tax_id: String(item?.tax_id || '').trim(),
+                        tax_name: String(item?.tax_name || '').trim(),
+                        tax_percentage: Math.max(0, Number(item?.tax_percentage ?? 0) || 0),
+                        warranty: String(item?.warranty || ''),
+                        serial_number_value: normalizeSerialInput(
+                            item?.serial_number_value ?? item?.serial_numbers ?? item?.serials
+                        ),
+                        available_serials: [],
+                        loading_serials: false,
+                    };
+                })
+                .filter((item: any) => item.item_id && item.description)
+            : [];
+
+        const customerId = String(editInvoice?.customer_id || '').trim();
+        const customerName = String(editInvoice?.customer?.name || '').trim();
+        if (customerId || customerName) {
+            const selected: Customer = {
+                id: customerId || '',
+                name: customerName || 'Cliente seleccionado',
+                email: editInvoice?.customer?.email || null,
+                phone: editInvoice?.customer?.phone || null,
+                ruc: editInvoice?.customer?.ruc || null,
+                source: 'supabase',
+            };
+            setSelectedCustomer(selected);
+            setCustomerSearch(selected.name);
+        } else {
+            setSelectedCustomer(null);
+            setCustomerSearch('');
+        }
+
+        setInvoiceDate(
+            String(editInvoice?.date || '').trim() || new Date().toISOString().slice(0, 10)
+        );
+        setDueDate(String(editInvoice?.due_date || '').trim());
+        setOrderNumber(String(editInvoice?.order_number || '').trim());
+        setSourceSalesOrderId(
+            String(editInvoice?.source_sales_order_id || '').trim() || null
+        );
+        setTerms(String(editInvoice?.terms || '').trim());
+        setNotes(String(editInvoice?.notes || '').trim());
+        setCreditDetail(String(editInvoice?.credit_detail || '').trim());
+        setWarehouseId(String(editInvoice?.warehouse_id || '').trim());
+        setSalespersonId(String(editInvoice?.salesperson_id || '').trim());
+        setDeliveryRequested(Boolean(editInvoice?.delivery_requested));
+        setDeliveryId(String(editInvoice?.delivery_id || '').trim() || null);
+        setShippingCharge(Math.max(0, Number(editInvoice?.shipping_charge ?? 0) || 0));
+        setCancellationReasonId(String(editInvoice?.cancellation_reason_id || '').trim() || null);
+        setCancellationComments(String(editInvoice?.cancellation_comments || '').trim());
+        setShowCancellation(Boolean(editInvoice?.cancellation_reason_id || editInvoice?.cancellation_comments));
+
+        setLineItems(
+            normalizedItems.length > 0
+                ? normalizedItems
+                : [{
+                    item_id: null,
+                    zoho_item_id: null,
+                    description: '',
+                    quantity: 1,
+                    max_available_qty: null,
+                    unit_price: 0,
+                    discount_percent: 0,
+                    tax_id: '',
+                    tax_name: '',
+                    tax_percentage: 0,
+                    warranty: '',
+                    serial_number_value: '',
+                    available_serials: [],
+                    loading_serials: false,
+                }]
+        );
+        setError('');
+    }, [isOpen, editInvoice]);
 
     useEffect(() => {
         if (!isOpen || editInvoice || !prefillData) return;
@@ -411,6 +481,7 @@ export default function InvoiceForm({ isOpen, onClose, onSaved, editInvoice, pre
 
                 return {
                     ...line,
+                    zoho_item_id: line.zoho_item_id || matched.zoho_item_id || null,
                     max_available_qty: maxAvailable > 0 ? maxAvailable : null,
                     quantity: nextQty,
                 };
@@ -814,8 +885,13 @@ export default function InvoiceForm({ isOpen, onClose, onSaved, editInvoice, pre
                 })),
             };
 
-            const res = await fetch('/api/ventas/invoices', {
-                method: 'POST',
+            const endpoint = isEditing
+                ? `/api/ventas/invoices/${encodeURIComponent(String(editInvoice.id))}`
+                : '/api/ventas/invoices';
+            const method = isEditing ? 'PUT' : 'POST';
+
+            const res = await fetch(endpoint, {
+                method,
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify(payload),
             });
@@ -835,7 +911,7 @@ export default function InvoiceForm({ isOpen, onClose, onSaved, editInvoice, pre
                         throw new Error(`Serial ${serial} reservado por OV ${ovNumber}.`);
                     }
                 }
-                throw new Error(data?.error || 'No se pudo crear la factura');
+                throw new Error(data?.error || (isEditing ? 'No se pudo actualizar la factura' : 'No se pudo crear la factura'));
             }
 
             onSaved();
@@ -922,7 +998,9 @@ export default function InvoiceForm({ isOpen, onClose, onSaved, editInvoice, pre
                     }}>
                         <h2 style={{ fontSize: '20px', fontWeight: 700, color: 'var(--text)', display: 'flex', alignItems: 'center', gap: '10px' }}>
                             <FileText size={22} style={{ color: 'var(--brand-primary)' }} />
-                            Nueva Factura
+                            {isEditing
+                                ? `Editar Factura${String(editInvoice?.invoice_number || '').trim() ? ` (${String(editInvoice.invoice_number).trim()})` : ''}`
+                                : 'Nueva Factura'}
                         </h2>
                         <button
                             onClick={() => {
@@ -1451,7 +1529,7 @@ export default function InvoiceForm({ isOpen, onClose, onSaved, editInvoice, pre
                             </button>
                             <button onClick={() => handleSave('borrador')} disabled={saving}
                                 style={{ padding: '12px 24px', background: '#374151', color: 'white', border: 'none', borderRadius: '8px', fontSize: '14px', fontWeight: 600, cursor: saving ? 'not-allowed' : 'pointer', opacity: saving ? 0.6 : 1 }}>
-                                Guardar Borrador
+                                {isEditing ? 'Guardar Cambios' : 'Guardar Borrador'}
                             </button>
                             <button onClick={() => handleSave('enviada')} disabled={saving}
                                 style={{ padding: '12px 24px', background: saving ? '#6B7280' : 'var(--brand-primary)', color: 'white', border: 'none', borderRadius: '8px', fontSize: '14px', fontWeight: 700, cursor: saving ? 'not-allowed' : 'pointer', transition: 'background 0.2s', boxShadow: '0 4px 12px rgba(220,38,38,0.3)' }}>

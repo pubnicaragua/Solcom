@@ -4,12 +4,16 @@ import { useState, useEffect, useRef } from 'react';
 import Link from 'next/link';
 import {
   FileText, Plus, Search, DollarSign, Clock,
-  CheckCircle, AlertTriangle, XCircle, Eye, Trash2,
+  CheckCircle, AlertTriangle, XCircle, Eye, Trash2, Pencil,
   ChevronLeft, ChevronRight, RefreshCw, ShoppingCart, ClipboardList,
 } from 'lucide-react';
 import InvoiceForm from '@/components/ventas/InvoiceForm';
 import InvoicePreview from '@/components/ventas/InvoicePreview';
 import SalesOrderList from '@/components/ventas/SalesOrderList';
+import {
+  INVENTORY_INVOICE_PREFILL_STORAGE_KEY,
+  type InvoicePrefillData,
+} from '@/lib/ventas/invoice-prefill';
 
 interface Invoice {
   id: string;
@@ -44,26 +48,6 @@ interface PivotItem {
   zoho_item_id?: string | null;
   warehouseQty: Record<string, number>;
   total: number;
-}
-
-interface InvoicePrefillData {
-  source_sales_order_id?: string | null;
-  source_order_number?: string | null;
-  customer_id?: string | null;
-  customer_name?: string | null;
-  salesperson_id?: string | null;
-  salesperson_name?: string | null;
-  warehouse_id: string;
-  items: Array<{
-    item_id: string;
-    zoho_item_id?: string | null;
-    description: string;
-    quantity: number;
-    available_qty?: number;
-    unit_price: number;
-    discount_percent: number;
-    serial_number_value?: string | null;
-  }>;
 }
 
 const STATUS_TABS = [
@@ -121,6 +105,8 @@ export default function FacturacionPage() {
   const [previewInvoiceId, setPreviewInvoiceId] = useState<string | null>(null);
   const [showPreview, setShowPreview] = useState(false);
   const [invoicePrefill, setInvoicePrefill] = useState<InvoicePrefillData | null>(null);
+  const [editInvoice, setEditInvoice] = useState<any | null>(null);
+  const [loadingEditInvoiceId, setLoadingEditInvoiceId] = useState<string | null>(null);
 
   // Draft builder (pivot + carrito)
   const [draftWarehouses, setDraftWarehouses] = useState<WarehouseOption[]>([]);
@@ -147,6 +133,59 @@ export default function FacturacionPage() {
     return () => {
       if (draftSearchTimeout.current) clearTimeout(draftSearchTimeout.current);
     };
+  }, []);
+
+  useEffect(() => {
+    const rawPrefill = window.sessionStorage.getItem(INVENTORY_INVOICE_PREFILL_STORAGE_KEY);
+    if (!rawPrefill) return;
+    window.sessionStorage.removeItem(INVENTORY_INVOICE_PREFILL_STORAGE_KEY);
+
+    try {
+      const parsed = JSON.parse(rawPrefill);
+      const warehouseId = String(parsed?.warehouse_id || '').trim();
+      const normalizedItems = Array.isArray(parsed?.items)
+        ? parsed.items
+          .map((line: any) => {
+            const itemId = String(line?.item_id || '').trim();
+            const description = String(line?.description || '').trim();
+            if (!itemId || !description) return null;
+
+            return {
+              item_id: itemId,
+              zoho_item_id: String(line?.zoho_item_id || '').trim() || null,
+              description,
+              quantity: Math.max(1, Math.floor(Number(line?.quantity ?? 1) || 1)),
+              available_qty: Math.max(0, Math.floor(Number(line?.available_qty ?? 0) || 0)),
+              unit_price: Math.max(0, Number(line?.unit_price ?? 0) || 0),
+              discount_percent: Math.max(0, Math.min(100, Number(line?.discount_percent ?? 0) || 0)),
+              serial_number_value: String(line?.serial_number_value || '').trim() || null,
+              tax_id: String(line?.tax_id || '').trim() || null,
+              tax_name: String(line?.tax_name || '').trim() || null,
+              tax_percentage: Math.max(0, Number(line?.tax_percentage ?? 0) || 0),
+              warranty: String(line?.warranty || '').trim() || null,
+            };
+          })
+          .filter(Boolean)
+        : [];
+
+      if (!warehouseId || normalizedItems.length === 0) return;
+
+      const prefill: InvoicePrefillData = {
+        customer_id: String(parsed?.customer_id || '').trim() || null,
+        customer_name: String(parsed?.customer_name || '').trim() || null,
+        salesperson_id: String(parsed?.salesperson_id || '').trim() || null,
+        salesperson_name: String(parsed?.salesperson_name || '').trim() || null,
+        warehouse_id: warehouseId,
+        items: normalizedItems as InvoicePrefillData['items'],
+      };
+
+      setEditInvoice(null);
+      setInvoicePrefill(prefill);
+      setVentasModule('facturas');
+      setShowInvoiceForm(true);
+    } catch (error) {
+      console.error('No se pudo parsear prefill de factura desde inventario:', error);
+    }
   }, []);
 
   useEffect(() => {
@@ -300,6 +339,39 @@ export default function FacturacionPage() {
     }
   };
 
+  const openInvoiceForEdit = async (id: string) => {
+    try {
+      setLoadingEditInvoiceId(id);
+      const response = await fetch(`/api/ventas/invoices/${id}`, { cache: 'no-store' });
+      const payload = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        throw new Error(payload?.error || 'No se pudo cargar la factura.');
+      }
+
+      const invoice = payload?.invoice;
+      if (!invoice) {
+        throw new Error('No se encontró la factura.');
+      }
+      if (String(invoice?.status || '').toLowerCase() !== 'borrador') {
+        throw new Error('Solo puedes editar facturas en borrador.');
+      }
+
+      setInvoicePrefill(null);
+      setEditInvoice(invoice);
+      setShowInvoiceForm(true);
+    } catch (error: any) {
+      alert(error?.message || 'No se pudo abrir la factura para edición.');
+    } finally {
+      setLoadingEditInvoiceId(null);
+    }
+  };
+
+  const closeInvoiceForm = () => {
+    setShowInvoiceForm(false);
+    setInvoicePrefill(null);
+    setEditInvoice(null);
+  };
+
   const refreshAll = () => {
     fetchInvoices();
     fetchKpis();
@@ -366,6 +438,7 @@ export default function FacturacionPage() {
       })),
     };
 
+    setEditInvoice(null);
     setInvoicePrefill(prefill);
     setShowInvoiceForm(true);
     setDraftError('');
@@ -427,6 +500,7 @@ export default function FacturacionPage() {
       throw new Error('La orden no tiene bodega asignada para preparar la factura.');
     }
 
+    setEditInvoice(null);
     setInvoicePrefill(prefill);
     setVentasModule('facturas');
     setShowInvoiceForm(true);
@@ -504,6 +578,7 @@ export default function FacturacionPage() {
           {ventasModule === 'facturas' && (
             <button
               onClick={() => {
+                setEditInvoice(null);
                 setInvoicePrefill(null);
                 setShowInvoiceForm(true);
               }}
@@ -989,7 +1064,7 @@ export default function FacturacionPage() {
         {/* Table header */}
         <div style={{
           display: 'grid',
-          gridTemplateColumns: '100px 1.2fr 130px 100px 130px 80px',
+          gridTemplateColumns: '100px minmax(200px,1.2fr) 140px 110px 120px 130px',
           padding: '14px 20px', borderBottom: '1px solid var(--border)',
           background: 'rgba(255,255,255,0.02)',
         }}>
@@ -1021,6 +1096,7 @@ export default function FacturacionPage() {
             </div>
             <button
               onClick={() => {
+                setEditInvoice(null);
                 setInvoicePrefill(null);
                 setShowInvoiceForm(true);
               }}
@@ -1044,7 +1120,7 @@ export default function FacturacionPage() {
                 onClick={() => { setPreviewInvoiceId(inv.id); setShowPreview(true); }}
                 style={{
                   display: 'grid',
-                  gridTemplateColumns: '100px 1.2fr 130px 100px 130px 80px',
+                  gridTemplateColumns: '100px minmax(200px,1.2fr) 140px 110px 120px 130px',
                   padding: '14px 20px',
                   borderBottom: i < invoices.length - 1 ? '1px solid var(--border)' : 'none',
                   cursor: 'pointer',
@@ -1080,7 +1156,7 @@ export default function FacturacionPage() {
                 <div style={{ fontSize: '16px', fontWeight: 700, color: 'var(--text)', textAlign: 'right' }}>
                   ${Number(inv.total).toLocaleString('en-US', { minimumFractionDigits: 2 })}
                 </div>
-                <div style={{ display: 'flex', gap: '6px', justifyContent: 'flex-end' }}>
+                <div style={{ display: 'flex', gap: '6px', justifyContent: 'flex-end', minWidth: 0 }}>
                   <button
                     onClick={(e) => { e.stopPropagation(); setPreviewInvoiceId(inv.id); setShowPreview(true); }}
                     title="Ver"
@@ -1092,6 +1168,31 @@ export default function FacturacionPage() {
                   >
                     <Eye size={14} />
                   </button>
+                  {inv.status === 'borrador' && (
+                    <button
+                      onClick={(e) => { e.stopPropagation(); void openInvoiceForEdit(inv.id); }}
+                      title="Editar"
+                      disabled={loadingEditInvoiceId === inv.id}
+                      style={{
+                        padding: '6px',
+                        background: 'rgba(59,130,246,0.08)',
+                        border: '1px solid rgba(59,130,246,0.22)',
+                        borderRadius: '6px',
+                        cursor: loadingEditInvoiceId === inv.id ? 'wait' : 'pointer',
+                        color: '#93C5FD',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        opacity: loadingEditInvoiceId === inv.id ? 0.7 : 1,
+                      }}
+                    >
+                      {loadingEditInvoiceId === inv.id ? (
+                        <RefreshCw size={14} style={{ animation: 'spin 1s linear infinite' }} />
+                      ) : (
+                        <Pencil size={14} />
+                      )}
+                    </button>
+                  )}
                   {inv.status === 'borrador' && (
                     <button
                       onClick={(e) => { e.stopPropagation(); handleDeleteInvoice(inv.id); }}
@@ -1158,9 +1259,10 @@ export default function FacturacionPage() {
       {/* Modals */}
       <InvoiceForm
         isOpen={showInvoiceForm}
-        onClose={() => setShowInvoiceForm(false)}
+        onClose={closeInvoiceForm}
         onSaved={refreshAll}
         prefillData={invoicePrefill}
+        editInvoice={editInvoice}
       />
 
       <InvoicePreview

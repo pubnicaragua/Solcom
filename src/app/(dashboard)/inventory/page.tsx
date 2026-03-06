@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect, useMemo } from 'react';
+import { useRouter } from 'next/navigation';
 import Card from '@/components/ui/Card';
 import Button from '@/components/ui/Button';
 import Input from '@/components/ui/Input';
@@ -16,11 +17,20 @@ import UpdateStockModal from '@/components/modals/UpdateStockModal';
 import TransferModal from '@/components/modals/TransferModal';
 import ProductDetailsModal from '@/components/modals/ProductDetailsModal';
 import KPIGrid from '@/components/dashboard/KPIGrid';
-import type { PivotItem } from '@/components/dashboard/PivotInventoryTable';
+import type { PivotItem as BasePivotItem } from '@/components/dashboard/PivotInventoryTable';
 import type { CartItem, CartType } from '@/components/dashboard/InventoryCart';
 import { useRoleAccess } from '@/hooks/useRoleAccess';
+import {
+  INVENTORY_INVOICE_PREFILL_STORAGE_KEY,
+  type InvoicePrefillData,
+} from '@/lib/ventas/invoice-prefill';
+
+type PivotItem = BasePivotItem & {
+  zoho_item_id?: string | null;
+};
 
 export default function InventoryPage() {
+  const router = useRouter();
   const { access: inventoryAccess, loading: inventoryAccessLoading } = useRoleAccess('inventory');
   const [filters, setFilters] = useState({
     search: '',
@@ -199,6 +209,7 @@ export default function InventoryPage() {
         ...prev,
         {
           itemId: item.id,
+          zohoItemId: item.zoho_item_id || null,
           sku: item.sku,
           name: item.name,
           color: item.color,
@@ -256,6 +267,19 @@ export default function InventoryPage() {
 
   function clearCart() {
     setCartItems([]);
+  }
+
+  function handleInvoicePrefillRequested(prefill: InvoicePrefillData) {
+    try {
+      window.sessionStorage.setItem(INVENTORY_INVOICE_PREFILL_STORAGE_KEY, JSON.stringify(prefill));
+      clearCart();
+      setCartMode(false);
+      setCartOpen(false);
+      setCartSelectorError('');
+      router.push('/ventas');
+    } catch (error) {
+      alert('No se pudo preparar la factura. Intenta de nuevo.');
+    }
   }
 
   useEffect(() => {
@@ -934,6 +958,7 @@ export default function InventoryPage() {
             setCartOpen(false);
             setCartSelectorError('');
           }}
+          onInvoicePrefillRequested={handleInvoicePrefillRequested}
         />
       )}
 

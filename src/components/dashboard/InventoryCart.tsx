@@ -3,10 +3,12 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { X, Trash2, Plus, Minus, ShoppingCart, FileText, Package, Loader2, Search, ChevronDown, ChevronUp, Calendar, MapPin, User, ClipboardList, Receipt } from 'lucide-react';
 import Link from 'next/link';
+import type { InvoicePrefillData } from '@/lib/ventas/invoice-prefill';
 
 /* ───── Types ───── */
 export interface CartItem {
     itemId: string;
+    zohoItemId?: string | null;
     sku: string;
     name: string;
     color: string | null;
@@ -74,6 +76,7 @@ interface InventoryCartProps {
     parentWarehouses?: Warehouse[];
     familyWarehouses?: Warehouse[];
     onParentWarehouseChange?: (warehouseId: string | null) => void;
+    onInvoicePrefillRequested?: (prefill: InvoicePrefillData) => void;
 }
 
 /* ───── Helpers ───── */
@@ -170,6 +173,7 @@ export default function InventoryCart({
     parentWarehouses: controlledParentWarehouses,
     familyWarehouses: controlledFamilyWarehouses,
     onParentWarehouseChange,
+    onInvoicePrefillRequested,
 }: InventoryCartProps) {
     const [internalCartType, setInternalCartType] = useState<CartType>('cotizacion');
     const [creating, setCreating] = useState(false);
@@ -488,27 +492,52 @@ export default function InventoryCart({
     async function handleSubmit() {
         if (items.length === 0) return;
         if (!validate()) return;
+        const selectedSalesperson = salespeople.find((seller) => seller.id === selectedSalespersonId) || null;
+        const docItems = items.map((item) => {
+            const fiscal = getItemFiscal(item.itemId);
+            return {
+                item_id: item.itemId,
+                zoho_item_id: String(item.zohoItemId || '').trim() || null,
+                description: `${item.name}${item.color ? ` — ${item.color}` : ''}${item.brand ? ` (${item.brand})` : ''}`,
+                quantity: item.quantity,
+                unit_price: Math.max(0, Number(item.unitPrice ?? 0) || 0),
+                discount_percent: 0,
+                tax_id: String(fiscal.tax_id || '').trim(),
+                tax_name: String(fiscal.tax_name || '').trim(),
+                tax_percentage: Math.max(0, Number(fiscal.tax_percentage || 0)),
+                warranty: String(fiscal.warranty || '').trim() || null,
+            };
+        });
+
+        if (cartType === 'factura' && onInvoicePrefillRequested) {
+            onInvoicePrefillRequested({
+                customer_id: selectedCustomerId,
+                customer_name: selectedCustomerName || customerSearch || null,
+                salesperson_id: selectedSalesperson?.id || null,
+                salesperson_name: selectedSalesperson?.name || null,
+                warehouse_id: warehouseId || null,
+                items: docItems.map((line, idx) => ({
+                    item_id: line.item_id,
+                    zoho_item_id: line.zoho_item_id,
+                    description: line.description,
+                    quantity: line.quantity,
+                    available_qty: getItemMaxQty(items[idx]),
+                    unit_price: line.unit_price,
+                    discount_percent: line.discount_percent,
+                    tax_id: line.tax_id || null,
+                    tax_name: line.tax_name || null,
+                    tax_percentage: line.tax_percentage,
+                    warranty: line.warranty || null,
+                })),
+            });
+            return;
+        }
 
         setCreating(true);
         setError('');
         setSuccess(false);
 
         try {
-            const selectedSalesperson = salespeople.find((seller) => seller.id === selectedSalespersonId) || null;
-            const docItems = items.map((item) => {
-                const fiscal = getItemFiscal(item.itemId);
-                return {
-                item_id: item.itemId,
-                description: `${item.name}${item.color ? ` — ${item.color}` : ''}${item.brand ? ` (${item.brand})` : ''}`,
-                quantity: item.quantity,
-                unit_price: Math.max(0, Number(item.unitPrice ?? 0) || 0),
-                discount_percent: 0,
-                    tax_id: String(fiscal.tax_id || '').trim(),
-                    tax_name: String(fiscal.tax_name || '').trim(),
-                    tax_percentage: Math.max(0, Number(fiscal.tax_percentage || 0)),
-                    warranty: String(fiscal.warranty || '').trim() || null,
-                };
-            });
 
             let response: Response;
             let docNumber = '';
@@ -1592,14 +1621,18 @@ export default function InventoryCart({
                                 ) : (
                                     <>
                                         <CartTypeIcon size={16} />
-                                        Crear {config.label}
+                                        {cartType === 'factura' && onInvoicePrefillRequested
+                                            ? 'Continuar a Factura'
+                                            : `Crear ${config.label}`}
                                     </>
                                 )}
                             </button>
                         </div>
 
                         <div style={{ fontSize: 11, color: 'var(--muted, #64748b)', textAlign: 'center', lineHeight: 1.4 }}>
-                            Se creará en Supabase y se sincronizará con Zoho Books.
+                            {cartType === 'factura' && onInvoicePrefillRequested
+                                ? 'Se abrirá Facturación con estos datos para completar seriales y campos finales.'
+                                : 'Se creará en Supabase y se sincronizará con Zoho Books.'}
                         </div>
                     </div>
                 )}
