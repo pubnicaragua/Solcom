@@ -121,6 +121,29 @@ function isInvalidSalespersonMessage(message: string): boolean {
     );
 }
 
+function isNonRecoverableInvoiceSyncError(message: unknown, errorCode?: string | null): boolean {
+    const normalizedCode = String(errorCode || '').trim().toUpperCase();
+    if (normalizedCode === 'ZOHO_VALIDATION_ERROR') return true;
+
+    const text = String(message || '').toLowerCase();
+    if (!text) return false;
+
+    return (
+        text.includes('requiere') && text.includes('serial') ||
+        text.includes('seriales inválidos') ||
+        text.includes('serial invalido') ||
+        text.includes('serial inválido') ||
+        text.includes('invalid serial') ||
+        text.includes('impuesto inválido') ||
+        text.includes('invalid tax') ||
+        text.includes('tax_id') && text.includes('invalid') ||
+        text.includes('no está vinculado con zoho') ||
+        text.includes('no tiene zoho_item_id') ||
+        text.includes('no se puede enviar a zoho sin cliente') ||
+        text.includes('vendedor') && text.includes('válido')
+    );
+}
+
 function normalizeSerialInput(value: unknown): string {
     if (Array.isArray(value)) {
         return value
@@ -979,8 +1002,67 @@ export async function POST(req: NextRequest) {
                 }
             } catch (zohoError: any) {
                 zohoWarning = zohoError?.message || 'No se pudo crear factura en Zoho';
-                responseStatus = 202;
                 const errorCode = normalizeSyncErrorCodeFromError(zohoError);
+                const isNonRecoverable = isNonRecoverableInvoiceSyncError(zohoWarning, errorCode);
+
+                if (isNonRecoverable) {
+                    const nowIso = new Date().toISOString();
+                    const draftRollback = await supabase
+                        .from('sales_invoices')
+                        .update({
+                            status: 'borrador',
+                            updated_at: nowIso,
+                        })
+                        .eq('id', invoice.id);
+
+                    if (draftRollback.error) {
+                        return failWith(
+                            {
+                                error: `Zoho rechazó la factura y no se pudo restaurar a borrador: ${draftRollback.error.message}`,
+                            },
+                            500
+                        );
+                    }
+
+                    const syncUpdate = await markDocumentSyncState({
+                        supabase,
+                        documentType: 'sales_invoice',
+                        documentId: invoice.id,
+                        status: 'failed_sync',
+                        errorCode,
+                        errorMessage: zohoWarning,
+                        externalRequestId: externalRequestId || null,
+                        incrementAttempts: true,
+                    });
+
+                    const failedSyncState = !syncUpdate.error && syncUpdate.data
+                        ? buildSyncStatusPayload(syncUpdate.data)
+                        : {
+                            sync_status: 'failed_sync' as const,
+                            sync_error_code: errorCode,
+                            sync_error_message: zohoWarning,
+                            last_sync_attempt_at: nowIso,
+                            last_synced_at: null as string | null,
+                        };
+
+                    return failWith(
+                        {
+                            error: zohoWarning,
+                            code: 'SEND_VALIDATION_ERROR',
+                            invoice: {
+                                ...invoice,
+                                status: 'borrador',
+                                ...failedSyncState,
+                                external_request_id: externalRequestId || invoice.external_request_id || null,
+                            },
+                            ...failedSyncState,
+                            external_request_id: externalRequestId || invoice.external_request_id || null,
+                        },
+                        400
+                    );
+                }
+
+                responseStatus = 202;
 
                 const syncUpdate = await markDocumentSyncState({
                     supabase,

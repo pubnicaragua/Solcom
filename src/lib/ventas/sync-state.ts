@@ -52,6 +52,7 @@ export function normalizeSyncErrorCodeFromError(error: unknown): string {
         message.includes('validation') ||
         message.includes('invalid') ||
         message.includes('required') ||
+        message.includes('serial') ||
         message.includes('tax')
     ) {
         return 'ZOHO_VALIDATION_ERROR';

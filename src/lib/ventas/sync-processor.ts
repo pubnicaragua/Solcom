@@ -42,6 +42,11 @@ function addSecondsToNow(seconds: number): string {
     return new Date(Date.now() + Math.max(0, seconds) * 1000).toISOString();
 }
 
+function isNonRetryableSyncErrorCode(errorCode: string): boolean {
+    const normalized = String(errorCode || '').trim().toUpperCase();
+    return normalized === 'ZOHO_VALIDATION_ERROR';
+}
+
 export async function enqueueDocumentForSync(params: {
     supabase: any;
     documentType: SalesDocumentType;
@@ -320,7 +325,7 @@ export async function finishSalesSyncJob(params: {
     const errorMessage = String((error as any)?.message || error || 'Error desconocido');
     const errorCode = normalizeSyncErrorCodeFromError(error);
     const maxAttempts = Math.max(1, Number(job.max_attempts || 12));
-    const shouldRetry = nextAttempts < maxAttempts;
+    const shouldRetry = nextAttempts < maxAttempts && !isNonRetryableSyncErrorCode(errorCode);
     const nextAttemptAt = shouldRetry
         ? addSecondsToNow(retryDelaySeconds(nextAttempts))
         : now;

@@ -16,7 +16,7 @@ type SerialPayload = {
     serials: SerialRow[];
 };
 
-const SERIAL_CACHE_TTL_MS = 45_000;
+const SERIAL_CACHE_TTL_MS = 15_000;
 const serialCache = new Map<string, { payload: SerialPayload; expiresAt: number }>();
 const serialInFlight = new Map<string, Promise<SerialPayload>>();
 

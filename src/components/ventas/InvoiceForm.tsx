@@ -23,7 +23,14 @@ interface InvoiceFormItem {
     tax_percentage: number;
     warranty: string;
     serial_number_value: string;
-    available_serials: Array<{ serial_id: string; serial_code: string }>;
+    available_serials: Array<{
+        serial_id: string;
+        serial_code: string;
+        warehouse_id?: string;
+        warehouse_code?: string;
+        warehouse_name?: string;
+        zoho_warehouse_id?: string;
+    }>;
     loading_serials: boolean;
 }
 
@@ -559,7 +566,7 @@ export default function InvoiceForm({ isOpen, onClose, onSaved, editInvoice, pre
             }
         });
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [isOpen, warehouseId, warehouses, lineSerialSourceKey]);
+    }, [isOpen, warehouseId, warehouses, familyWarehouses, lineSerialSourceKey]);
 
     const fetchWarehouses = async () => {
         try {
@@ -655,7 +662,8 @@ export default function InvoiceForm({ isOpen, onClose, onSaved, editInvoice, pre
     const fetchLineSerials = async (
         rowIndex: number,
         zohoItemId: string | null,
-        localItemId: string | null = null
+        localItemId: string | null = null,
+        family: Warehouse[] = familyWarehouses
     ) => {
         if (!warehouseId || (!zohoItemId && !localItemId)) {
             setLineItems((current) => current.map((line, idx) => (
@@ -667,8 +675,15 @@ export default function InvoiceForm({ isOpen, onClose, onSaved, editInvoice, pre
         }
 
         const selectedWarehouse = warehouses.find((w) => w.id === warehouseId);
-        const zohoWarehouseId = String(selectedWarehouse?.zoho_warehouse_id || '').trim();
-        if (!zohoWarehouseId) {
+        const fallbackFamily = selectedWarehouse ? [selectedWarehouse] : [];
+        const usableWarehouses = (family.length > 0 ? family : fallbackFamily)
+            .map((warehouse) => ({
+                ...warehouse,
+                zoho_warehouse_id: String(warehouse.zoho_warehouse_id || '').trim(),
+            }))
+            .filter((warehouse) => warehouse.zoho_warehouse_id);
+
+        if (usableWarehouses.length === 0) {
             setLineItems((current) => current.map((line, idx) => (
                 idx === rowIndex
                     ? { ...line, loading_serials: false, available_serials: [] }
@@ -684,28 +699,76 @@ export default function InvoiceForm({ isOpen, onClose, onSaved, editInvoice, pre
         )));
 
         try {
-            const params = new URLSearchParams();
-            if (zohoItemId) {
-                params.set('item_id', zohoItemId);
-            }
-            params.set('warehouse_id', zohoWarehouseId);
-            if (localItemId) {
-                params.set('local_item_id', String(localItemId));
-            }
-            if (sourceSalesOrderId) {
-                params.set('sales_order_id', String(sourceSalesOrderId));
-            }
+            const serialResults = await Promise.all(
+                usableWarehouses.map(async (warehouse) => {
+                    const params = new URLSearchParams();
+                    if (zohoItemId) {
+                        params.set('item_id', zohoItemId);
+                    }
+                    params.set('warehouse_id', String(warehouse.zoho_warehouse_id || ''));
+                    if (localItemId) {
+                        params.set('local_item_id', String(localItemId));
+                    }
+                    if (sourceSalesOrderId) {
+                        params.set('sales_order_id', String(sourceSalesOrderId));
+                    }
 
-            const res = await fetch(`/api/zoho/item-serials?${params.toString()}`);
-            const data = await res.json();
-            const serials = (data?.success && Array.isArray(data?.serials))
-                ? data.serials
-                    .map((row: any) => ({
-                        serial_id: String(row?.serial_id || ''),
-                        serial_code: String(row?.serial_code || '').trim(),
-                    }))
-                    .filter((row: any) => row.serial_code.length > 0)
-                : [];
+                    const res = await fetch(`/api/zoho/item-serials?${params.toString()}`, {
+                        cache: 'no-store',
+                    });
+                    const data = await res.json().catch(() => ({}));
+                    if (!res.ok) {
+                        return {
+                            warehouse,
+                            serials: [],
+                            error: String(data?.error || `Error ${res.status}`),
+                        };
+                    }
+
+                    const rows = Array.isArray(data?.serials) ? data.serials : [];
+                    return {
+                        warehouse,
+                        serials: rows
+                            .map((row: any) => ({
+                                serial_id: String(row?.serial_id || ''),
+                                serial_code: String(row?.serial_code || '').trim(),
+                                warehouse_id: String(warehouse.id || ''),
+                                warehouse_code: String(warehouse.code || '').trim(),
+                                warehouse_name: String(warehouse.name || '').trim(),
+                                zoho_warehouse_id: String(warehouse.zoho_warehouse_id || ''),
+                            }))
+                            .filter((row: any) => row.serial_code.length > 0),
+                        error: '',
+                    };
+                })
+            );
+
+            const serialMap = new Map<
+                string,
+                {
+                    serial_id: string;
+                    serial_code: string;
+                    warehouse_id?: string;
+                    warehouse_code?: string;
+                    warehouse_name?: string;
+                    zoho_warehouse_id?: string;
+                }
+            >();
+            for (const result of serialResults) {
+                for (const serial of result.serials) {
+                    if (!serialMap.has(serial.serial_code)) {
+                        serialMap.set(serial.serial_code, serial);
+                    }
+                }
+            }
+            const serials = Array.from(serialMap.values());
+            if (serials.length === 0) {
+                const failedResults = serialResults.filter((result) => result.error);
+                if (failedResults.length === serialResults.length && failedResults.length > 0) {
+                    const firstFailure = failedResults[0];
+                    setError(`No se pudieron cargar seriales en Zoho para ${firstFailure.warehouse.code}: ${firstFailure.error}`);
+                }
+            }
 
             setLineItems((current) => current.map((line, idx) => {
                 if (idx !== rowIndex) return line;
@@ -1008,6 +1071,7 @@ export default function InvoiceForm({ isOpen, onClose, onSaved, editInvoice, pre
         setNotes('');
         setCreditDetail('');
         setWarehouseId('');
+        setFamilyWarehouses([]);
         setSalespersonId('');
         setDeliveryRequested(false);
         setDeliveryId(null);
@@ -1163,6 +1227,11 @@ export default function InvoiceForm({ isOpen, onClose, onSaved, editInvoice, pre
                                     </select>
                                     <ChevronDown size={14} style={{ position: 'absolute', right: '10px', top: '12px', color: 'var(--muted)', pointerEvents: 'none' }} />
                                 </div>
+                                {warehouseId && familyWarehouses.length > 0 && (
+                                    <div style={{ marginTop: 6, fontSize: 11, color: 'var(--muted)' }}>
+                                        Seriales disponibles en familia: {familyWarehouses.map((warehouse) => warehouse.code).join(', ')}
+                                    </div>
+                                )}
                             </div>
                         </div>
 
@@ -1383,8 +1452,10 @@ export default function InvoiceForm({ isOpen, onClose, onSaved, editInvoice, pre
                                                                     background: isSelected ? 'rgba(220,38,38,0.16)' : 'rgba(255,255,255,0.02)',
                                                                     color: isSelected ? '#FCA5A5' : 'var(--muted)',
                                                                 }}
+                                                                title={serial.warehouse_code ? `${serial.serial_code} · ${serial.warehouse_code}` : serial.serial_code}
                                                             >
                                                                 {serial.serial_code}
+                                                                {serial.warehouse_code ? ` · ${serial.warehouse_code}` : ''}
                                                             </button>
                                                         );
                                                     })}

@@ -175,7 +175,6 @@ export default function InventoryCart({
     onParentWarehouseChange,
     onInvoicePrefillRequested,
 }: InventoryCartProps) {
-    const cartInvoicePrefillOnly = process.env.NEXT_PUBLIC_SALES_CART_INVOICE_PREFILL_ONLY !== 'false';
     const [internalCartType, setInternalCartType] = useState<CartType>('cotizacion');
     const [creating, setCreating] = useState(false);
     const [error, setError] = useState('');
@@ -510,35 +509,11 @@ export default function InventoryCart({
             };
         });
 
-        if (cartType === 'factura' && cartInvoicePrefillOnly) {
+        if (cartType === 'factura') {
             if (!onInvoicePrefillRequested) {
                 setError('No se pudo abrir Facturación para completar la factura.');
                 return;
             }
-            onInvoicePrefillRequested({
-                customer_id: selectedCustomerId,
-                customer_name: selectedCustomerName || customerSearch || null,
-                salesperson_id: selectedSalesperson?.id || null,
-                salesperson_name: selectedSalesperson?.name || null,
-                warehouse_id: warehouseId || null,
-                items: docItems.map((line, idx) => ({
-                    item_id: line.item_id,
-                    zoho_item_id: line.zoho_item_id,
-                    description: line.description,
-                    quantity: line.quantity,
-                    available_qty: getItemMaxQty(items[idx]),
-                    unit_price: line.unit_price,
-                    discount_percent: line.discount_percent,
-                    tax_id: line.tax_id || null,
-                    tax_name: line.tax_name || null,
-                    tax_percentage: line.tax_percentage,
-                    warranty: line.warranty || null,
-                })),
-            });
-            return;
-        }
-
-        if (cartType === 'factura' && onInvoicePrefillRequested) {
             onInvoicePrefillRequested({
                 customer_id: selectedCustomerId,
                 customer_name: selectedCustomerName || customerSearch || null,
@@ -593,31 +568,6 @@ export default function InventoryCart({
                 const data = await response.json().catch(() => ({}));
                 if (!response.ok) throw new Error(data?.error || 'No se pudo crear la cotización.');
                 docNumber = data?.quote?.quote_number || '';
-            } else if (cartType === 'factura') {
-                const payload = {
-                    customer_id: selectedCustomerId,
-                    warehouse_id: warehouseId,
-                    date: docDate,
-                    due_date: dueDate || null,
-                    payment_terms: paymentTerms || null,
-                    salesperson_id: selectedSalesperson?.id || null,
-                    salesperson_zoho_id: selectedSalesperson?.zoho_salesperson_id || selectedSalesperson?.zoho_user_id || null,
-                    salesperson_name: selectedSalesperson?.name || null,
-                    status: 'enviada',
-                    discount_amount: 0,
-                    notes: 'Factura generada desde inventario — precios pendientes de asignación.',
-                    source: 'inventory_cart',
-                    items: docItems,
-                    sync_to_zoho: true,
-                };
-                response = await fetch('/api/ventas/invoices', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify(payload),
-                });
-                const data = await response.json().catch(() => ({}));
-                if (!response.ok) throw new Error(data?.error || 'No se pudo crear la factura.');
-                docNumber = data?.invoice?.invoice_number || '';
             } else {
                 // orden_venta
                 const payload = {
@@ -1650,7 +1600,7 @@ export default function InventoryCart({
                                 ) : (
                                     <>
                                         <CartTypeIcon size={16} />
-                                        {cartType === 'factura' && (cartInvoicePrefillOnly || onInvoicePrefillRequested)
+                                        {cartType === 'factura'
                                             ? 'Continuar a Factura'
                                             : `Crear ${config.label}`}
                                     </>
@@ -1659,7 +1609,7 @@ export default function InventoryCart({
                         </div>
 
                         <div style={{ fontSize: 11, color: 'var(--muted, #64748b)', textAlign: 'center', lineHeight: 1.4 }}>
-                            {cartType === 'factura' && (cartInvoicePrefillOnly || onInvoicePrefillRequested)
+                            {cartType === 'factura'
                                 ? 'Se abrirá Facturación con estos datos para completar seriales y campos finales.'
                                 : 'Se creará en Supabase y se sincronizará con Zoho Books.'}
                         </div>
