@@ -3,7 +3,7 @@ import { createRouteHandlerClient } from '@supabase/auth-helpers-nextjs';
 import { cookies } from 'next/headers';
 import { deterministicUuidFromExternalId, normalizeSalespersonId } from '@/lib/identifiers';
 import { buildTaxCatalogMap, getZohoTaxCatalog } from '@/lib/zoho/tax-catalog';
-import { getZohoAccessToken } from '@/lib/zoho/inventory-utils';
+import { createZohoBooksClient } from '@/lib/zoho/books-client';
 import { fetchZohoSalespeople } from '@/lib/zoho/salespeople';
 import {
     computeFiscalTotals,
@@ -44,17 +44,6 @@ const TERMS_DAYS_MAP: Record<string, number> = {
     '90_dias': 90,
     contado: 0,
 };
-
-function parseErrorMessage(raw: string): string {
-    try {
-        const parsed = JSON.parse(raw);
-        if (typeof parsed?.message === 'string' && parsed.message.trim()) return parsed.message.trim();
-        if (typeof parsed?.error?.message === 'string' && parsed.error.message.trim()) return parsed.error.message.trim();
-    } catch {
-        // no-op
-    }
-    return raw.slice(0, 240).trim() || 'Error desconocido';
-}
 
 function normalizeNumber(value: unknown, fallback = 0): number {
     const parsed = Number(value);
@@ -217,10 +206,11 @@ export async function createZohoInvoiceFromPayload(params: {
         throw new Error('Configuración incompleta: falta ZOHO_BOOKS_ORGANIZATION_ID.');
     }
 
-    const auth: any = await getZohoAccessToken();
-    if (!auth || auth.error || !auth.accessToken || !auth.apiDomain) {
-        throw new Error(auth?.error || 'No se pudo autenticar con Zoho.');
+    const zohoClient = createZohoBooksClient();
+    if (!zohoClient) {
+        throw new Error('Configuración incompleta: no se pudo inicializar cliente Zoho Books.');
     }
+    const auth = await zohoClient.getAuthContext();
 
     const customerLookup = await (supabase as any)
         .from('customers')
@@ -282,16 +272,7 @@ export async function createZohoInvoiceFromPayload(params: {
 
     for (const zohoItemId of uniqueZohoItemIds) {
         try {
-            const detailResponse = await fetch(
-                `${auth.apiDomain}/books/v3/items/${encodeURIComponent(zohoItemId)}?organization_id=${encodeURIComponent(organizationId)}`,
-                {
-                    headers: { Authorization: `Zoho-oauthtoken ${auth.accessToken}` },
-                    cache: 'no-store',
-                }
-            );
-            if (!detailResponse.ok) continue;
-            const detailRaw = await detailResponse.text();
-            const detailData = detailRaw ? JSON.parse(detailRaw) : {};
+            const detailData = await zohoClient.request('GET', `/books/v3/items/${encodeURIComponent(zohoItemId)}`);
             const detail = detailData?.item || null;
             zohoItemMetaById.set(zohoItemId, { serialTracked: isSerialTracked(detail) });
         } catch {
@@ -472,106 +453,63 @@ export async function createZohoInvoiceFromPayload(params: {
         selectedZohoUserId ? { salesperson_id: selectedZohoUserId } : null,
     ].filter(Boolean) as Array<Record<string, string>>;
 
-    let parsed: any = null;
-    let lastStatus = 0;
+    let createdInvoice: { invoice_id: string; invoice_number: string } | null = null;
     let lastError = '';
 
     for (const salespersonVariant of salespersonPayloadCandidates) {
         const payload = { ...basePayload, ...salespersonVariant };
-        const response = await fetch(
-            `${auth.apiDomain}/books/v3/invoices?organization_id=${encodeURIComponent(organizationId)}`,
-            {
-                method: 'POST',
-                headers: {
-                    Authorization: `Zoho-oauthtoken ${auth.accessToken}`,
-                    'Content-Type': 'application/json',
-                },
-                body: JSON.stringify(payload),
-                cache: 'no-store',
-            }
-        );
+        try {
+            createdInvoice = await zohoClient.createInvoice(payload);
+            break;
+        } catch (error: any) {
+            const errorMessage = String(error?.message || error || 'Error desconocido');
+            lastError = errorMessage;
+            const lowered = errorMessage.toLowerCase();
+            const customFieldRejected = lowered.includes('customfield')
+                || lowered.includes('item_custom_fields');
 
-        const raw = await response.text();
-        lastStatus = response.status;
-        const parsedErrorMessage = parseErrorMessage(raw);
-
-        if (!response.ok) {
-            lastError = parsedErrorMessage;
-            const customFieldRejected = parsedErrorMessage.toLowerCase().includes('customfield')
-                || parsedErrorMessage.toLowerCase().includes('item_custom_fields');
             if (customFieldRejected) {
-                const retryPayload = {
-                    ...basePayload,
-                    ...salespersonVariant,
-                    line_items: buildZohoLineItems(false),
-                };
-                const retryResponse = await fetch(
-                    `${auth.apiDomain}/books/v3/invoices?organization_id=${encodeURIComponent(organizationId)}`,
-                    {
-                        method: 'POST',
-                        headers: {
-                            Authorization: `Zoho-oauthtoken ${auth.accessToken}`,
-                            'Content-Type': 'application/json',
-                        },
-                        body: JSON.stringify(retryPayload),
-                        cache: 'no-store',
+                try {
+                    const retryPayload = {
+                        ...basePayload,
+                        ...salespersonVariant,
+                        line_items: buildZohoLineItems(false),
+                    };
+                    createdInvoice = await zohoClient.createInvoice(retryPayload);
+                    break;
+                } catch (retryError: any) {
+                    const retryMessage = String(retryError?.message || retryError || 'Error desconocido');
+                    lastError = retryMessage;
+                    if (isInvalidSalespersonMessage(retryMessage)) {
+                        continue;
                     }
-                );
-                const retryRaw = await retryResponse.text();
-                if (retryResponse.ok) {
-                    try {
-                        parsed = retryRaw ? JSON.parse(retryRaw) : {};
-                    } catch {
-                        throw new Error(`Zoho respondió JSON inválido al crear factura: ${retryRaw.slice(0, 180)}`);
-                    }
-                    if (parsed?.code === 0) {
-                        break;
-                    }
+                    throw new Error(`Zoho rechazó la factura: ${retryMessage}`);
                 }
-                lastStatus = retryResponse.status;
-                lastError = parseErrorMessage(retryRaw);
             }
-            if (response.status === 400 && isInvalidSalespersonMessage(parsedErrorMessage)) {
+
+            if (isInvalidSalespersonMessage(errorMessage)) {
                 continue;
             }
-            throw new Error(`Zoho rechazó la factura: ${response.status} - ${parsedErrorMessage}`);
-        }
 
-        try {
-            parsed = raw ? JSON.parse(raw) : {};
-        } catch {
-            throw new Error(`Zoho respondió JSON inválido al crear factura: ${raw.slice(0, 180)}`);
+            throw new Error(`Zoho rechazó la factura: ${errorMessage}`);
         }
-
-        if (parsed?.code === 0) {
-            break;
-        }
-
-        lastError = String(parsed?.message || 'Error desconocido');
-        if (isInvalidSalespersonMessage(lastError)) {
-            parsed = null;
-            continue;
-        }
-
-        throw new Error(`Zoho devolvió error al crear factura: ${lastError}`);
     }
 
-    if (!parsed || parsed?.code !== 0) {
+    if (!createdInvoice) {
         const sellerSample = sellers
             .slice(0, 6)
             .map((row) => `${row.name} [sp:${row.salespersonId || '-'}|usr:${row.userId || '-'}]`)
             .join(' ; ');
 
         throw new Error(
-            `Zoho rechazó la factura: ${lastStatus || 400} - ${lastError || 'Introduzca un vendedor válido'}. ` +
+            `Zoho rechazó la factura: ${lastError || 'Introduzca un vendedor válido'}. ` +
             `Vendedor seleccionado: "${selectedZohoUserName}" [sp:${selectedZohoSalespersonId || '-'}|usr:${selectedZohoUserId || '-'}]. ` +
             `Disponibles (muestra): ${sellerSample || 'sin datos'}.`
         );
     }
 
-    const zohoInvoice = parsed?.invoice || {};
-    const zohoInvoiceId = String(zohoInvoice?.invoice_id || '').trim();
-    const zohoInvoiceNumber = String(zohoInvoice?.invoice_number || '').trim();
+    const zohoInvoiceId = String(createdInvoice?.invoice_id || '').trim();
+    const zohoInvoiceNumber = String(createdInvoice?.invoice_number || '').trim();
 
     // Optional metadata update if migration columns exist.
     if (zohoInvoiceId || zohoInvoiceNumber) {
@@ -805,6 +743,7 @@ export async function POST(req: NextRequest) {
             serial_number_value: normalizeSerialInput(
                 item?.serial_number_value ?? item?.serial_numbers ?? item?.serials
             ) || null,
+            price_profile_code: normalizeTrimmed(item?.price_profile_code) || null,
         }));
         let itemsForInvoice = normalizedItems;
 
@@ -974,6 +913,7 @@ export async function POST(req: NextRequest) {
             tax_percentage: Math.max(0, normalizeNumber(item.tax_percentage, 0)),
             warranty: normalizeWarranty(item.warranty),
             serial_number_value: item.serial_number_value || null,
+            price_profile_code: normalizeTrimmed(item.price_profile_code) || null,
             subtotal: Math.round(Math.max(0, normalizeNumber(item.line_taxable, item.subtotal || 0)) * 100) / 100,
             sort_order: index,
         }));

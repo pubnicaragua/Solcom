@@ -746,6 +746,7 @@ export async function PUT(
                 serial_number_value: normalizeSerialInput(
                     item?.serial_number_value ?? item?.serial_numbers ?? item?.serials
                 ) || null,
+                price_profile_code: normalizeTrimmed(item?.price_profile_code) || null,
             }));
 
             const totals = computeFiscalTotals(normalizedItems, normalizedShippingCharge);
@@ -780,6 +781,7 @@ export async function PUT(
                 tax_percentage: Math.max(0, normalizeNumber(item.tax_percentage, 0)),
                 warranty: normalizeWarranty(item.warranty),
                 serial_number_value: normalizeSerialInput(item.serial_number_value) || null,
+                price_profile_code: normalizeTrimmed(item.price_profile_code) || null,
                 subtotal: Math.round(Math.max(0, normalizeNumber(item.line_taxable, item.subtotal || 0)) * 100) / 100,
                 sort_order: index,
             }));

@@ -4,6 +4,8 @@ export const dynamic = 'force-dynamic';
 import { createRouteHandlerClient } from '@supabase/auth-helpers-nextjs';
 import { cookies } from 'next/headers';
 import { createZohoBooksClient } from '@/lib/zoho/books-client';
+import { deterministicUuidFromExternalId } from '@/lib/identifiers';
+import { fetchZohoSalespeople } from '@/lib/zoho/salespeople';
 import { buildTaxCatalogMap, getZohoTaxCatalog } from '@/lib/zoho/tax-catalog';
 import {
     computeFiscalTotals,
@@ -37,6 +39,10 @@ function normalizeNumber(value: unknown, fallback = 0): number {
 
 function normalizeText(value: unknown): string {
     return typeof value === 'string' ? value.trim() : '';
+}
+
+function equalsIgnoreCase(a: string, b: string): boolean {
+    return a.localeCompare(b, 'es', { sensitivity: 'base' }) === 0;
 }
 
 function normalizeSerialInput(value: unknown): string {
@@ -171,15 +177,87 @@ export async function syncSalesOrderToZoho(params: {
     date: string;
     expectedDeliveryDate: string | null;
     notes: string | null;
+    paymentTerms?: string | null;
+    deliveryMethod?: string | null;
+    shippingCharge?: number;
+    salespersonId?: string | null;
     salespersonName: string | null;
     status?: string;
     items: any[];
 }): Promise<{ zoho_salesorder_id: string; zoho_salesorder_number: string }> {
-    const { supabase, orderId, orderNumber, customerId, warehouseId, date, expectedDeliveryDate, notes, salespersonName, status, items } = params;
+    const {
+        supabase,
+        orderId,
+        orderNumber,
+        customerId,
+        warehouseId,
+        date,
+        expectedDeliveryDate,
+        notes,
+        paymentTerms,
+        deliveryMethod,
+        shippingCharge,
+        salespersonId,
+        salespersonName,
+        status,
+        items,
+    } = params;
 
     const zohoClient = createZohoBooksClient();
     if (!zohoClient) {
         throw new Error('Configuración de Zoho Books incompleta. Verifica las variables de entorno ZOHO_BOOKS_*.');
+    }
+
+    const normalizedSalespersonName = normalizeText(salespersonName);
+    const normalizedSalespersonLocalId = normalizeText(salespersonId);
+    let selectedZohoSalespersonId = '';
+    let selectedZohoSalespersonName = normalizedSalespersonName;
+
+    if (normalizedSalespersonName || normalizedSalespersonLocalId) {
+        try {
+            const auth = await zohoClient.getAuthContext();
+            const organizationId = normalizeText(process.env.ZOHO_BOOKS_ORGANIZATION_ID);
+            if (!organizationId) {
+                throw new Error('Falta ZOHO_BOOKS_ORGANIZATION_ID');
+            }
+            const sellers = await fetchZohoSalespeople(
+                { accessToken: auth.accessToken, apiDomain: auth.apiDomain },
+                organizationId
+            );
+
+            let selectedSeller = null as null | {
+                salespersonId: string;
+                userId: string;
+                name: string;
+            };
+
+            if (normalizedSalespersonLocalId) {
+                selectedSeller = sellers.find((row) => {
+                    const keys = [row.salespersonId, row.userId].filter(Boolean);
+                    return keys.some(
+                        (key) => deterministicUuidFromExternalId('zoho_salesperson', String(key)) === normalizedSalespersonLocalId
+                    );
+                }) || null;
+            }
+
+            if (!selectedSeller && normalizedSalespersonName) {
+                selectedSeller = sellers.find((row) => equalsIgnoreCase(normalizeText(row.name), normalizedSalespersonName)) || null;
+            }
+
+            if (!selectedSeller && normalizedSalespersonName) {
+                const compactRequested = normalizedSalespersonName.toLowerCase();
+                selectedSeller = sellers.find((row) => String(row.name || '').toLowerCase().includes(compactRequested)) || null;
+            }
+
+            if (selectedSeller) {
+                selectedZohoSalespersonId = normalizeText(selectedSeller.salespersonId || selectedSeller.userId);
+                selectedZohoSalespersonName = normalizeText(selectedSeller.name) || selectedZohoSalespersonName;
+            }
+        } catch (salespersonResolutionError: any) {
+            console.warn(
+                `[sales-orders] No se pudo resolver salesperson_id para OV ${orderId}: ${salespersonResolutionError?.message || 'error desconocido'}`
+            );
+        }
     }
 
     // Resolve zoho_contact_id
@@ -315,8 +393,22 @@ export async function syncSalesOrderToZoho(params: {
 
     if (expectedDeliveryDate) orderPayload.shipment_date = expectedDeliveryDate;
     if (notes && notes.trim()) orderPayload.notes = notes.trim();
-    if (salespersonName && salespersonName.trim()) orderPayload.salesperson_name = salespersonName.trim();
+    if (selectedZohoSalespersonName) orderPayload.salesperson_name = selectedZohoSalespersonName;
+    if (selectedZohoSalespersonId) orderPayload.salesperson_id = selectedZohoSalespersonId;
     if (zohoLocationId) orderPayload.location_id = zohoLocationId;
+    if (Math.max(0, normalizeNumber(shippingCharge, 0)) > 0) {
+        orderPayload.shipping_charge = Number(Math.max(0, normalizeNumber(shippingCharge, 0)).toFixed(2));
+    }
+
+    const normalizedDeliveryMethod = normalizeText(deliveryMethod);
+    if (normalizedDeliveryMethod) {
+        orderPayload.delivery_method = normalizedDeliveryMethod;
+    }
+
+    const normalizedPaymentTerms = normalizeText(paymentTerms);
+    if (normalizedPaymentTerms) {
+        orderPayload.terms = normalizedPaymentTerms;
+    }
 
     let result: { salesorder_id: string; salesorder_number: string };
     try {
@@ -325,12 +417,25 @@ export async function syncSalesOrderToZoho(params: {
         const message = String(error?.message || '').toLowerCase();
         const customFieldRejected = message.includes('customfield')
             || message.includes('item_custom_fields');
-        if (!customFieldRejected) throw error;
+        const optionalFieldsRejected =
+            message.includes('delivery_method')
+            || message.includes('shipping_charge')
+            || message.includes('salesperson_id')
+            || message.includes('payment term')
+            || message.includes('terms');
 
-        const retryPayload = {
-            ...orderPayload,
-            line_items: buildZohoLineItems(false),
-        };
+        const retryPayload = { ...orderPayload };
+        if (customFieldRejected) {
+            retryPayload.line_items = buildZohoLineItems(false);
+        }
+        if (optionalFieldsRejected) {
+            delete retryPayload.delivery_method;
+            delete retryPayload.shipping_charge;
+            delete retryPayload.salesperson_id;
+            delete retryPayload.terms;
+        }
+
+        if (!customFieldRejected && !optionalFieldsRejected) throw error;
         result = await zohoClient.createSalesOrder(retryPayload);
     }
 
@@ -459,6 +564,7 @@ export async function POST(req: NextRequest) {
             payment_terms,
             delivery_method,
             shipping_zone,
+            shipping_charge = 0,
             status = 'borrador',
             discount_amount = 0,
             notes,
@@ -522,6 +628,7 @@ export async function POST(req: NextRequest) {
         }
 
         const normalizedDiscount = Math.max(0, normalizeNumber(discount_amount, 0));
+        const normalizedShippingCharge = Math.max(0, normalizeNumber(shipping_charge, 0));
         if (normalizedDiscount > 0) {
             return failWith(
                 { error: 'El descuento global está deshabilitado en este flujo.', code: 'GLOBAL_DISCOUNT_DISABLED' },
@@ -558,6 +665,7 @@ export async function POST(req: NextRequest) {
                 ) || null,
                 line_warehouse_id: normalizeText(item?.line_warehouse_id) || null,
                 line_zoho_warehouse_id: normalizeText(item?.line_zoho_warehouse_id) || null,
+                price_profile_code: normalizeText(item?.price_profile_code) || null,
             };
         });
 
@@ -595,7 +703,7 @@ export async function POST(req: NextRequest) {
 
         const orderNumber = await generateOrderNumber(supabase, warehouseCode);
 
-        const totals = computeFiscalTotals(normalizedItems, 0);
+        const totals = computeFiscalTotals(normalizedItems, normalizedShippingCharge);
         const shouldSyncToZoho = Boolean(sync_to_zoho);
 
         const insertOrder: any = {
@@ -608,6 +716,7 @@ export async function POST(req: NextRequest) {
             payment_terms: normalizeText(payment_terms) || null,
             delivery_method: normalizeText(delivery_method) || null,
             shipping_zone: normalizeText(shipping_zone) || null,
+            shipping_charge: Math.round(normalizedShippingCharge * 100) / 100,
             status: normalizeStatus(status, 'borrador'),
             subtotal: totals.subtotal,
             tax_rate: totals.tax_rate,
@@ -692,6 +801,7 @@ export async function POST(req: NextRequest) {
                 serial_number_value: normalizeSerialInput(item?.serial_number_value) || null,
                 line_warehouse_id: normalizeText(item?.line_warehouse_id) || null,
                 line_zoho_warehouse_id: normalizeText(item?.line_zoho_warehouse_id) || null,
+                price_profile_code: normalizeText(item?.price_profile_code) || null,
                 subtotal: Math.round(Math.max(0, normalizeNumber(item?.line_taxable, quantity * unitPrice * (1 - discountPercent / 100))) * 100) / 100,
                 sort_order: index,
             };
@@ -752,6 +862,10 @@ export async function POST(req: NextRequest) {
                     date: date || new Date().toISOString().slice(0, 10),
                     expectedDeliveryDate: expected_delivery_date || null,
                     notes: notes || null,
+                    paymentTerms: normalizeText(payment_terms) || null,
+                    deliveryMethod: normalizeText(delivery_method) || null,
+                    shippingCharge: normalizedShippingCharge,
+                    salespersonId: normalizeText(salesperson_id) || null,
                     salespersonName: salesperson_name || null,
                     status: normalizeStatus(status, 'borrador'),
                     items: normalizedItems,

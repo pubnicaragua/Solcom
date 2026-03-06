@@ -77,7 +77,11 @@ async function syncSalesOrderById(supabase: any, orderId: string) {
             warehouse_id,
             date,
             expected_delivery_date,
+            payment_terms,
+            delivery_method,
+            shipping_charge,
             notes,
+            salesperson_id,
             salesperson_name,
             status,
             items:sales_order_items(*)
@@ -98,7 +102,11 @@ async function syncSalesOrderById(supabase: any, orderId: string) {
         warehouseId: String(order.warehouse_id || ''),
         date: String(order.date || new Date().toISOString().slice(0, 10)),
         expectedDeliveryDate: normalizeText(order.expected_delivery_date) || null,
+        paymentTerms: normalizeText(order.payment_terms) || null,
+        deliveryMethod: normalizeText(order.delivery_method) || null,
+        shippingCharge: Number.isFinite(Number(order.shipping_charge)) ? Number(order.shipping_charge) : 0,
         notes: normalizeText(order.notes) || null,
+        salespersonId: normalizeText(order.salesperson_id) || null,
         salespersonName: normalizeText(order.salesperson_name) || null,
         status: normalizeText(order.status) || 'borrador',
         items: Array.isArray(order.items) ? order.items : [],
@@ -342,4 +350,3 @@ export async function finishSalesSyncJob(params: {
         incrementAttempts: true,
     });
 }
-

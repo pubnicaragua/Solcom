@@ -52,11 +52,39 @@ export async function GET(req: NextRequest) {
         }, {});
 
         const pendingRows = rows.filter((row: any) => String(row?.status) === 'pending');
+        const completedRows = rows.filter((row: any) => String(row?.status) === 'completed');
         const oldestPending = pendingRows.length > 0 ? pendingRows[0] : null;
         const maxPendingAge = pendingRows.reduce((max, row: any) => {
             const age = ageMinutes(row?.created_at) || 0;
             return Math.max(max, age);
         }, 0);
+        const pendingAges = pendingRows
+            .map((row: any) => ageMinutes(row?.created_at) || 0)
+            .sort((a, b) => a - b);
+        const pendingP95 = pendingAges.length > 0
+            ? pendingAges[Math.min(pendingAges.length - 1, Math.floor(pendingAges.length * 0.95))]
+            : 0;
+
+        const completedLatencies = completedRows
+            .map((row: any) => {
+                const createdAt = new Date(String(row?.created_at || '')).getTime();
+                const completedAt = new Date(String(row?.updated_at || '')).getTime();
+                const ms = completedAt - createdAt;
+                if (!Number.isFinite(ms) || ms < 0) return null;
+                return Math.round(ms / 1000);
+            })
+            .filter((seconds: number | null): seconds is number => typeof seconds === 'number')
+            .sort((a, b) => a - b);
+        const syncLatencyP95Seconds = completedLatencies.length > 0
+            ? completedLatencies[Math.min(completedLatencies.length - 1, Math.floor(completedLatencies.length * 0.95))]
+            : 0;
+
+        const errorCodeCounts = rows.reduce((acc: Record<string, number>, row: any) => {
+            const code = String(row?.error_code || '').trim();
+            if (!code) return acc;
+            acc[code] = (acc[code] || 0) + 1;
+            return acc;
+        }, {});
 
         const [ordersPending, invoicesPending, quotesPending] = await Promise.all([
             supabase.from('sales_orders').select('id', { count: 'exact', head: true }).eq('sync_status', 'pending_sync'),
@@ -95,11 +123,16 @@ export async function GET(req: NextRequest) {
                 oldest_pending_at: oldestPending?.created_at || null,
                 oldest_pending_age_minutes: oldestPending ? ageMinutes(oldestPending.created_at) : null,
                 max_pending_age_minutes: maxPendingAge,
+                pending_age_p95_minutes: pendingP95,
+                sync_latency_p95_seconds: syncLatencyP95Seconds,
             },
             documents: {
                 orders_pending_sync: ordersPending.count || 0,
                 invoices_pending_sync: invoicesPending.count || 0,
                 quotes_pending_sync: quotesPending.count || 0,
+            },
+            errors: {
+                error_code_counts: errorCodeCounts,
             },
             stuck_jobs: stuck,
             timestamp: new Date().toISOString(),
@@ -108,4 +141,3 @@ export async function GET(req: NextRequest) {
         return jsonNoStore({ error: error?.message || 'Error interno' }, 500);
     }
 }
-

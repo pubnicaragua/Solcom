@@ -746,6 +746,7 @@ export async function POST(
             tax_percentage: Math.max(0, normalizeNumber(item.tax_percentage, 0)),
             warranty: normalizeText(item.warranty) || null,
             serial_number_value: normalizeText(item.serial_number_value) || null,
+            price_profile_code: normalizeText(item.price_profile_code) || null,
             subtotal: normalizeNumber(item.subtotal, 0),
             sort_order: index,
         }));

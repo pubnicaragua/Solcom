@@ -1,4 +1,14 @@
 import type { ZohoBooksConfig, ZohoBooksItem, ZohoBooksApiResponse } from './types';
+import { createHash, randomUUID } from 'crypto';
+import {
+    isRedisRestConfigured,
+    redisAcquireLock,
+    redisFixedWindowConsume,
+    redisGetJson,
+    redisReleaseLock,
+    redisSetJson,
+} from '@/lib/redis/rest';
+import { isSalesZohoRedisGuardsEnabled } from '@/lib/ventas/feature-flags';
 
 type SharedBooksAuth = {
     accessToken: string | null;
@@ -27,6 +37,8 @@ const DEFAULT_TOKEN_BUCKET_CAPACITY = 30;
 const DEFAULT_TOKEN_BUCKET_REFILL_PER_SEC = 12;
 const DEFAULT_CIRCUIT_FAILURE_THRESHOLD = 6;
 const DEFAULT_CIRCUIT_COOLDOWN_MS = 30_000;
+const DEFAULT_REDIS_AUTH_LOCK_TTL_SEC = 10;
+const DEFAULT_REDIS_RATE_LIMIT_PER_SEC = 16;
 
 const sharedBooksAuthByKey = new Map<string, SharedBooksAuth>();
 
@@ -43,6 +55,10 @@ type SharedCircuitState = {
 
 const sharedTokenBuckets = new Map<string, SharedTokenBucket>();
 const sharedCircuits = new Map<string, SharedCircuitState>();
+
+function sleep(ms: number): Promise<void> {
+    return new Promise((resolve) => setTimeout(resolve, ms));
+}
 
 function normalizeDomain(raw: string): string | null {
     const value = String(raw || '').trim().replace(/^['"]|['"]$/g, '');
@@ -133,6 +149,52 @@ export class ZohoBooksClient {
         this.apiDomain = resolved.apiDomain;
     }
 
+    private redisGuardsEnabled(): boolean {
+        return isSalesZohoRedisGuardsEnabled() && isRedisRestConfigured();
+    }
+
+    private sharedAuthKeyHash(): string {
+        return createHash('sha1').update(this.getSharedAuthKey()).digest('hex').slice(0, 24);
+    }
+
+    private redisAuthCacheKey(): string {
+        return `zoho:books:auth:cache:${this.sharedAuthKeyHash()}`;
+    }
+
+    private redisAuthLockKey(): string {
+        return `zoho:books:auth:lock:${this.sharedAuthKeyHash()}`;
+    }
+
+    private redisRateLimitKey(group: string): string {
+        return `zoho:books:ratelimit:${this.sharedAuthKeyHash()}:${group}`;
+    }
+
+    private async readRedisAuthCache(): Promise<ResolvedBooksAuth | null> {
+        if (!this.redisGuardsEnabled()) return null;
+        const result = await redisGetJson<ResolvedBooksAuth>(this.redisAuthCacheKey());
+        if (result.error || !result.value) return null;
+
+        const payload = result.value as any;
+        const accessToken = String(payload?.accessToken || '').trim();
+        const apiDomain = normalizeDomain(String(payload?.apiDomain || '')) || DEFAULT_ZOHO_API_DOMAIN;
+        const authDomainUsed = String(payload?.authDomainUsed || '').trim();
+        const expiresAtRaw = Number(payload?.expiresAt || 0);
+        const expiresAt = Number.isFinite(expiresAtRaw) ? expiresAtRaw : 0;
+        if (!accessToken || expiresAt <= Date.now()) return null;
+
+        return { accessToken, apiDomain, authDomainUsed, expiresAt };
+    }
+
+    private async writeRedisAuthCache(resolved: ResolvedBooksAuth): Promise<void> {
+        if (!this.redisGuardsEnabled()) return;
+        const ttlSec = Math.max(1, Math.floor((resolved.expiresAt - Date.now()) / 1000));
+        await redisSetJson({
+            key: this.redisAuthCacheKey(),
+            value: resolved,
+            ttlSeconds: ttlSec,
+        });
+    }
+
     private async refreshAccessToken(state: SharedBooksAuth): Promise<ResolvedBooksAuth> {
         const domains = authDomainCandidates(process.env.ZOHO_AUTH_DOMAIN);
         const errors: string[] = [];
@@ -212,6 +274,14 @@ export class ZohoBooksClient {
             return this.accessToken;
         }
 
+        if (!forceRefresh && this.redisGuardsEnabled()) {
+            const cached = await this.readRedisAuthCache();
+            if (cached && cached.expiresAt > now) {
+                this.applyResolvedAuth(state, cached);
+                return this.accessToken;
+            }
+        }
+
         if (!forceRefresh && state.cooldownUntil > now) {
             throw new Error(state.cooldownError || 'Zoho Books auth temporalmente bloqueado por rate limit');
         }
@@ -222,12 +292,61 @@ export class ZohoBooksClient {
             return this.accessToken;
         }
 
-        const refreshPromise = this.refreshAccessToken(state);
-        if (!forceRefresh) {
-            state.inFlight = refreshPromise;
+        const beginRefresh = () => {
+            const promise = this.refreshAccessToken(state);
+            if (!forceRefresh) {
+                state.inFlight = promise;
+            }
+            return promise;
+        };
+
+        if (!forceRefresh && this.redisGuardsEnabled()) {
+            const lockOwner = randomUUID();
+            const lockTtlRaw = Number(process.env.ZOHO_BOOKS_REDIS_AUTH_LOCK_TTL_SEC || DEFAULT_REDIS_AUTH_LOCK_TTL_SEC);
+            const lockTtl = Number.isFinite(lockTtlRaw) && lockTtlRaw > 0
+                ? Math.floor(lockTtlRaw)
+                : DEFAULT_REDIS_AUTH_LOCK_TTL_SEC;
+            const lockResult = await redisAcquireLock({
+                key: this.redisAuthLockKey(),
+                owner: lockOwner,
+                ttlSeconds: lockTtl,
+            });
+
+            if (!lockResult.acquired) {
+                for (let attempt = 0; attempt < 8; attempt += 1) {
+                    await sleep(160 + Math.floor(Math.random() * 90));
+                    const cached = await this.readRedisAuthCache();
+                    if (cached && cached.expiresAt > Date.now()) {
+                        this.applyResolvedAuth(state, cached);
+                        if (!forceRefresh) {
+                            state.inFlight = null;
+                        }
+                        return this.accessToken;
+                    }
+                }
+            }
+
+            try {
+                const refreshPromise = beginRefresh();
+                const resolved = await refreshPromise;
+                this.applyResolvedAuth(state, resolved);
+                await this.writeRedisAuthCache(resolved);
+                return this.accessToken;
+            } finally {
+                if (lockResult.acquired) {
+                    await redisReleaseLock({
+                        key: this.redisAuthLockKey(),
+                        owner: lockOwner,
+                    });
+                }
+                if (!forceRefresh) {
+                    state.inFlight = null;
+                }
+            }
         }
 
         try {
+            const refreshPromise = beginRefresh();
             const resolved = await refreshPromise;
             this.applyResolvedAuth(state, resolved);
             return this.accessToken;
@@ -236,6 +355,24 @@ export class ZohoBooksClient {
                 state.inFlight = null;
             }
         }
+    }
+
+    async getAuthContext(options?: { forceRefresh?: boolean }): Promise<{
+        accessToken: string;
+        apiDomain: string;
+        authDomainUsed: string;
+    }> {
+        const forceRefresh = options?.forceRefresh === true;
+        const accessToken = await this.getAccessToken(forceRefresh);
+        if (!accessToken) {
+            throw new Error('No se pudo obtener access token de Zoho Books.');
+        }
+        const state = this.getSharedAuthState();
+        return {
+            accessToken,
+            apiDomain: this.apiDomain || state.apiDomain || DEFAULT_ZOHO_API_DOMAIN,
+            authDomainUsed: state.authDomainUsed || '',
+        };
     }
 
     private isAuthExpiredResponse(status: number, rawText: string): boolean {
@@ -272,6 +409,20 @@ export class ZohoBooksClient {
 
     private async consumeToken(endpoint: string): Promise<void> {
         const group = this.endpointGroup(endpoint);
+        if (this.redisGuardsEnabled()) {
+            const limitRaw = Number(process.env.ZOHO_BOOKS_REDIS_GLOBAL_RPS || DEFAULT_REDIS_RATE_LIMIT_PER_SEC);
+            const limit = Number.isFinite(limitRaw) && limitRaw > 0
+                ? Math.floor(limitRaw)
+                : DEFAULT_REDIS_RATE_LIMIT_PER_SEC;
+            const distributed = await redisFixedWindowConsume({
+                keyPrefix: this.redisRateLimitKey(group),
+                limitPerSecond: limit,
+            });
+            if (!distributed.allowed) {
+                await sleep(Math.max(40, distributed.retryAfterMs));
+            }
+        }
+
         const bucketKey = `${this.getSharedAuthKey()}::${group}`;
         const now = Date.now();
         const { capacity, refillPerSec } = this.tokenBucketConfig();
@@ -671,7 +822,10 @@ export class ZohoBooksClient {
         discount?: number;
         is_discount_before_tax?: boolean;
         shipping_charge?: number;
+        delivery_method?: string;
+        terms?: string;
         salesperson_name?: string;
+        salesperson_id?: string;
         location_id?: string;
         discount_type?: 'item_level' | 'entity_level';
         line_items: Array<{
@@ -712,7 +866,10 @@ export class ZohoBooksClient {
             discount?: number;
             is_discount_before_tax?: boolean;
             shipping_charge?: number;
+            delivery_method?: string;
+            terms?: string;
             salesperson_name?: string;
+            salesperson_id?: string;
             location_id?: string;
             discount_type?: 'item_level' | 'entity_level';
             line_items: Array<{

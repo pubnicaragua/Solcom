@@ -1,9 +1,5 @@
 import { createClient } from '@supabase/supabase-js';
-import {
-    acquirePendingSalesSyncJobs,
-    finishSalesSyncJob,
-    syncSalesDocumentNow,
-} from '@/lib/ventas/sync-processor';
+import { runSalesSyncWorkerBatch } from '@/lib/ventas/sync-worker';
 
 export const dynamic = 'force-dynamic';
 export const revalidate = 0;
@@ -39,73 +35,14 @@ export async function GET(request: Request) {
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
     try {
-        const jobs = await acquirePendingSalesSyncJobs({
+        const result = await runSalesSyncWorkerBatch({
             supabase,
-            workerId,
             batchSize,
+            workerId,
+            useDistributedLock: true,
         });
 
-        if (!jobs.length) {
-            return jsonResponse({
-                ok: true,
-                processed: 0,
-                success: 0,
-                failed: 0,
-                message: 'No hay jobs pendientes en sales_sync_queue.',
-            });
-        }
-
-        let success = 0;
-        let failed = 0;
-        const results: any[] = [];
-
-        for (const job of jobs) {
-            try {
-                await syncSalesDocumentNow({
-                    supabase,
-                    documentType: job.document_type,
-                    documentId: job.document_id,
-                    externalRequestId: job.external_request_id || null,
-                });
-
-                await finishSalesSyncJob({
-                    supabase,
-                    job,
-                    success: true,
-                });
-
-                success += 1;
-                results.push({
-                    job_id: job.id,
-                    document_type: job.document_type,
-                    document_id: job.document_id,
-                    status: 'completed',
-                });
-            } catch (error: any) {
-                await finishSalesSyncJob({
-                    supabase,
-                    job,
-                    success: false,
-                    error,
-                });
-                failed += 1;
-                results.push({
-                    job_id: job.id,
-                    document_type: job.document_type,
-                    document_id: job.document_id,
-                    status: 'failed',
-                    error: error?.message || 'Error desconocido',
-                });
-            }
-        }
-
-        return jsonResponse({
-            ok: true,
-            processed: jobs.length,
-            success,
-            failed,
-            results,
-        });
+        return jsonResponse(result);
     } catch (error: any) {
         return jsonResponse({ error: error?.message || 'Error interno en process-sales-sync' }, 500);
     }

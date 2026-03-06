@@ -1,35 +1,4 @@
-function normalizeDomain(raw: string): string | null {
-    const value = raw.trim().replace(/^['"]|['"]$/g, '');
-    if (!value) return null;
-    try {
-        const parsed = new URL(value.includes('://') ? value : `https://${value}`);
-        return parsed.origin;
-    } catch {
-        return null;
-    }
-}
-
-function authDomainCandidates(rawDomain: string | undefined): string[] {
-    const candidates: string[] = [];
-    const normalized = rawDomain ? normalizeDomain(rawDomain) : null;
-    if (normalized) {
-        candidates.push(normalized);
-    }
-
-    const fallbacks = [
-        'https://accounts.zoho.com',
-        'https://accounts.zoho.eu',
-        'https://accounts.zoho.in',
-        'https://accounts.zoho.com.au',
-        'https://accounts.zoho.jp',
-    ];
-    for (const domain of fallbacks) {
-        if (!candidates.includes(domain)) {
-            candidates.push(domain);
-        }
-    }
-    return candidates;
-}
+import { createZohoBooksClient } from '@/lib/zoho/books-client';
 
 type ZohoAuthSuccess = {
     accessToken: string;
@@ -41,137 +10,22 @@ type ZohoAuthError = {
     error: string;
 };
 
-const AUTH_REFRESH_SAFETY_MS = 60_000;
-const AUTH_RATE_LIMIT_COOLDOWN_MS = 45_000;
-const AUTH_ERROR_COOLDOWN_MS = 8_000;
-
-let cachedAuth: (ZohoAuthSuccess & { expiresAt: number }) | null = null;
-let authInFlight: Promise<ZohoAuthSuccess | ZohoAuthError> | null = null;
-let authErrorUntil = 0;
-let authErrorMessage = '';
-
-function isRateLimitedAuth(status: number, rawText: string): boolean {
-    if (status === 429) return true;
-    const text = rawText.toLowerCase();
-    return text.includes('too many requests') || text.includes('access denied');
-}
-
-function toSafeSnippet(rawText: string): string {
-    return rawText.slice(0, 140).replace(/\s+/g, ' ').trim();
-}
-
-export async function getZohoAccessToken(options: { forceRefresh?: boolean } = {}) {
-    const forceRefresh = options.forceRefresh === true;
-
-    if (!forceRefresh && cachedAuth && Date.now() < cachedAuth.expiresAt) {
-        return {
-            accessToken: cachedAuth.accessToken,
-            apiDomain: cachedAuth.apiDomain,
-            authDomainUsed: cachedAuth.authDomainUsed,
-        };
-    }
-
-    if (!forceRefresh && authErrorUntil > Date.now()) {
-        return { error: authErrorMessage || 'Zoho auth temporalmente bloqueado por rate limit' };
-    }
-
-    if (!forceRefresh && authInFlight) {
-        return authInFlight;
-    }
-
-    const runAuth = async (): Promise<ZohoAuthSuccess | ZohoAuthError> => {
-    const clientId = (process.env.ZOHO_BOOKS_CLIENT_ID || '').trim();
-    const clientSecret = (process.env.ZOHO_BOOKS_CLIENT_SECRET || '').trim();
-    const refreshToken = (process.env.ZOHO_BOOKS_REFRESH_TOKEN || '').trim();
-
-    if (!clientId || !clientSecret || !refreshToken) {
-        return { error: 'Configuración de Zoho Books incompleta' };
-    }
-
-    const domains = authDomainCandidates(process.env.ZOHO_AUTH_DOMAIN);
-    const errors: string[] = [];
-    let rateLimited = false;
-
-    for (const authDomain of domains) {
-        const response = await fetch(`${authDomain}/oauth/v2/token`, {
-            method: 'POST',
-            cache: 'no-store',
-            headers: {
-                'Content-Type': 'application/x-www-form-urlencoded',
-            },
-            body: new URLSearchParams({
-                refresh_token: refreshToken,
-                client_id: clientId,
-                client_secret: clientSecret,
-                grant_type: 'refresh_token',
-            }),
-        });
-
-        const rawText = await response.text();
-        if (!response.ok) {
-            const snippet = toSafeSnippet(rawText);
-            errors.push(`${authDomain} -> ${response.status}: ${snippet}`);
-            if (isRateLimitedAuth(response.status, rawText)) {
-                rateLimited = true;
-                // Evita golpear todos los dominios cuando Zoho ya está rate-limiteando.
-                break;
-            }
-            continue;
-        }
-
-        let data: any;
-        try {
-            data = JSON.parse(rawText);
-        } catch {
-            errors.push(`${authDomain} -> 200: invalid JSON response`);
-            continue;
-        }
-
-        if (!data?.access_token) {
-            const snippet = JSON.stringify(data).slice(0, 140);
-            errors.push(`${authDomain} -> 200 without access_token: ${snippet}`);
-            continue;
-        }
-
-        const expiresInSecRaw = Number(data.expires_in ?? data.expires_in_sec ?? 3600);
-        const expiresInSec = Number.isFinite(expiresInSecRaw) && expiresInSecRaw > 0
-            ? expiresInSecRaw
-            : 3600;
-
-        cachedAuth = {
-            accessToken: data.access_token as string,
-            apiDomain: (data.api_domain as string) || 'https://www.zohoapis.com',
-            authDomainUsed: authDomain,
-            expiresAt: Date.now() + (expiresInSec * 1000) - AUTH_REFRESH_SAFETY_MS,
-        };
-        authErrorUntil = 0;
-        authErrorMessage = '';
-
-        return {
-            accessToken: cachedAuth.accessToken,
-            apiDomain: cachedAuth.apiDomain,
-            authDomainUsed: cachedAuth.authDomainUsed,
-        };
-    }
-
-    const finalError = `Zoho auth failed on all domains. Attempts: ${errors.join(' | ')}`;
-    authErrorMessage = finalError;
-    authErrorUntil = Date.now() + (rateLimited ? AUTH_RATE_LIMIT_COOLDOWN_MS : AUTH_ERROR_COOLDOWN_MS);
-
-    return {
-        error: finalError,
-    };
-    };
-
-    if (forceRefresh) {
-        return runAuth();
-    }
-
-    authInFlight = runAuth();
+export async function getZohoAccessToken(options: { forceRefresh?: boolean } = {}): Promise<ZohoAuthSuccess | ZohoAuthError> {
     try {
-        return await authInFlight;
-    } finally {
-        authInFlight = null;
+        const client = createZohoBooksClient();
+        if (!client) {
+            return { error: 'Configuración de Zoho Books incompleta' };
+        }
+        const auth = await client.getAuthContext({ forceRefresh: options.forceRefresh === true });
+        return {
+            accessToken: auth.accessToken,
+            apiDomain: auth.apiDomain,
+            authDomainUsed: auth.authDomainUsed,
+        };
+    } catch (error: any) {
+        return {
+            error: String(error?.message || error || 'No se pudo autenticar con Zoho Books'),
+        };
     }
 }
 

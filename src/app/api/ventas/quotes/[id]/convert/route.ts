@@ -234,6 +234,7 @@ export async function POST(
                 tax_name: normalizeText(item?.tax_name) || null,
                 tax_percentage: Math.max(0, normalizeNumber(item?.tax_percentage, 0)),
                 warranty: normalizeText(item?.warranty) || null,
+                price_profile_code: normalizeText(item?.price_profile_code) || null,
                 subtotal: Math.round(Math.max(0, normalizeNumber(item?.subtotal, quantity * unitPrice * (1 - discountPercent / 100))) * 100) / 100,
                 sort_order: index,
                 created_at: nowIso,

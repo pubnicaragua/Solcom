@@ -496,20 +496,23 @@ export async function POST(req: NextRequest) {
             (taxCatalog || []).filter((tax) => tax.active && tax.is_editable)
         );
 
-        const normalizedItems = items.map((item: any, index: number) => normalizeFiscalLine({
-            line: {
-                item_id: item?.item_id || null,
-                description: item?.description || item?.name || 'Artículo',
-                quantity: normalizeNumber(item?.quantity, NaN),
-                unit_price: Math.max(0, normalizeNumber(item?.unit_price, 0)),
-                discount_percent: Math.max(0, Math.min(100, normalizeNumber(item?.discount_percent, 0))),
-                tax_id: item?.tax_id || null,
-                tax_name: item?.tax_name || null,
-                tax_percentage: item?.tax_percentage,
-                warranty: item?.warranty ?? null,
-            },
-            taxCatalogMap,
-            lineIndex: index,
+        const normalizedItems = items.map((item: any, index: number) => ({
+            ...normalizeFiscalLine({
+                line: {
+                    item_id: item?.item_id || null,
+                    description: item?.description || item?.name || 'Artículo',
+                    quantity: normalizeNumber(item?.quantity, NaN),
+                    unit_price: Math.max(0, normalizeNumber(item?.unit_price, 0)),
+                    discount_percent: Math.max(0, Math.min(100, normalizeNumber(item?.discount_percent, 0))),
+                    tax_id: item?.tax_id || null,
+                    tax_name: item?.tax_name || null,
+                    tax_percentage: item?.tax_percentage,
+                    warranty: item?.warranty ?? null,
+                },
+                taxCatalogMap,
+                lineIndex: index,
+            }),
+            price_profile_code: normalizeText(item?.price_profile_code) || null,
         }));
 
         const invalidQuantityIndex = normalizedItems.findIndex(
@@ -632,6 +635,7 @@ export async function POST(req: NextRequest) {
                 tax_name: normalizeText(item?.tax_name) || null,
                 tax_percentage: Math.max(0, normalizeNumber(item?.tax_percentage, 0)),
                 warranty: normalizeWarranty(item?.warranty),
+                price_profile_code: normalizeText(item?.price_profile_code) || null,
                 subtotal: Math.round(Math.max(0, normalizeNumber(item?.line_taxable, item?.subtotal || 0)) * 100) / 100,
                 sort_order: index,
             };

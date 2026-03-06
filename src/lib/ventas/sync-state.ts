@@ -46,10 +46,15 @@ export function normalizeSyncErrorCodeFromError(error: unknown): string {
         return 'ZOHO_NETWORK_ERROR';
     }
     if (message.includes('oauth') || message.includes('token') || message.includes('auth')) {
-        return 'ZOHO_AUTH_ERROR';
+        return 'ZOHO_AUTH_FAILED';
     }
-    if (message.includes('invalid tax') || message.includes('tax')) {
-        return 'ZOHO_TAX_ERROR';
+    if (
+        message.includes('validation') ||
+        message.includes('invalid') ||
+        message.includes('required') ||
+        message.includes('tax')
+    ) {
+        return 'ZOHO_VALIDATION_ERROR';
     }
     return 'ZOHO_SYNC_ERROR';
 }
@@ -286,4 +291,3 @@ export async function findDocumentTypeById(params: {
     }
     return null;
 }
-

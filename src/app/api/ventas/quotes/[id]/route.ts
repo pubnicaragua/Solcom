@@ -114,7 +114,7 @@ async function syncUpdatedQuoteToZoho(params: {
 
     const quoteItemsLookup = await supabase
         .from('sales_quote_items')
-        .select('item_id, description, quantity, unit_price, discount_percent, tax_id, warranty')
+        .select('item_id, description, quantity, unit_price, discount_percent, tax_id, warranty, price_profile_code')
         .eq('quote_id', quoteId)
         .order('sort_order', { ascending: true });
 
@@ -409,20 +409,23 @@ export async function PUT(
                 (taxCatalog || []).filter((tax) => tax.active && tax.is_editable)
             );
 
-            const normalizedItems = items.map((item: any, index: number) => normalizeFiscalLine({
-                line: {
-                    item_id: item?.item_id || null,
-                    description: item?.description || item?.name || 'Artículo',
-                    quantity: normalizeNumber(item?.quantity, NaN),
-                    unit_price: Math.max(0, normalizeNumber(item?.unit_price, 0)),
-                    discount_percent: Math.max(0, Math.min(100, normalizeNumber(item?.discount_percent, 0))),
-                    tax_id: item?.tax_id || null,
-                    tax_name: item?.tax_name || null,
-                    tax_percentage: item?.tax_percentage,
-                    warranty: item?.warranty ?? null,
-                },
-                taxCatalogMap,
-                lineIndex: index,
+            const normalizedItems = items.map((item: any, index: number) => ({
+                ...normalizeFiscalLine({
+                    line: {
+                        item_id: item?.item_id || null,
+                        description: item?.description || item?.name || 'Artículo',
+                        quantity: normalizeNumber(item?.quantity, NaN),
+                        unit_price: Math.max(0, normalizeNumber(item?.unit_price, 0)),
+                        discount_percent: Math.max(0, Math.min(100, normalizeNumber(item?.discount_percent, 0))),
+                        tax_id: item?.tax_id || null,
+                        tax_name: item?.tax_name || null,
+                        tax_percentage: item?.tax_percentage,
+                        warranty: item?.warranty ?? null,
+                    },
+                    taxCatalogMap,
+                    lineIndex: index,
+                }),
+                price_profile_code: normalizeText(item?.price_profile_code) || null,
             }));
 
             const totals = computeFiscalTotals(normalizedItems, 0);
@@ -446,6 +449,7 @@ export async function PUT(
                     tax_name: normalizeText(item?.tax_name) || null,
                     tax_percentage: Math.max(0, normalizeNumber(item?.tax_percentage, 0)),
                     warranty: normalizeWarranty(item?.warranty),
+                    price_profile_code: normalizeText(item?.price_profile_code) || null,
                     subtotal: Math.round(Math.max(0, normalizeNumber(item?.line_taxable, item?.subtotal || 0)) * 100) / 100,
                     sort_order: index,
                 };

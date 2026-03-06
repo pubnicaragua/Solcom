@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createRouteHandlerClient } from '@supabase/auth-helpers-nextjs';
 import { cookies } from 'next/headers';
 import { createZohoBooksClient } from '@/lib/zoho/books-client';
+import { deterministicUuidFromExternalId } from '@/lib/identifiers';
+import { fetchZohoSalespeople } from '@/lib/zoho/salespeople';
 import { buildTaxCatalogMap, getZohoTaxCatalog } from '@/lib/zoho/tax-catalog';
 import {
     computeFiscalTotals,
@@ -29,6 +31,10 @@ function normalizeNumber(value: unknown, fallback = 0): number {
 
 function normalizeText(value: unknown): string {
     return typeof value === 'string' ? value.trim() : '';
+}
+
+function equalsIgnoreCase(a: string, b: string): boolean {
+    return a.localeCompare(b, 'es', { sensitivity: 'base' }) === 0;
 }
 
 function normalizeSerialInput(value: unknown): string {
@@ -143,9 +149,61 @@ async function syncUpdatedSalesOrderToZoho(params: {
         return;
     }
 
+    const normalizedSalespersonName = normalizeText(order?.salesperson_name);
+    const normalizedSalespersonLocalId = normalizeText(order?.salesperson_id);
+    let selectedZohoSalespersonId = '';
+    let selectedZohoSalespersonName = normalizedSalespersonName;
+
+    if (normalizedSalespersonName || normalizedSalespersonLocalId) {
+        try {
+            const auth = await zohoClient.getAuthContext();
+            const organizationId = normalizeText(process.env.ZOHO_BOOKS_ORGANIZATION_ID);
+            if (!organizationId) {
+                throw new Error('Falta ZOHO_BOOKS_ORGANIZATION_ID');
+            }
+            const sellers = await fetchZohoSalespeople(
+                { accessToken: auth.accessToken, apiDomain: auth.apiDomain },
+                organizationId
+            );
+
+            let selectedSeller = null as null | {
+                salespersonId: string;
+                userId: string;
+                name: string;
+            };
+
+            if (normalizedSalespersonLocalId) {
+                selectedSeller = sellers.find((row) => {
+                    const keys = [row.salespersonId, row.userId].filter(Boolean);
+                    return keys.some(
+                        (key) => deterministicUuidFromExternalId('zoho_salesperson', String(key)) === normalizedSalespersonLocalId
+                    );
+                }) || null;
+            }
+
+            if (!selectedSeller && normalizedSalespersonName) {
+                selectedSeller = sellers.find((row) => equalsIgnoreCase(normalizeText(row.name), normalizedSalespersonName)) || null;
+            }
+
+            if (!selectedSeller && normalizedSalespersonName) {
+                const compactRequested = normalizedSalespersonName.toLowerCase();
+                selectedSeller = sellers.find((row) => String(row.name || '').toLowerCase().includes(compactRequested)) || null;
+            }
+
+            if (selectedSeller) {
+                selectedZohoSalespersonId = normalizeText(selectedSeller.salespersonId || selectedSeller.userId);
+                selectedZohoSalespersonName = normalizeText(selectedSeller.name) || selectedZohoSalespersonName;
+            }
+        } catch (salespersonResolutionError: any) {
+            console.warn(
+                `[sales-orders] No se pudo resolver salesperson_id para OV ${orderId}: ${salespersonResolutionError?.message || 'error desconocido'}`
+            );
+        }
+    }
+
     const orderItemsLookup = await supabase
         .from('sales_order_items')
-        .select('item_id, quantity, unit_price, discount_percent, tax_id, tax_name, tax_percentage, warranty, description, serial_number_value')
+        .select('item_id, quantity, unit_price, discount_percent, tax_id, tax_name, tax_percentage, warranty, price_profile_code, description, serial_number_value')
         .eq('order_id', orderId)
         .order('sort_order', { ascending: true });
 
@@ -291,11 +349,26 @@ async function syncUpdatedSalesOrderToZoho(params: {
     const notes = normalizeText(order?.notes);
     if (notes) payload.notes = notes;
 
-    const salespersonName = normalizeText(order?.salesperson_name);
-    if (salespersonName) payload.salesperson_name = salespersonName;
+    if (selectedZohoSalespersonName) payload.salesperson_name = selectedZohoSalespersonName;
+    if (selectedZohoSalespersonId) payload.salesperson_id = selectedZohoSalespersonId;
 
     if (zohoLocationId) {
         payload.location_id = zohoLocationId;
+    }
+
+    const normalizedShippingCharge = Math.max(0, normalizeNumber(order?.shipping_charge, 0));
+    if (normalizedShippingCharge > 0) {
+        payload.shipping_charge = Number(normalizedShippingCharge.toFixed(2));
+    }
+
+    const deliveryMethod = normalizeText(order?.delivery_method);
+    if (deliveryMethod) {
+        payload.delivery_method = deliveryMethod;
+    }
+
+    const paymentTerms = normalizeText(order?.payment_terms);
+    if (paymentTerms) {
+        payload.terms = paymentTerms;
     }
 
     try {
@@ -304,12 +377,26 @@ async function syncUpdatedSalesOrderToZoho(params: {
         const message = String(error?.message || '').toLowerCase();
         const customFieldRejected = message.includes('customfield')
             || message.includes('item_custom_fields');
-        if (!customFieldRejected) throw error;
+        const optionalFieldsRejected =
+            message.includes('delivery_method')
+            || message.includes('shipping_charge')
+            || message.includes('salesperson_id')
+            || message.includes('payment term')
+            || message.includes('terms');
 
-        await zohoClient.updateSalesOrder(zohoSalesOrderId, {
-            ...payload,
-            line_items: buildZohoLineItems(false),
-        });
+        const retryPayload = { ...payload };
+        if (customFieldRejected) {
+            retryPayload.line_items = buildZohoLineItems(false);
+        }
+        if (optionalFieldsRejected) {
+            delete retryPayload.delivery_method;
+            delete retryPayload.shipping_charge;
+            delete retryPayload.salesperson_id;
+            delete retryPayload.terms;
+        }
+
+        if (!customFieldRejected && !optionalFieldsRejected) throw error;
+        await zohoClient.updateSalesOrder(zohoSalesOrderId, retryPayload);
     }
 
     if (normalizedStatus === 'confirmada') {
@@ -559,6 +646,7 @@ export async function PUT(
             payment_terms,
             delivery_method,
             shipping_zone,
+            shipping_charge,
             status,
             discount_amount,
             notes,
@@ -591,6 +679,9 @@ export async function PUT(
         }
 
         const normalizedDiscountAmount = Math.max(0, normalizeNumber(discount_amount, 0));
+        const normalizedShippingCharge = shipping_charge !== undefined
+            ? Math.max(0, normalizeNumber(shipping_charge, 0))
+            : Math.max(0, normalizeNumber((currentOrder as any).shipping_charge, 0));
         if (discount_amount !== undefined && normalizedDiscountAmount > 0) {
             return NextResponse.json(
                 { error: 'El descuento global está deshabilitado en este flujo.', code: 'GLOBAL_DISCOUNT_DISABLED' },
@@ -612,6 +703,7 @@ export async function PUT(
         if (payment_terms !== undefined) updateData.payment_terms = normalizeText(payment_terms) || null;
         if (delivery_method !== undefined) updateData.delivery_method = normalizeText(delivery_method) || null;
         if (shipping_zone !== undefined) updateData.shipping_zone = normalizeText(shipping_zone) || null;
+        if (shipping_charge !== undefined) updateData.shipping_charge = Math.round(normalizedShippingCharge * 100) / 100;
         if (status !== undefined) updateData.status = normalizeStatus(status, 'borrador');
         if (discount_amount !== undefined) updateData.discount_amount = 0;
         if (notes !== undefined) updateData.notes = notes || null;
@@ -656,7 +748,7 @@ export async function PUT(
                 lineIndex: index,
             }));
 
-            const totals = computeFiscalTotals(normalizedItems, 0);
+            const totals = computeFiscalTotals(normalizedItems, normalizedShippingCharge);
             updateData.subtotal = totals.subtotal;
             updateData.tax_rate = totals.tax_rate;
             updateData.tax_amount = totals.tax_amount;
@@ -692,6 +784,7 @@ export async function PUT(
                     ) || null,
                     line_warehouse_id: normalizeText(items[index]?.line_warehouse_id) || null,
                     line_zoho_warehouse_id: normalizeText(items[index]?.line_zoho_warehouse_id) || null,
+                    price_profile_code: normalizeText(items[index]?.price_profile_code) || null,
                     subtotal: Math.round(Math.max(0, normalizeNumber(item?.line_taxable, item?.subtotal || 0)) * 100) / 100,
                     sort_order: index,
                 };
@@ -754,6 +847,10 @@ export async function PUT(
                     { status: 500 }
                 );
             }
+        } else if (shipping_charge !== undefined) {
+            const subtotal = Math.max(0, normalizeNumber((currentOrder as any).subtotal, 0));
+            const taxAmount = Math.max(0, normalizeNumber((currentOrder as any).tax_amount, 0));
+            updateData.total = Math.round((subtotal + taxAmount + normalizedShippingCharge) * 100) / 100;
         }
 
         let data: any = null;
@@ -817,6 +914,7 @@ export async function PUT(
                     payment_terms: previousOrderSnapshot.payment_terms || null,
                     delivery_method: previousOrderSnapshot.delivery_method || null,
                     shipping_zone: previousOrderSnapshot.shipping_zone || null,
+                    shipping_charge: Math.max(0, normalizeNumber(previousOrderSnapshot.shipping_charge, 0)),
                     status: normalizeStatus(previousOrderSnapshot.status, 'borrador'),
                     subtotal: normalizeNumber(previousOrderSnapshot.subtotal, 0),
                     tax_rate: Math.max(0, normalizeNumber(previousOrderSnapshot.tax_rate, 0)),

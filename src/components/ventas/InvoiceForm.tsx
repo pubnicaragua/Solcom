@@ -890,14 +890,7 @@ export default function InvoiceForm({ isOpen, onClose, onSaved, editInvoice, pre
                 : '/api/ventas/invoices';
             const method = isEditing ? 'PUT' : 'POST';
 
-            const res = await fetch(endpoint, {
-                method,
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(payload),
-            });
-
-            const data = await res.json();
-            if (!res.ok) {
+            const handleApiError = (res: Response, data: any) => {
                 if (res.status === 409 && data?.code === 'SERIAL_NOT_RESERVED') {
                     throw new Error(data?.error || 'Serial reservado por otra OV o vendido fuera del sistema. Re-selecciona seriales.');
                 }
@@ -912,6 +905,47 @@ export default function InvoiceForm({ isOpen, onClose, onSaved, editInvoice, pre
                     }
                 }
                 throw new Error(data?.error || (isEditing ? 'No se pudo actualizar la factura' : 'No se pudo crear la factura'));
+            };
+
+            if (status === 'enviada') {
+                const draftRes = await fetch(endpoint, {
+                    method,
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ ...payload, status: 'borrador' }),
+                });
+                const draftData = await draftRes.json().catch(() => ({}));
+                if (!draftRes.ok) {
+                    handleApiError(draftRes, draftData);
+                }
+
+                const savedInvoice = draftData?.invoice || null;
+                const invoiceId = String(savedInvoice?.id || editInvoice?.id || '').trim();
+                if (!invoiceId) {
+                    throw new Error('No se pudo resolver la factura para enviar.');
+                }
+
+                const sendResponse = await fetch(`/api/ventas/invoices/${encodeURIComponent(invoiceId)}/send`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        expected_row_version: savedInvoice?.row_version ?? editInvoice?.row_version ?? null,
+                    }),
+                });
+                const sendData = await sendResponse.json().catch(() => ({}));
+                if (!sendResponse.ok) {
+                    throw new Error(sendData?.error || 'No se pudo enviar la factura.');
+                }
+            } else {
+                const res = await fetch(endpoint, {
+                    method,
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload),
+                });
+
+                const data = await res.json().catch(() => ({}));
+                if (!res.ok) {
+                    handleApiError(res, data);
+                }
             }
 
             onSaved();
