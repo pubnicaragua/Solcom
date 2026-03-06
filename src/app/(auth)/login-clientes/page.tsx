@@ -1,218 +1,197 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, type CSSProperties, type FormEvent } from 'react';
 import { useRouter } from 'next/navigation';
 import { supabase } from '@/lib/supabase/client';
-import Button from '@/components/ui/Button';
-import Input from '@/components/ui/Input';
+import AuthShell from '@/components/auth/AuthShell';
+import { AlertCircle, Eye, EyeOff, KeyRound, LogIn, Mail } from 'lucide-react';
+
+const GENERIC_AUTH_ERROR = 'Credenciales invalidas o acceso no autorizado.';
+
+function resolveClientLoginError(error: unknown): string {
+  const message = String((error as any)?.message || error || '').toLowerCase();
+  if (message.includes('network') || message.includes('fetch') || message.includes('timeout')) {
+    return 'No se pudo conectar con el servicio. Intenta nuevamente.';
+  }
+  return GENERIC_AUTH_ERROR;
+}
 
 export default function LoginClientesPage() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const router = useRouter();
 
-  async function handleLogin(e: React.FormEvent) {
+  async function handleLogin(e: FormEvent) {
     e.preventDefault();
     setLoading(true);
     setError(null);
 
     try {
-      console.log('Intentando login con:', email);
-
       const { data, error: authError } = await supabase.auth.signInWithPassword({
         email,
         password,
       });
 
-      console.log('Respuesta auth:', { data, authError });
-
       if (authError) {
-        console.error('Error de autenticación:', authError);
         throw authError;
       }
 
       if (data.user) {
-        console.log('✅ Login exitoso, usuario:', data.user.id);
-        console.log('📝 Sesión creada en Supabase');
-
-        // Esperar mínimo para asegurar que las cookies se guarden
         await new Promise(resolve => setTimeout(resolve, 100));
-
-        console.log('🚀 Redirigiendo a dashboard...');
-
-        // Usar router.push que maneja mejor las cookies de Next.js
         router.push('/cliente/dashboard');
-
-        // Mantener loading activo durante la redirección
         return;
       }
-    } catch (err: any) {
-      console.error('Error en handleLogin:', err);
-      setError(err.message || 'Error al iniciar sesión');
+    } catch (err: unknown) {
+      setError(resolveClientLoginError(err));
       setLoading(false);
     }
   }
 
-  return (
-    <div style={{
-      minHeight: '100vh',
-      background: '#111827',
-      display: 'flex',
-      alignItems: 'center',
-      justifyContent: 'center',
-      padding: '20px'
-    }}>
-      <div style={{
-        width: '100%',
-        maxWidth: '420px',
-        background: '#1F2937',
-        borderRadius: '12px',
-        boxShadow: '0 20px 60px rgba(0, 0, 0, 0.5)',
-        padding: '40px',
-        border: '1px solid #374151'
-      }}>
-        <div style={{ textAlign: 'center', marginBottom: 40 }}>
-          <img
-            src="https://www.soliscomercialni.com/Solis%20Comercial%20Logo.png"
-            alt="Solis Comercial"
-            style={{
-              maxWidth: '200px',
-              height: 'auto',
-              marginBottom: 24,
-              background: 'white',
-              padding: 12,
-              borderRadius: 8
-            }}
-          />
-          <div style={{
-            fontSize: 14,
-            color: '#9CA3AF',
-            marginBottom: 16
-          }}>
-            Portal de Clientes
-          </div>
-          <div style={{
-            width: '60px',
-            height: '4px',
-            background: '#DC2626',
-            borderRadius: '2px',
-            margin: '0 auto'
-          }} />
-        </div>
+  const fieldLabelStyle: CSSProperties = {
+    display: 'block',
+    fontSize: 13,
+    fontWeight: 500,
+    marginBottom: 8,
+    color: 'var(--text)',
+  };
 
-        <form onSubmit={handleLogin} style={{ display: 'grid', gap: 16 }}>
-          <div>
-            <label style={{
-              display: 'block',
-              fontSize: 13,
-              fontWeight: 600,
-              color: '#D1D5DB',
-              marginBottom: 8
-            }}>
-              Correo Electrónico
-            </label>
-            <Input
+  const fieldInputStyle: CSSProperties = {
+    width: '100%',
+    padding: '12px 14px 12px 42px',
+    borderRadius: 10,
+    border: '1px solid var(--border)',
+    background: 'rgba(15, 23, 42, 0.8)',
+    fontSize: 14,
+    color: 'var(--text)',
+    outline: 'none',
+    transition: 'all 0.2s',
+  };
+
+  const submitButtonStyle: CSSProperties = {
+    width: '100%',
+    padding: '13px 16px',
+    borderRadius: 10,
+    border: 'none',
+    background: loading ? 'rgba(148, 163, 184, 0.35)' : 'var(--brand-primary)',
+    color: '#fff',
+    fontSize: 14,
+    fontWeight: 600,
+    cursor: loading ? 'not-allowed' : 'pointer',
+    display: 'inline-flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    marginTop: 4,
+  };
+
+  return (
+    <AuthShell title="Login de usuarios" subtitle="Portal de acceso">
+      {error && (
+        <div
+          style={{
+            padding: '11px 12px',
+            background: 'rgba(239, 68, 68, 0.10)',
+            border: '1px solid rgba(239, 68, 68, 0.30)',
+            borderRadius: 10,
+            marginBottom: 14,
+            fontSize: 12,
+            color: '#fca5a5',
+            display: 'flex',
+            alignItems: 'center',
+            gap: 8,
+          }}
+        >
+          <AlertCircle size={14} />
+          <span>{error}</span>
+        </div>
+      )}
+
+      <form onSubmit={handleLogin} style={{ display: 'grid', gap: 16 }}>
+        <div>
+          <label style={fieldLabelStyle}>Correo electronico</label>
+          <div style={{ position: 'relative' }}>
+            <Mail
+              size={17}
+              style={{
+                position: 'absolute',
+                left: 14,
+                top: '50%',
+                transform: 'translateY(-50%)',
+                color: 'var(--muted)',
+              }}
+            />
+            <input
               type="email"
-              placeholder="ventas@gmail.com"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
+              placeholder="usuario@correo.com"
+              required
+              autoComplete="email"
               disabled={loading}
-              style={{
-                width: '100%',
-                padding: '12px 14px',
-                border: '1px solid #374151',
-                borderRadius: '8px',
-                fontSize: 14,
-                background: '#111827',
-                color: '#F9FAFB',
-                transition: 'all 0.2s'
-              }}
+              style={fieldInputStyle}
             />
           </div>
+        </div>
 
-          <div>
-            <label style={{
-              display: 'block',
-              fontSize: 13,
-              fontWeight: 600,
-              color: '#D1D5DB',
-              marginBottom: 8
-            }}>
-              Contraseña
-            </label>
-            <Input
-              type="password"
-              placeholder="••••••••"
+        <div>
+          <label style={fieldLabelStyle}>Contrasena</label>
+          <div style={{ position: 'relative' }}>
+            <KeyRound
+              size={17}
+              style={{
+                position: 'absolute',
+                left: 14,
+                top: '50%',
+                transform: 'translateY(-50%)',
+                color: 'var(--muted)',
+              }}
+            />
+            <input
+              type={showPassword ? 'text' : 'password'}
               value={password}
               onChange={(e) => setPassword(e.target.value)}
+              placeholder="••••••••"
+              required
+              autoComplete="current-password"
               disabled={loading}
-              style={{
-                width: '100%',
-                padding: '12px 14px',
-                border: '1px solid #374151',
-                borderRadius: '8px',
-                fontSize: 14,
-                background: '#111827',
-                color: '#F9FAFB',
-                transition: 'all 0.2s'
-              }}
+              style={{ ...fieldInputStyle, paddingRight: 44 }}
             />
+            <button
+              type="button"
+              onClick={() => setShowPassword((prev) => !prev)}
+              tabIndex={-1}
+              style={{
+                position: 'absolute',
+                right: 12,
+                top: '50%',
+                transform: 'translateY(-50%)',
+                background: 'transparent',
+                border: 'none',
+                color: 'var(--muted)',
+                padding: 2,
+                display: 'flex',
+                alignItems: 'center',
+              }}
+            >
+              {showPassword ? <EyeOff size={17} /> : <Eye size={17} />}
+            </button>
           </div>
-
-          {error && (
-            <div style={{
-              padding: '12px 14px',
-              background: '#fee2e2',
-              border: '1px solid #fecaca',
-              borderRadius: '8px',
-              fontSize: 13,
-              color: '#dc2626'
-            }}>
-              {error}
-            </div>
-          )}
-
-          <button
-            type="submit"
-            disabled={loading || !email || !password}
-            style={{
-              width: '100%',
-              padding: '12px 16px',
-              background: loading ? '#4B5563' : '#DC2626',
-              color: 'white',
-              border: 'none',
-              borderRadius: '8px',
-              fontSize: 14,
-              fontWeight: 600,
-              cursor: loading ? 'not-allowed' : 'pointer',
-              transition: 'all 0.3s',
-              marginTop: 8
-            }}
-          >
-            {loading ? 'Iniciando sesión...' : 'Ingresar'}
-          </button>
-        </form>
-
-        <div style={{
-          marginTop: 24,
-          paddingTop: 24,
-          borderTop: '1px solid #374151',
-          fontSize: 13,
-          color: '#9CA3AF',
-          textAlign: 'center'
-        }}>
-          ¿Necesitas ayuda? Contacta a{' '}
-          <a href="mailto:soporte@soliscomercial.com" style={{
-            color: '#DC2626',
-            textDecoration: 'none',
-            fontWeight: 600
-          }}>
-            soporte@soliscomercial.com
-          </a>
         </div>
-      </div>
-    </div>
+
+        <button type="submit" disabled={loading || !email || !password} style={submitButtonStyle}>
+          {loading ? (
+            'Ingresando...'
+          ) : (
+            <>
+              <LogIn size={17} />
+              Ingresar
+            </>
+          )}
+        </button>
+      </form>
+    </AuthShell>
   );
 }

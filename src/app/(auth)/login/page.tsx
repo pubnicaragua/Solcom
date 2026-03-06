@@ -1,15 +1,21 @@
 'use client';
 
-import { useState } from 'react';
-import { useRouter } from 'next/navigation';
+import { useState, type CSSProperties, type FormEvent } from 'react';
 import { createBrowserClient } from '@supabase/ssr';
-import Card from '@/components/ui/Card';
-import Button from '@/components/ui/Button';
-import Input from '@/components/ui/Input';
-import { LogIn, KeyRound, Mail, Eye, EyeOff } from 'lucide-react';
+import AuthShell from '@/components/auth/AuthShell';
+import { AlertCircle, CheckCircle2, Eye, EyeOff, KeyRound, LogIn, Mail } from 'lucide-react';
+
+const GENERIC_AUTH_ERROR = 'Credenciales invalidas o acceso no autorizado.';
+
+function resolveLoginError(error: unknown): string {
+  const message = String((error as any)?.message || error || '').toLowerCase();
+  if (message.includes('network') || message.includes('fetch') || message.includes('timeout')) {
+    return 'No se pudo conectar con el servicio. Intenta nuevamente.';
+  }
+  return GENERIC_AUTH_ERROR;
+}
 
 export default function LoginPage() {
-  const router = useRouter();
   const supabase = createBrowserClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
@@ -22,45 +28,32 @@ export default function LoginPage() {
   const [resetMode, setResetMode] = useState(false);
   const [resetSuccess, setResetSuccess] = useState(false);
 
-  async function handleLogin(e: React.FormEvent) {
+  async function handleLogin(e: FormEvent) {
     e.preventDefault();
     setLoading(true);
     setError('');
 
     try {
-      const { data, error } = await supabase.auth.signInWithPassword({
+      const { error: authError } = await supabase.auth.signInWithPassword({
         email,
         password,
       });
 
-      if (error) {
-        setError('Correo o contraseña incorrectos');
+      if (authError) {
+        setError(GENERIC_AUTH_ERROR);
         setLoading(false);
         return;
       }
 
       window.location.replace('/inventory');
-    } catch (error: any) {
-      // Mensajes amigables según el tipo de error
-      let userMessage = 'No pudimos iniciar sesión. Por favor, intenta de nuevo.';
-
-      if (error.message?.includes('Invalid login credentials')) {
-        userMessage = 'Correo o contraseña incorrectos. Verifica tus datos.';
-      } else if (error.message?.includes('Email not confirmed')) {
-        userMessage = 'Por favor, confirma tu correo electrónico antes de iniciar sesión.';
-      } else if (error.message?.includes('Database error') || error.status === 500) {
-        userMessage = 'El sistema está configurándose. Por favor, contacta al administrador.';
-      } else if (error.message?.includes('network') || error.message?.includes('fetch')) {
-        userMessage = 'Sin conexión a internet. Verifica tu conexión.';
-      }
-
-      setError(userMessage);
+    } catch (error: unknown) {
+      setError(resolveLoginError(error));
     } finally {
       setLoading(false);
     }
   }
 
-  async function handleResetPassword(e: React.FormEvent) {
+  async function handleResetPassword(e: FormEvent) {
     e.preventDefault();
     setLoading(true);
     setError('');
@@ -76,349 +69,249 @@ export default function LoginPage() {
       }
 
       setResetSuccess(true);
-    } catch (error: any) {
-      setError('Error de conexión. Intenta de nuevo.');
+    } catch {
+      setError('No se pudo procesar la solicitud. Intenta nuevamente.');
     } finally {
       setLoading(false);
     }
   }
 
+  const fieldLabelStyle: CSSProperties = {
+    display: 'block',
+    fontSize: 13,
+    fontWeight: 500,
+    marginBottom: 8,
+    color: 'var(--text)',
+  };
+
+  const fieldInputStyle: CSSProperties = {
+    width: '100%',
+    padding: '12px 14px 12px 42px',
+    borderRadius: 10,
+    border: '1px solid var(--border)',
+    background: 'rgba(15, 23, 42, 0.8)',
+    fontSize: 14,
+    color: 'var(--text)',
+    outline: 'none',
+    transition: 'all 0.2s',
+  };
+
+  const submitButtonStyle: CSSProperties = {
+    width: '100%',
+    padding: '13px 16px',
+    borderRadius: 10,
+    border: 'none',
+    background: loading ? 'rgba(148, 163, 184, 0.35)' : 'var(--brand-primary)',
+    color: '#fff',
+    fontSize: 14,
+    fontWeight: 600,
+    cursor: loading ? 'not-allowed' : 'pointer',
+    display: 'inline-flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+  };
+
   return (
-    <div style={{
-      minHeight: '100vh',
-      display: 'flex',
-      alignItems: 'center',
-      justifyContent: 'center',
-      background: 'linear-gradient(135deg, #071826 0%, #0a2540 100%)',
-      padding: 20,
-    }}>
-      <div style={{ maxWidth: 440, width: '100%' }}>
-        <Card>
-          <div style={{ padding: 40 }}>
-            {/* Logo con fondo blanco para legibilidad */}
-            <div style={{
-              textAlign: 'center',
-              marginBottom: 32,
-              background: '#ffffff',
-              padding: 24,
-              borderRadius: 12,
-              boxShadow: '0 4px 6px rgba(0, 0, 0, 0.1)'
-            }}>
-              <img
-                src="https://www.soliscomercialni.com/Solis%20Comercial%20Logo.png"
-                alt="Solis Comercial"
-                style={{ width: '100%', maxWidth: 240, height: 'auto', margin: '0 auto' }}
+    <AuthShell
+      title={resetMode ? 'Recuperar acceso' : 'Login de usuarios'}
+      subtitle={resetMode ? 'Ingresa tu correo para restablecer la contraseña.' : 'Portal de acceso'}
+    >
+      {error && (
+        <div
+          style={{
+            padding: '11px 12px',
+            background: 'rgba(239, 68, 68, 0.10)',
+            border: '1px solid rgba(239, 68, 68, 0.30)',
+            borderRadius: 10,
+            marginBottom: 14,
+            fontSize: 12,
+            color: '#fca5a5',
+            display: 'flex',
+            alignItems: 'center',
+            gap: 8,
+          }}
+        >
+          <AlertCircle size={14} />
+          <span>{error}</span>
+        </div>
+      )}
+
+      {resetSuccess && (
+        <div
+          style={{
+            padding: '11px 12px',
+            background: 'rgba(16, 185, 129, 0.10)',
+            border: '1px solid rgba(16, 185, 129, 0.30)',
+            borderRadius: 10,
+            marginBottom: 14,
+            fontSize: 12,
+            color: '#6ee7b7',
+            display: 'flex',
+            alignItems: 'center',
+            gap: 8,
+          }}
+        >
+          <CheckCircle2 size={14} />
+          <span>Si el correo es valido, recibiras instrucciones para continuar.</span>
+        </div>
+      )}
+
+      {resetMode ? (
+        <form onSubmit={handleResetPassword} style={{ display: 'grid', gap: 16 }}>
+          <div>
+            <label style={fieldLabelStyle}>Correo electronico</label>
+            <div style={{ position: 'relative' }}>
+              <Mail
+                size={17}
+                style={{
+                  position: 'absolute',
+                  left: 14,
+                  top: '50%',
+                  transform: 'translateY(-50%)',
+                  color: 'var(--muted)',
+                }}
+              />
+              <input
+                type="email"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                placeholder="usuario@correo.com"
+                required
+                autoComplete="email"
+                style={fieldInputStyle}
               />
             </div>
-
-            <div style={{ textAlign: 'center', marginBottom: 32 }}>
-              <h1 style={{ fontSize: 26, fontWeight: 600, marginBottom: 8 }}>
-                {resetMode ? '¿Olvidaste tu contraseña?' : 'Bienvenido'}
-              </h1>
-              <p style={{ fontSize: 14, color: 'var(--muted)' }}>
-                {resetMode
-                  ? 'Ingresa tu correo para recibir instrucciones'
-                  : 'Accede al dashboard de inventario'
-                }
-              </p>
-            </div>
-
-            {error && (
-              <div style={{
-                padding: 14,
-                background: 'rgba(239, 68, 68, 0.1)',
-                border: '1px solid rgba(239, 68, 68, 0.3)',
-                borderRadius: 8,
-                marginBottom: 20,
-                fontSize: 13,
-                color: '#ef4444',
-                display: 'flex',
-                alignItems: 'center',
-                gap: 8,
-              }}>
-                <span>⚠️</span>
-                <span>{error}</span>
-              </div>
-            )}
-
-            {resetSuccess && (
-              <div style={{
-                padding: 14,
-                background: 'rgba(34, 197, 94, 0.1)',
-                border: '1px solid rgba(34, 197, 94, 0.3)',
-                borderRadius: 8,
-                marginBottom: 20,
-                fontSize: 13,
-                color: '#22c55e',
-                display: 'flex',
-                alignItems: 'center',
-                gap: 8,
-              }}>
-                <span>✅</span>
-                <span>Correo enviado. Revisa tu bandeja de entrada.</span>
-              </div>
-            )}
-
-            {resetMode ? (
-              <form onSubmit={handleResetPassword} style={{ display: 'grid', gap: 20 }}>
-                <div>
-                  <label style={{
-                    display: 'block',
-                    fontSize: 13,
-                    fontWeight: 500,
-                    marginBottom: 8,
-                    color: 'var(--text)'
-                  }}>
-                    Correo Electrónico
-                  </label>
-                  <div style={{ position: 'relative' }}>
-                    <Mail size={18} style={{
-                      position: 'absolute',
-                      left: 14,
-                      top: '50%',
-                      transform: 'translateY(-50%)',
-                      color: 'var(--muted)'
-                    }} />
-                    <input
-                      type="email"
-                      value={email}
-                      onChange={(e) => setEmail(e.target.value)}
-                      placeholder="ventas@gmail.com"
-                      required
-                      autoComplete="off"
-                      style={{
-                        width: '100%',
-                        padding: '12px 14px 12px 44px',
-                        borderRadius: 8,
-                        border: '1px solid var(--border)',
-                        background: 'var(--panel)',
-                        fontSize: 14,
-                        color: 'var(--text)',
-                        outline: 'none',
-                        transition: 'all 0.2s',
-                      }}
-                    />
-                  </div>
-                </div>
-
-                <button
-                  type="submit"
-                  disabled={loading}
-                  style={{
-                    padding: '14px 24px',
-                    borderRadius: 8,
-                    border: 'none',
-                    background: loading ? 'var(--muted)' : 'var(--brand-primary)',
-                    color: '#ffffff',
-                    fontSize: 15,
-                    fontWeight: 600,
-                    cursor: loading ? 'not-allowed' : 'pointer',
-                    transition: 'all 0.2s',
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    gap: 8,
-                  }}
-                >
-                  <Mail size={18} />
-                  {loading ? 'Enviando...' : 'Enviar Correo de Recuperación'}
-                </button>
-
-                <button
-                  type="button"
-                  onClick={() => {
-                    setResetMode(false);
-                    setError('');
-                    setResetSuccess(false);
-                  }}
-                  style={{
-                    padding: '12px',
-                    background: 'transparent',
-                    border: 'none',
-                    color: 'var(--brand-primary)',
-                    fontSize: 14,
-                    fontWeight: 500,
-                    cursor: 'pointer',
-                    textAlign: 'center',
-                  }}
-                >
-                  ← Volver al inicio de sesión
-                </button>
-              </form>
-            ) : (
-              <form onSubmit={handleLogin} style={{ display: 'grid', gap: 20 }}>
-                <div>
-                  <label style={{
-                    display: 'block',
-                    fontSize: 13,
-                    fontWeight: 500,
-                    marginBottom: 8,
-                    color: 'var(--text)'
-                  }}>
-                    Correo Electrónico
-                  </label>
-                  <div style={{ position: 'relative' }}>
-                    <Mail size={18} style={{
-                      position: 'absolute',
-                      left: 14,
-                      top: '50%',
-                      transform: 'translateY(-50%)',
-                      color: 'var(--muted)'
-                    }} />
-                    <input
-                      type="email"
-                      value={email}
-                      onChange={(e) => setEmail(e.target.value)}
-                      placeholder="ventas@gmail.com"
-                      required
-                      autoComplete="off"
-                      style={{
-                        width: '100%',
-                        padding: '12px 14px 12px 44px',
-                        borderRadius: 8,
-                        border: '1px solid var(--border)',
-                        background: 'var(--panel)',
-                        fontSize: 14,
-                        color: 'var(--text)',
-                        outline: 'none',
-                        transition: 'all 0.2s',
-                      }}
-                    />
-                  </div>
-                </div>
-
-                <div>
-                  <label style={{
-                    display: 'block',
-                    fontSize: 13,
-                    fontWeight: 500,
-                    marginBottom: 8,
-                    color: 'var(--text)'
-                  }}>
-                    Contraseña
-                  </label>
-                  <div style={{ position: 'relative' }}>
-                    <KeyRound size={18} style={{
-                      position: 'absolute',
-                      left: 14,
-                      top: '50%',
-                      transform: 'translateY(-50%)',
-                      color: 'var(--muted)'
-                    }} />
-                    <input
-                      type={showPassword ? 'text' : 'password'}
-                      value={password}
-                      onChange={(e) => setPassword(e.target.value)}
-                      placeholder="••••••••"
-                      required
-                      autoComplete="new-password"
-                      style={{
-                        width: '100%',
-                        padding: '12px 44px 12px 44px',
-                        borderRadius: 8,
-                        border: '1px solid var(--border)',
-                        background: 'var(--panel)',
-                        fontSize: 14,
-                        color: 'var(--text)',
-                        outline: 'none',
-                        transition: 'all 0.2s',
-                      }}
-                    />
-                    <button
-                      type="button"
-                      onClick={() => setShowPassword(!showPassword)}
-                      tabIndex={-1}
-                      style={{
-                        position: 'absolute',
-                        right: 12,
-                        top: '50%',
-                        transform: 'translateY(-50%)',
-                        background: 'transparent',
-                        border: 'none',
-                        cursor: 'pointer',
-                        color: 'var(--muted)',
-                        padding: 2,
-                        display: 'flex',
-                        alignItems: 'center',
-                      }}
-                    >
-                      {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
-                    </button>
-                  </div>
-                </div>
-
-                <button
-                  type="button"
-                  onClick={() => setResetMode(true)}
-                  style={{
-                    padding: 0,
-                    background: 'transparent',
-                    border: 'none',
-                    color: 'var(--brand-primary)',
-                    fontSize: 13,
-                    fontWeight: 500,
-                    cursor: 'pointer',
-                    textAlign: 'right',
-                    marginTop: -8,
-                  }}
-                >
-                  ¿Olvidaste tu contraseña?
-                </button>
-
-                <button
-                  type="submit"
-                  disabled={loading}
-                  style={{
-                    padding: '14px 24px',
-                    borderRadius: 8,
-                    border: 'none',
-                    background: loading ? 'var(--muted)' : 'var(--brand-primary)',
-                    color: '#ffffff',
-                    fontSize: 15,
-                    fontWeight: 600,
-                    cursor: loading ? 'not-allowed' : 'pointer',
-                    transition: 'all 0.2s',
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    gap: 8,
-                  }}
-                  onMouseEnter={(e) => {
-                    if (!loading) {
-                      e.currentTarget.style.transform = 'translateY(-1px)';
-                      e.currentTarget.style.boxShadow = '0 4px 12px rgba(255, 0, 0, 0.3)';
-                    }
-                  }}
-                  onMouseLeave={(e) => {
-                    e.currentTarget.style.transform = 'translateY(0)';
-                    e.currentTarget.style.boxShadow = 'none';
-                  }}
-                >
-                  {loading ? (
-                    'Iniciando sesión...'
-                  ) : (
-                    <>
-                      <LogIn size={18} />
-                      Iniciar Sesión
-                    </>
-                  )}
-                </button>
-              </form>
-            )}
-
-
           </div>
-        </Card>
 
-        <div style={{
-          textAlign: 'center',
-          marginTop: 24,
-          fontSize: 13,
-          color: 'rgba(255, 255, 255, 0.5)'
-        }}>
-          © 2026 Solis Comercial - ¡A tu servicio, siempre!
-        </div>
-      </div>
-    </div>
+          <button type="submit" disabled={loading} style={submitButtonStyle}>
+            <Mail size={17} />
+            {loading ? 'Enviando...' : 'Enviar instrucciones'}
+          </button>
+
+          <button
+            type="button"
+            onClick={() => {
+              setResetMode(false);
+              setError('');
+              setResetSuccess(false);
+            }}
+            style={{
+              background: 'transparent',
+              border: 'none',
+              color: 'var(--muted)',
+              fontSize: 13,
+              fontWeight: 500,
+              textAlign: 'center',
+              padding: 0,
+            }}
+          >
+            Volver al inicio de sesion
+          </button>
+        </form>
+      ) : (
+        <form onSubmit={handleLogin} style={{ display: 'grid', gap: 16 }}>
+          <div>
+            <label style={fieldLabelStyle}>Correo electronico</label>
+            <div style={{ position: 'relative' }}>
+              <Mail
+                size={17}
+                style={{
+                  position: 'absolute',
+                  left: 14,
+                  top: '50%',
+                  transform: 'translateY(-50%)',
+                  color: 'var(--muted)',
+                }}
+              />
+              <input
+                type="email"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                placeholder="usuario@correo.com"
+                required
+                autoComplete="email"
+                style={fieldInputStyle}
+              />
+            </div>
+          </div>
+
+          <div>
+            <label style={fieldLabelStyle}>Contrasena</label>
+            <div style={{ position: 'relative' }}>
+              <KeyRound
+                size={17}
+                style={{
+                  position: 'absolute',
+                  left: 14,
+                  top: '50%',
+                  transform: 'translateY(-50%)',
+                  color: 'var(--muted)',
+                }}
+              />
+              <input
+                type={showPassword ? 'text' : 'password'}
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                placeholder="••••••••"
+                required
+                autoComplete="current-password"
+                style={{ ...fieldInputStyle, paddingRight: 44 }}
+              />
+              <button
+                type="button"
+                onClick={() => setShowPassword((prev) => !prev)}
+                tabIndex={-1}
+                style={{
+                  position: 'absolute',
+                  right: 12,
+                  top: '50%',
+                  transform: 'translateY(-50%)',
+                  background: 'transparent',
+                  border: 'none',
+                  color: 'var(--muted)',
+                  padding: 2,
+                  display: 'flex',
+                  alignItems: 'center',
+                }}
+              >
+                {showPassword ? <EyeOff size={17} /> : <Eye size={17} />}
+              </button>
+            </div>
+          </div>
+
+          <button
+            type="button"
+            onClick={() => {
+              setResetMode(true);
+              setError('');
+              setResetSuccess(false);
+            }}
+            style={{
+              background: 'transparent',
+              border: 'none',
+              color: 'var(--muted)',
+              fontSize: 12,
+              fontWeight: 500,
+              padding: 0,
+              textAlign: 'right',
+            }}
+          >
+            ¿Olvidaste tu contrasena?
+          </button>
+
+          <button type="submit" disabled={loading} style={submitButtonStyle}>
+            {loading ? (
+              'Ingresando...'
+            ) : (
+              <>
+                <LogIn size={17} />
+                Ingresar
+              </>
+            )}
+          </button>
+        </form>
+      )}
+    </AuthShell>
   );
 }
