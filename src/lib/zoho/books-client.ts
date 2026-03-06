@@ -1,51 +1,232 @@
 import type { ZohoBooksConfig, ZohoBooksItem, ZohoBooksApiResponse } from './types';
 
+type SharedBooksAuth = {
+    accessToken: string | null;
+    expiresAt: number;
+    apiDomain: string;
+    authDomainUsed: string;
+    inFlight: Promise<ResolvedBooksAuth> | null;
+    cooldownUntil: number;
+    cooldownError: string;
+};
+
+type ResolvedBooksAuth = {
+    accessToken: string;
+    expiresAt: number;
+    apiDomain: string;
+    authDomainUsed: string;
+};
+
+const BOOKS_AUTH_REFRESH_SAFETY_MS = 60_000;
+const BOOKS_AUTH_RATE_LIMIT_COOLDOWN_MS = 45_000;
+const BOOKS_AUTH_ERROR_COOLDOWN_MS = 8_000;
+const DEFAULT_ZOHO_API_DOMAIN = 'https://www.zohoapis.com';
+
+const sharedBooksAuthByKey = new Map<string, SharedBooksAuth>();
+
+function normalizeDomain(raw: string): string | null {
+    const value = String(raw || '').trim().replace(/^['"]|['"]$/g, '');
+    if (!value) return null;
+    try {
+        const parsed = new URL(value.includes('://') ? value : `https://${value}`);
+        return parsed.origin;
+    } catch {
+        return null;
+    }
+}
+
+function authDomainCandidates(rawDomain: string | undefined): string[] {
+    const candidates: string[] = [];
+    const normalized = rawDomain ? normalizeDomain(rawDomain) : null;
+    if (normalized) {
+        candidates.push(normalized);
+    }
+
+    const fallbacks = [
+        'https://accounts.zoho.com',
+        'https://accounts.zoho.eu',
+        'https://accounts.zoho.in',
+        'https://accounts.zoho.com.au',
+        'https://accounts.zoho.jp',
+    ];
+    for (const domain of fallbacks) {
+        if (!candidates.includes(domain)) {
+            candidates.push(domain);
+        }
+    }
+
+    return candidates;
+}
+
+function isRateLimitedAuth(status: number, rawText: string): boolean {
+    if (status === 429) return true;
+    const text = String(rawText || '').toLowerCase();
+    return text.includes('too many requests') || text.includes('access denied');
+}
+
+function toSafeSnippet(rawText: string): string {
+    return String(rawText || '').slice(0, 180).replace(/\s+/g, ' ').trim();
+}
+
 export class ZohoBooksClient {
     private config: ZohoBooksConfig;
     private accessToken: string | null = null;
     private tokenExpiry: number = 0;
-    private apiDomain: string = 'https://www.zohoapis.com'; // Default, will be updated after auth
+    private apiDomain: string = DEFAULT_ZOHO_API_DOMAIN; // Default, will be updated after auth
 
     constructor(config: ZohoBooksConfig) {
         this.config = config;
     }
 
-    private async getAccessToken(): Promise<string | null> {
-        if (this.accessToken && Date.now() < this.tokenExpiry) {
+    private getSharedAuthKey(): string {
+        return `${this.config.clientId}::${this.config.refreshToken}`;
+    }
+
+    private getSharedAuthState(): SharedBooksAuth {
+        const key = this.getSharedAuthKey();
+        const existing = sharedBooksAuthByKey.get(key);
+        if (existing) return existing;
+
+        const created: SharedBooksAuth = {
+            accessToken: null,
+            expiresAt: 0,
+            apiDomain: DEFAULT_ZOHO_API_DOMAIN,
+            authDomainUsed: '',
+            inFlight: null,
+            cooldownUntil: 0,
+            cooldownError: '',
+        };
+        sharedBooksAuthByKey.set(key, created);
+        return created;
+    }
+
+    private applyResolvedAuth(state: SharedBooksAuth, resolved: ResolvedBooksAuth) {
+        state.accessToken = resolved.accessToken;
+        state.expiresAt = resolved.expiresAt;
+        state.apiDomain = resolved.apiDomain;
+        state.authDomainUsed = resolved.authDomainUsed;
+        state.cooldownUntil = 0;
+        state.cooldownError = '';
+
+        this.accessToken = resolved.accessToken;
+        this.tokenExpiry = resolved.expiresAt;
+        this.apiDomain = resolved.apiDomain;
+    }
+
+    private async refreshAccessToken(state: SharedBooksAuth): Promise<ResolvedBooksAuth> {
+        const domains = authDomainCandidates(process.env.ZOHO_AUTH_DOMAIN);
+        const errors: string[] = [];
+        let rateLimited = false;
+
+        for (const authDomain of domains) {
+            const response = await fetch(`${authDomain}/oauth/v2/token`, {
+                method: 'POST',
+                cache: 'no-store',
+                headers: {
+                    'Content-Type': 'application/x-www-form-urlencoded',
+                },
+                body: new URLSearchParams({
+                    refresh_token: this.config.refreshToken,
+                    client_id: this.config.clientId,
+                    client_secret: this.config.clientSecret,
+                    grant_type: 'refresh_token',
+                }),
+            });
+
+            const rawText = await response.text();
+            if (!response.ok) {
+                errors.push(`${authDomain} -> ${response.status}: ${toSafeSnippet(rawText)}`);
+                if (isRateLimitedAuth(response.status, rawText)) {
+                    rateLimited = true;
+                    break;
+                }
+                continue;
+            }
+
+            let data: any;
+            try {
+                data = rawText ? JSON.parse(rawText) : {};
+            } catch {
+                errors.push(`${authDomain} -> 200: invalid JSON response`);
+                continue;
+            }
+
+            const accessToken = String(data?.access_token || '').trim();
+            if (!accessToken) {
+                errors.push(`${authDomain} -> 200 without access_token: ${toSafeSnippet(rawText)}`);
+                continue;
+            }
+
+            const expiresInSecRaw = Number(data?.expires_in ?? data?.expires_in_sec ?? 3600);
+            const expiresInSec = Number.isFinite(expiresInSecRaw) && expiresInSecRaw > 0
+                ? expiresInSecRaw
+                : 3600;
+            const apiDomain = normalizeDomain(String(data?.api_domain || '')) || state.apiDomain || DEFAULT_ZOHO_API_DOMAIN;
+
+            return {
+                accessToken,
+                expiresAt: Date.now() + (expiresInSec * 1000) - BOOKS_AUTH_REFRESH_SAFETY_MS,
+                apiDomain,
+                authDomainUsed: authDomain,
+            };
+        }
+
+        const finalError = `Zoho Books auth failed on all domains. Attempts: ${errors.join(' | ')}`;
+        state.cooldownError = finalError;
+        state.cooldownUntil = Date.now() + (rateLimited ? BOOKS_AUTH_RATE_LIMIT_COOLDOWN_MS : BOOKS_AUTH_ERROR_COOLDOWN_MS);
+        throw new Error(finalError);
+    }
+
+    private async getAccessToken(forceRefresh = false): Promise<string | null> {
+        const now = Date.now();
+        const state = this.getSharedAuthState();
+
+        if (!forceRefresh && this.accessToken && now < this.tokenExpiry) {
             return this.accessToken;
         }
 
-        // Detect region from environment or default to .com
-        const authDomain = process.env.ZOHO_AUTH_DOMAIN || 'https://accounts.zoho.com';
-
-        const response = await fetch(`${authDomain}/oauth/v2/token`, {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/x-www-form-urlencoded',
-            },
-            body: new URLSearchParams({
-                refresh_token: this.config.refreshToken,
-                client_id: this.config.clientId,
-                client_secret: this.config.clientSecret,
-                grant_type: 'refresh_token',
-            }),
-        });
-
-        if (!response.ok) {
-            const errorText = await response.text();
-            throw new Error(`Zoho Books auth failed: ${response.status} - ${errorText}`);
+        if (!forceRefresh && state.accessToken && now < state.expiresAt) {
+            this.accessToken = state.accessToken;
+            this.tokenExpiry = state.expiresAt;
+            this.apiDomain = state.apiDomain || DEFAULT_ZOHO_API_DOMAIN;
+            return this.accessToken;
         }
 
-        const data = await response.json();
-        this.accessToken = data.access_token || null;
-        this.tokenExpiry = Date.now() + (data.expires_in * 1000) - 60000;
-
-        // Use the api_domain returned by Zoho (this is region-specific)
-        if (data.api_domain) {
-            this.apiDomain = data.api_domain;
+        if (!forceRefresh && state.cooldownUntil > now) {
+            throw new Error(state.cooldownError || 'Zoho Books auth temporalmente bloqueado por rate limit');
         }
 
-        return this.accessToken;
+        if (!forceRefresh && state.inFlight) {
+            const resolved = await state.inFlight;
+            this.applyResolvedAuth(state, resolved);
+            return this.accessToken;
+        }
+
+        const refreshPromise = this.refreshAccessToken(state);
+        if (!forceRefresh) {
+            state.inFlight = refreshPromise;
+        }
+
+        try {
+            const resolved = await refreshPromise;
+            this.applyResolvedAuth(state, resolved);
+            return this.accessToken;
+        } finally {
+            if (!forceRefresh) {
+                state.inFlight = null;
+            }
+        }
+    }
+
+    private isAuthExpiredResponse(status: number, rawText: string): boolean {
+        if (status !== 401) return false;
+        const text = String(rawText || '').toLowerCase();
+        return (
+            text.includes('invalid oauth') ||
+            text.includes('invalid token') ||
+            text.includes('token expired') ||
+            text.includes('expired token')
+        );
     }
 
     async fetchItems(queryParams: string = ''): Promise<ZohoBooksItem[]> {
@@ -120,20 +301,32 @@ export class ZohoBooksClient {
 
         const joiner = endpoint.includes('?') ? '&' : '?';
         const url = `${this.apiDomain}${endpoint}${joiner}organization_id=${organizationId}`;
+        const body = data ? JSON.stringify(data) : undefined;
 
-        const response = await fetch(url, {
-            method,
-            headers: {
-                'Authorization': `Zoho-oauthtoken ${token}`,
-                'Content-Type': 'application/json',
-            },
-            body: data ? JSON.stringify(data) : undefined,
-            cache: 'no-store',
-        });
+        const doFetch = (accessToken: string | null) =>
+            fetch(url, {
+                method,
+                headers: {
+                    'Authorization': `Zoho-oauthtoken ${accessToken || ''}`,
+                    'Content-Type': 'application/json',
+                },
+                body,
+                cache: 'no-store',
+            });
 
+        let response = await doFetch(token);
         if (!response.ok) {
-            const errorText = await response.text();
-            throw new Error(`Zoho Books API error: ${response.status} - ${errorText}`);
+            const firstErrorText = await response.text();
+            if (this.isAuthExpiredResponse(response.status, firstErrorText)) {
+                const refreshedToken = await this.getAccessToken(true);
+                response = await doFetch(refreshedToken);
+                if (!response.ok) {
+                    const retryErrorText = await response.text();
+                    throw new Error(`Zoho Books API error: ${response.status} - ${retryErrorText}`);
+                }
+                return response.json();
+            }
+            throw new Error(`Zoho Books API error: ${response.status} - ${firstErrorText}`);
         }
 
         return response.json();
