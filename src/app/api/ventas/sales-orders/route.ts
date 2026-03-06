@@ -16,6 +16,17 @@ import {
     replaceOrderSerialReservations,
     SerialReservationError,
 } from '@/lib/ventas/serial-reservations';
+import {
+    beginIdempotentRequest,
+    failIdempotentRequest,
+    finalizeIdempotentRequest,
+} from '@/lib/ventas/idempotency';
+import {
+    buildSyncStatusPayload,
+    markDocumentSyncState,
+    normalizeSyncErrorCodeFromError,
+} from '@/lib/ventas/sync-state';
+import { enqueueDocumentForSync } from '@/lib/ventas/sync-processor';
 
 const ORDER_STATUSES = new Set(['borrador', 'confirmada', 'convertida', 'cancelada']);
 
@@ -151,7 +162,7 @@ async function generateOrderNumber(supabase: any, warehouseCode?: string): Promi
     return `${prefix}${String(nextNum).padStart(5, '0')}`;
 }
 
-async function syncSalesOrderToZoho(params: {
+export async function syncSalesOrderToZoho(params: {
     supabase: any;
     orderId: string;
     orderNumber: string;
@@ -424,6 +435,10 @@ export async function GET(req: NextRequest) {
 
 // POST /api/ventas/sales-orders — create order with line items
 export async function POST(req: NextRequest) {
+    let idempotencyRecordId = '';
+    let externalRequestId = '';
+    let idempotencyPayloadHash = '';
+    let idempotencyKey = '';
     try {
         const supabase = createRouteHandlerClient({ cookies });
         const {
@@ -454,15 +469,63 @@ export async function POST(req: NextRequest) {
             sync_to_zoho = false,
         } = body || {};
 
+        const idempotencyStart = await beginIdempotentRequest({
+            supabase,
+            req,
+            endpoint: '/api/ventas/sales-orders',
+            payload: body || {},
+            required: false,
+        });
+
+        if (idempotencyStart.kind === 'error' || idempotencyStart.kind === 'replay') {
+            return idempotencyStart.response;
+        }
+
+        idempotencyRecordId = idempotencyStart.recordId;
+        externalRequestId = idempotencyStart.externalRequestId;
+        idempotencyPayloadHash = idempotencyStart.payloadHash;
+        idempotencyKey = idempotencyStart.key;
+
+        const failWith = async (bodyData: any, statusCode: number) => {
+            await failIdempotentRequest({
+                supabase,
+                recordId: idempotencyRecordId,
+                responseStatus: statusCode,
+                responseBody: bodyData,
+            });
+            return NextResponse.json(bodyData, { status: statusCode });
+        };
+
+        const succeedWith = async (
+            bodyData: any,
+            statusCode: number,
+            documentId?: string | null
+        ) => {
+            await finalizeIdempotentRequest({
+                supabase,
+                recordId: idempotencyRecordId,
+                responseStatus: statusCode,
+                responseBody: bodyData,
+                documentType: 'sales_order',
+                documentId: documentId || null,
+                externalRequestId: externalRequestId || null,
+            });
+            const response = NextResponse.json(bodyData, { status: statusCode });
+            if (idempotencyKey) {
+                response.headers.set('X-Idempotency-Key', idempotencyKey);
+            }
+            return response;
+        };
+
         if (!Array.isArray(items) || items.length === 0) {
-            return NextResponse.json({ error: 'La orden de venta debe tener al menos un artículo' }, { status: 400 });
+            return failWith({ error: 'La orden de venta debe tener al menos un artículo' }, 400);
         }
 
         const normalizedDiscount = Math.max(0, normalizeNumber(discount_amount, 0));
         if (normalizedDiscount > 0) {
-            return NextResponse.json(
+            return failWith(
                 { error: 'El descuento global está deshabilitado en este flujo.', code: 'GLOBAL_DISCOUNT_DISABLED' },
-                { status: 400 }
+                400
             );
         }
 
@@ -502,9 +565,9 @@ export async function POST(req: NextRequest) {
             (item: any) => !Number.isFinite(item.quantity) || item.quantity <= 0
         );
         if (invalidQuantityIndex >= 0) {
-            return NextResponse.json(
+            return failWith(
                 { error: `Cantidad inválida en la línea ${invalidQuantityIndex + 1}.` },
-                { status: 400 }
+                400
             );
         }
 
@@ -514,7 +577,7 @@ export async function POST(req: NextRequest) {
             items: normalizedItems,
         });
         if (!stockValidation.ok) {
-            return NextResponse.json({ error: stockValidation.error }, { status: 400 });
+            return failWith({ error: stockValidation.error }, 400);
         }
 
         // Resolve warehouse code for order number format
@@ -533,8 +596,9 @@ export async function POST(req: NextRequest) {
         const orderNumber = await generateOrderNumber(supabase, warehouseCode);
 
         const totals = computeFiscalTotals(normalizedItems, 0);
+        const shouldSyncToZoho = Boolean(sync_to_zoho);
 
-        const insertOrder = {
+        const insertOrder: any = {
             order_number: orderNumber,
             customer_id: customer_id || null,
             warehouse_id: warehouse_id || null,
@@ -554,6 +618,11 @@ export async function POST(req: NextRequest) {
             salesperson_id: normalizeText(salesperson_id) || null,
             salesperson_name: salesperson_name || null,
             source: source || null,
+            sync_status: shouldSyncToZoho ? 'pending_sync' : 'not_requested',
+            sync_error_code: null,
+            sync_error_message: null,
+            last_sync_attempt_at: shouldSyncToZoho ? new Date().toISOString() : null,
+            external_request_id: externalRequestId || null,
         };
 
         // Retry loop for duplicate order number conflicts
@@ -602,7 +671,7 @@ export async function POST(req: NextRequest) {
         }
 
         if (!order) {
-            return NextResponse.json({ error: lastError?.message || 'No se pudo crear la orden de venta' }, { status: 500 });
+            return failWith({ error: lastError?.message || 'No se pudo crear la orden de venta' }, 500);
         }
 
         const orderItems = normalizedItems.map((item: any, index: number) => {
@@ -632,7 +701,7 @@ export async function POST(req: NextRequest) {
 
         if (itemsError) {
             await supabase.from('sales_orders').delete().eq('id', order.id);
-            return NextResponse.json({ error: itemsError.message }, { status: 500 });
+            return failWith({ error: itemsError.message }, 500);
         }
 
         try {
@@ -645,25 +714,34 @@ export async function POST(req: NextRequest) {
         } catch (reservationError: any) {
             await supabase.from('sales_orders').delete().eq('id', order.id);
             if (reservationError instanceof SerialReservationError) {
-                return NextResponse.json(
+                return failWith(
                     {
                         error: reservationError.message,
                         code: reservationError.code,
                         details: reservationError.details || null,
                     },
-                    { status: reservationError.status || 409 }
+                    reservationError.status || 409
                 );
             }
-            return NextResponse.json(
+            return failWith(
                 { error: reservationError?.message || 'No se pudo reservar seriales para la orden.' },
-                { status: 500 }
+                500
             );
         }
 
         // Sync to Zoho if requested
         let zohoSync: { zoho_salesorder_id: string; zoho_salesorder_number: string } | null = null;
         let zohoWarning: string | null = null;
-        if (sync_to_zoho) {
+        let responseStatus = 201;
+        let syncState = {
+            sync_status: shouldSyncToZoho ? 'pending_sync' : 'not_requested',
+            sync_error_code: null as string | null,
+            sync_error_message: null as string | null,
+            last_sync_attempt_at: shouldSyncToZoho ? new Date().toISOString() : null as string | null,
+            last_synced_at: null as string | null,
+        };
+
+        if (shouldSyncToZoho) {
             try {
                 zohoSync = await syncSalesOrderToZoho({
                     supabase,
@@ -678,14 +756,110 @@ export async function POST(req: NextRequest) {
                     status: normalizeStatus(status, 'borrador'),
                     items: normalizedItems,
                 });
+
+                const syncUpdate = await markDocumentSyncState({
+                    supabase,
+                    documentType: 'sales_order',
+                    documentId: order.id,
+                    status: 'synced',
+                    externalRequestId: externalRequestId || null,
+                    incrementAttempts: true,
+                });
+                if (!syncUpdate.error && syncUpdate.data) {
+                    syncState = buildSyncStatusPayload(syncUpdate.data);
+                } else {
+                    syncState = {
+                        sync_status: 'synced',
+                        sync_error_code: null,
+                        sync_error_message: null,
+                        last_sync_attempt_at: new Date().toISOString(),
+                        last_synced_at: new Date().toISOString(),
+                    };
+                }
             } catch (zohoError: any) {
                 zohoWarning = zohoError?.message || 'No se pudo crear la orden de venta en Zoho';
                 console.warn(`[sales-orders] OV local creada sin sincronizar en Zoho (${order.id}): ${zohoWarning}`);
+                responseStatus = 202;
+
+                const errorCode = normalizeSyncErrorCodeFromError(zohoError);
+                const syncUpdate = await markDocumentSyncState({
+                    supabase,
+                    documentType: 'sales_order',
+                    documentId: order.id,
+                    status: 'pending_sync',
+                    errorCode,
+                    errorMessage: zohoWarning,
+                    externalRequestId: externalRequestId || null,
+                    incrementAttempts: true,
+                });
+                if (!syncUpdate.error && syncUpdate.data) {
+                    syncState = buildSyncStatusPayload(syncUpdate.data);
+                } else {
+                    syncState = {
+                        sync_status: 'pending_sync',
+                        sync_error_code: errorCode,
+                        sync_error_message: zohoWarning,
+                        last_sync_attempt_at: new Date().toISOString(),
+                        last_synced_at: null,
+                    };
+                }
+
+                await enqueueDocumentForSync({
+                    supabase,
+                    documentType: 'sales_order',
+                    documentId: order.id,
+                    idempotencyKey: idempotencyKey || null,
+                    payloadHash: idempotencyPayloadHash || null,
+                    externalRequestId: externalRequestId || null,
+                    errorCode,
+                    errorMessage: zohoWarning,
+                    priority: 20,
+                });
             }
+        } else {
+            await markDocumentSyncState({
+                supabase,
+                documentType: 'sales_order',
+                documentId: order.id,
+                status: 'not_requested',
+                externalRequestId: externalRequestId || null,
+                incrementAttempts: false,
+            });
         }
 
-        return NextResponse.json({ order, zoho: zohoSync, warning: zohoWarning }, { status: 201 });
+        const orderResponse = {
+            ...order,
+            ...syncState,
+            external_request_id: externalRequestId || order.external_request_id || null,
+        };
+
+        const responseBody = {
+            order: orderResponse,
+            zoho: zohoSync,
+            warning: zohoWarning,
+            code: responseStatus === 202 ? 'SYNC_PENDING' : undefined,
+            ...syncState,
+            external_request_id: orderResponse.external_request_id,
+        };
+
+        return succeedWith(responseBody, responseStatus, order.id);
     } catch (error: any) {
+        if (idempotencyRecordId) {
+            const errorBody = error instanceof FiscalValidationError
+                ? { error: error.message, code: error.code, details: error.details || null }
+                : { error: error.message || 'Error interno' };
+            const errorStatus = error instanceof FiscalValidationError ? (error.status || 400) : 500;
+            try {
+                await failIdempotentRequest({
+                    supabase: createRouteHandlerClient({ cookies }),
+                    recordId: idempotencyRecordId,
+                    responseStatus: errorStatus,
+                    responseBody: errorBody,
+                });
+            } catch {
+                // no-op
+            }
+        }
         if (error instanceof FiscalValidationError) {
             return NextResponse.json(
                 { error: error.message, code: error.code, details: error.details || null },

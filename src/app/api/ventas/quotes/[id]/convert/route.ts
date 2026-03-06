@@ -1,6 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createRouteHandlerClient } from '@supabase/auth-helpers-nextjs';
 import { cookies } from 'next/headers';
+import {
+    beginIdempotentRequest,
+    failIdempotentRequest,
+    finalizeIdempotentRequest,
+} from '@/lib/ventas/idempotency';
 
 function normalizeNumber(value: unknown, fallback = 0): number {
     const parsed = Number(value);
@@ -63,6 +68,9 @@ export async function POST(
     req: NextRequest,
     { params }: { params: { id: string } }
 ) {
+    let idempotencyRecordId = '';
+    let externalRequestId = '';
+    let idempotencyKey = '';
     try {
         const supabase = createRouteHandlerClient({ cookies });
         const {
@@ -72,6 +80,53 @@ export async function POST(
         if (!user) {
             return NextResponse.json({ error: 'No autorizado' }, { status: 401 });
         }
+
+        const idempotencyStart = await beginIdempotentRequest({
+            supabase,
+            req,
+            endpoint: `/api/ventas/quotes/${params.id}/convert`,
+            payload: { quote_id: params.id },
+            required: false,
+        });
+
+        if (idempotencyStart.kind === 'error' || idempotencyStart.kind === 'replay') {
+            return idempotencyStart.response;
+        }
+
+        idempotencyRecordId = idempotencyStart.recordId;
+        externalRequestId = idempotencyStart.externalRequestId;
+        idempotencyKey = idempotencyStart.key;
+
+        const failWith = async (bodyData: any, statusCode: number) => {
+            await failIdempotentRequest({
+                supabase,
+                recordId: idempotencyRecordId,
+                responseStatus: statusCode,
+                responseBody: bodyData,
+            });
+            return NextResponse.json(bodyData, { status: statusCode });
+        };
+
+        const succeedWith = async (
+            bodyData: any,
+            statusCode: number,
+            documentId?: string | null
+        ) => {
+            await finalizeIdempotentRequest({
+                supabase,
+                recordId: idempotencyRecordId,
+                responseStatus: statusCode,
+                responseBody: bodyData,
+                documentType: 'sales_invoice',
+                documentId: documentId || null,
+                externalRequestId: externalRequestId || null,
+            });
+            const response = NextResponse.json(bodyData, { status: statusCode });
+            if (idempotencyKey) {
+                response.headers.set('X-Idempotency-Key', idempotencyKey);
+            }
+            return response;
+        };
 
         const { data: quote, error: quoteError } = await supabase
             .from('sales_quotes')
@@ -97,30 +152,30 @@ export async function POST(
             .single();
 
         if (quoteError || !quote) {
-            return NextResponse.json({ error: quoteError?.message || 'Cotización no encontrada' }, { status: 404 });
+            return failWith({ error: quoteError?.message || 'Cotización no encontrada' }, 404);
         }
 
         // Block conversion for cart-generated quotes
         if (quote.source === 'inventory_cart') {
-            return NextResponse.json(
+            return failWith(
                 { error: 'Las cotizaciones generadas desde el inventario no pueden convertirse a factura. Usa el módulo de facturación directamente.' },
-                { status: 400 }
+                400
             );
         }
 
         if (quote.converted_invoice_id || quote.status === 'convertida') {
-            return NextResponse.json(
+            return failWith(
                 {
                     error: 'Esta cotización ya fue convertida previamente.',
                     converted_invoice_id: quote.converted_invoice_id || null,
                 },
-                { status: 400 }
+                400
             );
         }
 
         const quoteItems = Array.isArray(quote.items) ? quote.items : [];
         if (quoteItems.length === 0) {
-            return NextResponse.json({ error: 'La cotización no tiene líneas para convertir.' }, { status: 400 });
+            return failWith({ error: 'La cotización no tiene líneas para convertir.' }, 400);
         }
 
         const invoiceNumber = await generateInvoiceNumber(supabase);
@@ -161,7 +216,7 @@ export async function POST(
             .single();
 
         if (invoiceError || !invoice) {
-            return NextResponse.json({ error: invoiceError?.message || 'No se pudo crear la factura' }, { status: 500 });
+            return failWith({ error: invoiceError?.message || 'No se pudo crear la factura' }, 500);
         }
 
         const invoiceItems = quoteItems.map((item: any, index: number) => {
@@ -189,7 +244,7 @@ export async function POST(
 
         if (itemsError) {
             await supabase.from('sales_invoices').delete().eq('id', invoice.id);
-            return NextResponse.json({ error: itemsError.message }, { status: 500 });
+            return failWith({ error: itemsError.message }, 500);
         }
 
         const { error: quoteUpdateError } = await supabase
@@ -202,16 +257,29 @@ export async function POST(
             .eq('id', quote.id);
 
         if (quoteUpdateError) {
-            return NextResponse.json({ error: quoteUpdateError.message }, { status: 500 });
+            return failWith({ error: quoteUpdateError.message }, 500);
         }
 
-        return NextResponse.json({
+        return succeedWith({
             success: true,
             quote_id: quote.id,
             invoice_id: invoice.id,
             invoice_number: invoice.invoice_number,
-        });
+            external_request_id: externalRequestId || null,
+        }, 201, invoice.id);
     } catch (error: any) {
+        if (idempotencyRecordId) {
+            try {
+                await failIdempotentRequest({
+                    supabase: createRouteHandlerClient({ cookies }),
+                    recordId: idempotencyRecordId,
+                    responseStatus: 500,
+                    responseBody: { error: error.message || 'Error interno' },
+                });
+            } catch {
+                // no-op
+            }
+        }
         return NextResponse.json({ error: error.message || 'Error interno' }, { status: 500 });
     }
 }

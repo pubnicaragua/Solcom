@@ -9,6 +9,11 @@ import {
     FiscalValidationError,
     normalizeFiscalLine,
 } from '@/lib/ventas/fiscal';
+import {
+    buildVersionConflictResponse,
+    getCurrentRowVersion,
+    getExpectedRowVersion,
+} from '@/lib/ventas/version-conflict';
 
 function parseErrorMessage(raw: string): string {
     try {
@@ -599,9 +604,29 @@ export async function PUT(
         }
         const { id } = params;
         const body = await req.json();
+        const expectedRowVersion = getExpectedRowVersion(req, body);
 
         // If only changing status
         if (body.status && Object.keys(body).length === 1) {
+            const currentLookup = await supabase
+                .from('sales_invoices')
+                .select('id, row_version')
+                .eq('id', id)
+                .maybeSingle();
+
+            if (currentLookup.error || !currentLookup.data) {
+                return NextResponse.json({ error: currentLookup.error?.message || 'Factura no encontrada' }, { status: 404 });
+            }
+
+            const currentRowVersion = getCurrentRowVersion(currentLookup.data);
+            if (expectedRowVersion !== null && currentRowVersion !== null && expectedRowVersion !== currentRowVersion) {
+                return buildVersionConflictResponse({
+                    expectedRowVersion,
+                    currentRowVersion,
+                    resourceId: id,
+                });
+            }
+
             const normalizedStatusValue = normalizeTrimmed(body.status) || String(body.status);
             const requestedStatus = normalizedStatusValue.toLowerCase();
             if (requestedStatus === 'pagada') {
@@ -615,15 +640,26 @@ export async function PUT(
                 }
             }
 
-            const { data, error } = await supabase
+            let statusUpdateQuery = supabase
                 .from('sales_invoices')
                 .update({ status: normalizedStatusValue, updated_at: new Date().toISOString() })
-                .eq('id', id)
-                .select()
-                .single();
+                .eq('id', id);
+
+            if (expectedRowVersion !== null && currentRowVersion !== null) {
+                statusUpdateQuery = statusUpdateQuery.eq('row_version', expectedRowVersion);
+            }
+
+            const { data, error } = await statusUpdateQuery.select().maybeSingle();
 
             if (error) {
                 return NextResponse.json({ error: error.message }, { status: 500 });
+            }
+            if (!data) {
+                return buildVersionConflictResponse({
+                    expectedRowVersion: expectedRowVersion ?? -1,
+                    currentRowVersion,
+                    resourceId: id,
+                });
             }
             return NextResponse.json({ invoice: data });
         }
@@ -644,12 +680,21 @@ export async function PUT(
 
         const { data: currentInvoice, error: currentInvoiceError } = await supabase
             .from('sales_invoices')
-            .select('id, shipping_charge, subtotal, tax_amount')
+            .select('id, shipping_charge, subtotal, tax_amount, row_version')
             .eq('id', id)
             .single();
 
         if (currentInvoiceError || !currentInvoice) {
             return NextResponse.json({ error: currentInvoiceError?.message || 'Factura no encontrada' }, { status: 404 });
+        }
+
+        const currentRowVersion = getCurrentRowVersion(currentInvoice);
+        if (expectedRowVersion !== null && currentRowVersion !== null && expectedRowVersion !== currentRowVersion) {
+            return buildVersionConflictResponse({
+                expectedRowVersion,
+                currentRowVersion,
+                resourceId: id,
+            });
         }
 
         const normalizedDiscountAmount = Math.max(0, normalizeNumber(discount_amount, 0));
@@ -752,18 +797,30 @@ export async function PUT(
             }
         }
 
-        const { data, error } = await supabase
+        let updateQuery = supabase
             .from('sales_invoices')
             .update(updateData)
-            .eq('id', id)
-            .select(`
+            .eq('id', id);
+
+        if (expectedRowVersion !== null && currentRowVersion !== null) {
+            updateQuery = updateQuery.eq('row_version', expectedRowVersion);
+        }
+
+        const { data, error } = await updateQuery.select(`
         *,
         customer:customers(id, name, email, phone, ruc, address)
       `)
-            .single();
+            .maybeSingle();
 
         if (error) {
             return NextResponse.json({ error: error.message }, { status: 500 });
+        }
+        if (!data) {
+            return buildVersionConflictResponse({
+                expectedRowVersion: expectedRowVersion ?? -1,
+                currentRowVersion,
+                resourceId: id,
+            });
         }
 
         return NextResponse.json({ invoice: data });

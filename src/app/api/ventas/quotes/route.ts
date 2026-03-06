@@ -10,6 +10,17 @@ import {
     withWarrantyInDescription,
 } from '@/lib/ventas/fiscal';
 import { validateWarehouseFamilyStock } from '@/lib/ventas/stock-validation';
+import {
+    beginIdempotentRequest,
+    failIdempotentRequest,
+    finalizeIdempotentRequest,
+} from '@/lib/ventas/idempotency';
+import {
+    buildSyncStatusPayload,
+    markDocumentSyncState,
+    normalizeSyncErrorCodeFromError,
+} from '@/lib/ventas/sync-state';
+import { enqueueDocumentForSync } from '@/lib/ventas/sync-processor';
 
 export const dynamic = 'force-dynamic';
 
@@ -113,7 +124,7 @@ async function generateQuoteNumber(supabase: any, warehouseCode?: string): Promi
     return `${prefix}${String(nextNum).padStart(5, '0')}`;
 }
 
-async function syncQuoteToZoho(params: {
+export async function syncQuoteToZoho(params: {
     supabase: any;
     quoteId: string;
     quoteNumber: string;
@@ -391,6 +402,10 @@ export async function GET(req: NextRequest) {
 
 // POST /api/ventas/quotes — create quote with line items
 export async function POST(req: NextRequest) {
+    let idempotencyRecordId = '';
+    let externalRequestId = '';
+    let idempotencyPayloadHash = '';
+    let idempotencyKey = '';
     try {
         const supabase = createRouteHandlerClient({ cookies });
         const {
@@ -416,15 +431,63 @@ export async function POST(req: NextRequest) {
             sync_to_zoho = false,
         } = body || {};
 
+        const idempotencyStart = await beginIdempotentRequest({
+            supabase,
+            req,
+            endpoint: '/api/ventas/quotes',
+            payload: body || {},
+            required: false,
+        });
+
+        if (idempotencyStart.kind === 'error' || idempotencyStart.kind === 'replay') {
+            return idempotencyStart.response;
+        }
+
+        idempotencyRecordId = idempotencyStart.recordId;
+        externalRequestId = idempotencyStart.externalRequestId;
+        idempotencyPayloadHash = idempotencyStart.payloadHash;
+        idempotencyKey = idempotencyStart.key;
+
+        const failWith = async (bodyData: any, statusCode: number) => {
+            await failIdempotentRequest({
+                supabase,
+                recordId: idempotencyRecordId,
+                responseStatus: statusCode,
+                responseBody: bodyData,
+            });
+            return NextResponse.json(bodyData, { status: statusCode });
+        };
+
+        const succeedWith = async (
+            bodyData: any,
+            statusCode: number,
+            documentId?: string | null
+        ) => {
+            await finalizeIdempotentRequest({
+                supabase,
+                recordId: idempotencyRecordId,
+                responseStatus: statusCode,
+                responseBody: bodyData,
+                documentType: 'sales_quote',
+                documentId: documentId || null,
+                externalRequestId: externalRequestId || null,
+            });
+            const response = NextResponse.json(bodyData, { status: statusCode });
+            if (idempotencyKey) {
+                response.headers.set('X-Idempotency-Key', idempotencyKey);
+            }
+            return response;
+        };
+
         if (!Array.isArray(items) || items.length === 0) {
-            return NextResponse.json({ error: 'La cotización debe tener al menos un artículo' }, { status: 400 });
+            return failWith({ error: 'La cotización debe tener al menos un artículo' }, 400);
         }
 
         const normalizedDiscount = Math.max(0, normalizeNumber(discount_amount, 0));
         if (normalizedDiscount > 0) {
-            return NextResponse.json(
+            return failWith(
                 { error: 'El descuento global está deshabilitado en este flujo.', code: 'GLOBAL_DISCOUNT_DISABLED' },
-                { status: 400 }
+                400
             );
         }
 
@@ -453,9 +516,9 @@ export async function POST(req: NextRequest) {
             (item: any) => !Number.isFinite(item.quantity) || item.quantity <= 0
         );
         if (invalidQuantityIndex >= 0) {
-            return NextResponse.json(
+            return failWith(
                 { error: `Cantidad inválida en la línea ${invalidQuantityIndex + 1}.` },
-                { status: 400 }
+                400
             );
         }
 
@@ -465,7 +528,7 @@ export async function POST(req: NextRequest) {
             items: normalizedItems,
         });
         if (!stockValidation.ok) {
-            return NextResponse.json({ error: stockValidation.error }, { status: 400 });
+            return failWith({ error: stockValidation.error }, 400);
         }
 
         // Resolve warehouse code for quote number format
@@ -485,7 +548,8 @@ export async function POST(req: NextRequest) {
 
         const totals = computeFiscalTotals(normalizedItems, 0);
 
-        const insertQuote = {
+        const shouldSyncToZoho = Boolean(sync_to_zoho);
+        const insertQuote: any = {
             quote_number: quoteNumber,
             customer_id: customer_id || null,
             warehouse_id: warehouse_id || null,
@@ -500,6 +564,11 @@ export async function POST(req: NextRequest) {
             notes: notes || null,
             template_key: template_key || null,
             source: source || null,
+            sync_status: shouldSyncToZoho ? 'pending_sync' : 'not_requested',
+            sync_error_code: null,
+            sync_error_message: null,
+            last_sync_attempt_at: shouldSyncToZoho ? new Date().toISOString() : null,
+            external_request_id: externalRequestId || null,
         };
 
         // Retry loop for duplicate quote number conflicts
@@ -512,11 +581,28 @@ export async function POST(req: NextRequest) {
                     ? `COT-${warehouseCode}-${ts}`
                     : `COT-${new Date().getFullYear()}-${ts}`;
             }
-            const { data, error: insertErr } = await supabase
-                .from('sales_quotes')
-                .insert(insertQuote)
-                .select()
-                .single();
+            let data: any = null;
+            let insertErr: any = null;
+            let columnRetry = 0;
+            while (columnRetry < 12) {
+                const result = await supabase
+                    .from('sales_quotes')
+                    .insert(insertQuote)
+                    .select()
+                    .single();
+                data = result.data;
+                insertErr = result.error;
+
+                if (!insertErr || data) break;
+
+                const missingColumn = extractMissingColumn(insertErr?.message || '');
+                if (missingColumn && Object.prototype.hasOwnProperty.call(insertQuote, missingColumn)) {
+                    delete insertQuote[missingColumn];
+                    columnRetry += 1;
+                    continue;
+                }
+                break;
+            }
 
             if (!insertErr && data) {
                 quote = data;
@@ -531,7 +617,7 @@ export async function POST(req: NextRequest) {
         }
 
         if (!quote) {
-            return NextResponse.json({ error: lastError?.message || 'No se pudo crear la cotización' }, { status: 500 });
+            return failWith({ error: lastError?.message || 'No se pudo crear la cotización' }, 500);
         }
 
         const quoteItems = normalizedItems.map((item: any, index: number) => {
@@ -555,12 +641,22 @@ export async function POST(req: NextRequest) {
 
         if (itemsError) {
             await supabase.from('sales_quotes').delete().eq('id', quote.id);
-            return NextResponse.json({ error: itemsError.message }, { status: 500 });
+            return failWith({ error: itemsError.message }, 500);
         }
 
         // Sync to Zoho if requested
         let zohoSync: { zoho_estimate_id: string; zoho_estimate_number: string } | null = null;
-        if (sync_to_zoho) {
+        let zohoWarning: string | null = null;
+        let responseStatus = 201;
+        let syncState = {
+            sync_status: shouldSyncToZoho ? 'pending_sync' : 'not_requested',
+            sync_error_code: null as string | null,
+            sync_error_message: null as string | null,
+            last_sync_attempt_at: shouldSyncToZoho ? new Date().toISOString() : null as string | null,
+            last_synced_at: null as string | null,
+        };
+
+        if (shouldSyncToZoho) {
             try {
                 zohoSync = await syncQuoteToZoho({
                     supabase,
@@ -573,19 +669,110 @@ export async function POST(req: NextRequest) {
                     notes: notes || null,
                     items: normalizedItems,
                 });
+
+                const syncUpdate = await markDocumentSyncState({
+                    supabase,
+                    documentType: 'sales_quote',
+                    documentId: quote.id,
+                    status: 'synced',
+                    externalRequestId: externalRequestId || null,
+                    incrementAttempts: true,
+                });
+                if (!syncUpdate.error && syncUpdate.data) {
+                    syncState = buildSyncStatusPayload(syncUpdate.data);
+                } else {
+                    syncState = {
+                        sync_status: 'synced',
+                        sync_error_code: null,
+                        sync_error_message: null,
+                        last_sync_attempt_at: new Date().toISOString(),
+                        last_synced_at: new Date().toISOString(),
+                    };
+                }
             } catch (zohoError: any) {
-                // Rollback: delete local quote + items on Zoho failure
-                await supabase.from('sales_quote_items').delete().eq('quote_id', quote.id);
-                await supabase.from('sales_quotes').delete().eq('id', quote.id);
-                return NextResponse.json(
-                    { error: zohoError?.message || 'No se pudo crear la cotización en Zoho' },
-                    { status: 400 }
-                );
+                zohoWarning = zohoError?.message || 'No se pudo crear la cotización en Zoho';
+                responseStatus = 202;
+                const errorCode = normalizeSyncErrorCodeFromError(zohoError);
+
+                const syncUpdate = await markDocumentSyncState({
+                    supabase,
+                    documentType: 'sales_quote',
+                    documentId: quote.id,
+                    status: 'pending_sync',
+                    errorCode,
+                    errorMessage: zohoWarning,
+                    externalRequestId: externalRequestId || null,
+                    incrementAttempts: true,
+                });
+
+                if (!syncUpdate.error && syncUpdate.data) {
+                    syncState = buildSyncStatusPayload(syncUpdate.data);
+                } else {
+                    syncState = {
+                        sync_status: 'pending_sync',
+                        sync_error_code: errorCode,
+                        sync_error_message: zohoWarning,
+                        last_sync_attempt_at: new Date().toISOString(),
+                        last_synced_at: null,
+                    };
+                }
+
+                await enqueueDocumentForSync({
+                    supabase,
+                    documentType: 'sales_quote',
+                    documentId: quote.id,
+                    idempotencyKey: idempotencyKey || null,
+                    payloadHash: idempotencyPayloadHash || null,
+                    externalRequestId: externalRequestId || null,
+                    errorCode,
+                    errorMessage: zohoWarning,
+                    priority: 30,
+                });
             }
+        } else {
+            await markDocumentSyncState({
+                supabase,
+                documentType: 'sales_quote',
+                documentId: quote.id,
+                status: 'not_requested',
+                externalRequestId: externalRequestId || null,
+                incrementAttempts: false,
+            });
         }
 
-        return NextResponse.json({ quote, zoho: zohoSync }, { status: 201 });
+        const quoteResponse = {
+            ...quote,
+            ...syncState,
+            external_request_id: externalRequestId || quote.external_request_id || null,
+        };
+
+        const responseBody = {
+            quote: quoteResponse,
+            zoho: zohoSync,
+            warning: zohoWarning,
+            code: responseStatus === 202 ? 'SYNC_PENDING' : undefined,
+            ...syncState,
+            external_request_id: quoteResponse.external_request_id,
+        };
+
+        return succeedWith(responseBody, responseStatus, quote.id);
     } catch (error: any) {
+        if (idempotencyRecordId) {
+            const errorBody = error instanceof FiscalValidationError
+                ? { error: error.message, code: error.code, details: error.details || null }
+                : { error: error.message || 'Error interno' };
+            const errorStatus = error instanceof FiscalValidationError ? (error.status || 400) : 500;
+            try {
+                await failIdempotentRequest({
+                    supabase: createRouteHandlerClient({ cookies }),
+                    recordId: idempotencyRecordId,
+                    responseStatus: errorStatus,
+                    responseBody: errorBody,
+                });
+            } catch {
+                // no-op
+            }
+        }
         if (error instanceof FiscalValidationError) {
             return NextResponse.json(
                 { error: error.message, code: error.code, details: error.details || null },

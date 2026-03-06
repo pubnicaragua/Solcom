@@ -9,6 +9,11 @@ import {
     normalizeFiscalLine,
     withWarrantyInDescription,
 } from '@/lib/ventas/fiscal';
+import {
+    buildVersionConflictResponse,
+    getCurrentRowVersion,
+    getExpectedRowVersion,
+} from '@/lib/ventas/version-conflict';
 
 const QUOTE_STATUSES = new Set(['borrador', 'enviada', 'aceptada', 'rechazada', 'vencida', 'convertida']);
 
@@ -298,18 +303,49 @@ export async function PUT(
         }
 
         const body = await req.json();
+        const expectedRowVersion = getExpectedRowVersion(req, body);
 
         if (body?.status && Object.keys(body).length === 1) {
             const normalizedStatus = normalizeStatus(body.status, 'borrador');
-            const { data, error } = await supabase
+            const currentLookup = await supabase
+                .from('sales_quotes')
+                .select('id, row_version')
+                .eq('id', params.id)
+                .maybeSingle();
+
+            if (currentLookup.error || !currentLookup.data) {
+                return NextResponse.json({ error: currentLookup.error?.message || 'Cotización no encontrada' }, { status: 404 });
+            }
+
+            const currentRowVersion = getCurrentRowVersion(currentLookup.data);
+            if (expectedRowVersion !== null && currentRowVersion !== null && expectedRowVersion !== currentRowVersion) {
+                return buildVersionConflictResponse({
+                    expectedRowVersion,
+                    currentRowVersion,
+                    resourceId: params.id,
+                });
+            }
+
+            let statusUpdateQuery = supabase
                 .from('sales_quotes')
                 .update({ status: normalizedStatus, updated_at: new Date().toISOString() })
-                .eq('id', params.id)
-                .select()
-                .single();
+                .eq('id', params.id);
+
+            if (expectedRowVersion !== null && currentRowVersion !== null) {
+                statusUpdateQuery = statusUpdateQuery.eq('row_version', expectedRowVersion);
+            }
+
+            const { data, error } = await statusUpdateQuery.select().maybeSingle();
 
             if (error) {
                 return NextResponse.json({ error: error.message }, { status: 500 });
+            }
+            if (!data) {
+                return buildVersionConflictResponse({
+                    expectedRowVersion: expectedRowVersion ?? -1,
+                    currentRowVersion,
+                    resourceId: params.id,
+                });
             }
 
             return NextResponse.json({ quote: data });
@@ -329,12 +365,21 @@ export async function PUT(
 
         const { data: currentQuote, error: currentError } = await supabase
             .from('sales_quotes')
-            .select('id, tax_rate, discount_amount')
+            .select('id, tax_rate, discount_amount, row_version')
             .eq('id', params.id)
             .single();
 
         if (currentError || !currentQuote) {
             return NextResponse.json({ error: currentError?.message || 'Cotización no encontrada' }, { status: 404 });
+        }
+
+        const currentRowVersion = getCurrentRowVersion(currentQuote);
+        if (expectedRowVersion !== null && currentRowVersion !== null && expectedRowVersion !== currentRowVersion) {
+            return buildVersionConflictResponse({
+                expectedRowVersion,
+                currentRowVersion,
+                resourceId: params.id,
+            });
         }
 
         const normalizedDiscountAmount = Math.max(0, normalizeNumber(discount_amount, 0));
@@ -413,19 +458,31 @@ export async function PUT(
             }
         }
 
-        const { data, error } = await supabase
+        let updateQuery = supabase
             .from('sales_quotes')
             .update(updateData)
-            .eq('id', params.id)
-            .select(`
+            .eq('id', params.id);
+
+        if (expectedRowVersion !== null && currentRowVersion !== null) {
+            updateQuery = updateQuery.eq('row_version', expectedRowVersion);
+        }
+
+        const { data, error } = await updateQuery.select(`
                 *,
                 customer:customers(id, name, email, phone, ruc, address),
                 warehouse:warehouses(id, code, name)
             `)
-            .single();
+            .maybeSingle();
 
         if (error) {
             return NextResponse.json({ error: error.message }, { status: 500 });
+        }
+        if (!data) {
+            return buildVersionConflictResponse({
+                expectedRowVersion: expectedRowVersion ?? -1,
+                currentRowVersion,
+                resourceId: params.id,
+            });
         }
 
         let zohoWarning: string | null = null;

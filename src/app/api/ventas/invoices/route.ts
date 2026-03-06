@@ -20,6 +20,17 @@ import {
     getActiveOrderSerialReservations,
     SerialReservationError,
 } from '@/lib/ventas/serial-reservations';
+import {
+    beginIdempotentRequest,
+    failIdempotentRequest,
+    finalizeIdempotentRequest,
+} from '@/lib/ventas/idempotency';
+import {
+    buildSyncStatusPayload,
+    markDocumentSyncState,
+    normalizeSyncErrorCodeFromError,
+} from '@/lib/ventas/sync-state';
+import { enqueueDocumentForSync } from '@/lib/ventas/sync-processor';
 
 export const dynamic = 'force-dynamic';
 
@@ -162,7 +173,7 @@ function isSerialTracked(detail: any): boolean {
     );
 }
 
-async function createZohoInvoiceFromPayload(params: {
+export async function createZohoInvoiceFromPayload(params: {
     supabase: any;
     invoiceId: string;
     invoiceNumber?: string | null;
@@ -669,6 +680,10 @@ export async function GET(req: NextRequest) {
 
 // POST /api/ventas/invoices — Create a new invoice with line items
 export async function POST(req: NextRequest) {
+    let idempotencyRecordId = '';
+    let externalRequestId = '';
+    let idempotencyPayloadHash = '';
+    let idempotencyKey = '';
     try {
         const supabase = createRouteHandlerClient({ cookies });
         const { data: { user } } = await supabase.auth.getUser();
@@ -701,19 +716,68 @@ export async function POST(req: NextRequest) {
             cancellation_comments,
             source_sales_order_id,
         } = body;
+
+        const idempotencyStart = await beginIdempotentRequest({
+            supabase,
+            req,
+            endpoint: '/api/ventas/invoices',
+            payload: body || {},
+            required: false,
+        });
+
+        if (idempotencyStart.kind === 'error' || idempotencyStart.kind === 'replay') {
+            return idempotencyStart.response;
+        }
+
+        idempotencyRecordId = idempotencyStart.recordId;
+        externalRequestId = idempotencyStart.externalRequestId;
+        idempotencyPayloadHash = idempotencyStart.payloadHash;
+        idempotencyKey = idempotencyStart.key;
+
+        const failWith = async (bodyData: any, statusCode: number) => {
+            await failIdempotentRequest({
+                supabase,
+                recordId: idempotencyRecordId,
+                responseStatus: statusCode,
+                responseBody: bodyData,
+            });
+            return NextResponse.json(bodyData, { status: statusCode });
+        };
+
+        const succeedWith = async (
+            bodyData: any,
+            statusCode: number,
+            documentId?: string | null
+        ) => {
+            await finalizeIdempotentRequest({
+                supabase,
+                recordId: idempotencyRecordId,
+                responseStatus: statusCode,
+                responseBody: bodyData,
+                documentType: 'sales_invoice',
+                documentId: documentId || null,
+                externalRequestId: externalRequestId || null,
+            });
+            const response = NextResponse.json(bodyData, { status: statusCode });
+            if (idempotencyKey) {
+                response.headers.set('X-Idempotency-Key', idempotencyKey);
+            }
+            return response;
+        };
+
         const normalizedSalespersonId = normalizeSalespersonId(salesperson_id);
         const normalizedSourceSalesOrderId = normalizeUuid(source_sales_order_id);
 
         if (!items || items.length === 0) {
-            return NextResponse.json({ error: 'La factura debe tener al menos un artículo' }, { status: 400 });
+            return failWith({ error: 'La factura debe tener al menos un artículo' }, 400);
         }
 
         const normalizedDiscountAmount = Math.max(0, normalizeNumber(discount_amount, 0));
         const normalizedShippingCharge = Math.max(0, normalizeNumber(shipping_charge, 0));
         if (normalizedDiscountAmount > 0) {
-            return NextResponse.json(
+            return failWith(
                 { error: 'El descuento global está deshabilitado en este flujo.', code: 'GLOBAL_DISCOUNT_DISABLED' },
-                { status: 400 }
+                400
             );
         }
 
@@ -748,9 +812,9 @@ export async function POST(req: NextRequest) {
             (item: any) => !Number.isFinite(item.quantity) || item.quantity <= 0
         );
         if (invalidQuantityIndex >= 0) {
-            return NextResponse.json(
+            return failWith(
                 { error: `Cantidad inválida en la línea ${invalidQuantityIndex + 1}.` },
-                { status: 400 }
+                400
             );
         }
 
@@ -760,7 +824,7 @@ export async function POST(req: NextRequest) {
             items: normalizedItems,
         });
         if (!stockValidation.ok) {
-            return NextResponse.json({ error: stockValidation.error }, { status: 400 });
+            return failWith({ error: stockValidation.error }, 400);
         }
 
         if (normalizedSourceSalesOrderId) {
@@ -806,18 +870,18 @@ export async function POST(req: NextRequest) {
                 });
             } catch (reservationError: any) {
                 if (reservationError instanceof SerialReservationError) {
-                    return NextResponse.json(
+                    return failWith(
                         {
                             error: reservationError.message,
                             code: reservationError.code,
                             details: reservationError.details || null,
                         },
-                        { status: reservationError.status || 409 }
+                        reservationError.status || 409
                     );
                 }
-                return NextResponse.json(
+                return failWith(
                     { error: reservationError?.message || 'No se pudieron validar reservas de seriales.' },
-                    { status: 500 }
+                    500
                 );
             }
         }
@@ -863,16 +927,38 @@ export async function POST(req: NextRequest) {
             credit_detail: credit_detail || null,
             cancellation_reason_id: cancellation_reason_id || null,
             cancellation_comments: cancellation_comments || null,
+            sync_status: String(status).toLowerCase() === 'enviada' ? 'pending_sync' : 'not_requested',
+            sync_error_code: null,
+            sync_error_message: null,
+            last_sync_attempt_at: String(status).toLowerCase() === 'enviada' ? new Date().toISOString() : null,
+            external_request_id: externalRequestId || null,
         };
 
-        const { data: invoice, error: invoiceError } = await supabase
-            .from('sales_invoices')
-            .insert(insertData)
-            .select()
-            .single();
+        let invoice: any = null;
+        let invoiceError: any = null;
+        let invoiceInsertRetry = 0;
+        while (invoiceInsertRetry < 12) {
+            const result = await supabase
+                .from('sales_invoices')
+                .insert(insertData)
+                .select()
+                .single();
+            invoice = result.data;
+            invoiceError = result.error;
+
+            if (!invoiceError || invoice) break;
+
+            const missingColumn = extractMissingColumn(invoiceError?.message || '');
+            if (missingColumn && Object.prototype.hasOwnProperty.call(insertData, missingColumn)) {
+                delete insertData[missingColumn];
+                invoiceInsertRetry += 1;
+                continue;
+            }
+            break;
+        }
 
         if (invoiceError) {
-            return NextResponse.json({ error: invoiceError.message }, { status: 500 });
+            return failWith({ error: invoiceError.message }, 500);
         }
 
         // Insert line items
@@ -897,11 +983,22 @@ export async function POST(req: NextRequest) {
         if (itemsError) {
             // Rollback: delete the invoice
             await supabase.from('sales_invoices').delete().eq('id', invoice.id);
-            return NextResponse.json({ error: itemsError.message }, { status: 500 });
+            return failWith({ error: itemsError.message }, 500);
         }
 
         let zohoSync: { zoho_invoice_id: string | null; zoho_invoice_number: string | null } | null = null;
-        if (status === 'enviada') {
+        let zohoWarning: string | null = null;
+        let responseStatus = 201;
+        const shouldSyncToZoho = String(status).toLowerCase() === 'enviada';
+        let syncState = {
+            sync_status: shouldSyncToZoho ? 'pending_sync' : 'not_requested',
+            sync_error_code: null as string | null,
+            sync_error_message: null as string | null,
+            last_sync_attempt_at: shouldSyncToZoho ? new Date().toISOString() : null as string | null,
+            last_synced_at: null as string | null,
+        };
+
+        if (shouldSyncToZoho) {
             try {
                 zohoSync = await createZohoInvoiceFromPayload({
                     supabase,
@@ -920,15 +1017,79 @@ export async function POST(req: NextRequest) {
                     shippingCharge: normalizedShippingCharge,
                     items: itemsForInvoice,
                 });
+
+                const syncUpdate = await markDocumentSyncState({
+                    supabase,
+                    documentType: 'sales_invoice',
+                    documentId: invoice.id,
+                    status: 'synced',
+                    externalRequestId: externalRequestId || null,
+                    incrementAttempts: true,
+                });
+                if (!syncUpdate.error && syncUpdate.data) {
+                    syncState = buildSyncStatusPayload(syncUpdate.data);
+                } else {
+                    syncState = {
+                        sync_status: 'synced',
+                        sync_error_code: null,
+                        sync_error_message: null,
+                        last_sync_attempt_at: new Date().toISOString(),
+                        last_synced_at: new Date().toISOString(),
+                    };
+                }
             } catch (zohoError: any) {
-                await supabase.from('sales_invoices').delete().eq('id', invoice.id);
-                return NextResponse.json({ error: zohoError?.message || 'No se pudo crear factura en Zoho' }, { status: 400 });
+                zohoWarning = zohoError?.message || 'No se pudo crear factura en Zoho';
+                responseStatus = 202;
+                const errorCode = normalizeSyncErrorCodeFromError(zohoError);
+
+                const syncUpdate = await markDocumentSyncState({
+                    supabase,
+                    documentType: 'sales_invoice',
+                    documentId: invoice.id,
+                    status: 'pending_sync',
+                    errorCode,
+                    errorMessage: zohoWarning,
+                    externalRequestId: externalRequestId || null,
+                    incrementAttempts: true,
+                });
+                if (!syncUpdate.error && syncUpdate.data) {
+                    syncState = buildSyncStatusPayload(syncUpdate.data);
+                } else {
+                    syncState = {
+                        sync_status: 'pending_sync',
+                        sync_error_code: errorCode,
+                        sync_error_message: zohoWarning,
+                        last_sync_attempt_at: new Date().toISOString(),
+                        last_synced_at: null,
+                    };
+                }
+
+                await enqueueDocumentForSync({
+                    supabase,
+                    documentType: 'sales_invoice',
+                    documentId: invoice.id,
+                    idempotencyKey: idempotencyKey || null,
+                    payloadHash: idempotencyPayloadHash || null,
+                    externalRequestId: externalRequestId || null,
+                    errorCode,
+                    errorMessage: zohoWarning,
+                    priority: 10,
+                });
             }
+        } else {
+            await markDocumentSyncState({
+                supabase,
+                documentType: 'sales_invoice',
+                documentId: invoice.id,
+                status: 'not_requested',
+                externalRequestId: externalRequestId || null,
+                incrementAttempts: false,
+            });
         }
 
         let salesOrderLinkWarning: string | null = null;
         let reservationWarning: string | null = null;
-        if (normalizedSourceSalesOrderId && status === 'enviada') {
+        if (normalizedSourceSalesOrderId && shouldSyncToZoho) {
             const orderUpdate = await supabase
                 .from('sales_orders')
                 .update({
@@ -953,15 +1114,46 @@ export async function POST(req: NextRequest) {
             }
         }
 
-        return NextResponse.json(
-            {
-                invoice,
-                zoho: zohoSync,
-                warning: [salesOrderLinkWarning, reservationWarning].filter(Boolean).join(' | ') || null,
-            },
-            { status: 201 }
-        );
+        const finalWarning = [zohoWarning, salesOrderLinkWarning, reservationWarning].filter(Boolean).join(' | ') || null;
+        const invoiceResponse = {
+            ...invoice,
+            ...syncState,
+            external_request_id: externalRequestId || invoice.external_request_id || null,
+        };
+
+        const responseBody = {
+            invoice: invoiceResponse,
+            zoho: zohoSync,
+            warning: finalWarning,
+            code: responseStatus === 202 ? 'SYNC_PENDING' : undefined,
+            ...syncState,
+            external_request_id: invoiceResponse.external_request_id,
+        };
+
+        return succeedWith(responseBody, responseStatus, invoice.id);
     } catch (error: any) {
+        if (idempotencyRecordId) {
+            const errorBody = error instanceof FiscalValidationError
+                ? { error: error.message, code: error.code, details: error.details || null }
+                : { error: error.message || 'Error interno' };
+            const errorStatus = error instanceof FiscalValidationError ? (error.status || 400) : 500;
+            try {
+                await failIdempotentRequest({
+                    supabase: createRouteHandlerClient({ cookies }),
+                    recordId: idempotencyRecordId,
+                    responseStatus: errorStatus,
+                    responseBody: errorBody,
+                });
+            } catch {
+                // no-op
+            }
+        }
+        if (error instanceof FiscalValidationError) {
+            return NextResponse.json(
+                { error: error.message, code: error.code, details: error.details || null },
+                { status: error.status || 400 }
+            );
+        }
         return NextResponse.json({ error: error.message }, { status: 500 });
     }
 }

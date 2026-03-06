@@ -10,6 +10,17 @@ import {
     getActiveOrderSerialReservations,
     SerialReservationError,
 } from '@/lib/ventas/serial-reservations';
+import {
+    beginIdempotentRequest,
+    failIdempotentRequest,
+    finalizeIdempotentRequest,
+} from '@/lib/ventas/idempotency';
+import { enqueueDocumentForSync } from '@/lib/ventas/sync-processor';
+import {
+    buildSyncStatusPayload,
+    markDocumentSyncState,
+    normalizeSyncErrorCodeFromError,
+} from '@/lib/ventas/sync-state';
 
 function normalizeNumber(value: unknown, fallback = 0): number {
     const parsed = Number(value);
@@ -529,6 +540,10 @@ export async function POST(
     req: NextRequest,
     { params }: { params: { id: string } }
 ) {
+    let idempotencyRecordId = '';
+    let externalRequestId = '';
+    let idempotencyPayloadHash = '';
+    let idempotencyKey = '';
     try {
         const supabase = createRouteHandlerClient({ cookies });
         const {
@@ -538,6 +553,54 @@ export async function POST(
         if (!user) {
             return NextResponse.json({ error: 'No autorizado' }, { status: 401 });
         }
+
+        const idempotencyStart = await beginIdempotentRequest({
+            supabase,
+            req,
+            endpoint: `/api/ventas/sales-orders/${params.id}/convert`,
+            payload: { order_id: params.id },
+            required: false,
+        });
+
+        if (idempotencyStart.kind === 'error' || idempotencyStart.kind === 'replay') {
+            return idempotencyStart.response;
+        }
+
+        idempotencyRecordId = idempotencyStart.recordId;
+        externalRequestId = idempotencyStart.externalRequestId;
+        idempotencyPayloadHash = idempotencyStart.payloadHash;
+        idempotencyKey = idempotencyStart.key;
+
+        const failWith = async (bodyData: any, statusCode: number) => {
+            await failIdempotentRequest({
+                supabase,
+                recordId: idempotencyRecordId,
+                responseStatus: statusCode,
+                responseBody: bodyData,
+            });
+            return NextResponse.json(bodyData, { status: statusCode });
+        };
+
+        const succeedWith = async (
+            bodyData: any,
+            statusCode: number,
+            documentId?: string | null
+        ) => {
+            await finalizeIdempotentRequest({
+                supabase,
+                recordId: idempotencyRecordId,
+                responseStatus: statusCode,
+                responseBody: bodyData,
+                documentType: 'sales_invoice',
+                documentId: documentId || null,
+                externalRequestId: externalRequestId || null,
+            });
+            const response = NextResponse.json(bodyData, { status: statusCode });
+            if (idempotencyKey) {
+                response.headers.set('X-Idempotency-Key', idempotencyKey);
+            }
+            return response;
+        };
 
         const { data: order, error: orderError } = await supabase
             .from('sales_orders')
@@ -550,20 +613,20 @@ export async function POST(
             .single();
 
         if (orderError || !order) {
-            return NextResponse.json({ error: orderError?.message || 'Orden no encontrada' }, { status: 404 });
+            return failWith({ error: orderError?.message || 'Orden no encontrada' }, 404);
         }
 
         if (order.status === 'convertida') {
-            return NextResponse.json({ error: 'Esta orden ya fue convertida a factura' }, { status: 400 });
+            return failWith({ error: 'Esta orden ya fue convertida a factura' }, 400);
         }
 
         if (order.status === 'cancelada') {
-            return NextResponse.json({ error: 'No se puede convertir una orden cancelada' }, { status: 400 });
+            return failWith({ error: 'No se puede convertir una orden cancelada' }, 400);
         }
 
         const orderItems = Array.isArray(order.items) ? order.items : [];
         if (orderItems.length === 0) {
-            return NextResponse.json({ error: 'La orden no tiene líneas para convertir.' }, { status: 400 });
+            return failWith({ error: 'La orden no tiene líneas para convertir.' }, 400);
         }
 
         const orderSerialReservations = await getActiveOrderSerialReservations({
@@ -584,18 +647,18 @@ export async function POST(
             });
         } catch (reservationError: any) {
             if (reservationError instanceof SerialReservationError) {
-                return NextResponse.json(
+                return failWith(
                     {
                         error: reservationError.message,
                         code: reservationError.code,
                         details: reservationError.details || null,
                     },
-                    { status: reservationError.status || 409 }
+                    reservationError.status || 409
                 );
             }
-            return NextResponse.json(
+            return failWith(
                 { error: reservationError?.message || 'No se pudieron validar reservas de seriales para facturar.' },
-                { status: 500 }
+                500
             );
         }
 
@@ -637,6 +700,11 @@ export async function POST(
                 ? `Convertida desde OV: ${order.order_number}. ${order.notes}`
                 : `Convertida desde OV: ${order.order_number}`,
             source: 'sales_order_conversion',
+            sync_status: 'pending_sync',
+            sync_error_code: null,
+            sync_error_message: null,
+            last_sync_attempt_at: new Date().toISOString(),
+            external_request_id: externalRequestId || null,
         };
 
         let invoice: any = null;
@@ -663,7 +731,7 @@ export async function POST(
         }
 
         if (invoiceError || !invoice) {
-            return NextResponse.json({ error: invoiceError?.message || 'No se pudo crear la factura local' }, { status: 500 });
+            return failWith({ error: invoiceError?.message || 'No se pudo crear la factura local' }, 500);
         }
 
         const invoiceItems = serialAwareItems.map((item: any, index: number) => ({
@@ -686,35 +754,47 @@ export async function POST(
 
         if (itemsError) {
             await supabase.from('sales_invoices').delete().eq('id', invoice.id);
-            return NextResponse.json({ error: itemsError.message }, { status: 500 });
+            return failWith({ error: itemsError.message }, 500);
         }
 
         const zohoClient = createZohoBooksClient();
-        if (!zohoClient) {
-            await supabase.from('sales_invoice_items').delete().eq('invoice_id', invoice.id);
-            await supabase.from('sales_invoices').delete().eq('id', invoice.id);
-            return NextResponse.json(
-                { error: 'No se pudo sincronizar con Zoho porque la configuración ZOHO_BOOKS_* está incompleta.' },
-                { status: 500 }
-            );
-        }
-
         let zohoInvoice: { invoice_id: string; invoice_number: string } | null = null;
         let directError: any = null;
         let convertError: any = null;
+        let syncWarning: string | null = null;
+        let responseStatus = 201;
+        let syncState: {
+            sync_status: string;
+            sync_error_code: string | null;
+            sync_error_message: string | null;
+            last_sync_attempt_at: string | null;
+            last_synced_at: string | null;
+        } = {
+            sync_status: 'pending_sync',
+            sync_error_code: null as string | null,
+            sync_error_message: null as string | null,
+            last_sync_attempt_at: new Date().toISOString() as string | null,
+            last_synced_at: null as string | null,
+        };
 
-        try {
-            // Prefer direct invoice creation to keep ERP prices and serial logic aligned.
-            zohoInvoice = await tryCreateZohoInvoiceDirect({
-                supabase,
-                order: orderForInvoice,
-                fallbackReference: invoice.invoice_number,
-            });
-        } catch (error: any) {
-            directError = error;
+        if (!zohoClient) {
+            directError = new Error('No se pudo sincronizar con Zoho porque la configuración ZOHO_BOOKS_* está incompleta.');
         }
 
-        if (!zohoInvoice && normalizeText(orderForInvoice.zoho_salesorder_id)) {
+        if (zohoClient) {
+            try {
+                // Prefer direct invoice creation to keep ERP prices and serial logic aligned.
+                zohoInvoice = await tryCreateZohoInvoiceDirect({
+                    supabase,
+                    order: orderForInvoice,
+                    fallbackReference: invoice.invoice_number,
+                });
+            } catch (error: any) {
+                directError = error;
+            }
+        }
+
+        if (!zohoInvoice && zohoClient && normalizeText(orderForInvoice.zoho_salesorder_id)) {
             try {
                 zohoInvoice = await zohoClient.convertSalesOrderToInvoice(orderForInvoice.zoho_salesorder_id);
             } catch (error: any) {
@@ -723,9 +803,6 @@ export async function POST(
         }
 
         if (!zohoInvoice) {
-            await supabase.from('sales_invoice_items').delete().eq('invoice_id', invoice.id);
-            await supabase.from('sales_invoices').delete().eq('id', invoice.id);
-
             const firstError = normalizeText(directError?.message);
             const secondError = normalizeText(convertError?.message);
             const secondErrorLower = secondError.toLowerCase();
@@ -739,8 +816,65 @@ export async function POST(
                         : `Zoho rechazó la creación directa (${firstError}) y también la conversión por OV (${secondError}).`
                 )
                 : firstError || secondError || 'No se pudo crear factura en Zoho.';
+            syncWarning = combinedError;
+            responseStatus = 202;
+            const errorCode = normalizeSyncErrorCodeFromError(new Error(combinedError));
 
-            return NextResponse.json({ error: combinedError }, { status: 400 });
+            const syncUpdate = await markDocumentSyncState({
+                supabase,
+                documentType: 'sales_invoice',
+                documentId: invoice.id,
+                status: 'pending_sync',
+                errorCode,
+                errorMessage: combinedError,
+                externalRequestId: externalRequestId || null,
+                incrementAttempts: true,
+            });
+
+            if (!syncUpdate.error && syncUpdate.data) {
+                syncState = buildSyncStatusPayload(syncUpdate.data);
+            } else {
+                syncState = {
+                    sync_status: 'pending_sync',
+                    sync_error_code: errorCode,
+                    sync_error_message: combinedError,
+                    last_sync_attempt_at: new Date().toISOString(),
+                    last_synced_at: null,
+                };
+            }
+
+            await enqueueDocumentForSync({
+                supabase,
+                documentType: 'sales_invoice',
+                documentId: invoice.id,
+                idempotencyKey: idempotencyKey || null,
+                payloadHash: idempotencyPayloadHash || null,
+                externalRequestId: externalRequestId || null,
+                errorCode,
+                errorMessage: combinedError,
+                priority: 10,
+            });
+        } else {
+            const syncUpdate = await markDocumentSyncState({
+                supabase,
+                documentType: 'sales_invoice',
+                documentId: invoice.id,
+                status: 'synced',
+                externalRequestId: externalRequestId || null,
+                incrementAttempts: true,
+            });
+
+            if (!syncUpdate.error && syncUpdate.data) {
+                syncState = buildSyncStatusPayload(syncUpdate.data);
+            } else {
+                syncState = {
+                    sync_status: 'synced',
+                    sync_error_code: null,
+                    sync_error_message: null,
+                    last_sync_attempt_at: new Date().toISOString(),
+                    last_synced_at: new Date().toISOString(),
+                };
+            }
         }
 
         if (zohoInvoice) {
@@ -776,9 +910,9 @@ export async function POST(
             .maybeSingle();
 
         if (verifyInvoice.error || !verifyInvoice.data) {
-            return NextResponse.json(
+            return failWith(
                 { error: 'La factura se procesó pero no fue posible verificar su persistencia local.' },
-                { status: 500 }
+                500
             );
         }
 
@@ -809,13 +943,13 @@ export async function POST(
         }
 
         if (orderUpdateError) {
-            return NextResponse.json(
+            return failWith(
                 {
                     error: `Factura creada (${invoice.invoice_number}) pero no se pudo actualizar la orden: ${orderUpdateError.message}`,
                     invoice_id: invoice.id,
                     invoice_number: invoice.invoice_number,
                 },
-                { status: 500 }
+                500
             );
         }
 
@@ -827,7 +961,7 @@ export async function POST(
             });
         } catch (consumeError: any) {
             if (consumeError instanceof SerialReservationError) {
-                return NextResponse.json(
+                return failWith(
                     {
                         error: `Factura creada (${invoice.invoice_number}) pero no se pudieron consumir reservas: ${consumeError.message}`,
                         code: consumeError.code,
@@ -835,27 +969,49 @@ export async function POST(
                         invoice_id: invoice.id,
                         invoice_number: invoice.invoice_number,
                     },
-                    { status: 500 }
+                    500
                 );
             }
-            return NextResponse.json(
+            return failWith(
                 {
                     error: `Factura creada (${invoice.invoice_number}) pero no se pudieron consumir reservas: ${consumeError?.message || 'Error desconocido'}`,
                     invoice_id: invoice.id,
                     invoice_number: invoice.invoice_number,
                 },
-                { status: 500 }
+                500
             );
         }
 
-        return NextResponse.json({
+        const responseBody = {
             success: true,
             order_id: params.id,
             invoice_id: invoice.id,
             invoice_number: invoice.invoice_number,
             zoho: zohoInvoice,
-        });
+            warning: syncWarning,
+            code: responseStatus === 202 ? 'SYNC_PENDING' : undefined,
+            ...syncState,
+            external_request_id: externalRequestId || invoice.external_request_id || null,
+        };
+
+        return succeedWith(responseBody, responseStatus, invoice.id);
     } catch (error: any) {
+        if (idempotencyRecordId) {
+            const errorBody = error instanceof SerialReservationError
+                ? { error: error.message, code: error.code, details: error.details || null }
+                : { error: error.message || 'Error interno' };
+            const errorStatus = error instanceof SerialReservationError ? (error.status || 409) : 500;
+            try {
+                await failIdempotentRequest({
+                    supabase: createRouteHandlerClient({ cookies }),
+                    recordId: idempotencyRecordId,
+                    responseStatus: errorStatus,
+                    responseBody: errorBody,
+                });
+            } catch {
+                // no-op
+            }
+        }
         if (error instanceof SerialReservationError) {
             return NextResponse.json(
                 {

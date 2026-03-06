@@ -14,6 +14,11 @@ import {
     replaceOrderSerialReservations,
     SerialReservationError,
 } from '@/lib/ventas/serial-reservations';
+import {
+    buildVersionConflictResponse,
+    getCurrentRowVersion,
+    getExpectedRowVersion,
+} from '@/lib/ventas/version-conflict';
 
 const ORDER_STATUSES = new Set(['borrador', 'confirmada', 'convertida', 'cancelada']);
 
@@ -446,6 +451,7 @@ export async function PUT(
         }
 
         const body = await req.json();
+        const expectedRowVersion = getExpectedRowVersion(req, body);
 
         // Status-only update (e.g., confirmar, cancelar)
         if (body?.status && Object.keys(body).length === 1) {
@@ -453,12 +459,21 @@ export async function PUT(
 
             const { data: currentOrder, error: currentOrderError } = await supabase
                 .from('sales_orders')
-                .select('id, status, zoho_salesorder_id')
+                .select('id, status, zoho_salesorder_id, row_version')
                 .eq('id', params.id)
                 .single();
 
             if (currentOrderError || !currentOrder) {
                 return NextResponse.json({ error: currentOrderError?.message || 'Orden no encontrada' }, { status: 404 });
+            }
+
+            const currentRowVersion = getCurrentRowVersion(currentOrder);
+            if (expectedRowVersion !== null && currentRowVersion !== null && expectedRowVersion !== currentRowVersion) {
+                return buildVersionConflictResponse({
+                    expectedRowVersion,
+                    currentRowVersion,
+                    resourceId: params.id,
+                });
             }
 
             const zohoSalesOrderId = normalizeText((currentOrder as any)?.zoho_salesorder_id);
@@ -510,15 +525,26 @@ export async function PUT(
                 }
             }
 
-            const { data, error } = await supabase
+            let statusUpdateQuery = supabase
                 .from('sales_orders')
                 .update({ status: normalizedStatus, updated_at: new Date().toISOString() })
-                .eq('id', params.id)
-                .select()
-                .single();
+                .eq('id', params.id);
+
+            if (expectedRowVersion !== null && currentRowVersion !== null) {
+                statusUpdateQuery = statusUpdateQuery.eq('row_version', expectedRowVersion);
+            }
+
+            const { data, error } = await statusUpdateQuery.select().maybeSingle();
 
             if (error) {
                 return NextResponse.json({ error: error.message }, { status: 500 });
+            }
+            if (!data) {
+                return buildVersionConflictResponse({
+                    expectedRowVersion: expectedRowVersion ?? -1,
+                    currentRowVersion,
+                    resourceId: params.id,
+                });
             }
 
             return NextResponse.json({ order: data });
@@ -549,6 +575,15 @@ export async function PUT(
 
         if (currentError || !currentOrder) {
             return NextResponse.json({ error: currentError?.message || 'Orden no encontrada' }, { status: 404 });
+        }
+
+        const currentRowVersion = getCurrentRowVersion(currentOrder);
+        if (expectedRowVersion !== null && currentRowVersion !== null && expectedRowVersion !== currentRowVersion) {
+            return buildVersionConflictResponse({
+                expectedRowVersion,
+                currentRowVersion,
+                resourceId: params.id,
+            });
         }
 
         if (currentOrder.status === 'convertida') {
@@ -725,16 +760,22 @@ export async function PUT(
         let error: any = null;
         let columnRetry = 0;
         while (columnRetry < 12) {
-            const result = await supabase
+            let updateQuery = supabase
                 .from('sales_orders')
                 .update(updateData)
-                .eq('id', params.id)
+                .eq('id', params.id);
+
+            if (expectedRowVersion !== null && currentRowVersion !== null) {
+                updateQuery = updateQuery.eq('row_version', expectedRowVersion);
+            }
+
+            const result = await updateQuery
                 .select(`
                     *,
                     customer:customers(id, name, email, phone, ruc, address),
                     warehouse:warehouses(id, code, name)
                 `)
-                .single();
+                .maybeSingle();
             data = result.data;
             error = result.error;
             if (!error || data) break;
@@ -750,6 +791,13 @@ export async function PUT(
 
         if (error) {
             return NextResponse.json({ error: error.message }, { status: 500 });
+        }
+        if (!data) {
+            return buildVersionConflictResponse({
+                expectedRowVersion: expectedRowVersion ?? -1,
+                currentRowVersion,
+                resourceId: params.id,
+            });
         }
 
         const existingZohoSalesOrderId = normalizeText(previousOrderSnapshot.zoho_salesorder_id);

@@ -21,8 +21,28 @@ const BOOKS_AUTH_REFRESH_SAFETY_MS = 60_000;
 const BOOKS_AUTH_RATE_LIMIT_COOLDOWN_MS = 45_000;
 const BOOKS_AUTH_ERROR_COOLDOWN_MS = 8_000;
 const DEFAULT_ZOHO_API_DOMAIN = 'https://www.zohoapis.com';
+const DEFAULT_REQUEST_TIMEOUT_MS = 20_000;
+const DEFAULT_TRANSIENT_RETRY_COUNT = 2;
+const DEFAULT_TOKEN_BUCKET_CAPACITY = 30;
+const DEFAULT_TOKEN_BUCKET_REFILL_PER_SEC = 12;
+const DEFAULT_CIRCUIT_FAILURE_THRESHOLD = 6;
+const DEFAULT_CIRCUIT_COOLDOWN_MS = 30_000;
 
 const sharedBooksAuthByKey = new Map<string, SharedBooksAuth>();
+
+type SharedTokenBucket = {
+    tokens: number;
+    lastRefillAt: number;
+};
+
+type SharedCircuitState = {
+    failureCount: number;
+    openUntil: number;
+    lastError: string;
+};
+
+const sharedTokenBuckets = new Map<string, SharedTokenBucket>();
+const sharedCircuits = new Map<string, SharedCircuitState>();
 
 function normalizeDomain(raw: string): string | null {
     const value = String(raw || '').trim().replace(/^['"]|['"]$/g, '');
@@ -229,6 +249,131 @@ export class ZohoBooksClient {
         );
     }
 
+    private endpointGroup(endpoint: string): string {
+        const normalized = String(endpoint || '').trim().toLowerCase();
+        if (!normalized) return 'unknown';
+        if (normalized.includes('/oauth/')) return 'oauth';
+        if (normalized.includes('/books/v3/invoices')) return 'books_invoices';
+        if (normalized.includes('/books/v3/salesorders')) return 'books_salesorders';
+        if (normalized.includes('/books/v3/estimates')) return 'books_estimates';
+        if (normalized.includes('/inventory/v1/items/serialnumbers')) return 'inventory_serials';
+        if (normalized.includes('/inventory/v1/')) return 'inventory_other';
+        return 'books_other';
+    }
+
+    private tokenBucketConfig() {
+        const capacityRaw = Number(process.env.ZOHO_BOOKS_TOKEN_BUCKET_CAPACITY || DEFAULT_TOKEN_BUCKET_CAPACITY);
+        const refillRaw = Number(process.env.ZOHO_BOOKS_TOKEN_BUCKET_REFILL_PER_SEC || DEFAULT_TOKEN_BUCKET_REFILL_PER_SEC);
+        return {
+            capacity: Number.isFinite(capacityRaw) && capacityRaw > 0 ? capacityRaw : DEFAULT_TOKEN_BUCKET_CAPACITY,
+            refillPerSec: Number.isFinite(refillRaw) && refillRaw > 0 ? refillRaw : DEFAULT_TOKEN_BUCKET_REFILL_PER_SEC,
+        };
+    }
+
+    private async consumeToken(endpoint: string): Promise<void> {
+        const group = this.endpointGroup(endpoint);
+        const bucketKey = `${this.getSharedAuthKey()}::${group}`;
+        const now = Date.now();
+        const { capacity, refillPerSec } = this.tokenBucketConfig();
+        const existing = sharedTokenBuckets.get(bucketKey) || {
+            tokens: capacity,
+            lastRefillAt: now,
+        };
+
+        const elapsedSec = Math.max(0, (now - existing.lastRefillAt) / 1000);
+        existing.tokens = Math.min(capacity, existing.tokens + (elapsedSec * refillPerSec));
+        existing.lastRefillAt = now;
+
+        if (existing.tokens >= 1) {
+            existing.tokens -= 1;
+            sharedTokenBuckets.set(bucketKey, existing);
+            return;
+        }
+
+        const waitMs = Math.ceil((1 - existing.tokens) / refillPerSec * 1000);
+        sharedTokenBuckets.set(bucketKey, existing);
+        await new Promise((resolve) => setTimeout(resolve, Math.max(40, waitMs)));
+
+        const secondNow = Date.now();
+        const second = sharedTokenBuckets.get(bucketKey) || existing;
+        const secondElapsedSec = Math.max(0, (secondNow - second.lastRefillAt) / 1000);
+        second.tokens = Math.min(capacity, second.tokens + (secondElapsedSec * refillPerSec));
+        second.lastRefillAt = secondNow;
+        if (second.tokens >= 1) {
+            second.tokens -= 1;
+        } else {
+            second.tokens = 0;
+        }
+        sharedTokenBuckets.set(bucketKey, second);
+    }
+
+    private circuitConfig() {
+        const thresholdRaw = Number(process.env.ZOHO_BOOKS_CIRCUIT_FAILURE_THRESHOLD || DEFAULT_CIRCUIT_FAILURE_THRESHOLD);
+        const cooldownRaw = Number(process.env.ZOHO_BOOKS_CIRCUIT_COOLDOWN_MS || DEFAULT_CIRCUIT_COOLDOWN_MS);
+        return {
+            threshold: Number.isFinite(thresholdRaw) && thresholdRaw > 0 ? thresholdRaw : DEFAULT_CIRCUIT_FAILURE_THRESHOLD,
+            cooldownMs: Number.isFinite(cooldownRaw) && cooldownRaw > 0 ? cooldownRaw : DEFAULT_CIRCUIT_COOLDOWN_MS,
+        };
+    }
+
+    private ensureCircuitClosed(endpoint: string): void {
+        const circuitKey = `${this.getSharedAuthKey()}::${this.endpointGroup(endpoint)}`;
+        const state = sharedCircuits.get(circuitKey);
+        if (!state) return;
+        if (state.openUntil > Date.now()) {
+            throw new Error(
+                state.lastError
+                    ? `Zoho circuit breaker abierto: ${state.lastError}`
+                    : 'Zoho circuit breaker abierto temporalmente.'
+            );
+        }
+    }
+
+    private registerCircuitSuccess(endpoint: string): void {
+        const circuitKey = `${this.getSharedAuthKey()}::${this.endpointGroup(endpoint)}`;
+        const state = sharedCircuits.get(circuitKey);
+        if (!state) return;
+        state.failureCount = 0;
+        state.openUntil = 0;
+        state.lastError = '';
+        sharedCircuits.set(circuitKey, state);
+    }
+
+    private registerCircuitFailure(endpoint: string, errorMessage: string): void {
+        const circuitKey = `${this.getSharedAuthKey()}::${this.endpointGroup(endpoint)}`;
+        const state = sharedCircuits.get(circuitKey) || {
+            failureCount: 0,
+            openUntil: 0,
+            lastError: '',
+        };
+        const { threshold, cooldownMs } = this.circuitConfig();
+        state.failureCount += 1;
+        state.lastError = errorMessage.slice(0, 180);
+        if (state.failureCount >= threshold) {
+            state.openUntil = Date.now() + cooldownMs;
+            state.failureCount = 0;
+        }
+        sharedCircuits.set(circuitKey, state);
+    }
+
+    private isTransientFailure(status: number, rawText: string): boolean {
+        if (status === 429) return true;
+        if (status >= 500) return true;
+        const text = String(rawText || '').toLowerCase();
+        return (
+            text.includes('temporarily unavailable') ||
+            text.includes('timeout') ||
+            text.includes('timed out') ||
+            text.includes('connection reset') ||
+            text.includes('gateway')
+        );
+    }
+
+    private requestTimeoutMs(): number {
+        const parsed = Number(process.env.ZOHO_BOOKS_REQUEST_TIMEOUT_MS || DEFAULT_REQUEST_TIMEOUT_MS);
+        return Number.isFinite(parsed) && parsed > 0 ? parsed : DEFAULT_REQUEST_TIMEOUT_MS;
+    }
+
     async fetchItems(queryParams: string = ''): Promise<ZohoBooksItem[]> {
         const token = await this.getAccessToken();
         const { organizationId } = this.config;
@@ -302,34 +447,85 @@ export class ZohoBooksClient {
         const joiner = endpoint.includes('?') ? '&' : '?';
         const url = `${this.apiDomain}${endpoint}${joiner}organization_id=${organizationId}`;
         const body = data ? JSON.stringify(data) : undefined;
+        const normalizedMethod = String(method || 'GET').toUpperCase();
+        const maxRetriesRaw = Number(process.env.ZOHO_BOOKS_TRANSIENT_RETRIES || DEFAULT_TRANSIENT_RETRY_COUNT);
+        const maxRetries = Number.isFinite(maxRetriesRaw) && maxRetriesRaw >= 0
+            ? Math.floor(maxRetriesRaw)
+            : DEFAULT_TRANSIENT_RETRY_COUNT;
 
-        const doFetch = (accessToken: string | null) =>
-            fetch(url, {
-                method,
-                headers: {
-                    'Authorization': `Zoho-oauthtoken ${accessToken || ''}`,
-                    'Content-Type': 'application/json',
-                },
-                body,
-                cache: 'no-store',
-            });
+        const canRetryTransient = normalizedMethod !== 'POST';
+        const timeoutMs = this.requestTimeoutMs();
 
-        let response = await doFetch(token);
-        if (!response.ok) {
-            const firstErrorText = await response.text();
-            if (this.isAuthExpiredResponse(response.status, firstErrorText)) {
-                const refreshedToken = await this.getAccessToken(true);
-                response = await doFetch(refreshedToken);
-                if (!response.ok) {
-                    const retryErrorText = await response.text();
-                    throw new Error(`Zoho Books API error: ${response.status} - ${retryErrorText}`);
-                }
-                return response.json();
+        const doFetch = async (accessToken: string | null) => {
+            const controller = new AbortController();
+            const timeout = setTimeout(() => controller.abort(), timeoutMs);
+            try {
+                return await fetch(url, {
+                    method: normalizedMethod,
+                    headers: {
+                        'Authorization': `Zoho-oauthtoken ${accessToken || ''}`,
+                        'Content-Type': 'application/json',
+                    },
+                    body,
+                    cache: 'no-store',
+                    signal: controller.signal,
+                });
+            } finally {
+                clearTimeout(timeout);
             }
-            throw new Error(`Zoho Books API error: ${response.status} - ${firstErrorText}`);
+        };
+
+        await this.consumeToken(endpoint);
+        this.ensureCircuitClosed(endpoint);
+
+        let attempt = 0;
+        let accessToken = token;
+        while (attempt <= maxRetries) {
+            try {
+                let response = await doFetch(accessToken);
+                if (!response.ok) {
+                    const firstErrorText = await response.text();
+                    if (this.isAuthExpiredResponse(response.status, firstErrorText)) {
+                        accessToken = await this.getAccessToken(true);
+                        response = await doFetch(accessToken);
+                        if (!response.ok) {
+                            const retryAuthErrorText = await response.text();
+                            this.registerCircuitFailure(endpoint, retryAuthErrorText);
+                            throw new Error(`Zoho Books API error: ${response.status} - ${retryAuthErrorText}`);
+                        }
+                        this.registerCircuitSuccess(endpoint);
+                        return response.json();
+                    }
+
+                    if (canRetryTransient && attempt < maxRetries && this.isTransientFailure(response.status, firstErrorText)) {
+                        attempt += 1;
+                        const backoff = Math.min(4_000, 180 * (2 ** attempt)) + Math.floor(Math.random() * 140);
+                        await new Promise((resolve) => setTimeout(resolve, backoff));
+                        continue;
+                    }
+
+                    this.registerCircuitFailure(endpoint, firstErrorText);
+                    throw new Error(`Zoho Books API error: ${response.status} - ${firstErrorText}`);
+                }
+
+                this.registerCircuitSuccess(endpoint);
+                return response.json();
+            } catch (error: any) {
+                const message = String(error?.message || error || '');
+                const timeoutLike = message.toLowerCase().includes('abort') || message.toLowerCase().includes('timeout');
+                if (canRetryTransient && attempt < maxRetries && timeoutLike) {
+                    attempt += 1;
+                    const backoff = Math.min(4_000, 180 * (2 ** attempt)) + Math.floor(Math.random() * 140);
+                    await new Promise((resolve) => setTimeout(resolve, backoff));
+                    continue;
+                }
+
+                this.registerCircuitFailure(endpoint, message);
+                throw error;
+            }
         }
 
-        return response.json();
+        throw new Error('No se pudo completar la solicitud a Zoho después de reintentos transitorios.');
     }
 
     async createInventoryAdjustment(adjustmentData: any): Promise<any> {
