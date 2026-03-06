@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect, useRef } from 'react';
+import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import {
   FileText, Plus, Search, DollarSign, Clock,
@@ -86,6 +87,8 @@ function formatInvoiceListDate(dateValue: string): string {
 }
 
 export default function FacturacionPage() {
+  const router = useRouter();
+  const searchParams = useSearchParams();
   const [ventasModule, setVentasModule] = useState<'facturas' | 'ordenes'>('facturas');
   const [invoices, setInvoices] = useState<Invoice[]>([]);
   const [loading, setLoading] = useState(true);
@@ -106,6 +109,7 @@ export default function FacturacionPage() {
   const [showPreview, setShowPreview] = useState(false);
   const [invoicePrefill, setInvoicePrefill] = useState<InvoicePrefillData | null>(null);
   const [editInvoice, setEditInvoice] = useState<any | null>(null);
+  const [openSalesOrderEditId, setOpenSalesOrderEditId] = useState<string | null>(null);
   const [loadingEditInvoiceId, setLoadingEditInvoiceId] = useState<string | null>(null);
 
   // Draft builder (pivot + carrito)
@@ -187,6 +191,24 @@ export default function FacturacionPage() {
       console.error('No se pudo parsear prefill de factura desde inventario:', error);
     }
   }, []);
+
+  useEffect(() => {
+    const moduleParam = String(searchParams.get('module') || '').trim().toLowerCase();
+    if (moduleParam === 'ordenes') {
+      setVentasModule('ordenes');
+    } else if (moduleParam === 'facturas') {
+      setVentasModule('facturas');
+    }
+
+    const editOrderId = String(searchParams.get('edit_order_id') || '').trim();
+    if (!editOrderId) return;
+
+    setOpenSalesOrderEditId(editOrderId);
+    const nextQuery = new URLSearchParams(searchParams.toString());
+    nextQuery.delete('edit_order_id');
+    const nextPath = nextQuery.toString() ? `/ventas?${nextQuery.toString()}` : '/ventas';
+    router.replace(nextPath, { scroll: false });
+  }, [searchParams, router]);
 
   useEffect(() => {
     if (!draftWarehouseId) {
@@ -650,7 +672,11 @@ export default function FacturacionPage() {
       </div>
 
       {ventasModule === 'ordenes' ? (
-        <SalesOrderList onStartInvoiceFromOrder={openInvoiceFromSalesOrder} />
+        <SalesOrderList
+          onStartInvoiceFromOrder={openInvoiceFromSalesOrder}
+          openEditOrderId={openSalesOrderEditId}
+          onOpenEditOrderHandled={() => setOpenSalesOrderEditId(null)}
+        />
       ) : (
         <>
       {/* KPI Cards */}

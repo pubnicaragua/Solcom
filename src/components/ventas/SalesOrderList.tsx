@@ -48,9 +48,15 @@ const statusConfig: Record<OrderStatus, { bg: string; text: string; label: strin
 
 interface SalesOrderListProps {
     onStartInvoiceFromOrder?: (orderId: string) => Promise<void> | void;
+    openEditOrderId?: string | null;
+    onOpenEditOrderHandled?: () => void;
 }
 
-export default function SalesOrderList({ onStartInvoiceFromOrder }: SalesOrderListProps) {
+export default function SalesOrderList({
+    onStartInvoiceFromOrder,
+    openEditOrderId = null,
+    onOpenEditOrderHandled,
+}: SalesOrderListProps) {
     const [orders, setOrders] = useState<SalesOrder[]>([]);
     const [loading, setLoading] = useState(true);
     const [activeTab, setActiveTab] = useState<'todas' | OrderStatus>('todas');
@@ -80,6 +86,13 @@ export default function SalesOrderList({ onStartInvoiceFromOrder }: SalesOrderLi
     useEffect(() => {
         void fetchKPIs();
     }, []);
+
+    useEffect(() => {
+        const forcedOrderId = String(openEditOrderId || '').trim();
+        if (!forcedOrderId) return;
+        setEditOrderId(forcedOrderId);
+        onOpenEditOrderHandled?.();
+    }, [openEditOrderId, onOpenEditOrderHandled]);
 
     async function fetchOrders() {
         setLoading(true);

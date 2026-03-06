@@ -77,6 +77,7 @@ interface InventoryCartProps {
     familyWarehouses?: Warehouse[];
     onParentWarehouseChange?: (warehouseId: string | null) => void;
     onInvoicePrefillRequested?: (prefill: InvoicePrefillData) => void;
+    onSalesOrderEditRequested?: (orderId: string) => void;
 }
 
 /* ───── Helpers ───── */
@@ -174,6 +175,7 @@ export default function InventoryCart({
     familyWarehouses: controlledFamilyWarehouses,
     onParentWarehouseChange,
     onInvoicePrefillRequested,
+    onSalesOrderEditRequested,
 }: InventoryCartProps) {
     const [internalCartType, setInternalCartType] = useState<CartType>('cotizacion');
     const [creating, setCreating] = useState(false);
@@ -592,6 +594,13 @@ export default function InventoryCart({
                 const data = await response.json().catch(() => ({}));
                 if (!response.ok) throw new Error(data?.error || 'No se pudo crear la orden de venta.');
                 docNumber = data?.order?.order_number || '';
+                const createdOrderId = String(data?.order?.id || '').trim();
+                if (createdOrderId && onSalesOrderEditRequested) {
+                    onClearCart();
+                    onDocumentCreated();
+                    onSalesOrderEditRequested(createdOrderId);
+                    return;
+                }
             }
 
             setCreatedDocNumber(docNumber);

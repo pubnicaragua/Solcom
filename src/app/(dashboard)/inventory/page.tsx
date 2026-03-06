@@ -282,6 +282,20 @@ export default function InventoryPage() {
     }
   }
 
+  function handleSalesOrderEditRequested(orderId: string) {
+    const normalizedOrderId = String(orderId || '').trim();
+    if (!normalizedOrderId) {
+      alert('No se pudo abrir la orden para edición.');
+      return;
+    }
+
+    clearCart();
+    setCartMode(false);
+    setCartOpen(false);
+    setCartSelectorError('');
+    router.push(`/ventas?module=ordenes&edit_order_id=${encodeURIComponent(normalizedOrderId)}`);
+  }
+
   useEffect(() => {
     fetchWarehouses();
   }, []);
@@ -959,6 +973,7 @@ export default function InventoryPage() {
             setCartSelectorError('');
           }}
           onInvoicePrefillRequested={handleInvoicePrefillRequested}
+          onSalesOrderEditRequested={handleSalesOrderEditRequested}
         />
       )}
 
