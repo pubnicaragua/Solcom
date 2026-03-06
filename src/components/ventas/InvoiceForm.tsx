@@ -53,6 +53,8 @@ interface Warehouse {
     code: string;
     name: string;
     zoho_warehouse_id?: string | null;
+    parent_warehouse_id?: string | null;
+    warehouse_type?: string | null;
 }
 
 interface Salesperson {
@@ -116,6 +118,7 @@ export default function InvoiceForm({ isOpen, onClose, onSaved, editInvoice, pre
 
     // Warehouse (Ubicación)
     const [warehouses, setWarehouses] = useState<Warehouse[]>([]);
+    const [familyWarehouses, setFamilyWarehouses] = useState<Warehouse[]>([]);
     const [warehouseId, setWarehouseId] = useState('');
 
     // Salesperson (Vendedor)
@@ -492,10 +495,33 @@ export default function InvoiceForm({ isOpen, onClose, onSaved, editInvoice, pre
         }
     };
 
+    const resolveFamilyRootWarehouseId = (selectedWarehouseId: string): string => {
+        const selected = warehouses.find((warehouse) => warehouse.id === selectedWarehouseId);
+        const parentId = String(selected?.parent_warehouse_id || '').trim();
+        return parentId || selectedWarehouseId;
+    };
+
+    const fetchFamilyWarehouses = async (selectedWarehouseId: string): Promise<Warehouse[]> => {
+        const rootWarehouseId = resolveFamilyRootWarehouseId(selectedWarehouseId);
+        if (!rootWarehouseId) return [];
+        try {
+            const response = await fetch(`/api/warehouses?family_of=${encodeURIComponent(rootWarehouseId)}`, {
+                cache: 'no-store',
+            });
+            const data = await response.json().catch(() => []);
+            if (!response.ok) return [];
+            const parsed: Warehouse[] = Array.isArray(data) ? data : data?.warehouses || [];
+            return parsed;
+        } catch {
+            return [];
+        }
+    };
+
     useEffect(() => {
         if (!isOpen) return;
         if (!warehouseId) {
             setProducts([]);
+            setFamilyWarehouses([]);
             setLineItems((current) => current.map((line) => ({
                 ...line,
                 max_available_qty: null,
@@ -505,24 +531,35 @@ export default function InvoiceForm({ isOpen, onClose, onSaved, editInvoice, pre
             return;
         }
 
+        let cancelled = false;
+        void (async () => {
+            const family = await fetchFamilyWarehouses(warehouseId);
+            if (cancelled) return;
+            setFamilyWarehouses(family);
+        })();
+
         fetchProducts(productSearch, warehouseId);
         setLineItems((current) => current.map((line) => ({
             ...line,
             available_serials: [],
             loading_serials: false,
         })));
+
+        return () => {
+            cancelled = true;
+        };
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [warehouseId, isOpen]);
+    }, [warehouseId, warehouses, isOpen]);
 
     useEffect(() => {
-        if (!isOpen || !warehouseId) return;
+        if (!isOpen || !warehouseId || warehouses.length === 0) return;
         lineItems.forEach((line, idx) => {
-            if (line.zoho_item_id) {
+            if (line.zoho_item_id || line.item_id) {
                 fetchLineSerials(idx, line.zoho_item_id, line.item_id);
             }
         });
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [isOpen, warehouseId, lineSerialSourceKey]);
+    }, [isOpen, warehouseId, warehouses, lineSerialSourceKey]);
 
     const fetchWarehouses = async () => {
         try {
@@ -620,7 +657,7 @@ export default function InvoiceForm({ isOpen, onClose, onSaved, editInvoice, pre
         zohoItemId: string | null,
         localItemId: string | null = null
     ) => {
-        if (!zohoItemId || !warehouseId) {
+        if (!warehouseId || (!zohoItemId && !localItemId)) {
             setLineItems((current) => current.map((line, idx) => (
                 idx === rowIndex
                     ? { ...line, loading_serials: false, available_serials: [] }
@@ -648,7 +685,9 @@ export default function InvoiceForm({ isOpen, onClose, onSaved, editInvoice, pre
 
         try {
             const params = new URLSearchParams();
-            params.set('item_id', zohoItemId);
+            if (zohoItemId) {
+                params.set('item_id', zohoItemId);
+            }
             params.set('warehouse_id', zohoWarehouseId);
             if (localItemId) {
                 params.set('local_item_id', String(localItemId));

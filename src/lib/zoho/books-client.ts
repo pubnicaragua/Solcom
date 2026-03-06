@@ -949,6 +949,22 @@ export class ZohoBooksClient {
         }
     }
 
+    async voidInvoice(invoiceId: string): Promise<void> {
+        const endpoint = `/books/v3/invoices/${invoiceId}/status/void`;
+        try {
+            const result = await this.request('POST', endpoint);
+            if (result?.code === 0 || result?.code === undefined) {
+                return;
+            }
+            throw new Error(String(result?.message || `code ${result?.code || 'desconocido'}`));
+        } catch (error: any) {
+            if (this.isAlreadyStatusMessage(error, 'void')) {
+                return;
+            }
+            throw error;
+        }
+    }
+
     async createInvoice(data: {
         customer_id: string;
         date: string;

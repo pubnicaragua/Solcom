@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createRouteHandlerClient } from '@supabase/auth-helpers-nextjs';
 import { cookies } from 'next/headers';
 import { normalizeSalespersonId } from '@/lib/identifiers';
+import { createZohoBooksClient } from '@/lib/zoho/books-client';
 import { getZohoAccessToken } from '@/lib/zoho/inventory-utils';
 import { buildTaxCatalogMap, getZohoTaxCatalog } from '@/lib/zoho/tax-catalog';
 import {
@@ -866,6 +867,48 @@ export async function DELETE(
                 { error: 'Solo se pueden eliminar facturas en borrador' },
                 { status: 400 }
             );
+        }
+
+        // If the invoice was already synchronized with Zoho, void it there and keep local record as canceled.
+        const metadata = await getOptionalZohoInvoiceMetadata(supabase, id);
+        if (metadata.zohoInvoiceId) {
+            const zohoClient = createZohoBooksClient();
+            if (!zohoClient) {
+                return NextResponse.json(
+                    { error: 'No se pudo anular en Zoho: configuración ZOHO_BOOKS_* incompleta.' },
+                    { status: 500 }
+                );
+            }
+
+            try {
+                await zohoClient.voidInvoice(metadata.zohoInvoiceId);
+            } catch (zohoError: any) {
+                return NextResponse.json(
+                    { error: `No se pudo anular la factura en Zoho: ${zohoError?.message || 'Error desconocido'}` },
+                    { status: 400 }
+                );
+            }
+
+            const { data: cancelledInvoice, error: cancelError } = await supabase
+                .from('sales_invoices')
+                .update({
+                    status: 'cancelada',
+                    updated_at: new Date().toISOString(),
+                })
+                .eq('id', id)
+                .select()
+                .maybeSingle();
+
+            if (cancelError) {
+                return NextResponse.json({ error: cancelError.message }, { status: 500 });
+            }
+
+            return NextResponse.json({
+                success: true,
+                deleted: false,
+                cancelled: true,
+                invoice: cancelledInvoice || null,
+            });
         }
 
         // Items deleted via CASCADE

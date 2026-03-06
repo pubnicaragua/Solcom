@@ -1020,7 +1020,7 @@ export async function DELETE(
 
         const { data: order, error: orderError } = await supabase
             .from('sales_orders')
-            .select('id, status, converted_invoice_id')
+            .select('id, status, converted_invoice_id, zoho_salesorder_id')
             .eq('id', params.id)
             .single();
 
@@ -1033,6 +1033,70 @@ export async function DELETE(
                 { error: 'No se puede eliminar una orden convertida a factura' },
                 { status: 400 }
             );
+        }
+
+        const zohoSalesOrderId = normalizeText((order as any)?.zoho_salesorder_id);
+        if (zohoSalesOrderId) {
+            const zohoClient = createZohoBooksClient();
+            if (!zohoClient) {
+                return NextResponse.json(
+                    { error: 'No se pudo anular en Zoho: configuración ZOHO_BOOKS_* incompleta.' },
+                    { status: 500 }
+                );
+            }
+
+            try {
+                await zohoClient.voidSalesOrder(zohoSalesOrderId);
+            } catch (zohoError: any) {
+                return NextResponse.json(
+                    { error: `No se pudo anular la OV en Zoho: ${zohoError?.message || 'Error desconocido'}` },
+                    { status: 400 }
+                );
+            }
+
+            try {
+                await releaseOrderSerialReservations({
+                    supabase,
+                    orderId: params.id,
+                    reason: 'order_cancelled',
+                });
+            } catch (reservationError: any) {
+                if (reservationError instanceof SerialReservationError) {
+                    return NextResponse.json(
+                        {
+                            error: reservationError.message,
+                            code: reservationError.code,
+                            details: reservationError.details || null,
+                        },
+                        { status: reservationError.status || 409 }
+                    );
+                }
+                return NextResponse.json(
+                    { error: reservationError?.message || 'No se pudieron liberar reservas de seriales.' },
+                    { status: 500 }
+                );
+            }
+
+            const { data: cancelledOrder, error: cancelError } = await supabase
+                .from('sales_orders')
+                .update({
+                    status: 'cancelada',
+                    updated_at: new Date().toISOString(),
+                })
+                .eq('id', params.id)
+                .select()
+                .maybeSingle();
+
+            if (cancelError) {
+                return NextResponse.json({ error: cancelError.message }, { status: 500 });
+            }
+
+            return NextResponse.json({
+                success: true,
+                deleted: false,
+                cancelled: true,
+                order: cancelledOrder || null,
+            });
         }
 
         try {

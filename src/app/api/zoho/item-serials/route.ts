@@ -143,14 +143,14 @@ async function fetchSerialsFromZoho(
 export async function GET(request: Request) {
     try {
         const { searchParams } = new URL(request.url);
-        const itemId = searchParams.get('item_id');
-        const warehouseId = searchParams.get('warehouse_id');
-        const localItemIdParam = searchParams.get('local_item_id');
+        const itemId = normalizeText(searchParams.get('item_id'));
+        const warehouseId = normalizeText(searchParams.get('warehouse_id'));
+        const localItemIdParam = normalizeText(searchParams.get('local_item_id'));
         const salesOrderId = searchParams.get('sales_order_id');
 
-        if (!itemId || !warehouseId) {
+        if (!warehouseId || (!itemId && !localItemIdParam)) {
             return NextResponse.json(
-                { error: 'Faltan parámetros requeridos: item_id y warehouse_id' },
+                { error: 'Faltan parámetros requeridos: warehouse_id y (item_id o local_item_id)' },
                 { status: 400 }
             );
         }
@@ -160,7 +160,34 @@ export async function GET(request: Request) {
             return NextResponse.json({ error: 'Falta configurar ZOHO_BOOKS_ORGANIZATION_ID' }, { status: 500 });
         }
 
-        const key = cacheKey(itemId, warehouseId);
+        const supabase = createRouteHandlerClient({ cookies });
+
+        let effectiveZohoItemId = itemId;
+        if (!effectiveZohoItemId && localItemIdParam) {
+            const localItemLookup = await supabase
+                .from('items')
+                .select('id, zoho_item_id')
+                .eq('id', localItemIdParam)
+                .maybeSingle();
+
+            if (localItemLookup.error) {
+                return NextResponse.json(
+                    { error: `No se pudo resolver zoho_item_id para local_item_id: ${localItemLookup.error.message}` },
+                    { status: 500 }
+                );
+            }
+
+            effectiveZohoItemId = normalizeText(localItemLookup.data?.zoho_item_id);
+            if (!effectiveZohoItemId) {
+                return NextResponse.json({
+                    success: true,
+                    total_found: 0,
+                    serials: [],
+                });
+            }
+        }
+
+        const key = cacheKey(effectiveZohoItemId, warehouseId);
         const cached = serialCache.get(key);
 
         let basePayload: SerialPayload | null = null;
@@ -177,7 +204,7 @@ export async function GET(request: Request) {
                 }
 
                 try {
-                    const payload = await fetchSerialsFromZoho(auth, organizationId, itemId, warehouseId);
+                    const payload = await fetchSerialsFromZoho(auth, organizationId, effectiveZohoItemId, warehouseId);
                     serialCache.set(key, { payload, expiresAt: Date.now() + SERIAL_CACHE_TTL_MS });
                     return payload;
                 } catch (firstError) {
@@ -188,7 +215,7 @@ export async function GET(request: Request) {
                             console.error('[Zoho Serials Auth Retry Error]:', retryAuth);
                             throw new Error('No se pudo refrescar token de Zoho');
                         }
-                        const payload = await fetchSerialsFromZoho(retryAuth, organizationId, itemId, warehouseId);
+                        const payload = await fetchSerialsFromZoho(retryAuth, organizationId, effectiveZohoItemId, warehouseId);
                         serialCache.set(key, { payload, expiresAt: Date.now() + SERIAL_CACHE_TTL_MS });
                         return payload;
                     }
@@ -205,7 +232,6 @@ export async function GET(request: Request) {
         }
 
         const payload = basePayload || { success: true, total_found: 0, serials: [] };
-        const supabase = createRouteHandlerClient({ cookies });
         const {
             data: { user },
         } = await supabase.auth.getUser();
@@ -214,7 +240,7 @@ export async function GET(request: Request) {
             return NextResponse.json(payload);
         }
 
-        const localItemId = await resolveLocalItemId(supabase, localItemIdParam, itemId);
+        const localItemId = await resolveLocalItemId(supabase, localItemIdParam, effectiveZohoItemId);
         const filteredPayload = await filterReservedSerials({
             supabase,
             payload,
