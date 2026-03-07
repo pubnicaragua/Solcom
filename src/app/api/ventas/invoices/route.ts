@@ -176,6 +176,31 @@ function serialCount(serialNumberValue?: string): number {
     return serialArray(serialNumberValue).length;
 }
 
+function parseSerialInput(value: unknown): string[] {
+    if (Array.isArray(value)) {
+        return value
+            .map((entry) => normalizeTrimmed(entry))
+            .filter(Boolean);
+    }
+
+    return String(value ?? '')
+        .replace(/[\n;]/g, ',')
+        .split(',')
+        .map((entry) => entry.trim())
+        .filter(Boolean);
+}
+
+function shouldRetryZohoLocationVariant(error: any): boolean {
+    const message = String(error?.message || '').toLowerCase();
+    return (
+        message.includes('warehouse_id') ||
+        message.includes('location_id') ||
+        message.includes('sucursal') ||
+        message.includes('branch') ||
+        message.includes('does not belong to the specified')
+    );
+}
+
 function isSerialTracked(detail: any): boolean {
     return Boolean(
         detail?.track_serial_number ??
@@ -303,8 +328,72 @@ export async function createZohoInvoiceFromPayload(params: {
         }
     }
 
+    const localWarehouseToZoho = new Map<string, string>();
+    const familyZohoLocations: Array<{ warehouseId: string; zohoWarehouseId: string }> = [];
+    let parentZohoLocationId = '';
+
+    if (warehouseId) {
+        const selectedWarehouseLookup = await supabase
+            .from('warehouses')
+            .select('id, code, name, parent_warehouse_id, zoho_warehouse_id')
+            .eq('id', warehouseId)
+            .maybeSingle();
+
+        if (selectedWarehouseLookup.error) {
+            throw new Error(`No se pudo leer bodega para Zoho: ${selectedWarehouseLookup.error.message}`);
+        }
+
+        const selectedWarehouse = selectedWarehouseLookup.data as any;
+        const selectedZohoWarehouseId = normalizeTrimmed(selectedWarehouse?.zoho_warehouse_id);
+        if (selectedZohoWarehouseId) {
+            parentZohoLocationId = selectedZohoWarehouseId;
+        }
+
+        const familyRootWarehouseId = normalizeTrimmed(selectedWarehouse?.parent_warehouse_id) || normalizeTrimmed(selectedWarehouse?.id);
+        if (familyRootWarehouseId) {
+            const familyLookup = await supabase
+                .from('warehouses')
+                .select('id, code, name, zoho_warehouse_id')
+                .or(`id.eq.${familyRootWarehouseId},parent_warehouse_id.eq.${familyRootWarehouseId}`);
+
+            if (!familyLookup.error) {
+                for (const row of familyLookup.data || []) {
+                    const localId = normalizeTrimmed(row?.id);
+                    const zohoId = normalizeTrimmed(row?.zoho_warehouse_id);
+                    if (!localId || !zohoId) continue;
+                    localWarehouseToZoho.set(localId, zohoId);
+                    familyZohoLocations.push({
+                        warehouseId: localId,
+                        zohoWarehouseId: zohoId,
+                    });
+                }
+            }
+        }
+    }
+
+    const serialPoolByItemAndLocation = new Map<string, string[]>();
+    const fetchSerialPool = async (zohoItemId: string, locationId: string): Promise<string[]> => {
+        const key = `${zohoItemId}::${locationId}`;
+        if (serialPoolByItemAndLocation.has(key)) {
+            return serialPoolByItemAndLocation.get(key) || [];
+        }
+
+        const serialResponse = await zohoClient.request(
+            'GET',
+            `/inventory/v1/items/serialnumbers?item_id=${encodeURIComponent(zohoItemId)}&show_transacted_out=false&location_id=${encodeURIComponent(locationId)}`
+        );
+
+        const pool = (Array.isArray(serialResponse?.serial_numbers) ? serialResponse.serial_numbers : [])
+            .filter((entry: any) => normalizeTrimmed(entry?.status).toLowerCase() === 'active')
+            .map((entry: any) => normalizeTrimmed(entry?.serialnumber))
+            .filter(Boolean);
+
+        serialPoolByItemAndLocation.set(key, pool);
+        return pool;
+    };
+
     const warrantyCustomFieldId = normalizeTrimmed(process.env.ZOHO_BOOKS_WARRANTY_CUSTOMFIELD_ID);
-    const buildZohoLineItems = (includeCustomFields: boolean) => (items || []).map((line: any, index: number) => {
+    const rawZohoLineItems = (items || []).map((line: any, index: number) => {
         const localItemId = String(line?.item_id || '').trim();
         if (!localItemId) {
             throw new Error(`La línea ${index + 1} no está vinculada a un producto del catálogo; Zoho requiere item_id.`);
@@ -328,10 +417,12 @@ export async function createZohoInvoiceFromPayload(params: {
         const normalizedSerials = normalizeSerialInput(
             line?.serial_number_value ?? line?.serial_numbers ?? line?.serials
         );
-        const serials = serialArray(normalizedSerials);
+        const serials = parseSerialInput(normalizedSerials);
         const meta = zohoItemMetaById.get(zohoItemId);
         const requiresSerials = Boolean(meta?.serialTracked || serials.length > 0);
         const expectedSerialCount = Math.round(quantity);
+        const lineWarehouseId = normalizeTrimmed(line?.line_warehouse_id);
+        const lineZohoWarehouseId = normalizeTrimmed(line?.line_zoho_warehouse_id);
 
         if (requiresSerials && !Number.isInteger(quantity)) {
             throw new Error(`El artículo "${mapped.name}" usa seriales y requiere cantidad entera.`);
@@ -354,6 +445,13 @@ export async function createZohoInvoiceFromPayload(params: {
             quantity,
             rate: Number(unitPrice.toFixed(6)),
             description: withWarrantyInDescription(normalizeTrimmed(line?.description || mapped.name), warranty),
+            __serials: serials,
+            __expectedSerialCount: expectedSerialCount,
+            __mappedName: mapped.name,
+            __zohoItemId: zohoItemId,
+            __lineWarehouseId: lineWarehouseId,
+            __lineZohoWarehouseId: lineZohoWarehouseId,
+            __warranty: warranty,
         };
 
         if (taxId) {
@@ -364,44 +462,109 @@ export async function createZohoInvoiceFromPayload(params: {
             payloadLine.discount = `${Number(discountPercent.toFixed(2))}%`;
         }
 
-        if (serials.length > 0) {
-            payloadLine.serial_number_value = normalizedSerials;
-            payloadLine.serial_numbers = serials;
-        }
-
-        if (includeCustomFields && warrantyCustomFieldId && warranty) {
-            payloadLine.item_custom_fields = [
-                {
-                    customfield_id: warrantyCustomFieldId,
-                    value: warranty,
-                },
-            ];
-        }
-
         return payloadLine;
     });
 
-    const zohoLineItems = buildZohoLineItems(true);
-    if (zohoLineItems.length === 0) {
-        throw new Error('No hay líneas válidas para enviar a Zoho.');
+    const zohoLineItems: any[] = [];
+    for (const line of rawZohoLineItems as any[]) {
+        const zohoItemId = line.__zohoItemId as string;
+        const mappedName = line.__mappedName as string;
+        const explicitLineWarehouseId = normalizeTrimmed(line.__lineWarehouseId);
+        const explicitLineZohoWarehouseId = normalizeTrimmed(line.__lineZohoWarehouseId);
+        const locationCandidates = Array.from(
+            new Set(
+                [
+                    explicitLineZohoWarehouseId,
+                    explicitLineWarehouseId ? normalizeTrimmed(localWarehouseToZoho.get(explicitLineWarehouseId)) : '',
+                    parentZohoLocationId || '',
+                    ...familyZohoLocations.map((entry) => entry.zohoWarehouseId),
+                ].filter(Boolean)
+            )
+        );
+
+        const meta = zohoItemMetaById.get(zohoItemId);
+        const serialTracked = Boolean(meta?.serialTracked);
+        const quantity = normalizeNumber(line.quantity, 0);
+        const expectedSerialCount = normalizeNumber(line.__expectedSerialCount, 0);
+        const serials: string[] = Array.isArray(line.__serials) ? line.__serials : [];
+        const explicitLineLocationId = explicitLineZohoWarehouseId
+            || (explicitLineWarehouseId ? normalizeTrimmed(localWarehouseToZoho.get(explicitLineWarehouseId)) : '')
+            || '';
+        const resolvedLineLocationId = explicitLineLocationId || locationCandidates[0] || '';
+
+        if (serialTracked && !Number.isInteger(quantity)) {
+            throw new Error(`El artículo "${mappedName}" usa seriales y requiere cantidad entera.`);
+        }
+
+        if (serialTracked) {
+            if (locationCandidates.length === 0) {
+                throw new Error(`El artículo "${mappedName}" requiere seriales y la factura no tiene ubicación Zoho válida.`);
+            }
+
+            if (serials.length !== expectedSerialCount) {
+                throw new Error(
+                    `El artículo "${mappedName}" requiere ${expectedSerialCount} serial(es). Seleccionados: ${serials.length}.`
+                );
+            }
+
+            const byLocation = new Map<string, string[]>();
+            for (const serial of serials) {
+                let foundLocation = '';
+                for (const locationId of locationCandidates) {
+                    const pool = await fetchSerialPool(zohoItemId, locationId);
+                    const index = pool.indexOf(serial);
+                    if (index >= 0) {
+                        pool.splice(index, 1);
+                        foundLocation = locationId;
+                        break;
+                    }
+                }
+
+                if (!foundLocation) {
+                    throw new Error(`El serial "${serial}" del artículo "${mappedName}" no está disponible en la familia de bodegas seleccionada.`);
+                }
+
+                if (!byLocation.has(foundLocation)) {
+                    byLocation.set(foundLocation, []);
+                }
+                byLocation.get(foundLocation)!.push(serial);
+            }
+
+            for (const [locationId, serialList] of byLocation.entries()) {
+                zohoLineItems.push({
+                    item_id: line.item_id,
+                    quantity: serialList.length,
+                    rate: line.rate,
+                    ...(line.tax_id ? { tax_id: line.tax_id } : {}),
+                    description: line.description,
+                    ...(line.discount ? { discount: line.discount } : {}),
+                    serial_number_value: serialList.join(','),
+                    serial_numbers: serialList,
+                    __resolvedLineLocationId: locationId,
+                    __warranty: line.__warranty,
+                });
+            }
+            continue;
+        }
+
+        if (serials.length > 0 && serials.length !== expectedSerialCount) {
+            throw new Error(
+                `Seriales inválidos para "${mappedName}": cantidad ${expectedSerialCount}, seriales ${serials.length}.`
+            );
+        }
+
+        if (serials.length > 0) {
+            line.serial_number_value = serials.join(',');
+            line.serial_numbers = serials;
+        }
+        if (resolvedLineLocationId) {
+            line.__resolvedLineLocationId = resolvedLineLocationId;
+        }
+        zohoLineItems.push(line);
     }
 
-    let zohoLocationId: string | undefined;
-    if (warehouseId) {
-        const warehouseLookup = await supabase
-            .from('warehouses')
-            .select('id, code, name, zoho_warehouse_id')
-            .eq('id', warehouseId)
-            .maybeSingle();
-
-        if (warehouseLookup.error) {
-            throw new Error(`No se pudo leer bodega para Zoho: ${warehouseLookup.error.message}`);
-        }
-
-        const zohoWarehouseId = String((warehouseLookup.data as any)?.zoho_warehouse_id || '').trim();
-        if (zohoWarehouseId) {
-            zohoLocationId = zohoWarehouseId;
-        }
+    if (zohoLineItems.length === 0) {
+        throw new Error('No hay líneas válidas para enviar a Zoho.');
     }
 
     const resolvedDueDate = (dueDate || '').trim() || computeDueDateFromTerms(date, terms) || undefined;
@@ -457,7 +620,6 @@ export async function createZohoInvoiceFromPayload(params: {
     const basePayload: any = {
         customer_id: zohoCustomerId,
         date,
-        line_items: zohoLineItems,
         discount_type: 'item_level',
         is_discount_before_tax: true,
     };
@@ -466,7 +628,54 @@ export async function createZohoInvoiceFromPayload(params: {
     if (normalizedReferenceNumber) basePayload.reference_number = normalizedReferenceNumber;
     if (notes && notes.trim()) basePayload.notes = notes.trim();
     if (shippingCharge > 0) basePayload.shipping_charge = Number(shippingCharge.toFixed(2));
-    if (zohoLocationId) basePayload.location_id = zohoLocationId;
+
+    const hasLineLocation = zohoLineItems.some((line) => Boolean(normalizeTrimmed(line?.__resolvedLineLocationId)));
+    const buildLineItems = (lineFieldMode: 'warehouse_id' | 'location_id' | 'none', includeCustomFields: boolean) =>
+        zohoLineItems.map((line) => {
+            const locationId = normalizeTrimmed(line?.__resolvedLineLocationId);
+            const warranty = normalizeWarranty(line?.__warranty);
+            const nextLine: any = {
+                item_id: line.item_id,
+                quantity: line.quantity,
+                rate: line.rate,
+                description: line.description,
+            };
+            if (line.tax_id) nextLine.tax_id = line.tax_id;
+            if (line.discount) nextLine.discount = line.discount;
+            if (line.serial_number_value) nextLine.serial_number_value = line.serial_number_value;
+            if (Array.isArray(line.serial_numbers) && line.serial_numbers.length > 0) {
+                nextLine.serial_numbers = line.serial_numbers;
+            }
+            if (locationId && lineFieldMode === 'warehouse_id') {
+                nextLine.warehouse_id = locationId;
+            }
+            if (locationId && lineFieldMode === 'location_id') {
+                nextLine.location_id = locationId;
+            }
+            if (includeCustomFields && warrantyCustomFieldId && warranty) {
+                nextLine.item_custom_fields = [
+                    {
+                        customfield_id: warrantyCustomFieldId,
+                        value: warranty,
+                    },
+                ];
+            }
+            return nextLine;
+        });
+
+    const locationAttempts = hasLineLocation
+        ? [
+            { mode: 'warehouse_id' as const, includeParentLocation: true, label: 'line.warehouse_id + location_id padre' },
+            { mode: 'location_id' as const, includeParentLocation: true, label: 'line.location_id + location_id padre' },
+            { mode: 'warehouse_id' as const, includeParentLocation: false, label: 'line.warehouse_id sin location padre' },
+            { mode: 'location_id' as const, includeParentLocation: false, label: 'line.location_id sin location padre' },
+            { mode: 'none' as const, includeParentLocation: true, label: 'sin ubicación por línea + location_id padre' },
+            { mode: 'none' as const, includeParentLocation: false, label: 'sin ubicación por línea y sin padre' },
+        ]
+        : [
+            { mode: 'none' as const, includeParentLocation: true, label: 'solo location_id padre' },
+            { mode: 'none' as const, includeParentLocation: false, label: 'sin location_id padre' },
+        ];
 
     const salespersonPayloadCandidates = [
         { salesperson_name: selectedZohoUserName, salesperson_id: selectedZohoSalespersonId || undefined },
@@ -478,43 +687,58 @@ export async function createZohoInvoiceFromPayload(params: {
 
     let createdInvoice: { invoice_id: string; invoice_number: string } | null = null;
     let lastError = '';
+    const locationErrors: string[] = [];
 
     for (const salespersonVariant of salespersonPayloadCandidates) {
-        const payload = { ...basePayload, ...salespersonVariant };
-        try {
-            createdInvoice = await zohoClient.createInvoice(payload);
-            break;
-        } catch (error: any) {
-            const errorMessage = String(error?.message || error || 'Error desconocido');
-            lastError = errorMessage;
-            const lowered = errorMessage.toLowerCase();
-            const customFieldRejected = lowered.includes('customfield')
-                || lowered.includes('item_custom_fields');
+        for (const attempt of locationAttempts) {
+            const payload = {
+                ...basePayload,
+                ...salespersonVariant,
+                line_items: buildLineItems(attempt.mode, true),
+            } as any;
 
-            if (customFieldRejected) {
-                try {
-                    const retryPayload = {
-                        ...basePayload,
-                        ...salespersonVariant,
-                        line_items: buildZohoLineItems(false),
-                    };
-                    createdInvoice = await zohoClient.createInvoice(retryPayload);
-                    break;
-                } catch (retryError: any) {
-                    const retryMessage = String(retryError?.message || retryError || 'Error desconocido');
-                    lastError = retryMessage;
-                    if (isInvalidSalespersonMessage(retryMessage)) {
-                        continue;
+            if (attempt.includeParentLocation && parentZohoLocationId) {
+                payload.location_id = parentZohoLocationId;
+            } else {
+                delete payload.location_id;
+            }
+
+            try {
+                createdInvoice = await zohoClient.createInvoice(payload);
+                break;
+            } catch (error: any) {
+                const errorMessage = String(error?.message || error || 'Error desconocido');
+                lastError = errorMessage;
+                const lowered = errorMessage.toLowerCase();
+                const customFieldRejected = lowered.includes('customfield')
+                    || lowered.includes('item_custom_fields');
+
+                if (customFieldRejected) {
+                    try {
+                        createdInvoice = await zohoClient.createInvoice({
+                            ...payload,
+                            line_items: buildLineItems(attempt.mode, false),
+                        });
+                        break;
+                    } catch {
+                        // Si falla sin custom fields, continúa flujo de variantes.
                     }
-                    throw new Error(`Zoho rechazó la factura: ${retryMessage}`);
                 }
-            }
 
-            if (isInvalidSalespersonMessage(errorMessage)) {
-                continue;
-            }
+                if (isInvalidSalespersonMessage(errorMessage)) {
+                    break;
+                }
 
-            throw new Error(`Zoho rechazó la factura: ${errorMessage}`);
+                locationErrors.push(`${attempt.label}: ${errorMessage}`);
+                if (shouldRetryZohoLocationVariant(error)) {
+                    continue;
+                }
+                throw new Error(`Zoho rechazó la factura: ${errorMessage}`);
+            }
+        }
+
+        if (createdInvoice) {
+            break;
         }
     }
 
@@ -527,7 +751,8 @@ export async function createZohoInvoiceFromPayload(params: {
         throw new Error(
             `Zoho rechazó la factura: ${lastError || 'Introduzca un vendedor válido'}. ` +
             `Vendedor seleccionado: "${selectedZohoUserName}" [sp:${selectedZohoSalespersonId || '-'}|usr:${selectedZohoUserId || '-'}]. ` +
-            `Disponibles (muestra): ${sellerSample || 'sin datos'}.`
+            `Disponibles (muestra): ${sellerSample || 'sin datos'}. ` +
+            `${locationErrors.length ? `Intentos ubicación: ${locationErrors.slice(0, 3).join(' | ')}` : ''}`
         );
     }
 
@@ -763,10 +988,12 @@ export async function POST(req: NextRequest) {
                 taxCatalogMap,
                 lineIndex: index,
             }),
-            serial_number_value: normalizeSerialInput(
-                item?.serial_number_value ?? item?.serial_numbers ?? item?.serials
-            ) || null,
-            price_profile_code: normalizeTrimmed(item?.price_profile_code) || null,
+                serial_number_value: normalizeSerialInput(
+                    item?.serial_number_value ?? item?.serial_numbers ?? item?.serials
+                ) || null,
+                line_warehouse_id: normalizeTrimmed(item?.line_warehouse_id) || null,
+                line_zoho_warehouse_id: normalizeTrimmed(item?.line_zoho_warehouse_id) || null,
+                price_profile_code: normalizeTrimmed(item?.price_profile_code) || null,
         }));
         let itemsForInvoice = normalizedItems;
 

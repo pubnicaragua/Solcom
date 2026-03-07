@@ -671,6 +671,47 @@ export default function InvoiceForm({ isOpen, onClose, onSaved, editInvoice, pre
         setShowCustomerDropdown(false);
     };
 
+    const resolveLineWarehouseFromSelectedSerials = (line: InvoiceFormItem): {
+        line_warehouse_id: string | null;
+        line_zoho_warehouse_id: string | null;
+    } => {
+        const selected = serialArray(line.serial_number_value);
+        if (selected.length === 0 || line.available_serials.length === 0) {
+            return { line_warehouse_id: null, line_zoho_warehouse_id: null };
+        }
+
+        const serialMap = new Map<string, InvoiceFormItem['available_serials'][number]>();
+        for (const serial of line.available_serials) {
+            const code = String(serial.serial_code || '').trim();
+            if (!code) continue;
+            if (!serialMap.has(code)) serialMap.set(code, serial);
+        }
+
+        const localWarehouseSet = new Set<string>();
+        const zohoWarehouseSet = new Set<string>();
+        let firstLocalWarehouseId: string | null = null;
+        let firstZohoWarehouseId: string | null = null;
+
+        for (const serialCode of selected) {
+            const serialMeta = serialMap.get(serialCode);
+            const localWarehouseId = String(serialMeta?.warehouse_id || '').trim();
+            const zohoWarehouseId = String(serialMeta?.zoho_warehouse_id || '').trim();
+            if (localWarehouseId) {
+                localWarehouseSet.add(localWarehouseId);
+                if (!firstLocalWarehouseId) firstLocalWarehouseId = localWarehouseId;
+            }
+            if (zohoWarehouseId) {
+                zohoWarehouseSet.add(zohoWarehouseId);
+                if (!firstZohoWarehouseId) firstZohoWarehouseId = zohoWarehouseId;
+            }
+        }
+
+        return {
+            line_warehouse_id: localWarehouseSet.size === 1 ? firstLocalWarehouseId : null,
+            line_zoho_warehouse_id: zohoWarehouseSet.size === 1 ? firstZohoWarehouseId : null,
+        };
+    };
+
     const fetchLineSerials = async (
         rowIndex: number,
         zohoItemId: string | null,
@@ -985,6 +1026,7 @@ export default function InvoiceForm({ isOpen, onClose, onSaved, editInvoice, pre
                 cancellation_comments: cancellationComments || null,
                 source_sales_order_id: sourceSalesOrderId || null,
                 items: lineItems.filter(item => item.description.trim()).map(item => ({
+                    ...resolveLineWarehouseFromSelectedSerials(item),
                     item_id: item.item_id,
                     description: item.description,
                     quantity: item.quantity,
