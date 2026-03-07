@@ -90,13 +90,8 @@ export async function POST(
         }
 
         const currentRowVersion = getCurrentRowVersion(invoice);
-        if (expectedRowVersion !== null && currentRowVersion !== null && expectedRowVersion !== currentRowVersion) {
-            return buildVersionConflictResponse({
-                expectedRowVersion,
-                currentRowVersion,
-                resourceId: invoiceId,
-            });
-        }
+        // En envío explícito evitamos conflicto optimista inicial para no bloquear
+        // cuando el documento fue actualizado internamente entre guardar borrador y enviar.
 
         try {
             const zohoSync = await createZohoInvoiceFromPayload({
@@ -117,6 +112,24 @@ export async function POST(
                 items: Array.isArray(invoice.items) ? invoice.items : [],
             });
 
+            let statusUpdateVersion: number | null = null;
+            if (expectedRowVersion !== null && currentRowVersion !== null) {
+                const latestVersionLookup = await supabase
+                    .from('sales_invoices')
+                    .select('id, row_version')
+                    .eq('id', invoiceId)
+                    .maybeSingle();
+
+                if (latestVersionLookup.error || !latestVersionLookup.data) {
+                    return NextResponse.json(
+                        { error: latestVersionLookup.error?.message || 'No se pudo validar versión de la factura tras sincronizar con Zoho.' },
+                        { status: 500 }
+                    );
+                }
+
+                statusUpdateVersion = getCurrentRowVersion(latestVersionLookup.data);
+            }
+
             let statusUpdateQuery = supabase
                 .from('sales_invoices')
                 .update({
@@ -125,18 +138,23 @@ export async function POST(
                 })
                 .eq('id', invoiceId);
 
-            if (expectedRowVersion !== null && currentRowVersion !== null) {
-                statusUpdateQuery = statusUpdateQuery.eq('row_version', expectedRowVersion);
+            if (statusUpdateVersion !== null) {
+                statusUpdateQuery = statusUpdateQuery.eq('row_version', statusUpdateVersion);
             }
 
             const statusUpdate = await statusUpdateQuery
                 .select('*')
                 .maybeSingle();
 
-            if (!statusUpdate.error && !statusUpdate.data && expectedRowVersion !== null && currentRowVersion !== null) {
+            if (!statusUpdate.error && !statusUpdate.data && statusUpdateVersion !== null) {
+                const latestVersion = await supabase
+                    .from('sales_invoices')
+                    .select('row_version')
+                    .eq('id', invoiceId)
+                    .maybeSingle();
                 return buildVersionConflictResponse({
-                    expectedRowVersion,
-                    currentRowVersion,
+                    expectedRowVersion: expectedRowVersion ?? -1,
+                    currentRowVersion: getCurrentRowVersion(latestVersion.data),
                     resourceId: invoiceId,
                 });
             }

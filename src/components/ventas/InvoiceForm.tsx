@@ -1080,14 +1080,26 @@ export default function InvoiceForm({ isOpen, onClose, onSaved, editInvoice, pre
                     throw new Error('No se pudo resolver la factura para enviar.');
                 }
 
-                const sendResponse = await fetch(`/api/ventas/invoices/${encodeURIComponent(invoiceId)}/send`, {
+                const sendUrl = `/api/ventas/invoices/${encodeURIComponent(invoiceId)}/send`;
+                let sendResponse = await fetch(sendUrl, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({
                         expected_row_version: savedInvoice?.row_version ?? editInvoice?.row_version ?? null,
                     }),
                 });
-                const sendData = await sendResponse.json().catch(() => ({}));
+                let sendData = await sendResponse.json().catch(() => ({}));
+
+                // Reintento sin control optimista si el conflicto fue de versión local.
+                if (!sendResponse.ok && sendResponse.status === 409 && sendData?.code === 'VERSION_CONFLICT') {
+                    sendResponse = await fetch(sendUrl, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({}),
+                    });
+                    sendData = await sendResponse.json().catch(() => ({}));
+                }
+
                 if (!sendResponse.ok) {
                     throw new Error(sendData?.error || 'No se pudo enviar la factura.');
                 }
