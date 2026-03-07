@@ -119,6 +119,7 @@ export default function SalesOrderForm({ isOpen, orderId, onClose, onSaved }: Sa
     const [warehouses, setWarehouses] = useState<WarehouseOption[]>([]);
     const [familyWarehouses, setFamilyWarehouses] = useState<WarehouseOption[]>([]);
     const [salespeople, setSalespeople] = useState<SalespersonOption[]>([]);
+    const [syncingSalespeople, setSyncingSalespeople] = useState(false);
     const [taxOptions, setTaxOptions] = useState<TaxOption[]>([]);
 
     const [orderNumber, setOrderNumber] = useState('');
@@ -183,9 +184,10 @@ export default function SalesOrderForm({ isOpen, orderId, onClose, onSaved }: Sa
         }
     }
 
-    async function fetchSalespeople() {
+    async function fetchSalespeople(options: { forceRefresh?: boolean } = {}) {
         try {
-            const response = await fetch('/api/ventas/salespeople', { cache: 'no-store' });
+            const query = options.forceRefresh ? '?sync=1' : '';
+            const response = await fetch(`/api/ventas/salespeople${query}`, { cache: 'no-store' });
             const data = await response.json().catch(() => ({}));
             if (!response.ok) {
                 throw new Error(data?.error || 'No se pudieron cargar vendedores');
@@ -196,6 +198,16 @@ export default function SalesOrderForm({ isOpen, orderId, onClose, onSaved }: Sa
         } catch {
             setSalespeople([]);
             return [];
+        }
+    }
+
+    async function syncSalespeople() {
+        if (syncingSalespeople) return;
+        setSyncingSalespeople(true);
+        try {
+            await fetchSalespeople({ forceRefresh: true });
+        } finally {
+            setSyncingSalespeople(false);
         }
     }
 
@@ -1017,6 +1029,29 @@ export default function SalesOrderForm({ isOpen, orderId, onClose, onSaved }: Sa
                                 <input type="text" value={shippingZone} onChange={(e) => setShippingZone(e.target.value)} placeholder="Managua, León, etc." style={inputStyle} />
                             </Field>
                             <Field label="Vendedor">
+                                <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 6 }}>
+                                    <button
+                                        type="button"
+                                        onClick={syncSalespeople}
+                                        disabled={syncingSalespeople}
+                                        style={{
+                                            border: '1px solid var(--border)',
+                                            background: 'transparent',
+                                            color: 'var(--muted)',
+                                            borderRadius: 6,
+                                            padding: '4px 8px',
+                                            fontSize: 11,
+                                            display: 'inline-flex',
+                                            alignItems: 'center',
+                                            gap: 6,
+                                            cursor: syncingSalespeople ? 'wait' : 'pointer',
+                                            opacity: syncingSalespeople ? 0.7 : 1,
+                                        }}
+                                    >
+                                        {syncingSalespeople ? <Loader2 size={12} className="animate-spin" /> : null}
+                                        {syncingSalespeople ? 'Sincronizando...' : 'Actualizar'}
+                                    </button>
+                                </div>
                                 <div style={{ position: 'relative' }}>
                                     <User
                                         size={14}

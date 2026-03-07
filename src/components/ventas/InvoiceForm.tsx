@@ -3,7 +3,7 @@
 import { useState, useEffect, useRef } from 'react';
 import {
     X, Plus, Trash2, Search, UserPlus, FileText,
-    MapPin, User, Truck, ChevronDown,
+    MapPin, User, Truck, ChevronDown, Loader2,
 } from 'lucide-react';
 import type { InvoicePrefillData } from '@/lib/ventas/invoice-prefill';
 import CustomerModal from './CustomerModal';
@@ -131,6 +131,7 @@ export default function InvoiceForm({ isOpen, onClose, onSaved, editInvoice, pre
     // Salesperson (Vendedor)
     const [salespeople, setSalespeople] = useState<Salesperson[]>([]);
     const [salespersonId, setSalespersonId] = useState('');
+    const [syncingSalespeople, setSyncingSalespeople] = useState(false);
     const [taxOptions, setTaxOptions] = useState<TaxOption[]>([]);
 
     // Delivery
@@ -578,13 +579,24 @@ export default function InvoiceForm({ isOpen, onClose, onSaved, editInvoice, pre
         }
     };
 
-    const fetchSalespeople = async () => {
+    const fetchSalespeople = async (options: { forceRefresh?: boolean } = {}) => {
         try {
-            const res = await fetch('/api/ventas/salespeople', { cache: 'no-store' });
+            const query = options.forceRefresh ? '?sync=1' : '';
+            const res = await fetch(`/api/ventas/salespeople${query}`, { cache: 'no-store' });
             const data = await res.json();
             setSalespeople(data.salespeople || []);
         } catch (err) {
             console.error('Error fetching salespeople:', err);
+        }
+    };
+
+    const syncSalespeople = async () => {
+        if (syncingSalespeople) return;
+        setSyncingSalespeople(true);
+        try {
+            await fetchSalespeople({ forceRefresh: true });
+        } finally {
+            setSyncingSalespeople(false);
         }
     };
 
@@ -1268,7 +1280,30 @@ export default function InvoiceForm({ isOpen, onClose, onSaved, editInvoice, pre
                         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px', marginBottom: '20px' }}>
                             {/* Vendedor */}
                             <div>
-                                <label style={labelStyle}>Vendedor{requiredStar}</label>
+                                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
+                                    <label style={{ ...labelStyle, marginBottom: 0 }}>Vendedor{requiredStar}</label>
+                                    <button
+                                        type="button"
+                                        onClick={syncSalespeople}
+                                        disabled={syncingSalespeople}
+                                        style={{
+                                            border: '1px solid var(--border)',
+                                            background: 'transparent',
+                                            color: 'var(--muted)',
+                                            borderRadius: 6,
+                                            padding: '4px 8px',
+                                            fontSize: 11,
+                                            display: 'inline-flex',
+                                            alignItems: 'center',
+                                            gap: 6,
+                                            cursor: syncingSalespeople ? 'wait' : 'pointer',
+                                            opacity: syncingSalespeople ? 0.7 : 1,
+                                        }}
+                                    >
+                                        {syncingSalespeople ? <Loader2 size={12} className="animate-spin" /> : null}
+                                        {syncingSalespeople ? 'Sincronizando...' : 'Actualizar'}
+                                    </button>
+                                </div>
                                 <div style={{ position: 'relative' }}>
                                     <User size={14} style={{ position: 'absolute', left: '10px', top: '11px', color: 'var(--muted)' }} />
                                     <select value={salespersonId} onChange={(e) => setSalespersonId(e.target.value)}

@@ -2,23 +2,19 @@ import { NextResponse } from 'next/server';
 import { createRouteHandlerClient } from '@supabase/auth-helpers-nextjs';
 import { cookies } from 'next/headers';
 import { getZohoAccessToken } from '../../../../lib/zoho/inventory-utils';
+import {
+    buildZohoSerialCacheKey,
+    clearZohoSerialInFlight,
+    getCachedZohoSerialPayload,
+    getZohoSerialInFlight,
+    setCachedZohoSerialPayload,
+    setZohoSerialInFlight,
+} from '@/lib/zoho/serial-cache';
+import type { ZohoSerialPayload } from '@/lib/zoho/serial-cache';
 
 export const dynamic = 'force-dynamic';
 
-type SerialRow = {
-    serial_id: string;
-    serial_code: string;
-};
-
-type SerialPayload = {
-    success: true;
-    total_found: number;
-    serials: SerialRow[];
-};
-
 const SERIAL_CACHE_TTL_MS = 15_000;
-const serialCache = new Map<string, { payload: SerialPayload; expiresAt: number }>();
-const serialInFlight = new Map<string, Promise<SerialPayload>>();
 
 class ZohoSerialsRequestError extends Error {
     status: number;
@@ -29,10 +25,6 @@ class ZohoSerialsRequestError extends Error {
         this.status = status;
         this.body = body;
     }
-}
-
-function cacheKey(itemId: string, warehouseId: string): string {
-    return `${itemId}::${warehouseId}`;
 }
 
 function normalizeText(value: unknown): string {
@@ -63,10 +55,10 @@ async function resolveLocalItemId(
 
 async function filterReservedSerials(params: {
     supabase: any;
-    payload: SerialPayload;
+    payload: ZohoSerialPayload;
     localItemId: string | null;
     salesOrderId: string | null;
-}): Promise<SerialPayload> {
+}): Promise<ZohoSerialPayload> {
     const { supabase, payload, localItemId, salesOrderId } = params;
     if (!localItemId || !Array.isArray(payload.serials) || payload.serials.length === 0) {
         return payload;
@@ -113,7 +105,7 @@ async function fetchSerialsFromZoho(
     organizationId: string,
     itemId: string,
     warehouseId: string,
-): Promise<SerialPayload> {
+): Promise<ZohoSerialPayload> {
     const headers = { Authorization: `Zoho-oauthtoken ${auth.accessToken}` };
     const url = `${auth.apiDomain}/inventory/v1/items/serialnumbers?item_id=${itemId}&show_transacted_out=false&location_id=${warehouseId}&organization_id=${organizationId}`;
     const response = await fetch(url, { headers, cache: 'no-store' });
@@ -187,14 +179,14 @@ export async function GET(request: Request) {
             }
         }
 
-        const key = cacheKey(effectiveZohoItemId, warehouseId);
-        const cached = serialCache.get(key);
+        const key = buildZohoSerialCacheKey(effectiveZohoItemId, warehouseId);
+        const cached = getCachedZohoSerialPayload(key);
 
-        let basePayload: SerialPayload | null = null;
-        if (cached && Date.now() < cached.expiresAt) {
-            basePayload = cached.payload;
-        } else if (serialInFlight.has(key)) {
-            basePayload = await serialInFlight.get(key)!;
+        let basePayload: ZohoSerialPayload | null = null;
+        if (cached) {
+            basePayload = cached;
+        } else if (getZohoSerialInFlight(key)) {
+            basePayload = await getZohoSerialInFlight(key)!;
         } else {
             const requestPromise = (async () => {
                 const auth = await getZohoAccessToken();
@@ -205,7 +197,7 @@ export async function GET(request: Request) {
 
                 try {
                     const payload = await fetchSerialsFromZoho(auth, organizationId, effectiveZohoItemId, warehouseId);
-                    serialCache.set(key, { payload, expiresAt: Date.now() + SERIAL_CACHE_TTL_MS });
+                    setCachedZohoSerialPayload(key, payload, SERIAL_CACHE_TTL_MS);
                     return payload;
                 } catch (firstError) {
                     if (firstError instanceof ZohoSerialsRequestError && firstError.status === 401) {
@@ -216,18 +208,18 @@ export async function GET(request: Request) {
                             throw new Error('No se pudo refrescar token de Zoho');
                         }
                         const payload = await fetchSerialsFromZoho(retryAuth, organizationId, effectiveZohoItemId, warehouseId);
-                        serialCache.set(key, { payload, expiresAt: Date.now() + SERIAL_CACHE_TTL_MS });
+                        setCachedZohoSerialPayload(key, payload, SERIAL_CACHE_TTL_MS);
                         return payload;
                     }
                     throw firstError;
                 }
             })();
 
-            serialInFlight.set(key, requestPromise);
+            setZohoSerialInFlight(key, requestPromise);
             try {
                 basePayload = await requestPromise;
             } finally {
-                serialInFlight.delete(key);
+                clearZohoSerialInFlight(key);
             }
         }
 

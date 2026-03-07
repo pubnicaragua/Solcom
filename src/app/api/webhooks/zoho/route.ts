@@ -5,6 +5,7 @@ import {
     normalizeItemId,
     syncItemStock,
 } from '@/lib/zoho/sync-logic';
+import { invalidateZohoSerialCacheByItemIds } from '@/lib/zoho/serial-cache';
 
 // Service Role Client for Webhooks (Bypasses RLS)
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
@@ -329,6 +330,11 @@ export async function POST(request: NextRequest) {
 
         const dedupedItemIds = Array.from(new Set(allItemIds));
         debugLog.push(`Final item IDs to sync: ${dedupedItemIds.length}`);
+
+        if (dedupedItemIds.length > 0) {
+            const clearedSerialCache = invalidateZohoSerialCacheByItemIds(dedupedItemIds);
+            debugLog.push(`Serial cache invalidada para ${dedupedItemIds.length} item(s), claves limpiadas: ${clearedSerialCache}`);
+        }
 
         // --- SPECIAL HANDLING: Transfer Order Upsert ---
         // (Keep existing logic but ensure we sync items too)

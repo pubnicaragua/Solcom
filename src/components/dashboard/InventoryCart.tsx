@@ -204,6 +204,7 @@ export default function InventoryCart({
     const [dueDate, setDueDate] = useState(() => todayPlusDays(30));
     const [paymentTerms, setPaymentTerms] = useState('30_dias');
     const [salespeople, setSalespeople] = useState<Salesperson[]>([]);
+    const [syncingSalespeople, setSyncingSalespeople] = useState(false);
     const [selectedSalespersonId, setSelectedSalespersonId] = useState('');
     const [taxOptions, setTaxOptions] = useState<TaxOption[]>([]);
     const [itemFiscalByItemId, setItemFiscalByItemId] = useState<Record<string, ItemFiscalInput>>({});
@@ -283,9 +284,10 @@ export default function InventoryCart({
         }
     }, []);
 
-    const fetchSalespeople = useCallback(async () => {
+    const fetchSalespeople = useCallback(async (options: { forceRefresh?: boolean } = {}) => {
         try {
-            const res = await fetch('/api/ventas/salespeople', { cache: 'no-store' });
+            const query = options.forceRefresh ? '?sync=1' : '';
+            const res = await fetch(`/api/ventas/salespeople${query}`, { cache: 'no-store' });
             const data = await res.json().catch(() => ({}));
             if (!res.ok) throw new Error(data?.error || 'No se pudieron cargar vendedores');
             const parsedSalespeople = Array.isArray(data?.salespeople) ? data.salespeople : [];
@@ -294,6 +296,16 @@ export default function InventoryCart({
             setSalespeople([]);
         }
     }, []);
+
+    const syncSalespeople = useCallback(async () => {
+        if (syncingSalespeople) return;
+        setSyncingSalespeople(true);
+        try {
+            await fetchSalespeople({ forceRefresh: true });
+        } finally {
+            setSyncingSalespeople(false);
+        }
+    }, [fetchSalespeople, syncingSalespeople]);
 
     const fetchTaxes = useCallback(async () => {
         try {
@@ -1193,10 +1205,33 @@ export default function InventoryCart({
                                                         </select>
                                                     </div>
                                                     <div style={{ ...fieldGroupStyle, flex: 1 }}>
-                                                        <label style={labelStyle}>
-                                                            <User size={11} />
-                                                            Vendedor
-                                                        </label>
+                                                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
+                                                            <label style={{ ...labelStyle, marginBottom: 0 }}>
+                                                                <User size={11} />
+                                                                Vendedor
+                                                            </label>
+                                                            <button
+                                                                type="button"
+                                                                onClick={syncSalespeople}
+                                                                disabled={syncingSalespeople}
+                                                                style={{
+                                                                    border: '1px solid var(--border, rgba(148,163,184,0.25))',
+                                                                    background: 'transparent',
+                                                                    color: 'var(--muted, #9ca3af)',
+                                                                    borderRadius: 6,
+                                                                    padding: '3px 7px',
+                                                                    fontSize: 10,
+                                                                    display: 'inline-flex',
+                                                                    alignItems: 'center',
+                                                                    gap: 5,
+                                                                    cursor: syncingSalespeople ? 'wait' : 'pointer',
+                                                                    opacity: syncingSalespeople ? 0.7 : 1,
+                                                                }}
+                                                            >
+                                                                {syncingSalespeople ? <Loader2 size={11} className="animate-spin" /> : null}
+                                                                {syncingSalespeople ? 'Sync...' : 'Actualizar'}
+                                                            </button>
+                                                        </div>
                                                         <select
                                                             value={selectedSalespersonId}
                                                             onChange={(e) => setSelectedSalespersonId(e.target.value)}
@@ -1259,10 +1294,33 @@ export default function InventoryCart({
                                                 </div>
                                                 <div style={{ display: 'flex', gap: 10 }}>
                                                     <div style={{ ...fieldGroupStyle, flex: 1 }}>
-                                                        <label style={labelStyle}>
-                                                            <User size={11} />
-                                                            Vendedor
-                                                        </label>
+                                                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
+                                                            <label style={{ ...labelStyle, marginBottom: 0 }}>
+                                                                <User size={11} />
+                                                                Vendedor
+                                                            </label>
+                                                            <button
+                                                                type="button"
+                                                                onClick={syncSalespeople}
+                                                                disabled={syncingSalespeople}
+                                                                style={{
+                                                                    border: '1px solid var(--border, rgba(148,163,184,0.25))',
+                                                                    background: 'transparent',
+                                                                    color: 'var(--muted, #9ca3af)',
+                                                                    borderRadius: 6,
+                                                                    padding: '3px 7px',
+                                                                    fontSize: 10,
+                                                                    display: 'inline-flex',
+                                                                    alignItems: 'center',
+                                                                    gap: 5,
+                                                                    cursor: syncingSalespeople ? 'wait' : 'pointer',
+                                                                    opacity: syncingSalespeople ? 0.7 : 1,
+                                                                }}
+                                                            >
+                                                                {syncingSalespeople ? <Loader2 size={11} className="animate-spin" /> : null}
+                                                                {syncingSalespeople ? 'Sync...' : 'Actualizar'}
+                                                            </button>
+                                                        </div>
                                                         <select
                                                             value={selectedSalespersonId}
                                                             onChange={(e) => setSelectedSalespersonId(e.target.value)}
