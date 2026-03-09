@@ -105,6 +105,7 @@ export async function runSalesSyncWorkerBatch(params: RunWorkerParams): Promise<
                     documentType: job.document_type,
                     documentId: job.document_id,
                     externalRequestId: job.external_request_id || null,
+                    action: (String(job.action || '').trim().toLowerCase() === 'sync_delete' ? 'sync_delete' : 'sync_create'),
                 });
 
                 await finishSalesSyncJob({

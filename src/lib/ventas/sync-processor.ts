@@ -1,12 +1,17 @@
 import { createZohoInvoiceFromPayload } from '@/app/api/ventas/invoices/route';
 import { syncQuoteToZoho } from '@/app/api/ventas/quotes/route';
 import { syncSalesOrderToZoho } from '@/app/api/ventas/sales-orders/route';
+import { createZohoBooksClient } from '@/lib/zoho/books-client';
+import { releaseOrderSerialReservations } from '@/lib/ventas/serial-reservations';
 import {
     enqueueSalesSyncJob,
     markDocumentSyncState,
     normalizeSyncErrorCodeFromError,
     SalesDocumentType,
 } from '@/lib/ventas/sync-state';
+import { mapZohoInvoiceStatusToLocal, normalizeLocalInvoiceStatus } from '@/lib/ventas/zoho-invoice-status';
+
+export type SalesSyncAction = 'sync_create' | 'sync_delete';
 
 export type SalesSyncQueueRow = {
     id: string;
@@ -51,6 +56,7 @@ export async function enqueueDocumentForSync(params: {
     supabase: any;
     documentType: SalesDocumentType;
     documentId: string;
+    action?: SalesSyncAction;
     idempotencyKey?: string | null;
     payloadHash?: string | null;
     externalRequestId?: string | null;
@@ -68,7 +74,7 @@ export async function enqueueDocumentForSync(params: {
         errorCode: params.errorCode ?? null,
         errorMessage: params.errorMessage ?? null,
         priority: params.priority ?? 50,
-        action: 'sync_create',
+        action: params.action || 'sync_create',
     });
 }
 
@@ -167,6 +173,7 @@ async function syncInvoiceById(supabase: any, invoiceId: string) {
             terms,
             salesperson_id,
             shipping_charge,
+            zoho_invoice_id,
             items:sales_invoice_items(*)
         `)
         .eq('id', invoiceId)
@@ -177,23 +184,126 @@ async function syncInvoiceById(supabase: any, invoiceId: string) {
     }
 
     const invoice = invoiceLookup.data;
-    await createZohoInvoiceFromPayload({
+    const existingZohoInvoiceId = normalizeText((invoice as any).zoho_invoice_id);
+    let zohoSync: any;
+    if (existingZohoInvoiceId) {
+        const client = createZohoBooksClient();
+        if (!client) {
+            throw new Error('No se pudo inicializar cliente Zoho Books para enviar factura existente.');
+        }
+        const sent = await client.markInvoiceAsSent(existingZohoInvoiceId);
+        const zohoStatus = normalizeText(sent?.status) || 'sent';
+        zohoSync = {
+            zoho_invoice_id: existingZohoInvoiceId,
+            zoho_status: zohoStatus,
+            local_status: mapZohoInvoiceStatusToLocal(zohoStatus, 'enviada'),
+        };
+    } else {
+        zohoSync = await createZohoInvoiceFromPayload({
+            supabase,
+            invoiceId: String(invoice.id),
+            invoiceNumber: String(invoice.invoice_number || ''),
+            customerId: normalizeText(invoice.customer_id) || null,
+            warehouseId: normalizeText(invoice.warehouse_id) || null,
+            orderNumber: normalizeText(invoice.order_number) || null,
+            notes: normalizeText(invoice.notes) || null,
+            date: String(invoice.date || new Date().toISOString().slice(0, 10)),
+            dueDate: normalizeText(invoice.due_date) || null,
+            terms: normalizeText(invoice.terms) || null,
+            salespersonLocalId: normalizeText(invoice.salesperson_id) || null,
+            salespersonZohoId: null,
+            salespersonName: null,
+            shippingCharge: Math.max(0, Number(invoice.shipping_charge || 0)),
+            items: Array.isArray(invoice.items) ? invoice.items : [],
+        });
+    }
+
+    const alignedLocalStatus = normalizeLocalInvoiceStatus(zohoSync?.local_status, 'enviada');
+    await supabase
+        .from('sales_invoices')
+        .update({
+            status: alignedLocalStatus,
+            updated_at: new Date().toISOString(),
+        })
+        .eq('id', invoiceId);
+}
+
+async function syncInvoiceDeleteById(supabase: any, invoiceId: string) {
+    const invoiceLookup = await supabase
+        .from('sales_invoices')
+        .select('id, status, zoho_invoice_id')
+        .eq('id', invoiceId)
+        .maybeSingle();
+
+    if (invoiceLookup.error) {
+        const code = String(invoiceLookup.error?.code || '').trim();
+        if (code === 'PGRST116') return; // ya no existe localmente
+        throw new Error(invoiceLookup.error?.message || 'Factura no encontrada para sync_delete.');
+    }
+
+    const invoice = invoiceLookup.data as any;
+    if (!invoice?.id) return; // ya eliminada localmente
+
+    const zohoInvoiceId = normalizeText(invoice?.zoho_invoice_id);
+    if (zohoInvoiceId) {
+        const client = createZohoBooksClient();
+        if (!client) {
+            throw new Error('No se pudo inicializar cliente Zoho Books para anular factura.');
+        }
+        await client.voidInvoice(zohoInvoiceId);
+    }
+
+    await supabase
+        .from('sales_invoices')
+        .update({
+            status: 'cancelada',
+            updated_at: new Date().toISOString(),
+        })
+        .eq('id', invoiceId);
+}
+
+async function syncSalesOrderDeleteById(supabase: any, orderId: string) {
+    const orderLookup = await supabase
+        .from('sales_orders')
+        .select('id, status, converted_invoice_id, zoho_salesorder_id')
+        .eq('id', orderId)
+        .maybeSingle();
+
+    if (orderLookup.error) {
+        const code = String(orderLookup.error?.code || '').trim();
+        if (code === 'PGRST116') return; // ya no existe localmente
+        throw new Error(orderLookup.error?.message || 'Orden no encontrada para sync_delete.');
+    }
+
+    const order = orderLookup.data as any;
+    if (!order?.id) return; // ya eliminada localmente
+
+    if (order.converted_invoice_id || normalizeText(order.status) === 'convertida') {
+        throw new Error('No se puede eliminar una OV convertida a factura.');
+    }
+
+    const zohoSalesOrderId = normalizeText(order.zoho_salesorder_id);
+    if (zohoSalesOrderId) {
+        const client = createZohoBooksClient();
+        if (!client) {
+            throw new Error('No se pudo inicializar cliente Zoho Books para anular OV.');
+        }
+        await client.voidSalesOrder(zohoSalesOrderId);
+    }
+
+    await releaseOrderSerialReservations({
         supabase,
-        invoiceId: String(invoice.id),
-        invoiceNumber: String(invoice.invoice_number || ''),
-        customerId: normalizeText(invoice.customer_id) || null,
-        warehouseId: normalizeText(invoice.warehouse_id) || null,
-        orderNumber: normalizeText(invoice.order_number) || null,
-        notes: normalizeText(invoice.notes) || null,
-        date: String(invoice.date || new Date().toISOString().slice(0, 10)),
-        dueDate: normalizeText(invoice.due_date) || null,
-        terms: normalizeText(invoice.terms) || null,
-        salespersonLocalId: normalizeText(invoice.salesperson_id) || null,
-        salespersonZohoId: null,
-        salespersonName: null,
-        shippingCharge: Math.max(0, Number(invoice.shipping_charge || 0)),
-        items: Array.isArray(invoice.items) ? invoice.items : [],
+        orderId,
+        reason: 'order_cancelled',
     });
+
+    await supabase
+        .from('sales_orders')
+        .update({
+            status: 'cancelada',
+            updated_at: new Date().toISOString(),
+        })
+        .eq('id', orderId);
 }
 
 export async function syncSalesDocumentNow(params: {
@@ -201,8 +311,35 @@ export async function syncSalesDocumentNow(params: {
     documentType: SalesDocumentType;
     documentId: string;
     externalRequestId?: string | null;
+    action?: SalesSyncAction;
 }): Promise<void> {
-    const { supabase, documentType, documentId, externalRequestId = null } = params;
+    const {
+        supabase,
+        documentType,
+        documentId,
+        externalRequestId = null,
+        action = 'sync_create',
+    } = params;
+
+    if (action === 'sync_delete') {
+        if (documentType === 'sales_order') {
+            await syncSalesOrderDeleteById(supabase, documentId);
+        } else if (documentType === 'sales_invoice') {
+            await syncInvoiceDeleteById(supabase, documentId);
+        } else {
+            throw new Error(`sync_delete no soportado para tipo de documento: ${documentType}`);
+        }
+
+        await markDocumentSyncState({
+            supabase,
+            documentType,
+            documentId,
+            status: 'synced',
+            externalRequestId,
+            incrementAttempts: true,
+        });
+        return;
+    }
 
     if (documentType === 'sales_order') {
         await syncSalesOrderById(supabase, documentId);

@@ -607,6 +607,31 @@ export default function InventoryCart({
                 if (!response.ok) throw new Error(data?.error || 'No se pudo crear la orden de venta.');
                 docNumber = data?.order?.order_number || '';
                 const createdOrderId = String(data?.order?.id || '').trim();
+                const isSyncPending =
+                    response.status === 202
+                    || data?.code === 'SYNC_PENDING'
+                    || String(data?.order?.sync_status || '').toLowerCase() === 'pending_sync';
+
+                if (isSyncPending && createdOrderId) {
+                    try {
+                        await fetch(`/api/ventas/sync/retry/${encodeURIComponent(createdOrderId)}`, {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({
+                                document_type: 'sales_order',
+                                action: 'sync_create',
+                                immediate: true,
+                            }),
+                        });
+                    } catch {
+                        // no-op: si falla el retry inmediato, quedará en cola para retry manual/worker
+                    }
+                }
+
+                if (isSyncPending && data?.warning) {
+                    alert(`OV creada localmente. Zoho pendiente: ${String(data.warning)}`);
+                }
+
                 if (createdOrderId && onSalesOrderEditRequested) {
                     onClearCart();
                     onDocumentCreated();

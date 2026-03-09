@@ -900,7 +900,7 @@ export class ZohoBooksClient {
         };
     }
 
-    private isAlreadyStatusMessage(error: any, statusKeyword: 'open' | 'void'): boolean {
+    private isAlreadyStatusMessage(error: any, statusKeyword: 'open' | 'void' | 'sent'): boolean {
         const message = String(error?.message || '').toLowerCase();
         return message.includes('already') && message.includes(statusKeyword);
     }
@@ -965,6 +965,39 @@ export class ZohoBooksClient {
         }
     }
 
+    async markInvoiceAsSent(invoiceId: string): Promise<{ status: string | null }> {
+        const normalizedId = String(invoiceId || '').trim();
+        if (!normalizedId) {
+            throw new Error('No se puede marcar enviada una factura sin invoice_id.');
+        }
+
+        const attempts = [
+            `/books/v3/invoices/${encodeURIComponent(normalizedId)}/status/sent`,
+            `/books/v3/invoices/${encodeURIComponent(normalizedId)}/status/open`,
+        ];
+
+        const errors: string[] = [];
+        for (const endpoint of attempts) {
+            try {
+                const result = await this.request('POST', endpoint);
+                if (result?.code === 0 || result?.code === undefined) {
+                    const status = typeof result?.invoice?.status === 'string'
+                        ? String(result.invoice.status).trim().toLowerCase()
+                        : 'sent';
+                    return { status: status || 'sent' };
+                }
+                errors.push(`${endpoint}: ${String(result?.message || `code ${result?.code || 'desconocido'}`)}`);
+            } catch (error: any) {
+                if (this.isAlreadyStatusMessage(error, 'sent') || this.isAlreadyStatusMessage(error, 'open')) {
+                    return { status: 'sent' };
+                }
+                errors.push(`${endpoint}: ${String(error?.message || 'Error desconocido')}`);
+            }
+        }
+
+        throw new Error(`No se pudo marcar la factura como enviada en Zoho. ${errors.slice(0, 3).join(' | ')}`);
+    }
+
     async createInvoice(data: {
         customer_id: string;
         date: string;
@@ -993,7 +1026,7 @@ export class ZohoBooksClient {
                 value: string | number;
             }>;
         }>;
-    }): Promise<{ invoice_id: string; invoice_number: string }> {
+    }): Promise<{ invoice_id: string; invoice_number: string; status?: string | null }> {
         const result = await this.request('POST', '/books/v3/invoices', data);
         if (result.code !== 0) {
             throw new Error(result.message || 'Error al crear factura en Zoho');
@@ -1001,6 +1034,7 @@ export class ZohoBooksClient {
         return {
             invoice_id: result.invoice.invoice_id,
             invoice_number: result.invoice.invoice_number,
+            status: typeof result?.invoice?.status === 'string' ? result.invoice.status : null,
         };
     }
 

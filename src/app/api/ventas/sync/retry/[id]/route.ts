@@ -4,6 +4,7 @@ import { cookies } from 'next/headers';
 import {
     enqueueDocumentForSync,
     finishSalesSyncJob,
+    SalesSyncAction,
     syncSalesDocumentNow,
 } from '@/lib/ventas/sync-processor';
 import {
@@ -38,6 +39,11 @@ function normalizeDocumentType(value: unknown): SalesDocumentType | null {
         return 'sales_quote';
     }
     return null;
+}
+
+function normalizeSyncAction(value: unknown): SalesSyncAction {
+    const text = String(value || '').trim().toLowerCase();
+    return text === 'sync_delete' ? 'sync_delete' : 'sync_create';
 }
 
 export async function POST(
@@ -80,6 +86,7 @@ export async function POST(
 
         const idempotencyKey = req.headers.get('Idempotency-Key') || req.headers.get('idempotency-key') || null;
         const immediate = body?.immediate === undefined ? true : Boolean(body.immediate);
+        const action = normalizeSyncAction(body?.action);
         const externalRequestId = idempotencyKey ? `idem_${String(idempotencyKey).trim()}` : `retry_${Date.now()}`;
 
         await markDocumentSyncState({
@@ -97,6 +104,7 @@ export async function POST(
             supabase,
             documentType,
             documentId,
+            action,
             idempotencyKey: idempotencyKey || null,
             payloadHash: null,
             externalRequestId,
@@ -116,6 +124,7 @@ export async function POST(
                     documentType,
                     documentId,
                     externalRequestId,
+                    action,
                 });
                 await finishSalesSyncJob({
                     supabase,
@@ -128,6 +137,7 @@ export async function POST(
                     synced_now: true,
                     document_type: documentType,
                     document_id: documentId,
+                    action,
                     sync_status: 'synced',
                     job_id: queueResult.job.id,
                 });
@@ -146,6 +156,7 @@ export async function POST(
                         code: 'SYNC_PENDING',
                         document_type: documentType,
                         document_id: documentId,
+                        action,
                         sync_status: 'pending_sync',
                         warning: error?.message || 'Error al sincronizar inmediatamente; quedó en cola.',
                         job_id: queueResult.job.id,
@@ -162,6 +173,7 @@ export async function POST(
                 code: 'SYNC_PENDING',
                 document_type: documentType,
                 document_id: documentId,
+                action,
                 sync_status: 'pending_sync',
                 job_id: queueResult.job?.id || null,
             },

@@ -10,6 +10,9 @@ import {
     FiscalValidationError,
     normalizeFiscalLine,
 } from '@/lib/ventas/fiscal';
+import { enqueueDocumentForSync } from '@/lib/ventas/sync-processor';
+import { recordDeleteSyncAudit } from '@/lib/ventas/delete-sync-audit';
+import { markDocumentSyncState, normalizeSyncErrorCodeFromError } from '@/lib/ventas/sync-state';
 import {
     buildVersionConflictResponse,
     getCurrentRowVersion,
@@ -656,6 +659,12 @@ export async function PUT(
                 return NextResponse.json({ error: error.message }, { status: 500 });
             }
             if (!data) {
+                if (expectedRowVersion === null || currentRowVersion === null) {
+                    return NextResponse.json(
+                        { error: 'No se pudo actualizar el estado de la factura. Recarga e intenta nuevamente.' },
+                        { status: 409 }
+                    );
+                }
                 return buildVersionConflictResponse({
                     expectedRowVersion: expectedRowVersion ?? -1,
                     currentRowVersion,
@@ -819,6 +828,12 @@ export async function PUT(
             return NextResponse.json({ error: error.message }, { status: 500 });
         }
         if (!data) {
+            if (expectedRowVersion === null || currentRowVersion === null) {
+                return NextResponse.json(
+                    { error: 'No se pudo actualizar la factura. Recarga e intenta nuevamente.' },
+                    { status: 409 }
+                );
+            }
             return buildVersionConflictResponse({
                 expectedRowVersion: expectedRowVersion ?? -1,
                 currentRowVersion,
@@ -850,13 +865,14 @@ export async function DELETE(
             return NextResponse.json({ error: 'No autorizado' }, { status: 401 });
         }
         const { id } = params;
+        const externalRequestId = `delete_invoice_${id}_${Date.now()}`;
 
         // Verify it's a draft
         const { data: invoice } = await supabase
             .from('sales_invoices')
-            .select('status')
+            .select('id, status, invoice_number, external_request_id')
             .eq('id', id)
-            .single();
+            .maybeSingle();
 
         if (!invoice) {
             return NextResponse.json({ error: 'Factura no encontrada' }, { status: 404 });
@@ -874,18 +890,103 @@ export async function DELETE(
         if (metadata.zohoInvoiceId) {
             const zohoClient = createZohoBooksClient();
             if (!zohoClient) {
-                return NextResponse.json(
-                    { error: 'No se pudo anular en Zoho: configuración ZOHO_BOOKS_* incompleta.' },
-                    { status: 500 }
-                );
+                const message = 'No se pudo anular en Zoho: configuración ZOHO_BOOKS_* incompleta.';
+                const errorCode = normalizeSyncErrorCodeFromError(message);
+                await markDocumentSyncState({
+                    supabase,
+                    documentType: 'sales_invoice',
+                    documentId: id,
+                    status: 'failed_sync',
+                    errorCode,
+                    errorMessage: message,
+                    externalRequestId,
+                    incrementAttempts: true,
+                });
+                await recordDeleteSyncAudit({
+                    supabase,
+                    documentType: 'sales_invoice',
+                    documentId: id,
+                    documentNumber: (invoice as any)?.invoice_number || null,
+                    requestedBy: user.id,
+                    localAction: 'soft_cancel',
+                    localResult: 'kept',
+                    zohoLinked: true,
+                    zohoExternalId: metadata.zohoInvoiceId,
+                    zohoOperation: 'void_invoice',
+                    zohoResultStatus: 'failed',
+                    zohoErrorCode: errorCode,
+                    zohoErrorMessage: message,
+                    metadata: { reason: 'missing_zoho_config' },
+                });
+                return NextResponse.json({ error: message }, { status: 500 });
             }
 
             try {
                 await zohoClient.voidInvoice(metadata.zohoInvoiceId);
             } catch (zohoError: any) {
+                const message = `No se pudo anular la factura en Zoho: ${zohoError?.message || 'Error desconocido'}`;
+                const errorCode = normalizeSyncErrorCodeFromError(zohoError);
+                const syncUpdate = await markDocumentSyncState({
+                    supabase,
+                    documentType: 'sales_invoice',
+                    documentId: id,
+                    status: 'pending_sync',
+                    errorCode,
+                    errorMessage: message,
+                    externalRequestId,
+                    incrementAttempts: true,
+                });
+
+                const queueResult = await enqueueDocumentForSync({
+                    supabase,
+                    documentType: 'sales_invoice',
+                    documentId: id,
+                    action: 'sync_delete',
+                    externalRequestId,
+                    errorCode,
+                    errorMessage: message,
+                    priority: 1,
+                });
+
+                await recordDeleteSyncAudit({
+                    supabase,
+                    documentType: 'sales_invoice',
+                    documentId: id,
+                    documentNumber: (invoice as any)?.invoice_number || null,
+                    requestedBy: user.id,
+                    localAction: 'soft_cancel',
+                    localResult: 'kept',
+                    zohoLinked: true,
+                    zohoExternalId: metadata.zohoInvoiceId,
+                    zohoOperation: 'void_invoice',
+                    zohoResultStatus: queueResult.error ? 'failed' : 'pending',
+                    zohoErrorCode: errorCode,
+                    zohoErrorMessage: message,
+                    syncJobId: queueResult.job?.id || null,
+                    metadata: { sync_status: syncUpdate.data?.sync_status || 'pending_sync' },
+                });
+
+                if (queueResult.error) {
+                    return NextResponse.json(
+                        {
+                            error: `${message}. Además, no se pudo encolar reintento: ${queueResult.error.message || 'error desconocido'}`,
+                            code: 'DELETE_SYNC_QUEUE_FAILED',
+                        },
+                        { status: 500 }
+                    );
+                }
+
                 return NextResponse.json(
-                    { error: `No se pudo anular la factura en Zoho: ${zohoError?.message || 'Error desconocido'}` },
-                    { status: 400 }
+                    {
+                        success: false,
+                        deleted: false,
+                        cancelled: false,
+                        code: 'DELETE_SYNC_PENDING',
+                        warning: message,
+                        sync_status: 'pending_sync',
+                        retry_job_id: queueResult.job?.id || null,
+                    },
+                    { status: 202 }
                 );
             }
 
@@ -900,8 +1001,55 @@ export async function DELETE(
                 .maybeSingle();
 
             if (cancelError) {
+                await markDocumentSyncState({
+                    supabase,
+                    documentType: 'sales_invoice',
+                    documentId: id,
+                    status: 'failed_sync',
+                    errorCode: 'LOCAL_UPDATE_FAILED',
+                    errorMessage: cancelError.message,
+                    externalRequestId,
+                    incrementAttempts: true,
+                });
+                await recordDeleteSyncAudit({
+                    supabase,
+                    documentType: 'sales_invoice',
+                    documentId: id,
+                    documentNumber: (invoice as any)?.invoice_number || null,
+                    requestedBy: user.id,
+                    localAction: 'soft_cancel',
+                    localResult: 'failed',
+                    zohoLinked: true,
+                    zohoExternalId: metadata.zohoInvoiceId,
+                    zohoOperation: 'void_invoice',
+                    zohoResultStatus: 'success',
+                    zohoErrorCode: 'LOCAL_UPDATE_FAILED',
+                    zohoErrorMessage: cancelError.message,
+                });
                 return NextResponse.json({ error: cancelError.message }, { status: 500 });
             }
+
+            await markDocumentSyncState({
+                supabase,
+                documentType: 'sales_invoice',
+                documentId: id,
+                status: 'synced',
+                externalRequestId,
+                incrementAttempts: true,
+            });
+            await recordDeleteSyncAudit({
+                supabase,
+                documentType: 'sales_invoice',
+                documentId: id,
+                documentNumber: (invoice as any)?.invoice_number || null,
+                requestedBy: user.id,
+                localAction: 'soft_cancel',
+                localResult: 'cancelled',
+                zohoLinked: true,
+                zohoExternalId: metadata.zohoInvoiceId,
+                zohoOperation: 'void_invoice',
+                zohoResultStatus: 'success',
+            });
 
             return NextResponse.json({
                 success: true,
@@ -918,8 +1066,35 @@ export async function DELETE(
             .eq('id', id);
 
         if (error) {
+            await recordDeleteSyncAudit({
+                supabase,
+                documentType: 'sales_invoice',
+                documentId: id,
+                documentNumber: (invoice as any)?.invoice_number || null,
+                requestedBy: user.id,
+                localAction: 'hard_delete',
+                localResult: 'failed',
+                zohoLinked: false,
+                zohoOperation: 'none',
+                zohoResultStatus: 'not_required',
+                zohoErrorCode: 'LOCAL_DELETE_FAILED',
+                zohoErrorMessage: error.message,
+            });
             return NextResponse.json({ error: error.message }, { status: 500 });
         }
+
+        await recordDeleteSyncAudit({
+            supabase,
+            documentType: 'sales_invoice',
+            documentId: id,
+            documentNumber: (invoice as any)?.invoice_number || null,
+            requestedBy: user.id,
+            localAction: 'hard_delete',
+            localResult: 'deleted',
+            zohoLinked: false,
+            zohoOperation: 'none',
+            zohoResultStatus: 'not_required',
+        });
 
         return NextResponse.json({ success: true });
     } catch (error: any) {

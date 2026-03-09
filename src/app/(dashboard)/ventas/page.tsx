@@ -123,6 +123,8 @@ function FacturacionPageContent() {
   const [draftLoading, setDraftLoading] = useState(false);
   const [draftError, setDraftError] = useState('');
   const draftSearchTimeout = useRef<NodeJS.Timeout | null>(null);
+  const invoicesAbortRef = useRef<AbortController | null>(null);
+  const invoicesFetchSeqRef = useRef(0);
 
   useEffect(() => {
     fetchInvoices();
@@ -135,6 +137,7 @@ function FacturacionPageContent() {
   useEffect(() => {
     fetchDraftWarehouses();
     return () => {
+      invoicesAbortRef.current?.abort();
       if (draftSearchTimeout.current) clearTimeout(draftSearchTimeout.current);
     };
   }, []);
@@ -228,6 +231,11 @@ function FacturacionPageContent() {
   }, [draftWarehouseId, draftSearch]);
 
   const fetchInvoices = async () => {
+    const requestSeq = ++invoicesFetchSeqRef.current;
+    invoicesAbortRef.current?.abort();
+    const controller = new AbortController();
+    invoicesAbortRef.current = controller;
+
     setLoading(true);
     try {
       const params = new URLSearchParams();
@@ -238,16 +246,38 @@ function FacturacionPageContent() {
       params.set('page', String(page));
       params.set('per_page', '15');
 
-      const res = await fetch(`/api/ventas/invoices?${params.toString()}`);
-      const data = await res.json();
+      const res = await fetch(`/api/ventas/invoices?${params.toString()}`, {
+        cache: 'no-store',
+        signal: controller.signal,
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        throw new Error(String(data?.error || `Error ${res.status} al cargar facturas`));
+      }
+      if (requestSeq !== invoicesFetchSeqRef.current) return;
 
-      setInvoices(data.invoices || []);
-      setTotalPages(data.total_pages || 1);
-      setTotalCount(data.total || 0);
-    } catch (err) {
+      const nextInvoices = Array.isArray(data?.invoices) ? data.invoices : [];
+      const nextTotalPages = Math.max(1, Number(data?.total_pages || 1));
+      const nextTotalCount = Math.max(0, Number(data?.total || 0));
+
+      // Si el backend reduce páginas (por filtros/cambios), reajusta sin vaciar la tabla.
+      if (page > nextTotalPages) {
+        setPage(nextTotalPages);
+        return;
+      }
+
+      setInvoices(nextInvoices);
+      setTotalPages(nextTotalPages);
+      setTotalCount(nextTotalCount);
+    } catch (err: any) {
+      if (controller.signal.aborted) return;
+      if (requestSeq !== invoicesFetchSeqRef.current) return;
       console.error('Error fetching invoices:', err);
+      // No vaciamos la tabla en errores transitorios para evitar "desapariciones" visuales.
     } finally {
-      setLoading(false);
+      if (!controller.signal.aborted && requestSeq === invoicesFetchSeqRef.current) {
+        setLoading(false);
+      }
     }
   };
 
@@ -349,11 +379,14 @@ function FacturacionPageContent() {
     if (!confirm('¿Eliminar esta factura en borrador?')) return;
     try {
       const res = await fetch(`/api/ventas/invoices/${id}`, { method: 'DELETE' });
+      const data = await res.json().catch(() => ({}));
       if (res.ok) {
-        fetchInvoices();
-        fetchKpis();
+        await fetchInvoices();
+        await fetchKpis();
+        if (res.status === 202 || data?.code === 'DELETE_SYNC_PENDING') {
+          alert(data?.warning || 'No se pudo anular en Zoho por ahora. La factura quedó pendiente para reintento automático.');
+        }
       } else {
-        const data = await res.json();
         alert(data.error || 'Error al eliminar');
       }
     } catch (err) {
@@ -595,6 +628,18 @@ function FacturacionPageContent() {
           >
             <FileText size={16} />
             Cotizaciones
+          </Link>
+          <Link
+            href="/ventas/sync"
+            style={{
+              display: 'inline-flex', alignItems: 'center', gap: '8px',
+              padding: '12px 20px', background: 'rgba(245,158,11,0.18)', color: '#FCD34D',
+              border: '1px solid rgba(245,158,11,0.4)', borderRadius: '10px', fontSize: '14px', fontWeight: 700,
+              textDecoration: 'none',
+            }}
+          >
+            <RefreshCw size={16} />
+            Sync Zoho
           </Link>
 
           {ventasModule === 'facturas' && (

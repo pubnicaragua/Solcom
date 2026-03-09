@@ -512,6 +512,11 @@ export default function SalesOrderForm({ isOpen, orderId, onClose, onSaved }: Sa
             setSalespersonId(matchedSalesperson?.id || '');
             setSalespersonName(matchedSalesperson?.name || orderSalespersonName || '');
             setNotes(order.notes || '');
+            const currentSyncStatus = String(order?.sync_status || '').toLowerCase();
+            const currentSyncError = String(order?.sync_error_message || '').trim();
+            if ((currentSyncStatus === 'pending_sync' || currentSyncStatus === 'failed_sync') && currentSyncError) {
+                setError(`Zoho pendiente: ${currentSyncError}`);
+            }
             const normalizedLines: OrderLine[] = Array.isArray(order.items) && order.items.length > 0
                 ? order.items.map((line: any) => ({
                     id: line.id,
@@ -799,6 +804,11 @@ export default function SalesOrderForm({ isOpen, orderId, onClose, onSaved }: Sa
                     if (serial) {
                         throw new Error(`Serial ${serial} reservado por otra OV.`);
                     }
+                }
+                if (res.status === 409 && data?.code === 'VERSION_CONFLICT') {
+                    const expected = data?.expected_row_version ?? 'n/a';
+                    const current = data?.current_row_version ?? 'n/a';
+                    throw new Error(`Conflicto de versión. Esperada: ${expected}, actual: ${current}.`);
                 }
                 throw new Error(data?.error || 'No se pudo guardar la orden');
             }

@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createRouteHandlerClient } from '@supabase/auth-helpers-nextjs';
 import { cookies } from 'next/headers';
 import { createZohoInvoiceFromPayload } from '@/app/api/ventas/invoices/route';
+import { createZohoBooksClient } from '@/lib/zoho/books-client';
 import {
     buildSyncStatusPayload,
     markDocumentSyncState,
@@ -13,6 +14,7 @@ import {
     getCurrentRowVersion,
     getExpectedRowVersion,
 } from '@/lib/ventas/version-conflict';
+import { mapZohoInvoiceStatusToLocal, normalizeLocalInvoiceStatus } from '@/lib/ventas/zoho-invoice-status';
 
 function normalizeText(value: unknown): string {
     return typeof value === 'string' ? value.trim() : '';
@@ -70,6 +72,8 @@ export async function POST(
                 salesperson_id,
                 shipping_charge,
                 status,
+                zoho_invoice_id,
+                zoho_invoice_number,
                 row_version,
                 items:sales_invoice_items(*)
             `)
@@ -94,23 +98,48 @@ export async function POST(
         // cuando el documento fue actualizado internamente entre guardar borrador y enviar.
 
         try {
-            const zohoSync = await createZohoInvoiceFromPayload({
-                supabase,
-                invoiceId: String(invoice.id),
-                invoiceNumber: normalizeText(invoice.invoice_number) || null,
-                customerId: normalizeText(invoice.customer_id) || null,
-                warehouseId: normalizeText(invoice.warehouse_id) || null,
-                orderNumber: normalizeText(invoice.order_number) || null,
-                notes: normalizeText(invoice.notes) || null,
-                date: normalizeText(invoice.date) || new Date().toISOString().slice(0, 10),
-                dueDate: normalizeText(invoice.due_date) || null,
-                terms: normalizeText(invoice.terms) || null,
-                salespersonLocalId: normalizeText(invoice.salesperson_id) || null,
-                salespersonZohoId: null,
-                salespersonName: null,
-                shippingCharge: Math.max(0, normalizeNumber(invoice.shipping_charge, 0)),
-                items: Array.isArray(invoice.items) ? invoice.items : [],
-            });
+            let zohoSync: {
+                zoho_invoice_id: string | null;
+                zoho_invoice_number: string | null;
+                zoho_status?: string | null;
+                local_status?: string | null;
+                status_warning?: string | null;
+            };
+            const existingZohoInvoiceId = normalizeText(invoice.zoho_invoice_id);
+            const existingZohoInvoiceNumber = normalizeText(invoice.zoho_invoice_number);
+            if (existingZohoInvoiceId) {
+                const zohoClient = createZohoBooksClient();
+                if (!zohoClient) {
+                    throw new Error('No se pudo inicializar cliente Zoho Books para enviar factura existente.');
+                }
+                const sentResult = await zohoClient.markInvoiceAsSent(existingZohoInvoiceId);
+                const zohoStatus = normalizeText(sentResult?.status).toLowerCase() || 'sent';
+                zohoSync = {
+                    zoho_invoice_id: existingZohoInvoiceId,
+                    zoho_invoice_number: existingZohoInvoiceNumber || null,
+                    zoho_status: zohoStatus,
+                    local_status: mapZohoInvoiceStatusToLocal(zohoStatus, 'enviada'),
+                    status_warning: null,
+                };
+            } else {
+                zohoSync = await createZohoInvoiceFromPayload({
+                    supabase,
+                    invoiceId: String(invoice.id),
+                    invoiceNumber: normalizeText(invoice.invoice_number) || null,
+                    customerId: normalizeText(invoice.customer_id) || null,
+                    warehouseId: normalizeText(invoice.warehouse_id) || null,
+                    orderNumber: normalizeText(invoice.order_number) || null,
+                    notes: normalizeText(invoice.notes) || null,
+                    date: normalizeText(invoice.date) || new Date().toISOString().slice(0, 10),
+                    dueDate: normalizeText(invoice.due_date) || null,
+                    terms: normalizeText(invoice.terms) || null,
+                    salespersonLocalId: normalizeText(invoice.salesperson_id) || null,
+                    salespersonZohoId: null,
+                    salespersonName: null,
+                    shippingCharge: Math.max(0, normalizeNumber(invoice.shipping_charge, 0)),
+                    items: Array.isArray(invoice.items) ? invoice.items : [],
+                });
+            }
 
             let statusUpdateVersion: number | null = null;
             if (expectedRowVersion !== null && currentRowVersion !== null) {
@@ -133,7 +162,7 @@ export async function POST(
             let statusUpdateQuery = supabase
                 .from('sales_invoices')
                 .update({
-                    status: 'enviada',
+                    status: normalizeLocalInvoiceStatus(zohoSync?.local_status, 'enviada'),
                     updated_at: new Date().toISOString(),
                 })
                 .eq('id', invoiceId);
@@ -184,6 +213,7 @@ export async function POST(
                     zoho_invoice_number: zohoSync.zoho_invoice_number,
                 },
                 status: 'synced',
+                warning: zohoSync.status_warning || null,
             });
         } catch (error: any) {
             const message = String(error?.message || error || 'No se pudo sincronizar factura en Zoho.');
@@ -201,7 +231,7 @@ export async function POST(
             await supabase
                 .from('sales_invoices')
                 .update({
-                    status: 'enviada',
+                    status: 'borrador',
                     updated_at: new Date().toISOString(),
                 })
                 .eq('id', invoiceId);
@@ -234,7 +264,7 @@ export async function POST(
                     code: errorCode,
                     invoice: {
                         id: invoiceId,
-                        status: 'enviada',
+                        status: 'borrador',
                         ...buildSyncStatusPayload(syncUpdate.data || {}),
                         external_request_id: externalRequestId,
                     },

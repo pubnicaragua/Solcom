@@ -31,6 +31,10 @@ import {
     normalizeSyncErrorCodeFromError,
 } from '@/lib/ventas/sync-state';
 import { enqueueDocumentForSync } from '@/lib/ventas/sync-processor';
+import {
+    mapZohoInvoiceStatusToLocal,
+    normalizeLocalInvoiceStatus,
+} from '@/lib/ventas/zoho-invoice-status';
 
 export const dynamic = 'force-dynamic';
 
@@ -52,6 +56,18 @@ function normalizeNumber(value: unknown, fallback = 0): number {
 
 function normalizeTrimmed(value: unknown): string {
     return typeof value === 'string' ? value.trim() : '';
+}
+
+function isZohoInvoiceSentLikeStatus(value: unknown): boolean {
+    const normalized = normalizeTrimmed(value).toLowerCase();
+    return (
+        normalized === 'sent' ||
+        normalized === 'open' ||
+        normalized === 'unpaid' ||
+        normalized === 'partially_paid' ||
+        normalized === 'paid' ||
+        normalized === 'overdue'
+    );
 }
 
 function normalizeUuid(value: unknown): string | null {
@@ -226,6 +242,7 @@ export async function createZohoInvoiceFromPayload(params: {
     salespersonName: string | null | undefined;
     shippingCharge: number;
     items: any[];
+    markAsSent?: boolean;
 }) {
     const {
         supabase,
@@ -243,6 +260,7 @@ export async function createZohoInvoiceFromPayload(params: {
         salespersonName,
         shippingCharge,
         items,
+        markAsSent = true,
     } = params;
 
     if (!customerId) {
@@ -685,7 +703,7 @@ export async function createZohoInvoiceFromPayload(params: {
         selectedZohoUserId ? { salesperson_id: selectedZohoUserId } : null,
     ].filter(Boolean) as Array<Record<string, string>>;
 
-    let createdInvoice: { invoice_id: string; invoice_number: string } | null = null;
+    let createdInvoice: { invoice_id: string; invoice_number: string; status?: string | null } | null = null;
     let lastError = '';
     const locationErrors: string[] = [];
 
@@ -783,9 +801,25 @@ export async function createZohoInvoiceFromPayload(params: {
         }
     }
 
+    let finalZohoStatus = normalizeTrimmed((createdInvoice as any)?.status).toLowerCase() || null;
+    let statusWarning: string | null = null;
+
+    if (markAsSent && zohoInvoiceId && !isZohoInvoiceSentLikeStatus(finalZohoStatus)) {
+        try {
+            const sentResult = await zohoClient.markInvoiceAsSent(zohoInvoiceId);
+            const normalizedSentStatus = normalizeTrimmed(sentResult?.status).toLowerCase();
+            finalZohoStatus = normalizedSentStatus || 'sent';
+        } catch (error: any) {
+            statusWarning = String(error?.message || 'No se pudo marcar la factura como enviada en Zoho.');
+        }
+    }
+
     return {
         zoho_invoice_id: zohoInvoiceId || null,
         zoho_invoice_number: zohoInvoiceNumber || null,
+        zoho_status: finalZohoStatus,
+        local_status: mapZohoInvoiceStatusToLocal(finalZohoStatus, 'enviada'),
+        status_warning: statusWarning,
     };
 }
 
@@ -1176,7 +1210,14 @@ export async function POST(req: NextRequest) {
             return failWith({ error: itemsError.message }, 500);
         }
 
-        let zohoSync: { zoho_invoice_id: string | null; zoho_invoice_number: string | null } | null = null;
+        let responseInvoice = invoice;
+        let zohoSync: {
+            zoho_invoice_id: string | null;
+            zoho_invoice_number: string | null;
+            zoho_status?: string | null;
+            local_status?: string | null;
+            status_warning?: string | null;
+        } | null = null;
         let zohoWarning: string | null = null;
         let responseStatus = 201;
         const shouldSyncToZoho = String(status).toLowerCase() === 'enviada';
@@ -1207,6 +1248,9 @@ export async function POST(req: NextRequest) {
                     shippingCharge: normalizedShippingCharge,
                     items: itemsForInvoice,
                 });
+                if (zohoSync?.status_warning) {
+                    zohoWarning = zohoSync.status_warning;
+                }
 
                 const syncUpdate = await markDocumentSyncState({
                     supabase,
@@ -1226,6 +1270,30 @@ export async function POST(req: NextRequest) {
                         last_sync_attempt_at: new Date().toISOString(),
                         last_synced_at: new Date().toISOString(),
                     };
+                }
+
+                const alignedLocalStatus = normalizeLocalInvoiceStatus(zohoSync?.local_status, 'enviada');
+                const currentLocalStatus = normalizeLocalInvoiceStatus(responseInvoice?.status, 'borrador');
+                if (currentLocalStatus !== alignedLocalStatus) {
+                    const statusSyncUpdate = await supabase
+                        .from('sales_invoices')
+                        .update({
+                            status: alignedLocalStatus,
+                            updated_at: new Date().toISOString(),
+                        })
+                        .eq('id', invoice.id)
+                        .select('*')
+                        .maybeSingle();
+
+                    if (!statusSyncUpdate.error && statusSyncUpdate.data) {
+                        responseInvoice = statusSyncUpdate.data;
+                    } else {
+                        responseInvoice = {
+                            ...responseInvoice,
+                            status: alignedLocalStatus,
+                            updated_at: new Date().toISOString(),
+                        };
+                    }
                 }
             } catch (zohoError: any) {
                 zohoWarning = zohoError?.message || 'No se pudo crear factura en Zoho';
@@ -1277,13 +1345,13 @@ export async function POST(req: NextRequest) {
                             error: zohoWarning,
                             code: 'SEND_VALIDATION_ERROR',
                             invoice: {
-                                ...invoice,
+                                ...responseInvoice,
                                 status: 'borrador',
                                 ...failedSyncState,
-                                external_request_id: externalRequestId || invoice.external_request_id || null,
+                                external_request_id: externalRequestId || responseInvoice.external_request_id || null,
                             },
                             ...failedSyncState,
-                            external_request_id: externalRequestId || invoice.external_request_id || null,
+                            external_request_id: externalRequestId || responseInvoice.external_request_id || null,
                         },
                         400
                     );
@@ -1310,6 +1378,26 @@ export async function POST(req: NextRequest) {
                         sync_error_message: zohoWarning,
                         last_sync_attempt_at: new Date().toISOString(),
                         last_synced_at: null,
+                    };
+                }
+
+                const pendingStatusUpdate = await supabase
+                    .from('sales_invoices')
+                    .update({
+                        status: 'borrador',
+                        updated_at: new Date().toISOString(),
+                    })
+                    .eq('id', invoice.id)
+                    .select('*')
+                    .maybeSingle();
+
+                if (!pendingStatusUpdate.error && pendingStatusUpdate.data) {
+                    responseInvoice = pendingStatusUpdate.data;
+                } else {
+                    responseInvoice = {
+                        ...responseInvoice,
+                        status: 'borrador',
+                        updated_at: new Date().toISOString(),
                     };
                 }
 
@@ -1365,9 +1453,9 @@ export async function POST(req: NextRequest) {
 
         const finalWarning = [zohoWarning, salesOrderLinkWarning, reservationWarning].filter(Boolean).join(' | ') || null;
         const invoiceResponse = {
-            ...invoice,
+            ...responseInvoice,
             ...syncState,
-            external_request_id: externalRequestId || invoice.external_request_id || null,
+            external_request_id: externalRequestId || responseInvoice.external_request_id || null,
         };
 
         const responseBody = {
@@ -1379,7 +1467,7 @@ export async function POST(req: NextRequest) {
             external_request_id: invoiceResponse.external_request_id,
         };
 
-        return succeedWith(responseBody, responseStatus, invoice.id);
+        return succeedWith(responseBody, responseStatus, responseInvoice.id || invoice.id);
     } catch (error: any) {
         if (idempotencyRecordId) {
             const errorBody = error instanceof FiscalValidationError

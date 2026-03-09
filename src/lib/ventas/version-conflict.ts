@@ -1,23 +1,33 @@
 import { NextRequest, NextResponse } from 'next/server';
 
 function parseNumeric(value: unknown): number | null {
+    if (value === null || value === undefined) return null;
+    if (typeof value === 'boolean') return null;
+    if (typeof value === 'string' && value.trim() === '') return null;
     const parsed = Number(value);
     if (!Number.isFinite(parsed)) return null;
+    if (!Number.isInteger(parsed)) return null;
     if (parsed < 0) return null;
-    return Math.floor(parsed);
+    return parsed;
 }
 
 export function getExpectedRowVersion(req: NextRequest, body: any): number | null {
-    const fromHeader = req.headers.get('If-Match-Version')
-        || req.headers.get('if-match-version')
-        || req.headers.get('If-Match')
-        || req.headers.get('if-match');
+    // Solo aceptamos versión explícita enviada en el payload.
+    // Evita falsos positivos por headers/proxies y por null => 0.
+    const bodyRowVersion = body
+        && typeof body === 'object'
+        && Object.prototype.hasOwnProperty.call(body, 'row_version')
+        ? body.row_version
+        : undefined;
+    const bodyExpectedRowVersion = body
+        && typeof body === 'object'
+        && Object.prototype.hasOwnProperty.call(body, 'expected_row_version')
+        ? body.expected_row_version
+        : undefined;
 
     const candidates = [
-        fromHeader,
-        body?.row_version,
-        body?.expected_row_version,
-        body?.version,
+        bodyRowVersion,
+        bodyExpectedRowVersion,
     ];
 
     for (const candidate of candidates) {
@@ -48,4 +58,3 @@ export function buildVersionConflictResponse(params: {
         { status: 409 }
     );
 }
-

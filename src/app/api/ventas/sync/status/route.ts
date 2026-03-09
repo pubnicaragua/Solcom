@@ -22,6 +22,14 @@ function ageMinutes(iso: string | null | undefined): number | null {
     return Math.round(ms / 60000);
 }
 
+function isMissingDeleteAuditTableError(errorMessage: string): boolean {
+    const text = String(errorMessage || '').toLowerCase();
+    return (
+        text.includes('sales_delete_sync_audit') &&
+        (text.includes('does not exist') || text.includes('could not find the table'))
+    );
+}
+
 export async function GET(req: NextRequest) {
     try {
         const supabase = createRouteHandlerClient({ cookies });
@@ -92,6 +100,45 @@ export async function GET(req: NextRequest) {
             supabase.from('sales_quotes').select('id', { count: 'exact', head: true }).eq('sync_status', 'pending_sync'),
         ]);
 
+        const [invoiceIssuesRes, orderIssuesRes, quoteIssuesRes] = await Promise.all([
+            supabase
+                .from('sales_invoices')
+                .select('id, invoice_number, status, sync_status, sync_error_code, sync_error_message, sync_attempts, last_sync_attempt_at, updated_at')
+                .in('sync_status', ['pending_sync', 'failed_sync'])
+                .order('updated_at', { ascending: false })
+                .limit(120),
+            supabase
+                .from('sales_orders')
+                .select('id, order_number, status, sync_status, sync_error_code, sync_error_message, sync_attempts, last_sync_attempt_at, updated_at')
+                .in('sync_status', ['pending_sync', 'failed_sync'])
+                .order('updated_at', { ascending: false })
+                .limit(120),
+            supabase
+                .from('sales_quotes')
+                .select('id, quote_number, status, sync_status, sync_error_code, sync_error_message, sync_attempts, last_sync_attempt_at, updated_at')
+                .in('sync_status', ['pending_sync', 'failed_sync'])
+                .order('updated_at', { ascending: false })
+                .limit(120),
+        ]);
+
+        const invoiceIssues = invoiceIssuesRes.error ? [] : (invoiceIssuesRes.data || []);
+        const orderIssues = orderIssuesRes.error ? [] : (orderIssuesRes.data || []);
+        const quoteIssues = quoteIssuesRes.error ? [] : (quoteIssuesRes.data || []);
+
+        const deleteAuditRes = await supabase
+            .from('sales_delete_sync_audit')
+            .select('id, document_type, document_id, document_number, requested_by, requested_at, local_action, local_result, zoho_linked, zoho_external_id, zoho_operation, zoho_result_status, zoho_error_code, zoho_error_message, sync_job_id, created_at')
+            .in('zoho_result_status', ['pending', 'failed'])
+            .order('requested_at', { ascending: false })
+            .limit(200);
+
+        let deleteSyncIssues: any[] = [];
+        if (!deleteAuditRes.error) {
+            deleteSyncIssues = deleteAuditRes.data || [];
+        } else if (!isMissingDeleteAuditTableError(deleteAuditRes.error.message || '')) {
+            console.warn('[sync/status] No se pudo leer sales_delete_sync_audit:', deleteAuditRes.error.message);
+        }
+
         const stuck = rows
             .filter((row: any) => {
                 const status = String(row?.status || '');
@@ -134,6 +181,12 @@ export async function GET(req: NextRequest) {
             errors: {
                 error_code_counts: errorCodeCounts,
             },
+            sync_issues: {
+                invoices: invoiceIssues,
+                orders: orderIssues,
+                quotes: quoteIssues,
+            },
+            delete_sync_issues: deleteSyncIssues,
             stuck_jobs: stuck,
             timestamp: new Date().toISOString(),
         });

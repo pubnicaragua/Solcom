@@ -16,6 +16,9 @@ import {
     replaceOrderSerialReservations,
     SerialReservationError,
 } from '@/lib/ventas/serial-reservations';
+import { enqueueDocumentForSync } from '@/lib/ventas/sync-processor';
+import { recordDeleteSyncAudit } from '@/lib/ventas/delete-sync-audit';
+import { markDocumentSyncState, normalizeSyncErrorCodeFromError } from '@/lib/ventas/sync-state';
 import {
     buildVersionConflictResponse,
     getCurrentRowVersion,
@@ -60,6 +63,16 @@ function normalizeWarranty(value: unknown): string | null {
 function normalizeStatus(value: unknown, fallback = 'borrador'): string {
     const text = typeof value === 'string' ? value.trim().toLowerCase() : '';
     return ORDER_STATUSES.has(text) ? text : fallback;
+}
+
+function isInvalidSalespersonMessage(message: string): boolean {
+    const text = String(message || '').toLowerCase();
+    return (
+        text.includes('vendedor') ||
+        text.includes('salesperson') ||
+        text.includes('introduzca un vendedor válido') ||
+        text.includes('introduce a valid salesperson')
+    );
 }
 
 function extractMissingColumn(message: string): string | null {
@@ -152,6 +165,7 @@ async function syncUpdatedSalesOrderToZoho(params: {
     const normalizedSalespersonName = normalizeText(order?.salesperson_name);
     const normalizedSalespersonLocalId = normalizeText(order?.salesperson_id);
     let selectedZohoSalespersonId = '';
+    let selectedZohoUserId = '';
     let selectedZohoSalespersonName = normalizedSalespersonName;
 
     if (normalizedSalespersonName || normalizedSalespersonLocalId) {
@@ -191,7 +205,8 @@ async function syncUpdatedSalesOrderToZoho(params: {
             }
 
             if (selectedSeller) {
-                selectedZohoSalespersonId = normalizeText(selectedSeller.salespersonId || selectedSeller.userId);
+                selectedZohoSalespersonId = normalizeText(selectedSeller.salespersonId);
+                selectedZohoUserId = normalizeText(selectedSeller.userId);
                 selectedZohoSalespersonName = normalizeText(selectedSeller.name) || selectedZohoSalespersonName;
             }
         } catch (salespersonResolutionError: any) {
@@ -334,7 +349,7 @@ async function syncUpdatedSalesOrderToZoho(params: {
         }
     }
 
-    const payload: any = {
+    const basePayload: any = {
         customer_id: zohoCustomerId,
         date: normalizeText(order?.date) || new Date().toISOString().slice(0, 10),
         line_items: buildZohoLineItems(true),
@@ -344,59 +359,106 @@ async function syncUpdatedSalesOrderToZoho(params: {
     };
 
     const shipmentDate = normalizeText(order?.expected_delivery_date);
-    if (shipmentDate) payload.shipment_date = shipmentDate;
+    if (shipmentDate) basePayload.shipment_date = shipmentDate;
 
     const notes = normalizeText(order?.notes);
-    if (notes) payload.notes = notes;
-
-    if (selectedZohoSalespersonName) payload.salesperson_name = selectedZohoSalespersonName;
-    if (selectedZohoSalespersonId) payload.salesperson_id = selectedZohoSalespersonId;
+    if (notes) basePayload.notes = notes;
 
     if (zohoLocationId) {
-        payload.location_id = zohoLocationId;
+        basePayload.location_id = zohoLocationId;
     }
 
     const normalizedShippingCharge = Math.max(0, normalizeNumber(order?.shipping_charge, 0));
     if (normalizedShippingCharge > 0) {
-        payload.shipping_charge = Number(normalizedShippingCharge.toFixed(2));
+        basePayload.shipping_charge = Number(normalizedShippingCharge.toFixed(2));
     }
 
     const deliveryMethod = normalizeText(order?.delivery_method);
     if (deliveryMethod) {
-        payload.delivery_method = deliveryMethod;
+        basePayload.delivery_method = deliveryMethod;
     }
 
     const paymentTerms = normalizeText(order?.payment_terms);
     if (paymentTerms) {
-        payload.terms = paymentTerms;
+        basePayload.terms = paymentTerms;
     }
 
-    try {
-        await zohoClient.updateSalesOrder(zohoSalesOrderId, payload);
-    } catch (error: any) {
-        const message = String(error?.message || '').toLowerCase();
-        const customFieldRejected = message.includes('customfield')
-            || message.includes('item_custom_fields');
-        const optionalFieldsRejected =
-            message.includes('delivery_method')
-            || message.includes('shipping_charge')
-            || message.includes('salesperson_id')
-            || message.includes('payment term')
-            || message.includes('terms');
+    const salespersonPayloadCandidates = [
+        selectedZohoSalespersonName
+            ? {
+                salesperson_name: selectedZohoSalespersonName,
+                ...(selectedZohoSalespersonId ? { salesperson_id: selectedZohoSalespersonId } : {}),
+            }
+            : null,
+        selectedZohoSalespersonName ? { salesperson_name: selectedZohoSalespersonName } : null,
+        selectedZohoSalespersonId ? { salesperson_id: selectedZohoSalespersonId } : null,
+        selectedZohoUserId
+            ? {
+                ...(selectedZohoSalespersonName ? { salesperson_name: selectedZohoSalespersonName } : {}),
+                salesperson_id: selectedZohoUserId,
+            }
+            : null,
+        selectedZohoUserId ? { salesperson_id: selectedZohoUserId } : null,
+        {},
+    ].filter((variant, index, arr) => {
+        if (!variant) return false;
+        const asKey = JSON.stringify(variant);
+        return arr.findIndex((candidate) => JSON.stringify(candidate || {}) === asKey) === index;
+    }) as Array<Record<string, string>>;
 
-        const retryPayload = { ...payload };
-        if (customFieldRejected) {
-            retryPayload.line_items = buildZohoLineItems(false);
-        }
-        if (optionalFieldsRejected) {
-            delete retryPayload.delivery_method;
-            delete retryPayload.shipping_charge;
-            delete retryPayload.salesperson_id;
-            delete retryPayload.terms;
-        }
+    const updateSalesOrderWithFallback = async (payload: any): Promise<void> => {
+        try {
+            await zohoClient.updateSalesOrder(zohoSalesOrderId, payload);
+        } catch (error: any) {
+            const message = String(error?.message || '').toLowerCase();
+            const customFieldRejected = message.includes('customfield')
+                || message.includes('item_custom_fields');
+            const optionalFieldsRejected =
+                message.includes('delivery_method')
+                || message.includes('shipping_charge')
+                || message.includes('salesperson_id')
+                || message.includes('payment term')
+                || message.includes('terms');
 
-        if (!customFieldRejected && !optionalFieldsRejected) throw error;
-        await zohoClient.updateSalesOrder(zohoSalesOrderId, retryPayload);
+            const retryPayload = { ...payload };
+            if (customFieldRejected) {
+                retryPayload.line_items = buildZohoLineItems(false);
+            }
+            if (optionalFieldsRejected) {
+                delete retryPayload.delivery_method;
+                delete retryPayload.shipping_charge;
+                delete retryPayload.salesperson_id;
+                delete retryPayload.terms;
+            }
+
+            if (!customFieldRejected && !optionalFieldsRejected) throw error;
+            await zohoClient.updateSalesOrder(zohoSalesOrderId, retryPayload);
+        }
+    };
+
+    let updated = false;
+    let lastSalespersonError = '';
+    for (const salespersonVariant of salespersonPayloadCandidates) {
+        const payload = {
+            ...basePayload,
+            ...salespersonVariant,
+        };
+        try {
+            await updateSalesOrderWithFallback(payload);
+            updated = true;
+            break;
+        } catch (error: any) {
+            const errorMessage = String(error?.message || 'Error desconocido');
+            lastSalespersonError = errorMessage;
+            if (isInvalidSalespersonMessage(errorMessage)) {
+                continue;
+            }
+            throw error;
+        }
+    }
+
+    if (!updated) {
+        throw new Error(lastSalespersonError || 'Zoho rechazó la actualización de la OV por vendedor inválido.');
     }
 
     if (normalizedStatus === 'confirmada') {
@@ -627,6 +689,12 @@ export async function PUT(
                 return NextResponse.json({ error: error.message }, { status: 500 });
             }
             if (!data) {
+                if (expectedRowVersion === null || currentRowVersion === null) {
+                    return NextResponse.json(
+                        { error: 'No se pudo actualizar el estado de la OV. Recarga e intenta nuevamente.' },
+                        { status: 409 }
+                    );
+                }
                 return buildVersionConflictResponse({
                     expectedRowVersion: expectedRowVersion ?? -1,
                     currentRowVersion,
@@ -890,6 +958,12 @@ export async function PUT(
             return NextResponse.json({ error: error.message }, { status: 500 });
         }
         if (!data) {
+            if (expectedRowVersion === null || currentRowVersion === null) {
+                return NextResponse.json(
+                    { error: 'No se pudo actualizar la OV. Recarga e intenta nuevamente.' },
+                    { status: 409 }
+                );
+            }
             return buildVersionConflictResponse({
                 expectedRowVersion: expectedRowVersion ?? -1,
                 currentRowVersion,
@@ -1017,10 +1091,11 @@ export async function DELETE(
         if (!user) {
             return NextResponse.json({ error: 'No autorizado' }, { status: 401 });
         }
+        const externalRequestId = `delete_order_${params.id}_${Date.now()}`;
 
         const { data: order, error: orderError } = await supabase
             .from('sales_orders')
-            .select('id, status, converted_invoice_id, zoho_salesorder_id')
+            .select('id, status, order_number, converted_invoice_id, zoho_salesorder_id')
             .eq('id', params.id)
             .single();
 
@@ -1039,18 +1114,101 @@ export async function DELETE(
         if (zohoSalesOrderId) {
             const zohoClient = createZohoBooksClient();
             if (!zohoClient) {
-                return NextResponse.json(
-                    { error: 'No se pudo anular en Zoho: configuración ZOHO_BOOKS_* incompleta.' },
-                    { status: 500 }
-                );
+                const message = 'No se pudo anular en Zoho: configuración ZOHO_BOOKS_* incompleta.';
+                const errorCode = normalizeSyncErrorCodeFromError(message);
+                await markDocumentSyncState({
+                    supabase,
+                    documentType: 'sales_order',
+                    documentId: params.id,
+                    status: 'failed_sync',
+                    errorCode,
+                    errorMessage: message,
+                    externalRequestId,
+                    incrementAttempts: true,
+                });
+                await recordDeleteSyncAudit({
+                    supabase,
+                    documentType: 'sales_order',
+                    documentId: params.id,
+                    documentNumber: (order as any)?.order_number || null,
+                    requestedBy: user.id,
+                    localAction: 'soft_cancel',
+                    localResult: 'kept',
+                    zohoLinked: true,
+                    zohoExternalId: zohoSalesOrderId,
+                    zohoOperation: 'void_sales_order',
+                    zohoResultStatus: 'failed',
+                    zohoErrorCode: errorCode,
+                    zohoErrorMessage: message,
+                    metadata: { reason: 'missing_zoho_config' },
+                });
+                return NextResponse.json({ error: message }, { status: 500 });
             }
 
             try {
                 await zohoClient.voidSalesOrder(zohoSalesOrderId);
             } catch (zohoError: any) {
+                const message = `No se pudo anular la OV en Zoho: ${zohoError?.message || 'Error desconocido'}`;
+                const errorCode = normalizeSyncErrorCodeFromError(zohoError);
+                const syncUpdate = await markDocumentSyncState({
+                    supabase,
+                    documentType: 'sales_order',
+                    documentId: params.id,
+                    status: 'pending_sync',
+                    errorCode,
+                    errorMessage: message,
+                    externalRequestId,
+                    incrementAttempts: true,
+                });
+                const queueResult = await enqueueDocumentForSync({
+                    supabase,
+                    documentType: 'sales_order',
+                    documentId: params.id,
+                    action: 'sync_delete',
+                    externalRequestId,
+                    errorCode,
+                    errorMessage: message,
+                    priority: 1,
+                });
+                await recordDeleteSyncAudit({
+                    supabase,
+                    documentType: 'sales_order',
+                    documentId: params.id,
+                    documentNumber: (order as any)?.order_number || null,
+                    requestedBy: user.id,
+                    localAction: 'soft_cancel',
+                    localResult: 'kept',
+                    zohoLinked: true,
+                    zohoExternalId: zohoSalesOrderId,
+                    zohoOperation: 'void_sales_order',
+                    zohoResultStatus: queueResult.error ? 'failed' : 'pending',
+                    zohoErrorCode: errorCode,
+                    zohoErrorMessage: message,
+                    syncJobId: queueResult.job?.id || null,
+                    metadata: { sync_status: syncUpdate.data?.sync_status || 'pending_sync' },
+                });
+
+                if (queueResult.error) {
+                    return NextResponse.json(
+                        {
+                            error: `${message}. Además, no se pudo encolar reintento: ${queueResult.error.message || 'error desconocido'}`,
+                            code: 'DELETE_SYNC_QUEUE_FAILED',
+                        },
+                        { status: 500 }
+                    );
+                }
+
                 return NextResponse.json(
-                    { error: `No se pudo anular la OV en Zoho: ${zohoError?.message || 'Error desconocido'}` },
-                    { status: 400 }
+                    {
+                        success: false,
+                        deleted: false,
+                        cancelled: false,
+                        code: 'DELETE_SYNC_PENDING',
+                        warning: message,
+                        sync_status: 'pending_sync',
+                        retry_job_id: queueResult.job?.id || null,
+                    },
+                    { status: 202 }
                 );
             }
 
@@ -1088,8 +1246,55 @@ export async function DELETE(
                 .maybeSingle();
 
             if (cancelError) {
+                await markDocumentSyncState({
+                    supabase,
+                    documentType: 'sales_order',
+                    documentId: params.id,
+                    status: 'failed_sync',
+                    errorCode: 'LOCAL_UPDATE_FAILED',
+                    errorMessage: cancelError.message,
+                    externalRequestId,
+                    incrementAttempts: true,
+                });
+                await recordDeleteSyncAudit({
+                    supabase,
+                    documentType: 'sales_order',
+                    documentId: params.id,
+                    documentNumber: (order as any)?.order_number || null,
+                    requestedBy: user.id,
+                    localAction: 'soft_cancel',
+                    localResult: 'failed',
+                    zohoLinked: true,
+                    zohoExternalId: zohoSalesOrderId,
+                    zohoOperation: 'void_sales_order',
+                    zohoResultStatus: 'success',
+                    zohoErrorCode: 'LOCAL_UPDATE_FAILED',
+                    zohoErrorMessage: cancelError.message,
+                });
                 return NextResponse.json({ error: cancelError.message }, { status: 500 });
             }
+
+            await markDocumentSyncState({
+                supabase,
+                documentType: 'sales_order',
+                documentId: params.id,
+                status: 'synced',
+                externalRequestId,
+                incrementAttempts: true,
+            });
+            await recordDeleteSyncAudit({
+                supabase,
+                documentType: 'sales_order',
+                documentId: params.id,
+                documentNumber: (order as any)?.order_number || null,
+                requestedBy: user.id,
+                localAction: 'soft_cancel',
+                localResult: 'cancelled',
+                zohoLinked: true,
+                zohoExternalId: zohoSalesOrderId,
+                zohoOperation: 'void_sales_order',
+                zohoResultStatus: 'success',
+            });
 
             return NextResponse.json({
                 success: true,
@@ -1106,6 +1311,23 @@ export async function DELETE(
                 reason: 'order_deleted',
             });
         } catch (reservationError: any) {
+            const reservationMessage = reservationError?.message || 'No se pudieron liberar reservas de seriales.';
+            await recordDeleteSyncAudit({
+                supabase,
+                documentType: 'sales_order',
+                documentId: params.id,
+                documentNumber: (order as any)?.order_number || null,
+                requestedBy: user.id,
+                localAction: 'hard_delete',
+                localResult: 'failed',
+                zohoLinked: false,
+                zohoOperation: 'none',
+                zohoResultStatus: 'not_required',
+                zohoErrorCode: reservationError instanceof SerialReservationError
+                    ? reservationError.code
+                    : 'LOCAL_RESERVATION_RELEASE_FAILED',
+                zohoErrorMessage: reservationMessage,
+            });
             if (reservationError instanceof SerialReservationError) {
                 return NextResponse.json(
                     {
@@ -1128,8 +1350,35 @@ export async function DELETE(
             .eq('id', params.id);
 
         if (error) {
+            await recordDeleteSyncAudit({
+                supabase,
+                documentType: 'sales_order',
+                documentId: params.id,
+                documentNumber: (order as any)?.order_number || null,
+                requestedBy: user.id,
+                localAction: 'hard_delete',
+                localResult: 'failed',
+                zohoLinked: false,
+                zohoOperation: 'none',
+                zohoResultStatus: 'not_required',
+                zohoErrorCode: 'LOCAL_DELETE_FAILED',
+                zohoErrorMessage: error.message,
+            });
             return NextResponse.json({ error: error.message }, { status: 500 });
         }
+
+        await recordDeleteSyncAudit({
+            supabase,
+            documentType: 'sales_order',
+            documentId: params.id,
+            documentNumber: (order as any)?.order_number || null,
+            requestedBy: user.id,
+            localAction: 'hard_delete',
+            localResult: 'deleted',
+            zohoLinked: false,
+            zohoOperation: 'none',
+            zohoResultStatus: 'not_required',
+        });
 
         return NextResponse.json({ success: true });
     } catch (error: any) {

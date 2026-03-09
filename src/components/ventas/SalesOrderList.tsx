@@ -202,12 +202,15 @@ export default function SalesOrderList({
             const res = await fetch(`/api/ventas/sales-orders/${orderId}`, {
                 method: 'DELETE',
             });
+            const data = await res.json().catch(() => ({}));
             if (!res.ok) {
-                const data = await res.json();
                 throw new Error(data?.error || 'Error al eliminar');
             }
             await fetchOrders();
             await fetchKPIs();
+            if (res.status === 202 || data?.code === 'DELETE_SYNC_PENDING') {
+                setError(data?.warning || 'No se pudo anular la OV en Zoho por ahora. Quedó pendiente para reintento automático.');
+            }
         } catch (err: any) {
             setError(err?.message || 'Error al eliminar orden');
         } finally {

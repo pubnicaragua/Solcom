@@ -70,6 +70,16 @@ function normalizeStatus(value: unknown, fallback = 'borrador'): string {
     return ORDER_STATUSES.has(text) ? text : fallback;
 }
 
+function isInvalidSalespersonMessage(message: string): boolean {
+    const text = String(message || '').toLowerCase();
+    return (
+        text.includes('vendedor') ||
+        text.includes('salesperson') ||
+        text.includes('introduzca un vendedor válido') ||
+        text.includes('introduce a valid salesperson')
+    );
+}
+
 function isDuplicateKeyError(message: string): boolean {
     const text = String(message || '').toLowerCase();
     return text.includes('duplicate key') || text.includes('unique constraint');
@@ -211,6 +221,7 @@ export async function syncSalesOrderToZoho(params: {
     const normalizedSalespersonName = normalizeText(salespersonName);
     const normalizedSalespersonLocalId = normalizeText(salespersonId);
     let selectedZohoSalespersonId = '';
+    let selectedZohoUserId = '';
     let selectedZohoSalespersonName = normalizedSalespersonName;
 
     if (normalizedSalespersonName || normalizedSalespersonLocalId) {
@@ -250,7 +261,8 @@ export async function syncSalesOrderToZoho(params: {
             }
 
             if (selectedSeller) {
-                selectedZohoSalespersonId = normalizeText(selectedSeller.salespersonId || selectedSeller.userId);
+                selectedZohoSalespersonId = normalizeText(selectedSeller.salespersonId);
+                selectedZohoUserId = normalizeText(selectedSeller.userId);
                 selectedZohoSalespersonName = normalizeText(selectedSeller.name) || selectedZohoSalespersonName;
             }
         } catch (salespersonResolutionError: any) {
@@ -381,8 +393,8 @@ export async function syncSalesOrderToZoho(params: {
         throw new Error('No hay líneas válidas para enviar a Zoho.');
     }
 
-    // Build sales order payload
-    const orderPayload: any = {
+    // Build base sales order payload
+    const baseOrderPayload: any = {
         customer_id: zohoCustomerId,
         date,
         line_items: zohoLineItems,
@@ -391,52 +403,99 @@ export async function syncSalesOrderToZoho(params: {
         is_discount_before_tax: true,
     };
 
-    if (expectedDeliveryDate) orderPayload.shipment_date = expectedDeliveryDate;
-    if (notes && notes.trim()) orderPayload.notes = notes.trim();
-    if (selectedZohoSalespersonName) orderPayload.salesperson_name = selectedZohoSalespersonName;
-    if (selectedZohoSalespersonId) orderPayload.salesperson_id = selectedZohoSalespersonId;
-    if (zohoLocationId) orderPayload.location_id = zohoLocationId;
+    if (expectedDeliveryDate) baseOrderPayload.shipment_date = expectedDeliveryDate;
+    if (notes && notes.trim()) baseOrderPayload.notes = notes.trim();
+    if (zohoLocationId) baseOrderPayload.location_id = zohoLocationId;
     if (Math.max(0, normalizeNumber(shippingCharge, 0)) > 0) {
-        orderPayload.shipping_charge = Number(Math.max(0, normalizeNumber(shippingCharge, 0)).toFixed(2));
+        baseOrderPayload.shipping_charge = Number(Math.max(0, normalizeNumber(shippingCharge, 0)).toFixed(2));
     }
 
     const normalizedDeliveryMethod = normalizeText(deliveryMethod);
     if (normalizedDeliveryMethod) {
-        orderPayload.delivery_method = normalizedDeliveryMethod;
+        baseOrderPayload.delivery_method = normalizedDeliveryMethod;
     }
 
     const normalizedPaymentTerms = normalizeText(paymentTerms);
     if (normalizedPaymentTerms) {
-        orderPayload.terms = normalizedPaymentTerms;
+        baseOrderPayload.terms = normalizedPaymentTerms;
     }
 
-    let result: { salesorder_id: string; salesorder_number: string };
-    try {
-        result = await zohoClient.createSalesOrder(orderPayload);
-    } catch (error: any) {
-        const message = String(error?.message || '').toLowerCase();
-        const customFieldRejected = message.includes('customfield')
-            || message.includes('item_custom_fields');
-        const optionalFieldsRejected =
-            message.includes('delivery_method')
-            || message.includes('shipping_charge')
-            || message.includes('salesperson_id')
-            || message.includes('payment term')
-            || message.includes('terms');
+    const salespersonPayloadCandidates = [
+        selectedZohoSalespersonName
+            ? {
+                salesperson_name: selectedZohoSalespersonName,
+                ...(selectedZohoSalespersonId ? { salesperson_id: selectedZohoSalespersonId } : {}),
+            }
+            : null,
+        selectedZohoSalespersonName ? { salesperson_name: selectedZohoSalespersonName } : null,
+        selectedZohoSalespersonId ? { salesperson_id: selectedZohoSalespersonId } : null,
+        selectedZohoUserId
+            ? {
+                ...(selectedZohoSalespersonName ? { salesperson_name: selectedZohoSalespersonName } : {}),
+                salesperson_id: selectedZohoUserId,
+            }
+            : null,
+        selectedZohoUserId ? { salesperson_id: selectedZohoUserId } : null,
+        {},
+    ].filter((variant, index, arr) => {
+        if (!variant) return false;
+        const asKey = JSON.stringify(variant);
+        return arr.findIndex((candidate) => JSON.stringify(candidate || {}) === asKey) === index;
+    }) as Array<Record<string, string>>;
 
-        const retryPayload = { ...orderPayload };
-        if (customFieldRejected) {
-            retryPayload.line_items = buildZohoLineItems(false);
-        }
-        if (optionalFieldsRejected) {
-            delete retryPayload.delivery_method;
-            delete retryPayload.shipping_charge;
-            delete retryPayload.salesperson_id;
-            delete retryPayload.terms;
-        }
+    const createSalesOrderWithFallback = async (payload: any): Promise<{ salesorder_id: string; salesorder_number: string }> => {
+        try {
+            return await zohoClient.createSalesOrder(payload);
+        } catch (error: any) {
+            const message = String(error?.message || '').toLowerCase();
+            const customFieldRejected = message.includes('customfield')
+                || message.includes('item_custom_fields');
+            const optionalFieldsRejected =
+                message.includes('delivery_method')
+                || message.includes('shipping_charge')
+                || message.includes('salesperson_id')
+                || message.includes('payment term')
+                || message.includes('terms');
 
-        if (!customFieldRejected && !optionalFieldsRejected) throw error;
-        result = await zohoClient.createSalesOrder(retryPayload);
+            const retryPayload = { ...payload };
+            if (customFieldRejected) {
+                retryPayload.line_items = buildZohoLineItems(false);
+            }
+            if (optionalFieldsRejected) {
+                delete retryPayload.delivery_method;
+                delete retryPayload.shipping_charge;
+                delete retryPayload.salesperson_id;
+                delete retryPayload.terms;
+            }
+
+            if (!customFieldRejected && !optionalFieldsRejected) throw error;
+            return await zohoClient.createSalesOrder(retryPayload);
+        }
+    };
+
+    let result: { salesorder_id: string; salesorder_number: string } | null = null;
+    let lastSalespersonError = '';
+    for (const salespersonVariant of salespersonPayloadCandidates) {
+        const payload = {
+            ...baseOrderPayload,
+            ...salespersonVariant,
+        };
+
+        try {
+            result = await createSalesOrderWithFallback(payload);
+            break;
+        } catch (error: any) {
+            const errorMessage = String(error?.message || 'Error desconocido');
+            lastSalespersonError = errorMessage;
+            if (isInvalidSalespersonMessage(errorMessage)) {
+                continue;
+            }
+            throw error;
+        }
+    }
+
+    if (!result) {
+        throw new Error(lastSalespersonError || 'Zoho rechazó la orden de venta por vendedor inválido.');
     }
 
     // If local status is confirmada, mirror status in Zoho.
