@@ -684,7 +684,17 @@ export async function PUT(
             shipping_charge,
             payment_method,
             notes,
+            warehouse_id,
+            order_number,
+            terms,
             salesperson_id,
+            salesperson_name,
+            delivery_requested,
+            delivery_id,
+            credit_detail,
+            cancellation_reason_id,
+            cancellation_comments,
+            source_sales_order_id,
             items,
         } = body;
 
@@ -728,7 +738,17 @@ export async function PUT(
         if (shipping_charge !== undefined) updateData.shipping_charge = Math.round(normalizedShippingCharge * 100) / 100;
         if (payment_method !== undefined) updateData.payment_method = payment_method || null;
         if (notes !== undefined) updateData.notes = notes || null;
+        if (warehouse_id !== undefined) updateData.warehouse_id = normalizeTrimmed(warehouse_id) || null;
+        if (order_number !== undefined) updateData.order_number = normalizeTrimmed(order_number) || null;
+        if (terms !== undefined) updateData.terms = normalizeTrimmed(terms) || null;
         if (salesperson_id !== undefined) updateData.salesperson_id = normalizeSalespersonId(salesperson_id);
+        if (salesperson_name !== undefined) updateData.salesperson_name = normalizeTrimmed(salesperson_name) || null;
+        if (delivery_requested !== undefined) updateData.delivery_requested = !!delivery_requested;
+        if (delivery_id !== undefined) updateData.delivery_id = normalizeTrimmed(delivery_id) || null;
+        if (credit_detail !== undefined) updateData.credit_detail = normalizeTrimmed(credit_detail) || null;
+        if (cancellation_reason_id !== undefined) updateData.cancellation_reason_id = normalizeTrimmed(cancellation_reason_id) || null;
+        if (cancellation_comments !== undefined) updateData.cancellation_comments = normalizeTrimmed(cancellation_comments) || null;
+        if (source_sales_order_id !== undefined) updateData.source_sales_order_id = normalizeTrimmed(source_sales_order_id) || null;
 
         // Recalculate totals if items provided
         if (Array.isArray(items) && items.length > 0) {
@@ -809,20 +829,42 @@ export async function PUT(
             }
         }
 
-        let updateQuery = supabase
-            .from('sales_invoices')
-            .update(updateData)
-            .eq('id', id);
+        let data: any = null;
+        let error: any = null;
+        let updateRetry = 0;
+        while (updateRetry < 8) {
+            let updateQuery = supabase
+                .from('sales_invoices')
+                .update(updateData)
+                .eq('id', id);
 
-        if (expectedRowVersion !== null && currentRowVersion !== null) {
-            updateQuery = updateQuery.eq('row_version', expectedRowVersion);
-        }
+            if (expectedRowVersion !== null && currentRowVersion !== null) {
+                updateQuery = updateQuery.eq('row_version', expectedRowVersion);
+            }
 
-        const { data, error } = await updateQuery.select(`
+            const result = await updateQuery
+                .select(`
         *,
         customer:customers(id, name, email, phone, ruc, address)
       `)
-            .maybeSingle();
+                .maybeSingle();
+
+            data = result.data;
+            error = result.error;
+
+            if (!error) {
+                break;
+            }
+
+            const missingColumn = extractMissingColumn(error?.message || '');
+            if (missingColumn && Object.prototype.hasOwnProperty.call(updateData, missingColumn)) {
+                delete updateData[missingColumn];
+                updateRetry += 1;
+                continue;
+            }
+
+            break;
+        }
 
         if (error) {
             return NextResponse.json({ error: error.message }, { status: 500 });

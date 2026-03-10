@@ -21,6 +21,7 @@ import {
     markDocumentSyncState,
     normalizeSyncErrorCodeFromError,
 } from '@/lib/ventas/sync-state';
+import { cancelPickOrderForSalesOrder, isMissingPickingInfraError } from '@/lib/ventas/picking';
 
 function normalizeNumber(value: unknown, fallback = 0): number {
     const parsed = Number(value);
@@ -951,6 +952,20 @@ export async function POST(
                     invoice_number: invoice.invoice_number,
                 },
                 500
+            );
+        }
+
+        const pickCancel = await cancelPickOrderForSalesOrder({
+            supabase,
+            salesOrderId: params.id,
+            actorUserId: user.id || null,
+            reason: 'sales_order_converted_to_invoice',
+        });
+        if (pickCancel.error && !isMissingPickingInfraError(pickCancel.error)) {
+            console.warn(
+                `[sales-orders/convert] OV ${params.id} convertida, pero no se pudo cancelar alistamiento: ${
+                    pickCancel.error?.message || 'error desconocido'
+                }`
             );
         }
 

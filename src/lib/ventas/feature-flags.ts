@@ -18,3 +18,7 @@ export function isSalesCartInvoicePrefillOnlyEnabled(): boolean {
 export function isSalesPriceProfilesEnabled(): boolean {
     return parseBoolean(process.env.SALES_PRICE_PROFILES_ENABLED, false);
 }
+
+export function isSalesPickingFlowEnabled(): boolean {
+    return parseBoolean(process.env.SALES_PICKING_FLOW_ENABLED, false);
+}

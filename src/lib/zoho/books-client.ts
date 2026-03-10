@@ -1008,8 +1008,14 @@ export class ZohoBooksClient {
         is_discount_before_tax?: boolean;
         shipping_charge?: number;
         salesperson_name?: string;
+        salesperson_id?: string;
         location_id?: string;
         discount_type?: 'item_level' | 'entity_level';
+        custom_fields?: Array<{
+            customfield_id?: string;
+            label?: string;
+            value: string | number;
+        }>;
         line_items: Array<{
             item_id: string;
             quantity: number;

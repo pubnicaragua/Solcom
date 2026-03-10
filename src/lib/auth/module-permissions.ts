@@ -17,6 +17,7 @@ type SupabaseRouteClient = ReturnType<typeof createRouteHandlerClient>;
 export const MODULE_DEFINITIONS: ModuleDefinition[] = [
   { key: 'inventory', label: 'Inventario', paths: ['/inventory'] },
   { key: 'ventas', label: 'Facturacion', paths: ['/ventas'] },
+  { key: 'alistamiento', label: 'Alistamiento', paths: ['/alistamiento'] },
   { key: 'reports', label: 'Reportes', paths: ['/reports'] },
   { key: 'ai-agents', label: 'Agentes IA', paths: ['/ai-agents'] },
   { key: 'transfers', label: 'Transferencias', paths: ['/transfers'] },
@@ -34,8 +35,8 @@ export const MODULE_KEYS = MODULE_DEFINITIONS.map((module) => module.key);
 
 const ROLE_BASE_MODULES: Record<AppRole, string[]> = {
   admin: MODULE_KEYS,
-  manager: ['inventory', 'ventas', 'reports', 'ai-agents', 'transfers', 'how-it-works', 'cliente', 'entregables'],
-  operator: ['inventory', 'ventas', 'how-it-works', 'cliente', 'entregables'],
+  manager: ['inventory', 'ventas', 'alistamiento', 'reports', 'ai-agents', 'transfers', 'how-it-works', 'cliente', 'entregables'],
+  operator: ['inventory', 'ventas', 'alistamiento', 'how-it-works', 'cliente', 'entregables'],
   auditor: ['reports', 'how-it-works', 'cliente', 'entregables'],
 };
 
@@ -100,6 +101,7 @@ export function getFallbackPath(moduleAccess: Record<string, boolean>): string {
   const orderedModules = [
     { key: 'inventory', path: '/inventory' },
     { key: 'ventas', path: '/ventas' },
+    { key: 'alistamiento', path: '/alistamiento' },
     { key: 'reports', path: '/reports' },
     { key: 'transfers', path: '/transfers' },
     { key: 'how-it-works', path: '/how-it-works' },

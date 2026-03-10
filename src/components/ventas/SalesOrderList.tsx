@@ -29,6 +29,13 @@ interface SalesOrder {
     converted_invoice_id: string | null;
     zoho_salesorder_id: string | null;
     created_at: string;
+    pick_status?: string | null;
+    pick_queue_position?: number | null;
+    pick_assigned_to?: {
+        id: string;
+        full_name: string | null;
+        email: string | null;
+    } | null;
 }
 
 const STATUS_TABS: Array<{ key: 'todas' | OrderStatus; label: string }> = [
@@ -44,6 +51,16 @@ const statusConfig: Record<OrderStatus, { bg: string; text: string; label: strin
     confirmada: { bg: 'rgba(59,130,246,0.15)', text: '#60A5FA', label: 'Confirmada' },
     convertida: { bg: 'rgba(168,85,247,0.18)', text: '#C084FC', label: 'Convertida' },
     cancelada: { bg: 'rgba(239,68,68,0.15)', text: '#F87171', label: 'Cancelada' },
+};
+
+const pickStatusConfig: Record<string, { label: string; text: string; bg: string }> = {
+    queued: { label: 'En cola', text: '#FBBF24', bg: 'rgba(245,158,11,0.16)' },
+    claimed: { label: 'Tomada', text: '#60A5FA', bg: 'rgba(59,130,246,0.16)' },
+    picking: { label: 'En proceso', text: '#38BDF8', bg: 'rgba(56,189,248,0.14)' },
+    ready: { label: 'Lista', text: '#34D399', bg: 'rgba(16,185,129,0.16)' },
+    completed_floor: { label: 'Completada piso', text: '#22C55E', bg: 'rgba(34,197,94,0.15)' },
+    completed_dispatch: { label: 'Completada despacho', text: '#14B8A6', bg: 'rgba(20,184,166,0.15)' },
+    cancelled: { label: 'Cancelada', text: '#F87171', bg: 'rgba(239,68,68,0.16)' },
 };
 
 interface SalesOrderListProps {
@@ -427,6 +444,11 @@ export default function SalesOrderList({
                                                 <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--text)' }}>
                                                     {order.order_number}
                                                 </div>
+                                                {order.pick_status === 'queued' && Number(order.pick_queue_position || 0) > 0 && (
+                                                    <div style={{ fontSize: 11, color: '#FBBF24', marginTop: 4, fontWeight: 600 }}>
+                                                        Cola Bodega #{order.pick_queue_position}
+                                                    </div>
+                                                )}
                                             </td>
                                             <td style={{ padding: '12px 14px' }}>
                                                 <div style={{ fontSize: 12, color: 'var(--muted)' }}>
@@ -453,6 +475,25 @@ export default function SalesOrderList({
                                                 }}>
                                                     {sc.label}
                                                 </span>
+                                                {order.pick_status && (
+                                                    <div style={{ marginTop: 6 }}>
+                                                        <span style={{
+                                                            display: 'inline-block',
+                                                            padding: '3px 8px',
+                                                            borderRadius: 6,
+                                                            background: pickStatusConfig[order.pick_status]?.bg || 'rgba(148,163,184,0.14)',
+                                                            color: pickStatusConfig[order.pick_status]?.text || '#94A3B8',
+                                                            fontSize: 10,
+                                                            fontWeight: 700,
+                                                            letterSpacing: '0.02em',
+                                                        }}>
+                                                            {pickStatusConfig[order.pick_status]?.label || order.pick_status}
+                                                            {order.pick_status === 'queued' && Number(order.pick_queue_position || 0) > 0
+                                                                ? ` · #${order.pick_queue_position}`
+                                                                : ''}
+                                                        </span>
+                                                    </div>
+                                                )}
                                             </td>
                                             <td style={{ padding: '12px 14px' }}>
                                                 <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--text)' }}>

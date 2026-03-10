@@ -32,10 +32,11 @@ export async function GET() {
     return NextResponse.json([
       { id: 'mock-m1', code: 'inventory', name: 'Inventario' },
       { id: 'mock-m2', code: 'ventas', name: 'Ventas' },
-      { id: 'mock-m3', code: 'reports', name: 'Reportes' },
-      { id: 'mock-m4', code: 'users', name: 'Usuarios y Roles' },
-      { id: 'mock-m5', code: 'settings', name: 'Configuración' },
-      { id: 'mock-m6', code: 'transfers', name: 'Transferencias' }
+      { id: 'mock-m3', code: 'alistamiento', name: 'Alistamiento' },
+      { id: 'mock-m4', code: 'reports', name: 'Reportes' },
+      { id: 'mock-m5', code: 'users', name: 'Usuarios y Roles' },
+      { id: 'mock-m6', code: 'settings', name: 'Configuración' },
+      { id: 'mock-m7', code: 'transfers', name: 'Transferencias' }
     ]);
   }
 }

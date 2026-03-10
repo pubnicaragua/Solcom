@@ -180,6 +180,68 @@ function normalizeWarranty(value: unknown): string | null {
     return text || null;
 }
 
+type ZohoHeaderCustomField = {
+    customfield_id?: string;
+    label?: string;
+    value: string | number;
+};
+
+function normalizeCustomFieldValue(value: unknown): string {
+    if (typeof value === 'number' && Number.isFinite(value)) {
+        return String(value);
+    }
+    return normalizeTrimmed(value);
+}
+
+function appendUniqueNoteLines(base: string, lines: string[]): string {
+    const normalizedBase = normalizeTrimmed(base);
+    const existingLines = normalizedBase
+        .split('\n')
+        .map((line) => line.trim().toLowerCase())
+        .filter(Boolean);
+    const existingSet = new Set(existingLines);
+    const toAppend: string[] = [];
+
+    for (const line of lines) {
+        const normalized = normalizeTrimmed(line);
+        if (!normalized) continue;
+        const key = normalized.toLowerCase();
+        if (existingSet.has(key)) continue;
+        existingSet.add(key);
+        toAppend.push(normalized);
+    }
+
+    if (!normalizedBase) {
+        return toAppend.join('\n');
+    }
+    if (toAppend.length === 0) {
+        return normalizedBase;
+    }
+    return `${normalizedBase}\n${toAppend.join('\n')}`;
+}
+
+function buildZohoHeaderCustomField(params: {
+    customFieldId?: string | null;
+    fallbackLabel: string;
+    value: unknown;
+}): ZohoHeaderCustomField | null {
+    const normalizedValue = normalizeCustomFieldValue(params.value);
+    if (!normalizedValue) return null;
+
+    const normalizedCustomFieldId = normalizeTrimmed(params.customFieldId);
+    if (normalizedCustomFieldId) {
+        return {
+            customfield_id: normalizedCustomFieldId,
+            value: normalizedValue,
+        };
+    }
+
+    return {
+        label: params.fallbackLabel,
+        value: normalizedValue,
+    };
+}
+
 function serialArray(serialNumberValue?: string): string[] {
     if (!serialNumberValue) return [];
     return serialNumberValue
@@ -241,6 +303,11 @@ export async function createZohoInvoiceFromPayload(params: {
     salespersonZohoId: string | null | undefined;
     salespersonName: string | null | undefined;
     shippingCharge: number;
+    deliveryRequested?: boolean;
+    deliveryId?: string | null | undefined;
+    creditDetail?: string | null | undefined;
+    cancellationReasonId?: string | null | undefined;
+    cancellationComments?: string | null | undefined;
     items: any[];
     markAsSent?: boolean;
 }) {
@@ -259,6 +326,11 @@ export async function createZohoInvoiceFromPayload(params: {
         salespersonZohoId,
         salespersonName,
         shippingCharge,
+        deliveryRequested = false,
+        deliveryId,
+        creditDetail,
+        cancellationReasonId,
+        cancellationComments,
         items,
         markAsSent = true,
     } = params;
@@ -635,6 +707,98 @@ export async function createZohoInvoiceFromPayload(params: {
         throw new Error('Zoho devolvió un vendedor sin nombre válido.');
     }
 
+    const normalizedDeliveryId = normalizeTrimmed(deliveryId);
+    const normalizedCreditDetail = normalizeTrimmed(creditDetail);
+    const normalizedCancellationReasonId = normalizeTrimmed(cancellationReasonId);
+    const normalizedCancellationComments = normalizeTrimmed(cancellationComments);
+
+    let resolvedDeliveryName = '';
+    if (normalizedDeliveryId) {
+        const deliveryLookup = await supabase
+            .from('deliveries')
+            .select('id, name')
+            .eq('id', normalizedDeliveryId)
+            .maybeSingle();
+        if (!deliveryLookup?.error && deliveryLookup?.data) {
+            resolvedDeliveryName = normalizeTrimmed((deliveryLookup.data as any)?.name);
+        }
+    }
+
+    let resolvedCancellationReasonLabel = '';
+    if (normalizedCancellationReasonId) {
+        const cancellationReasonLookup = await supabase
+            .from('cancellation_reasons')
+            .select('id, label')
+            .eq('id', normalizedCancellationReasonId)
+            .maybeSingle();
+        if (!cancellationReasonLookup?.error && cancellationReasonLookup?.data) {
+            resolvedCancellationReasonLabel = normalizeTrimmed((cancellationReasonLookup.data as any)?.label);
+        }
+    }
+
+    const deliveryRequestedTrueValue = normalizeTrimmed(process.env.ZOHO_BOOKS_INVOICE_DELIVERY_REQUESTED_TRUE_VALUE) || 'Si';
+    const deliveryRequestedFalseValue = normalizeTrimmed(process.env.ZOHO_BOOKS_INVOICE_DELIVERY_REQUESTED_FALSE_VALUE) || 'No';
+    const deliveryRequestedValue = deliveryRequested ? deliveryRequestedTrueValue : deliveryRequestedFalseValue;
+
+    const headerCustomFields: ZohoHeaderCustomField[] = [];
+    const pushHeaderCustomField = (field: ZohoHeaderCustomField | null) => {
+        if (!field) return;
+        headerCustomFields.push(field);
+    };
+
+    pushHeaderCustomField(buildZohoHeaderCustomField({
+        customFieldId: process.env.ZOHO_BOOKS_INVOICE_DELIVERY_REQUESTED_CUSTOMFIELD_ID,
+        fallbackLabel: 'Solicitud de Delivery',
+        value: deliveryRequestedValue,
+    }));
+
+    if (resolvedDeliveryName) {
+        pushHeaderCustomField(buildZohoHeaderCustomField({
+            customFieldId: process.env.ZOHO_BOOKS_INVOICE_DELIVERY_ASSIGNMENT_CUSTOMFIELD_ID,
+            fallbackLabel: 'Asignación Delivery',
+            value: resolvedDeliveryName,
+        }));
+    }
+
+    if (normalizedCreditDetail) {
+        pushHeaderCustomField(buildZohoHeaderCustomField({
+            customFieldId: process.env.ZOHO_BOOKS_INVOICE_CREDIT_DETAIL_CUSTOMFIELD_ID,
+            fallbackLabel: 'Detalle de Crédito',
+            value: normalizedCreditDetail,
+        }));
+    }
+
+    if (resolvedCancellationReasonLabel) {
+        pushHeaderCustomField(buildZohoHeaderCustomField({
+            customFieldId: process.env.ZOHO_BOOKS_INVOICE_CANCELLATION_REASON_CUSTOMFIELD_ID,
+            fallbackLabel: 'Motivo de Anulación',
+            value: resolvedCancellationReasonLabel,
+        }));
+    }
+
+    if (normalizedCancellationComments) {
+        pushHeaderCustomField(buildZohoHeaderCustomField({
+            customFieldId: process.env.ZOHO_BOOKS_INVOICE_CANCELLATION_COMMENTS_CUSTOMFIELD_ID,
+            fallbackLabel: 'Comentarios por Anulación',
+            value: normalizedCancellationComments,
+        }));
+    }
+
+    const baseNotes = normalizeTrimmed(notes);
+    const fallbackNoteLines = [
+        `Solicitud de Delivery: ${deliveryRequestedValue}`,
+        resolvedDeliveryName ? `Asignación Delivery: ${resolvedDeliveryName}` : '',
+        normalizedCreditDetail ? `Detalle de Crédito: ${normalizedCreditDetail}` : '',
+        resolvedCancellationReasonLabel ? `Motivo de Anulación: ${resolvedCancellationReasonLabel}` : '',
+        normalizedCancellationComments ? `Comentarios por Anulación: ${normalizedCancellationComments}` : '',
+    ].filter(Boolean);
+    const composeInvoiceNotes = (includeFallbackLines: boolean): string | null => {
+        if (!includeFallbackLines || fallbackNoteLines.length === 0) {
+            return baseNotes || null;
+        }
+        return appendUniqueNoteLines(baseNotes, fallbackNoteLines) || null;
+    };
+
     const basePayload: any = {
         customer_id: zohoCustomerId,
         date,
@@ -644,7 +808,6 @@ export async function createZohoInvoiceFromPayload(params: {
     if (resolvedDueDate) basePayload.due_date = resolvedDueDate;
     const normalizedReferenceNumber = (orderNumber && orderNumber.trim()) || (invoiceNumber && invoiceNumber.trim()) || '';
     if (normalizedReferenceNumber) basePayload.reference_number = normalizedReferenceNumber;
-    if (notes && notes.trim()) basePayload.notes = notes.trim();
     if (shippingCharge > 0) basePayload.shipping_charge = Number(shippingCharge.toFixed(2));
 
     const hasLineLocation = zohoLineItems.some((line) => Boolean(normalizeTrimmed(line?.__resolvedLineLocationId)));
@@ -703,23 +866,59 @@ export async function createZohoInvoiceFromPayload(params: {
         selectedZohoUserId ? { salesperson_id: selectedZohoUserId } : null,
     ].filter(Boolean) as Array<Record<string, string>>;
 
+    const buildInvoicePayloadForAttempt = (params: {
+        salespersonVariant: Record<string, string>;
+        attempt: { mode: 'warehouse_id' | 'location_id' | 'none'; includeParentLocation: boolean };
+        includeLineCustomFields: boolean;
+        includeHeaderCustomFields: boolean;
+    }) => {
+        const {
+            salespersonVariant,
+            attempt,
+            includeLineCustomFields,
+            includeHeaderCustomFields,
+        } = params;
+        const payload = {
+            ...basePayload,
+            ...salespersonVariant,
+            line_items: buildLineItems(attempt.mode, includeLineCustomFields),
+        } as any;
+
+        if (attempt.includeParentLocation && parentZohoLocationId) {
+            payload.location_id = parentZohoLocationId;
+        } else {
+            delete payload.location_id;
+        }
+
+        const includeFallbackNotes = !includeHeaderCustomFields || headerCustomFields.length === 0;
+        const composedNotes = composeInvoiceNotes(includeFallbackNotes);
+        if (composedNotes) {
+            payload.notes = composedNotes;
+        } else {
+            delete payload.notes;
+        }
+
+        if (includeHeaderCustomFields && headerCustomFields.length > 0) {
+            payload.custom_fields = headerCustomFields;
+        } else {
+            delete payload.custom_fields;
+        }
+
+        return payload;
+    };
+
     let createdInvoice: { invoice_id: string; invoice_number: string; status?: string | null } | null = null;
     let lastError = '';
     const locationErrors: string[] = [];
 
     for (const salespersonVariant of salespersonPayloadCandidates) {
         for (const attempt of locationAttempts) {
-            const payload = {
-                ...basePayload,
-                ...salespersonVariant,
-                line_items: buildLineItems(attempt.mode, true),
-            } as any;
-
-            if (attempt.includeParentLocation && parentZohoLocationId) {
-                payload.location_id = parentZohoLocationId;
-            } else {
-                delete payload.location_id;
-            }
+            const payload = buildInvoicePayloadForAttempt({
+                salespersonVariant,
+                attempt,
+                includeLineCustomFields: true,
+                includeHeaderCustomFields: true,
+            });
 
             try {
                 createdInvoice = await zohoClient.createInvoice(payload);
@@ -728,15 +927,36 @@ export async function createZohoInvoiceFromPayload(params: {
                 const errorMessage = String(error?.message || error || 'Error desconocido');
                 lastError = errorMessage;
                 const lowered = errorMessage.toLowerCase();
+                const deliveryFieldRejected = lowered.includes('solicitud de delivery')
+                    || lowered.includes('asignación delivery')
+                    || lowered.includes('asignacion delivery')
+                    || lowered.includes('detalle de crédito')
+                    || lowered.includes('detalle de credito')
+                    || lowered.includes('motivo de anulación')
+                    || lowered.includes('motivo de anulacion')
+                    || lowered.includes('comentarios por anulación')
+                    || lowered.includes('comentarios por anulacion');
+                const dropdownValueRejected = lowered.includes('illegal value specified for a dropdown field')
+                    || lowered.includes('dropdown field')
+                    || lowered.includes('valor ilegal especificado para un campo desplegable')
+                    || lowered.includes('valor ilegal');
                 const customFieldRejected = lowered.includes('customfield')
+                    || lowered.includes('custom field')
+                    || lowered.includes('custom_fields')
+                    || deliveryFieldRejected
+                    || dropdownValueRejected
                     || lowered.includes('item_custom_fields');
 
                 if (customFieldRejected) {
                     try {
-                        createdInvoice = await zohoClient.createInvoice({
-                            ...payload,
-                            line_items: buildLineItems(attempt.mode, false),
-                        });
+                        createdInvoice = await zohoClient.createInvoice(
+                            buildInvoicePayloadForAttempt({
+                                salespersonVariant,
+                                attempt,
+                                includeLineCustomFields: false,
+                                includeHeaderCustomFields: false,
+                            })
+                        );
                         break;
                     } catch {
                         // Si falla sin custom fields, continúa flujo de variantes.
@@ -1145,11 +1365,13 @@ export async function POST(req: NextRequest) {
             order_number: order_number || null,
             terms: terms || null,
             salesperson_id: normalizedSalespersonId,
+            salesperson_name: normalizeTrimmed(salesperson_name) || null,
             delivery_requested: !!delivery_requested,
             delivery_id: delivery_id || null,
             credit_detail: credit_detail || null,
             cancellation_reason_id: cancellation_reason_id || null,
             cancellation_comments: cancellation_comments || null,
+            source_sales_order_id: normalizedSourceSalesOrderId,
             sync_status: String(status).toLowerCase() === 'enviada' ? 'pending_sync' : 'not_requested',
             sync_error_code: null,
             sync_error_message: null,
@@ -1173,6 +1395,20 @@ export async function POST(req: NextRequest) {
 
             const missingColumn = extractMissingColumn(invoiceError?.message || '');
             if (missingColumn && Object.prototype.hasOwnProperty.call(insertData, missingColumn)) {
+                const protectedColumns = new Set([
+                    'delivery_requested',
+                    'delivery_id',
+                    'credit_detail',
+                ]);
+                if (protectedColumns.has(missingColumn)) {
+                    return failWith(
+                        {
+                            error: `Falta migración en ventas: columna "${missingColumn}" no existe en sales_invoices.`,
+                            code: 'MISSING_INVOICE_SCHEMA_COLUMN',
+                        },
+                        500
+                    );
+                }
                 delete insertData[missingColumn];
                 invoiceInsertRetry += 1;
                 continue;
@@ -1246,6 +1482,11 @@ export async function POST(req: NextRequest) {
                     salespersonZohoId: salesperson_zoho_id || null,
                     salespersonName: salesperson_name || null,
                     shippingCharge: normalizedShippingCharge,
+                    deliveryRequested: !!delivery_requested,
+                    deliveryId: delivery_id || null,
+                    creditDetail: credit_detail || null,
+                    cancellationReasonId: cancellation_reason_id || null,
+                    cancellationComments: cancellation_comments || null,
                     items: itemsForInvoice,
                 });
                 if (zohoSync?.status_warning) {

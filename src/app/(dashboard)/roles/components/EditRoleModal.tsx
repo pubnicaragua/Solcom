@@ -36,6 +36,7 @@ const ROLE_DISPLAY_NAMES: Record<string, string> = {
 const MODULE_DISPLAY_NAMES: Record<string, string> = {
   inventory: 'Inventario',
   ventas: 'Ventas y Cotizaciones',
+  alistamiento: 'Alistamiento de Bodega',
   transfers: 'Transferencias',
   reports: 'Reportes',
   roles: 'Roles y Usuarios',

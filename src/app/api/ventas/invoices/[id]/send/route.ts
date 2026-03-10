@@ -25,6 +25,15 @@ function normalizeNumber(value: unknown, fallback = 0): number {
     return Number.isFinite(parsed) ? parsed : fallback;
 }
 
+function extractMissingColumn(error: any): string {
+    const message = String(error?.message || '');
+    let match = message.match(/Could not find the '([^']+)' column/i);
+    if (match?.[1]) return match[1];
+    match = message.match(/column \"?([a-zA-Z0-9_]+)\"? does not exist/i);
+    if (match?.[1]) return match[1];
+    return '';
+}
+
 function isNonRecoverableSendError(message: string): boolean {
     const text = String(message || '').toLowerCase();
     if (!text) return false;
@@ -57,28 +66,58 @@ export async function POST(
         const invoiceId = params.id;
         const externalRequestId = `send_${invoiceId}_${Date.now()}`;
 
-        const invoiceLookup = await supabase
-            .from('sales_invoices')
-            .select(`
-                id,
-                invoice_number,
-                customer_id,
-                warehouse_id,
-                order_number,
-                notes,
-                date,
-                due_date,
-                terms,
-                salesperson_id,
-                shipping_charge,
-                status,
-                zoho_invoice_id,
-                zoho_invoice_number,
-                row_version,
-                items:sales_invoice_items(*)
-            `)
-            .eq('id', invoiceId)
-            .maybeSingle();
+        const selectColumns = [
+            'id',
+            'invoice_number',
+            'customer_id',
+            'warehouse_id',
+            'order_number',
+            'notes',
+            'date',
+            'due_date',
+            'terms',
+            'salesperson_id',
+            'salesperson_name',
+            'shipping_charge',
+            'delivery_requested',
+            'delivery_id',
+            'credit_detail',
+            'cancellation_reason_id',
+            'cancellation_comments',
+            'status',
+            'zoho_invoice_id',
+            'zoho_invoice_number',
+            'row_version',
+            'items:sales_invoice_items(*)',
+        ];
+
+        let invoiceLookup: any = null;
+        let attempt = 0;
+        while (attempt < 12 && selectColumns.length > 0) {
+            invoiceLookup = await supabase
+                .from('sales_invoices')
+                .select(selectColumns.join(','))
+                .eq('id', invoiceId)
+                .maybeSingle();
+
+            if (!invoiceLookup.error) {
+                break;
+            }
+
+            const missingColumn = extractMissingColumn(invoiceLookup.error);
+            if (!missingColumn) {
+                break;
+            }
+
+            const index = selectColumns.findIndex(
+                (column) => column === missingColumn || column.startsWith(`${missingColumn}:`)
+            );
+            if (index < 0) {
+                break;
+            }
+            selectColumns.splice(index, 1);
+            attempt += 1;
+        }
 
         if (invoiceLookup.error || !invoiceLookup.data) {
             return NextResponse.json({ error: invoiceLookup.error?.message || 'Factura no encontrada' }, { status: 404 });
@@ -135,8 +174,13 @@ export async function POST(
                     terms: normalizeText(invoice.terms) || null,
                     salespersonLocalId: normalizeText(invoice.salesperson_id) || null,
                     salespersonZohoId: null,
-                    salespersonName: null,
+                    salespersonName: normalizeText(invoice.salesperson_name) || null,
                     shippingCharge: Math.max(0, normalizeNumber(invoice.shipping_charge, 0)),
+                    deliveryRequested: Boolean(invoice.delivery_requested),
+                    deliveryId: normalizeText(invoice.delivery_id) || null,
+                    creditDetail: normalizeText(invoice.credit_detail) || null,
+                    cancellationReasonId: normalizeText(invoice.cancellation_reason_id) || null,
+                    cancellationComments: normalizeText(invoice.cancellation_comments) || null,
                     items: Array.isArray(invoice.items) ? invoice.items : [],
                 });
             }

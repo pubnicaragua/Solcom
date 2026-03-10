@@ -73,7 +73,7 @@ export default function Fase2Page() {
       description: 'Gestión de preparación de pedidos en bodega',
       icon: Package,
       color: '#F59E0B',
-      route: '/fase2/alistamiento',
+      route: '/alistamiento',
       features: [
         'Generar orden de alistamiento',
         'Imprimir ticket de preparación',

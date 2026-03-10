@@ -24,6 +24,12 @@ import {
     getCurrentRowVersion,
     getExpectedRowVersion,
 } from '@/lib/ventas/version-conflict';
+import {
+    cancelPickOrderForSalesOrder,
+    enrichSalesOrdersWithPickInfo,
+    isMissingPickingInfraError,
+    upsertPickOrderFromSalesOrder,
+} from '@/lib/ventas/picking';
 
 const ORDER_STATUSES = new Set(['borrador', 'confirmada', 'convertida', 'cancelada']);
 
@@ -34,6 +40,27 @@ function normalizeNumber(value: unknown, fallback = 0): number {
 
 function normalizeText(value: unknown): string {
     return typeof value === 'string' ? value.trim() : '';
+}
+
+function normalizeBoolean(value: unknown, fallback = false): boolean {
+    if (typeof value === 'boolean') return value;
+    const text = normalizeText(value).toLowerCase();
+    if (!text) return fallback;
+    if (['1', 'true', 'yes', 'y', 'on', 'si', 'sí'].includes(text)) return true;
+    if (['0', 'false', 'no', 'n', 'off'].includes(text)) return false;
+    return fallback;
+}
+
+function inferDeliveryRequested(value: unknown, deliveryMethod: unknown): boolean {
+    if (typeof value === 'boolean') return value;
+    const method = normalizeText(deliveryMethod).toLowerCase();
+    if (!method) return false;
+    return (
+        method.includes('envio') ||
+        method.includes('delivery') ||
+        method.includes('reparto') ||
+        method.includes('domicilio')
+    );
 }
 
 function equalsIgnoreCase(a: string, b: string): boolean {
@@ -513,7 +540,11 @@ export async function GET(
             .single();
 
         if (!withItemsRelation.error && withItemsRelation.data) {
-            return NextResponse.json({ order: withItemsRelation.data });
+            const [enriched] = await enrichSalesOrdersWithPickInfo({
+                supabase,
+                orders: [withItemsRelation.data],
+            });
+            return NextResponse.json({ order: enriched || withItemsRelation.data });
         }
 
         if (!isMissingRelationshipBetween(withItemsRelation.error?.message || '', 'sales_order_items', 'items')) {
@@ -572,7 +603,11 @@ export async function GET(
             })),
         };
 
-        return NextResponse.json({ order: mergedOrder });
+        const [enriched] = await enrichSalesOrdersWithPickInfo({
+            supabase,
+            orders: [mergedOrder],
+        });
+        return NextResponse.json({ order: enriched || mergedOrder });
     } catch (error: any) {
         if (error instanceof FiscalValidationError) {
             return NextResponse.json(
@@ -702,6 +737,38 @@ export async function PUT(
                 });
             }
 
+            if (normalizedStatus === 'confirmada') {
+                const pickSync = await upsertPickOrderFromSalesOrder({
+                    supabase,
+                    salesOrderId: params.id,
+                    actorUserId: user.id || null,
+                    reason: 'sales_order_status_confirmed',
+                });
+                if (pickSync.error && !isMissingPickingInfraError(pickSync.error)) {
+                    console.warn(
+                        `[sales-orders] No se pudo crear/alinear alistamiento para OV ${params.id}: ${
+                            pickSync.error?.message || 'error desconocido'
+                        }`
+                    );
+                }
+            } else if (normalizedStatus === 'cancelada' || normalizedStatus === 'convertida') {
+                const pickCancel = await cancelPickOrderForSalesOrder({
+                    supabase,
+                    salesOrderId: params.id,
+                    actorUserId: user.id || null,
+                    reason: normalizedStatus === 'cancelada'
+                        ? 'sales_order_status_cancelled'
+                        : 'sales_order_status_converted',
+                });
+                if (pickCancel.error && !isMissingPickingInfraError(pickCancel.error)) {
+                    console.warn(
+                        `[sales-orders] No se pudo cancelar alistamiento para OV ${params.id}: ${
+                            pickCancel.error?.message || 'error desconocido'
+                        }`
+                    );
+                }
+            }
+
             return NextResponse.json({ order: data });
         }
 
@@ -713,6 +780,7 @@ export async function PUT(
             reference_number,
             payment_terms,
             delivery_method,
+            delivery_requested,
             shipping_zone,
             shipping_charge,
             status,
@@ -770,6 +838,11 @@ export async function PUT(
         if (reference_number !== undefined) updateData.reference_number = normalizeText(reference_number) || null;
         if (payment_terms !== undefined) updateData.payment_terms = normalizeText(payment_terms) || null;
         if (delivery_method !== undefined) updateData.delivery_method = normalizeText(delivery_method) || null;
+        if (delivery_requested !== undefined) {
+            updateData.delivery_requested = normalizeBoolean(delivery_requested, false);
+        } else if (delivery_method !== undefined) {
+            updateData.delivery_requested = inferDeliveryRequested(undefined, delivery_method);
+        }
         if (shipping_zone !== undefined) updateData.shipping_zone = normalizeText(shipping_zone) || null;
         if (shipping_charge !== undefined) updateData.shipping_charge = Math.round(normalizedShippingCharge * 100) / 100;
         if (status !== undefined) updateData.status = normalizeStatus(status, 'borrador');
@@ -1071,6 +1144,39 @@ export async function PUT(
             }
         }
 
+        const finalStatus = normalizeStatus(data?.status, 'borrador');
+        if (finalStatus === 'confirmada') {
+            const pickSync = await upsertPickOrderFromSalesOrder({
+                supabase,
+                salesOrderId: params.id,
+                actorUserId: user.id || null,
+                reason: 'sales_order_updated_confirmed',
+            });
+            if (pickSync.error && !isMissingPickingInfraError(pickSync.error)) {
+                console.warn(
+                    `[sales-orders] No se pudo sincronizar alistamiento tras editar OV ${params.id}: ${
+                        pickSync.error?.message || 'error desconocido'
+                    }`
+                );
+            }
+        } else if (finalStatus === 'cancelada' || finalStatus === 'convertida') {
+            const pickCancel = await cancelPickOrderForSalesOrder({
+                supabase,
+                salesOrderId: params.id,
+                actorUserId: user.id || null,
+                reason: finalStatus === 'cancelada'
+                    ? 'sales_order_updated_cancelled'
+                    : 'sales_order_updated_converted',
+            });
+            if (pickCancel.error && !isMissingPickingInfraError(pickCancel.error)) {
+                console.warn(
+                    `[sales-orders] No se pudo cancelar alistamiento tras editar OV ${params.id}: ${
+                        pickCancel.error?.message || 'error desconocido'
+                    }`
+                );
+            }
+        }
+
         return NextResponse.json({ order: data });
     } catch (error: any) {
         return NextResponse.json({ error: error.message || 'Error interno' }, { status: 500 });
@@ -1282,6 +1388,19 @@ export async function DELETE(
                 externalRequestId,
                 incrementAttempts: true,
             });
+            const pickCancel = await cancelPickOrderForSalesOrder({
+                supabase,
+                salesOrderId: params.id,
+                actorUserId: user.id || null,
+                reason: 'sales_order_deleted_soft_cancel',
+            });
+            if (pickCancel.error && !isMissingPickingInfraError(pickCancel.error)) {
+                console.warn(
+                    `[sales-orders] No se pudo cancelar alistamiento durante delete OV ${params.id}: ${
+                        pickCancel.error?.message || 'error desconocido'
+                    }`
+                );
+            }
             await recordDeleteSyncAudit({
                 supabase,
                 documentType: 'sales_order',
@@ -1341,6 +1460,20 @@ export async function DELETE(
             return NextResponse.json(
                 { error: reservationError?.message || 'No se pudieron liberar reservas de seriales.' },
                 { status: 500 }
+            );
+        }
+
+        const pickCancel = await cancelPickOrderForSalesOrder({
+            supabase,
+            salesOrderId: params.id,
+            actorUserId: user.id || null,
+            reason: 'sales_order_deleted_hard',
+        });
+        if (pickCancel.error && !isMissingPickingInfraError(pickCancel.error)) {
+            console.warn(
+                `[sales-orders] No se pudo cancelar alistamiento previo a hard delete OV ${params.id}: ${
+                    pickCancel.error?.message || 'error desconocido'
+                }`
             );
         }
 

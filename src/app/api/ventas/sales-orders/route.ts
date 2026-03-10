@@ -29,6 +29,11 @@ import {
     normalizeSyncErrorCodeFromError,
 } from '@/lib/ventas/sync-state';
 import { enqueueDocumentForSync } from '@/lib/ventas/sync-processor';
+import {
+    enrichSalesOrdersWithPickInfo,
+    isMissingPickingInfraError,
+    upsertPickOrderFromSalesOrder,
+} from '@/lib/ventas/picking';
 
 const ORDER_STATUSES = new Set(['borrador', 'confirmada', 'convertida', 'cancelada']);
 
@@ -39,6 +44,27 @@ function normalizeNumber(value: unknown, fallback = 0): number {
 
 function normalizeText(value: unknown): string {
     return typeof value === 'string' ? value.trim() : '';
+}
+
+function normalizeBoolean(value: unknown, fallback = false): boolean {
+    if (typeof value === 'boolean') return value;
+    const text = normalizeText(value).toLowerCase();
+    if (!text) return fallback;
+    if (['1', 'true', 'yes', 'y', 'on', 'si', 'sí'].includes(text)) return true;
+    if (['0', 'false', 'no', 'n', 'off'].includes(text)) return false;
+    return fallback;
+}
+
+function inferDeliveryRequested(value: unknown, deliveryMethod: unknown): boolean {
+    if (typeof value === 'boolean') return value;
+    const method = normalizeText(deliveryMethod).toLowerCase();
+    if (!method) return false;
+    return (
+        method.includes('envio') ||
+        method.includes('delivery') ||
+        method.includes('reparto') ||
+        method.includes('domicilio')
+    );
 }
 
 function equalsIgnoreCase(a: string, b: string): boolean {
@@ -585,8 +611,13 @@ export async function GET(req: NextRequest) {
             return NextResponse.json({ error: error.message }, { status: 500 });
         }
 
-        return NextResponse.json({
+        const enrichedOrders = await enrichSalesOrdersWithPickInfo({
+            supabase,
             orders: data || [],
+        });
+
+        return NextResponse.json({
+            orders: enrichedOrders,
             total: count || 0,
             page,
             per_page: perPage,
@@ -622,6 +653,7 @@ export async function POST(req: NextRequest) {
             reference_number,
             payment_terms,
             delivery_method,
+            delivery_requested,
             shipping_zone,
             shipping_charge = 0,
             status = 'borrador',
@@ -774,6 +806,7 @@ export async function POST(req: NextRequest) {
             reference_number: normalizeText(reference_number) || null,
             payment_terms: normalizeText(payment_terms) || null,
             delivery_method: normalizeText(delivery_method) || null,
+            delivery_requested: inferDeliveryRequested(delivery_requested, delivery_method),
             shipping_zone: normalizeText(shipping_zone) || null,
             shipping_charge: Math.round(normalizedShippingCharge * 100) / 100,
             status: normalizeStatus(status, 'borrador'),
@@ -896,6 +929,22 @@ export async function POST(req: NextRequest) {
                 { error: reservationError?.message || 'No se pudo reservar seriales para la orden.' },
                 500
             );
+        }
+
+        if (normalizeStatus(status, 'borrador') === 'confirmada') {
+            const pickSync = await upsertPickOrderFromSalesOrder({
+                supabase,
+                salesOrderId: order.id,
+                actorUserId: user.id || null,
+                reason: 'sales_order_confirmed_on_create',
+            });
+            if (pickSync.error && !isMissingPickingInfraError(pickSync.error)) {
+                console.warn(
+                    `[sales-orders] OV ${order.id} creada confirmada pero alistamiento no sincronizó: ${
+                        pickSync.error?.message || 'error desconocido'
+                    }`
+                );
+            }
         }
 
         // Sync to Zoho if requested
