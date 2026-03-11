@@ -12,7 +12,8 @@ export default function HorizontalBarChart({ data, height = 300, showValues = tr
   const total = totalValue || data.reduce((sum, d) => sum + d.value, 0);
 
   return (
-    <div style={{ height, display: 'flex', flexDirection: 'column', gap: 12, padding: '16px 0', overflow: 'auto' }}>
+    <div className="table-card-hover" style={{ height, display: 'flex', flexDirection: 'column', position: 'relative' }}>
+      <div className="custom-scrollbar" style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 12, padding: '16px 0', overflowY: 'auto', overflowX: 'hidden' }}>
       {data.map((item, idx) => {
         const percentage = (item.value / maxValue) * 100;
         const percentageOfTotal = total > 0 ? (item.value / total) * 100 : 0;
@@ -77,16 +78,26 @@ export default function HorizontalBarChart({ data, height = 300, showValues = tr
           </div>
         );
       })}
+      </div>
       {showPercentage && (
         <div style={{
-          marginTop: 8,
-          paddingTop: 8,
-          borderTop: '1px solid var(--border)',
-          fontSize: 12,
-          color: 'var(--muted)',
-          textAlign: 'center'
+          position: 'sticky',
+          bottom: 0,
+          background: 'var(--panel)',
+          padding: '12px 16px',
+          borderTop: '2px solid var(--border)',
+          fontWeight: 700,
+          display: 'flex',
+          justifyContent: 'space-between',
+          alignItems: 'center',
+          boxShadow: '0 -4px 6px -1px rgba(0,0,0,0.05)',
+          zIndex: 10,
+          marginTop: 'auto'
         }}>
-          Total: {valueFormatter ? valueFormatter(total) : total.toLocaleString() + ' unidades'}
+          <span style={{ color: 'var(--brand-primary)' }}>Total</span>
+          <span style={{ color: valueFormatter ? '#10b981' : 'var(--text)' }}>
+            {valueFormatter ? valueFormatter(total) : total.toLocaleString() + ' unidades'}
+          </span>
         </div>
       )}
     </div>

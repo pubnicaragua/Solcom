@@ -533,6 +533,27 @@ export default function ReportsPage() {
 
   return (
     <div style={{ display: 'grid', gap: 14, maxWidth: '100%', overflowX: 'hidden' }}>
+      <style>{`
+        .custom-scrollbar::-webkit-scrollbar {
+          height: 8px;
+          height: 8px;
+          transition: background 0.3s ease;
+        }
+        .custom-scrollbar::-webkit-scrollbar-track {
+          background: transparent;
+          border-radius: 4px;
+        }
+        .custom-scrollbar::-webkit-scrollbar-thumb {
+          background: transparent;
+          border-radius: 4px;
+        }
+        .table-card-hover:hover .custom-scrollbar::-webkit-scrollbar-thumb {
+          background: #cbd5e1;
+        }
+        .custom-scrollbar::-webkit-scrollbar-thumb:hover {
+          background: #94a3b8 !important;
+        }
+      `}</style>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 12 }}>
         <div className="h-title" style={{ fontSize: 'clamp(18px, 5vw, 24px)' }}>Reportes de Inventario</div>
         <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
@@ -745,7 +766,7 @@ export default function ReportsPage() {
               No hay datos de bodegas
             </div>
           ) : (
-            <div style={{ overflowX: 'auto', borderRadius: 8, border: '1px solid var(--border)' }}>
+            <div className="custom-scrollbar" style={{ overflowX: 'auto', borderRadius: 8, border: '1px solid var(--border)' }}>
               <table style={{ width: '100%', minWidth: 600, borderCollapse: 'collapse', fontSize: 13 }}>
                 <thead>
                   <tr style={{ background: 'var(--panel)' }}>
@@ -812,8 +833,9 @@ export default function ReportsPage() {
       <div style={{ background: 'linear-gradient(135deg, #8b5cf6 0%, #6d28d9 100%)', padding: '12px 20px', borderRadius: 8 }}>
         <h2 style={{ color: 'white', fontSize: 18, fontWeight: 700, margin: 0 }}>El "Money Maker" de Categorías</h2>
       </div>
-      <Card>
-        <div style={{ padding: 16 }}>
+      <div className="table-card-hover">
+        <Card>
+          <div style={{ padding: 16 }}>
           {loading ? (
             <div style={{ height: 200, background: 'var(--panel)', borderRadius: 4, animation: 'pulse 1.5s infinite' }} />
           ) : !reportData?.moneyMakerCategories || reportData.moneyMakerCategories.length === 0 ? (
@@ -821,7 +843,7 @@ export default function ReportsPage() {
               No hay datos de categorías
             </div>
           ) : (
-            <div style={{ maxHeight: 400, overflowY: 'auto', overflowX: 'auto', borderRadius: 8, border: '1px solid var(--border)' }}>
+            <div className="custom-scrollbar" style={{ maxHeight: 400, overflowY: 'auto', overflowX: 'auto', borderRadius: 8, border: '1px solid var(--border)' }}>
               <table style={{ width: '100%', minWidth: 600, borderCollapse: 'collapse', fontSize: 13 }}>
                 <thead>
                   <tr style={{ background: 'var(--panel)', position: 'sticky', top: 0, zIndex: 1 }}>
@@ -855,18 +877,50 @@ export default function ReportsPage() {
                     );
                   })}
                 </tbody>
+                <tfoot>
+                  <tr style={{ background: 'var(--panel)', position: 'sticky', bottom: 0, zIndex: 1, boxShadow: '0 -4px 6px -1px rgba(0,0,0,0.05)', borderTop: '2px solid var(--border)', fontWeight: 700 }}>
+                    <td style={{ padding: '10px 12px', textAlign: 'left', color: '#8b5cf6' }}>Total</td>
+                    <td style={{ padding: '10px 12px', textAlign: 'center' }}>
+                      {reportData.moneyMakerCategories.reduce((acc: number, c: any) => acc + (c.uniqueSkus || 0), 0).toLocaleString('es-NI')}
+                    </td>
+                    <td style={{ padding: '10px 12px', textAlign: 'right' }}>
+                      {reportData.moneyMakerCategories.reduce((acc: number, c: any) => acc + (c.stock || 0), 0).toLocaleString('es-NI')}
+                    </td>
+                    <td style={{ padding: '10px 12px', textAlign: 'right', color: '#10b981' }}>
+                      ${reportData.moneyMakerCategories.reduce((acc: number, c: any) => acc + (c.capital || 0), 0).toLocaleString('es-NI', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                    </td>
+                    <td style={{ padding: '10px 12px', textAlign: 'center' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 8, justifyContent: 'flex-end' }}>
+                        <div style={{ fontWeight: 600 }}>
+                          {(stats?.totalStock > 0 
+                            ? (reportData.moneyMakerCategories.reduce((acc: number, c: any) => acc + (c.stock || 0), 0) / stats.totalStock) * 100 
+                            : 0).toFixed(1)}%
+                        </div>
+                        <div style={{ width: 60, height: 6, background: 'var(--border)', borderRadius: 3, overflow: 'hidden' }}>
+                          <div style={{ 
+                            width: `${Math.min(100, stats?.totalStock > 0 ? (reportData.moneyMakerCategories.reduce((acc: number, c: any) => acc + (c.stock || 0), 0) / stats.totalStock) * 100 : 0)}%`, 
+                            height: '100%', 
+                            background: '#8b5cf6' 
+                          }} />
+                        </div>
+                      </div>
+                    </td>
+                  </tr>
+                </tfoot>
               </table>
             </div>
           )}
         </div>
-      </Card>
+        </Card>
+      </div>
 
       {/* NUEVA SECCIÓN: MONEY MAKER DE MARCAS */}
       <div style={{ background: 'linear-gradient(135deg, #f59e0b 0%, #d97706 100%)', padding: '12px 20px', borderRadius: 8, marginTop: 16 }}>
         <h2 style={{ color: 'white', fontSize: 18, fontWeight: 700, margin: 0 }}>El "Money Maker" de Marcas</h2>
       </div>
-      <Card>
-        <div style={{ padding: 16 }}>
+      <div className="table-card-hover">
+        <Card>
+          <div style={{ padding: 16 }}>
           {loading ? (
             <div style={{ height: 200, background: 'var(--panel)', borderRadius: 4, animation: 'pulse 1.5s infinite' }} />
           ) : !reportData?.moneyMakerBrands || reportData.moneyMakerBrands.length === 0 ? (
@@ -874,7 +928,7 @@ export default function ReportsPage() {
               No hay datos de marcas
             </div>
           ) : (
-            <div style={{ maxHeight: 400, overflowY: 'auto', overflowX: 'auto', borderRadius: 8, border: '1px solid var(--border)' }}>
+            <div className="custom-scrollbar" style={{ maxHeight: 400, overflowY: 'auto', overflowX: 'auto', borderRadius: 8, border: '1px solid var(--border)' }}>
               <table style={{ width: '100%', minWidth: 600, borderCollapse: 'collapse', fontSize: 13 }}>
                 <thead>
                   <tr style={{ background: 'var(--panel)', position: 'sticky', top: 0, zIndex: 1 }}>
@@ -908,11 +962,42 @@ export default function ReportsPage() {
                     );
                   })}
                 </tbody>
+                <tfoot>
+                  <tr style={{ background: 'var(--panel)', position: 'sticky', bottom: 0, zIndex: 1, boxShadow: '0 -4px 6px -1px rgba(0,0,0,0.05)', borderTop: '2px solid var(--border)', fontWeight: 700 }}>
+                    <td style={{ padding: '10px 12px', textAlign: 'left', color: '#f59e0b' }}>Total</td>
+                    <td style={{ padding: '10px 12px', textAlign: 'center' }}>
+                      {reportData.moneyMakerBrands.reduce((acc: number, b: any) => acc + (b.uniqueSkus || 0), 0).toLocaleString('es-NI')}
+                    </td>
+                    <td style={{ padding: '10px 12px', textAlign: 'right' }}>
+                      {reportData.moneyMakerBrands.reduce((acc: number, b: any) => acc + (b.stock || 0), 0).toLocaleString('es-NI')}
+                    </td>
+                    <td style={{ padding: '10px 12px', textAlign: 'right', color: '#10b981' }}>
+                      ${reportData.moneyMakerBrands.reduce((acc: number, b: any) => acc + (b.capital || 0), 0).toLocaleString('es-NI', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                    </td>
+                    <td style={{ padding: '10px 12px', textAlign: 'center' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 8, justifyContent: 'flex-end' }}>
+                        <div style={{ fontWeight: 600 }}>
+                          {(stats?.totalStock > 0 
+                            ? (reportData.moneyMakerBrands.reduce((acc: number, b: any) => acc + (b.stock || 0), 0) / stats.totalStock) * 100 
+                            : 0).toFixed(1)}%
+                        </div>
+                        <div style={{ width: 60, height: 6, background: 'var(--border)', borderRadius: 3, overflow: 'hidden' }}>
+                          <div style={{ 
+                            width: `${Math.min(100, stats?.totalStock > 0 ? (reportData.moneyMakerBrands.reduce((acc: number, b: any) => acc + (b.stock || 0), 0) / stats.totalStock) * 100 : 0)}%`, 
+                            height: '100%', 
+                            background: '#f59e0b' 
+                          }} />
+                        </div>
+                      </div>
+                    </td>
+                  </tr>
+                </tfoot>
               </table>
             </div>
           )}
         </div>
-      </Card>
+        </Card>
+      </div>
 
 
 
@@ -927,8 +1012,15 @@ export default function ReportsPage() {
             <div style={{ height: 300, background: 'var(--panel)', borderRadius: 4, animation: 'pulse 1.5s infinite' }} />
           ) : (() => {
             const data = charts?.categoryBreakdown;
+            const total = data?.reduce((sum: number, d: any) => sum + d.value, 0) || 0;
             return data && data.length > 0 ? (
-              <HorizontalBarChart data={data.map((d: any, i: number) => ({ ...d, color: generateColors(data.length)[i] }))} height={300} />
+              <HorizontalBarChart
+                data={data.map((d: any, i: number) => ({ ...d, color: generateColors(data.length)[i] }))}
+                height={300}
+                showValues={true}
+                showPercentage={true}
+                totalValue={total}
+              />
             ) : (
               <ReportPlaceholder title="Sin datos" height={300} />
             );
@@ -1057,17 +1149,6 @@ export default function ReportsPage() {
         </ChartCard>
       </div>
 
-      {/* SECCIÓN 3: ANÁLISIS DE VENTAS */}
-      <div style={{ background: 'linear-gradient(135deg, #dc2626 0%, #991b1b 100%)', padding: '12px 20px', borderRadius: 8 }}>
-        <h2 style={{ color: 'white', fontSize: 18, fontWeight: 700, margin: 0 }}>Análisis de Ventas por Almacén Consignación</h2>
-      </div>
-      <ReportPlaceholder title="Análisis de Ventas" reason="Requiere datos de ventas desde Zoho Inventory" height={400} />
-
-      {/* SECCIÓN 4: INDICADORES MENSUALES */}
-      <div style={{ background: 'linear-gradient(135deg, #dc2626 0%, #991b1b 100%)', padding: '12px 20px', borderRadius: 8 }}>
-        <h2 style={{ color: 'white', fontSize: 18, fontWeight: 700, margin: 0 }}>Indicadores Mensuales por Almacén</h2>
-      </div>
-      <ReportPlaceholder title="Indicadores Mensuales" reason="Requiere datos mensuales de ventas desde Zoho Inventory" height={400} />
     </div>
   );
 }
