@@ -63,21 +63,37 @@ async function getScopedTotalsForItems(
     const totals = new Map<string, number>();
     if (itemIds.length === 0 || allowedWarehouseIds.length === 0) return totals;
     const ITEM_CHUNK = 250;
+    const PAGE_SIZE = 1000;
 
     try {
         for (let i = 0; i < itemIds.length; i += ITEM_CHUNK) {
             const itemChunk = itemIds.slice(i, i + ITEM_CHUNK);
-            const { data: balances, error: balanceError } = await (supabase.from as any)('inventory_balance')
-                .select('item_id, warehouse_id, qty_on_hand')
-                .in('item_id', itemChunk)
-                .in('warehouse_id', allowedWarehouseIds);
+            let page = 0;
+            let hasMore = true;
 
-            if (balanceError) throw balanceError;
+            while (hasMore) {
+                const from = page * PAGE_SIZE;
+                const to = from + PAGE_SIZE - 1;
 
-            for (const row of balances || []) {
-                const itemId = String(row.item_id || '');
-                if (!itemId) continue;
-                totals.set(itemId, Number(totals.get(itemId) || 0) + Number(row.qty_on_hand || 0));
+                const { data: balances, error: balanceError } = await (supabase.from as any)('inventory_balance')
+                    .select('item_id, warehouse_id, qty_on_hand')
+                    .in('item_id', itemChunk)
+                    .in('warehouse_id', allowedWarehouseIds)
+                    .order('item_id', { ascending: true })
+                    .range(from, to);
+
+                if (balanceError) throw balanceError;
+
+                const rows = balances || [];
+                for (const row of rows) {
+                    const itemId = String(row.item_id || '');
+                    if (!itemId) continue;
+                    totals.set(itemId, Number(totals.get(itemId) || 0) + Number(row.qty_on_hand || 0));
+                }
+
+                if (rows.length < PAGE_SIZE) hasMore = false;
+                else page += 1;
+                if (page > 200) break;
             }
         }
         return totals;
@@ -85,23 +101,37 @@ async function getScopedTotalsForItems(
         const latestByItemWarehouse = new Set<string>();
         for (let i = 0; i < itemIds.length; i += ITEM_CHUNK) {
             const itemChunk = itemIds.slice(i, i + ITEM_CHUNK);
-            const { data: snapshots, error: snapshotError } = await supabase
-                .from('stock_snapshots')
-                .select('item_id, warehouse_id, qty, synced_at')
-                .in('item_id', itemChunk)
-                .in('warehouse_id', allowedWarehouseIds)
-                .order('synced_at', { ascending: false });
+            let page = 0;
+            let hasMore = true;
 
-            if (snapshotError) throw snapshotError;
+            while (hasMore) {
+                const from = page * PAGE_SIZE;
+                const to = from + PAGE_SIZE - 1;
 
-            for (const row of snapshots || []) {
-                const itemId = String(row.item_id || '');
-                const warehouseId = String(row.warehouse_id || '');
-                if (!itemId || !warehouseId) continue;
-                const key = `${itemId}__${warehouseId}`;
-                if (latestByItemWarehouse.has(key)) continue;
-                latestByItemWarehouse.add(key);
-                totals.set(itemId, Number(totals.get(itemId) || 0) + Number(row.qty || 0));
+                const { data: snapshots, error: snapshotError } = await supabase
+                    .from('stock_snapshots')
+                    .select('item_id, warehouse_id, qty, synced_at')
+                    .in('item_id', itemChunk)
+                    .in('warehouse_id', allowedWarehouseIds)
+                    .order('synced_at', { ascending: false })
+                    .range(from, to);
+
+                if (snapshotError) throw snapshotError;
+
+                const rows = snapshots || [];
+                for (const row of rows) {
+                    const itemId = String(row.item_id || '');
+                    const warehouseId = String(row.warehouse_id || '');
+                    if (!itemId || !warehouseId) continue;
+                    const key = `${itemId}__${warehouseId}`;
+                    if (latestByItemWarehouse.has(key)) continue;
+                    latestByItemWarehouse.add(key);
+                    totals.set(itemId, Number(totals.get(itemId) || 0) + Number(row.qty || 0));
+                }
+
+                if (rows.length < PAGE_SIZE) hasMore = false;
+                else page += 1;
+                if (page > 200) break;
             }
         }
         return totals;

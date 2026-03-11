@@ -10,6 +10,24 @@ import { getEffectiveModuleAccess, hasModuleAccess } from '@/lib/auth/module-per
 
 export const dynamic = 'force-dynamic';
 
+const UNCATEGORIZED_ALIASES = new Set([
+    'sin categoria',
+    'sin categoría',
+    'sin-categoria',
+    'sin_categoria',
+    's/c',
+    'sin cat',
+    'uncategorized',
+    'no category',
+    'none',
+    'null',
+    'undefined',
+    'n/a',
+    'na',
+    '-',
+    '(none)',
+]);
+
 function containsInsensitive(haystack: unknown, needle: string): boolean {
     const text = String(haystack ?? '').trim().toLowerCase();
     const query = String(needle ?? '').trim().toLowerCase();
@@ -24,11 +42,25 @@ function equalsInsensitive(value: unknown, expected: string): boolean {
     return left === right;
 }
 
+function normalizeCategoryValue(raw: unknown): string | null {
+    const text = String(raw ?? '').trim().replace(/\s+/g, ' ');
+    if (!text) return null;
+    const normalized = text.toLowerCase();
+    if (UNCATEGORIZED_ALIASES.has(normalized)) return null;
+    return text;
+}
+
+function isUncategorizedFilter(raw: string): boolean {
+    const text = String(raw ?? '').trim();
+    if (!text) return false;
+    return normalizeCategoryValue(text) === null;
+}
+
 function normalizeItemMeta(row: any) {
     return {
         id: String(row?.id ?? '').trim(),
         sku: String(row?.sku ?? '').trim(),
-        category: String(row?.category ?? '').trim() || null,
+        category: normalizeCategoryValue(row?.category),
         marca: String(row?.marca ?? '').trim() || null,
         state: String(row?.state ?? '').trim() || null,
         color: String(row?.color ?? '').trim() || null,
@@ -42,7 +74,13 @@ function matchesFilters(
     filters: { category: string; marca: string; state: string; color: string }
 ): boolean {
     if (item.zoho_removed_at) return false;
-    if (filters.category && !containsInsensitive(item.category, filters.category)) return false;
+    if (filters.category) {
+        if (isUncategorizedFilter(filters.category)) {
+            if (item.category) return false;
+        } else if (!containsInsensitive(item.category, filters.category)) {
+            return false;
+        }
+    }
     if (filters.marca && !equalsInsensitive(item.marca, filters.marca)) return false;
     if (filters.state && !equalsInsensitive(item.state, filters.state)) return false;
     if (filters.color && !containsInsensitive(item.color, filters.color)) return false;
@@ -122,6 +160,7 @@ export async function GET(request: Request) {
         const { searchParams } = new URL(request.url);
         const category = searchParams.get('category') || '';
         const marca = searchParams.get('marca') || '';
+        const warehouse = searchParams.get('warehouse') || '';
         const state = searchParams.get('state') || '';
         const color = searchParams.get('color') || '';
 
@@ -146,9 +185,18 @@ export async function GET(request: Request) {
             return NextResponse.json({ warehouseBreakdown: [] });
         }
 
+        const requestedWarehouse = warehouse
+            ? warehouses.find((warehouseRow) => warehouseRow.code === warehouse || warehouseRow.id === warehouse) || null
+            : null;
+        if (warehouse && !requestedWarehouse) {
+            return NextResponse.json({ error: 'No tienes permiso para consultar esa bodega' }, { status: 403 });
+        }
+
+        const visibleWarehouses = requestedWarehouse ? [requestedWarehouse] : warehouses;
+
         const filters = { category, marca, state, color };
         const results = await Promise.all(
-            warehouses.map(async (warehouseRow) => {
+            visibleWarehouses.map(async (warehouseRow) => {
                 const qtyByItem = await loadQtyByItemForWarehouse(supabase, warehouseRow.id);
                 const itemIds = Array.from(qtyByItem.keys());
                 if (itemIds.length === 0) {
@@ -213,4 +261,3 @@ export async function GET(request: Request) {
         return NextResponse.json({ warehouseBreakdown: [] });
     }
 }
-
