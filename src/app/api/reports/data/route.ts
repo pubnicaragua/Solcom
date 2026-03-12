@@ -383,8 +383,8 @@ export async function GET(request: Request) {
         lowStockList.sort((a, b) => a.stock_total - b.stock_total);
 
         // 5) Chart breakdowns from items (instant)
-        const categoryBreakdown: Record<string, { stock: number; capital: number; skus: Set<string>; byWarehouse: Record<string, number> }> = {};
-        const brandBreakdown: Record<string, { stock: number; capital: number; skus: Set<string>; label: string; byWarehouse: Record<string, number> }> = {};
+        const categoryBreakdown: Record<string, { stock: number; capital: number; skus: Set<string>; byWarehouse: Record<string, number>; capitalByWarehouse: Record<string, number> }> = {};
+        const brandBreakdown: Record<string, { stock: number; capital: number; skus: Set<string>; label: string; byWarehouse: Record<string, number>; capitalByWarehouse: Record<string, number> }> = {};
 
         // Prepare warehouse display names mappings
         const warehouseCodeMap: Record<string, string> = {};
@@ -476,7 +476,7 @@ export async function GET(request: Request) {
                 capital: data.capital,
                 uniqueSkus: data.skus.size,
                 byWarehouse: data.byWarehouse,
-                capitalByWarehouse: (data as any).capitalByWarehouse
+                capitalByWarehouse: data.capitalByWarehouse
             }))
             .filter(c => c.stock > 0 || c.capital > 0)
             .sort((a, b) => b.capital - a.capital); // Sort by capital invested

@@ -1519,7 +1519,7 @@ export default function ReportsPage() {
       </div>
 
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(400px, 100%), 1fr))', gap: 14, marginTop: 14 }}>
-        <ChartCard title="Participación - Top Inventario Equipos">
+        <ChartCard title="Participación - Top Inventario Equipos (Unidades)">
           {loading ? (
             <div style={{ height: 300, background: 'var(--panel)', borderRadius: 4, animation: 'pulse 1.5s infinite' }} />
           ) : (() => {
@@ -1528,7 +1528,28 @@ export default function ReportsPage() {
               value: item.stock_total
             })) || [];
             return data && data.length > 0 ? (
-              <PieChart data={data.map((d: any, i: number) => ({ ...d, color: generateColors(data.length)[i] }))} size={250} innerRadius={65} />
+              <PieChart data={data.map((d: any, i: number) => ({ ...d, color: generateColors(data.length)[i] }))} size={250} innerRadius={65} unit="unids" />
+            ) : (
+              <ReportPlaceholder title="Sin datos" height={300} />
+            );
+          })()}
+        </ChartCard>
+
+        <ChartCard title="Participación - Top Inventario Equipos (al Costo)">
+          {loading ? (
+            <div style={{ height: 300, background: 'var(--panel)', borderRadius: 4, animation: 'pulse 1.5s infinite' }} />
+          ) : (() => {
+            const data = reportData?.topInventoryItemsByCost?.map((item: any) => ({
+              label: item.name,
+              value: item.capital
+            })) || [];
+            return data && data.length > 0 ? (
+              <PieChart
+                data={data.map((d: any, i: number) => ({ ...d, color: generateColors(data.length)[i] }))}
+                size={250}
+                innerRadius={65}
+                valueFormatter={(v) => '$' + v.toLocaleString('es-NI', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+              />
             ) : (
               <ReportPlaceholder title="Sin datos" height={300} />
             );

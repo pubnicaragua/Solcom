@@ -7,9 +7,18 @@ interface PieChartProps {
   size?: number;
   showLegend?: boolean;
   innerRadius?: number; // Added innerRadius prop
+  unit?: string;
+  valueFormatter?: (value: number) => string;
 }
 
-export default function PieChart({ data, size = 200, showLegend = true, innerRadius = 0 }: PieChartProps) {
+export default function PieChart({
+  data,
+  size = 200,
+  showLegend = true,
+  innerRadius = 0,
+  unit = 'unids',
+  valueFormatter
+}: PieChartProps) {
   const [hoveredIndex, setHoveredIndex] = useState<number | null>(null);
 
   if (!data || data.length === 0) {
@@ -83,7 +92,10 @@ export default function PieChart({ data, size = 200, showLegend = true, innerRad
   const radius = size / 2 - 10;
   const actualInnerRadius = innerRadius > 0 ? (size / 2) * (innerRadius / 100) : 0;
 
-  const formatValue = (value: number) => value.toLocaleString('es-NI');
+  const formatValue = (value: number) => {
+    if (valueFormatter) return valueFormatter(value);
+    return value.toLocaleString('es-NI');
+  };
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 16, width: '100%' }}>
@@ -177,7 +189,7 @@ export default function PieChart({ data, size = 200, showLegend = true, innerRad
       >
         {hoveredIndex !== null && slices[hoveredIndex] && (
           <div style={{ fontSize: 10, fontWeight: 600, whiteSpace: 'nowrap' }}>
-            {slices[hoveredIndex].label} · {formatValue(slices[hoveredIndex].value)} unids ({slices[hoveredIndex].percentage.toFixed(1)}%)
+            {slices[hoveredIndex].label} · {formatValue(slices[hoveredIndex].value)}{!valueFormatter ? ` ${unit}` : ''} ({slices[hoveredIndex].percentage.toFixed(1)}%)
           </div>
         )}
       </div>
@@ -234,7 +246,7 @@ export default function PieChart({ data, size = 200, showLegend = true, innerRad
                   {slice.label}
                 </div>
                 <div style={{ color: 'var(--muted)', fontSize: 10 }}>
-                  {formatValue(slice.value)} unids
+                  {formatValue(slice.value)}{!valueFormatter ? ` ${unit}` : ''}
                 </div>
               </div>
             </div>
