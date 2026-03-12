@@ -194,6 +194,7 @@ export async function GET(request: Request) {
                 },
                 moneyMakerCategories: [],
                 moneyMakerBrands: [],
+                topInventoryItems: [],
                 filterOptions: {
                     categories: [],
                     marcas: [],
@@ -230,6 +231,7 @@ export async function GET(request: Request) {
                 },
                 moneyMakerCategories: [],
                 moneyMakerBrands: [],
+                topInventoryItems: [],
                 filterOptions: {
                     categories: [],
                     marcas: [],
@@ -492,6 +494,33 @@ export async function GET(request: Request) {
             .filter(b => b.stock > 0 || b.capital > 0)
             .sort((a, b) => b.capital - a.capital); // Sort by capital invested
 
+        // 7) Top 10 Inventory Items by stock (Equipos/Unidades only, excluding accessories)
+        const accessoryKeywords = ['lamina', 'lámina', 'hidrogel', 'hydrogel', 'cable', 'cargador', 'case', 'funda', 'protector', 'mica', 'vidrio', 'templado', 'correa', 'accesorio', 'soporte', 'holder', 'cargador', 'adaptador', 'silicone', 'tpu'];
+        
+        const topInventoryItems = [...allItems]
+            .filter((item: any) => {
+                const name = (item.name || '').toLowerCase();
+                const category = (item.category || '').toLowerCase();
+                return !accessoryKeywords.some(kw => name.includes(kw) || category.includes(kw));
+            })
+            .sort((a: any, b: any) => (b.stock_total || 0) - (a.stock_total || 0))
+            .slice(0, 10)
+            .map((item: any) => {
+                const byWarehouseMapped: Record<string, number> = {};
+                if (item.stock_by_warehouse) {
+                    Object.entries(item.stock_by_warehouse).forEach(([whId, qty]) => {
+                        const wCode = warehouseCodeMap[whId] || whId;
+                        byWarehouseMapped[wCode] = Number(qty);
+                    });
+                }
+                return {
+                    id: item.id,
+                    name: item.name,
+                    stock_total: item.stock_total,
+                    byWarehouse: byWarehouseMapped
+                };
+            });
+
         return NextResponse.json({
             stats: {
                 totalProducts: allItems.length,
@@ -507,6 +536,7 @@ export async function GET(request: Request) {
             },
             moneyMakerCategories,
             moneyMakerBrands,
+            topInventoryItems,
             filterOptions,
             aging: {
                 items: agingItems,

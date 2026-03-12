@@ -927,7 +927,7 @@ export default function ReportsPage() {
                                   }
                                 })}
                                 <td style={{ padding: '8px 12px', textAlign: 'right', fontWeight: 700 }}>
-                                  {categoryViewMode === 'units' 
+                                  {categoryViewMode === 'units'
                                     ? (cat.stock || 0).toLocaleString('es-NI')
                                     : '$' + (cat.capital || 0).toLocaleString('es-NI', { minimumFractionDigits: 1, maximumFractionDigits: 1 })
                                   }
@@ -1036,7 +1036,7 @@ export default function ReportsPage() {
             onClick={() => setBrandViewMode('units')}
             style={{ padding: '6px 12px', borderRadius: 4, border: 'none', background: brandViewMode === 'units' ? 'white' : 'transparent', color: brandViewMode === 'units' ? '#d97706' : 'white', fontSize: 13, fontWeight: 600, cursor: 'pointer', transition: 'all 0.2s' }}
           >
-             Desglose Unids
+            Desglose Unids
           </button>
           <button
             onClick={() => setBrandViewMode('cost')}
@@ -1203,6 +1203,85 @@ export default function ReportsPage() {
                             </td>
                           </>
                         )}
+                      </tr>
+                    </tfoot>
+                  </table>
+                </div>
+              );
+            })()}
+          </div>
+        </Card>
+      </div>
+
+      {/* NUEVA SECCIÓN: TOP INVENTARIO POR EQUIPO UNIDAD */}
+      <div style={{ background: 'linear-gradient(135deg, #1e3a8a 0%, #172554 100%)', padding: '12px 20px', borderRadius: 8, marginTop: 16 }}>
+        <h2 style={{ color: 'white', fontSize: 18, fontWeight: 700, margin: 0 }}>Top Inventario por Equipo Unidad</h2>
+      </div>
+      <div className="table-card-hover" style={{ marginTop: 14 }}>
+        <Card>
+          <div style={{ padding: 16 }}>
+            {loading ? (
+              <div style={{ height: 200, background: 'var(--panel)', borderRadius: 4, animation: 'pulse 1.5s infinite' }} />
+            ) : !reportData?.topInventoryItems || reportData.topInventoryItems.length === 0 ? (
+              <div style={{ textAlign: 'center', padding: '30px 0', color: 'var(--muted)' }}>
+                No hay datos de productos
+              </div>
+            ) : (() => {
+              const uniqueWarehouses = new Set<string>();
+              reportData.topInventoryItems.forEach((item: any) => {
+                const source = item.byWarehouse;
+                if (source) {
+                  Object.keys(source).forEach(w => uniqueWarehouses.add(w));
+                }
+              });
+              const warehouseCols = Array.from(uniqueWarehouses).sort();
+
+              return (
+                <div className="custom-scrollbar" style={{ maxHeight: 400, overflowY: 'auto', overflowX: 'auto', borderRadius: 8, border: '1px solid var(--border)' }}>
+                  <table style={{ width: '100%', minWidth: 400 + (warehouseCols.length * 80), borderCollapse: 'collapse', fontSize: 13 }}>
+                    <thead>
+                      <tr style={{ background: 'var(--panel)', position: 'sticky', top: 0, zIndex: 1 }}>
+                        <th style={{ padding: '10px 12px', textAlign: 'left', fontWeight: 600, borderBottom: '1px solid var(--border)' }}>Nombre del Producto</th>
+                        {warehouseCols.map(wh => (
+                          <th key={wh} style={{ padding: '10px 12px', textAlign: 'right', fontWeight: 600, borderBottom: '1px solid var(--border)' }}>{wh}</th>
+                        ))}
+                        <th style={{ padding: '10px 12px', textAlign: 'right', fontWeight: 600, borderBottom: '1px solid var(--border)' }}>Total</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {reportData.topInventoryItems.map((item: any, idx: number) => {
+                        return (
+                          <tr key={idx} style={{ borderBottom: '1px solid var(--border)', background: idx % 2 === 0 ? 'transparent' : 'var(--panel)' }}>
+                            <td style={{ padding: '8px 12px', fontWeight: 600, color: '#ffffffff' }}>{item.name}</td>
+                            {warehouseCols.map(wh => {
+                              const qty = item.byWarehouse?.[wh] || 0;
+                              return (
+                                <td key={wh} style={{ padding: '8px 12px', textAlign: 'right' }}>
+                                  {qty > 0 ? qty.toLocaleString('es-NI') : ''}
+                                </td>
+                              );
+                            })}
+                            <td style={{ padding: '8px 12px', textAlign: 'right', fontWeight: 700 }}>
+                              {(item.stock_total || 0).toLocaleString('es-NI')}
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                    <tfoot>
+                      <tr style={{ background: 'var(--panel)', position: 'sticky', bottom: 0, zIndex: 1, boxShadow: '0 -4px 6px -1px rgba(0,0,0,0.05)', borderTop: '2px solid var(--border)', fontWeight: 700 }}>
+                        <td style={{ padding: '10px 12px', textAlign: 'left', color: '#ffffffff' }}>Total</td>
+                        {warehouseCols.map(wh => {
+                          const whTotal = reportData.topInventoryItems.reduce((acc: number, item: any) => acc + (item.byWarehouse?.[wh] || 0), 0);
+                          return (
+                            <td key={wh} style={{ padding: '10px 12px', textAlign: 'right' }}>
+                              {whTotal > 0 ? whTotal.toLocaleString('es-NI') : ''}
+                            </td>
+                          );
+                        })}
+                        <td style={{ padding: '10px 12px', textAlign: 'right' }}>
+                          {reportData.topInventoryItems.reduce((acc: number, item: any) => acc + (item.stock_total || 0), 0).toLocaleString('es-NI')}
+                        </td>
                       </tr>
                     </tfoot>
                   </table>
