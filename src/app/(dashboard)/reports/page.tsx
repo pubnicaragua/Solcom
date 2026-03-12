@@ -33,6 +33,8 @@ export default function ReportsPage() {
     color: ''
   });
   const [exporting, setExporting] = useState<'pdf' | 'excel' | null>(null);
+  const [categoryViewMode, setCategoryViewMode] = useState<'consolidated' | 'units' | 'cost'>('consolidated');
+  const [brandViewMode, setBrandViewMode] = useState<'consolidated' | 'units' | 'cost'>('consolidated');
 
   useEffect(() => {
     setIsMobile(window.innerWidth < 640);
@@ -830,8 +832,28 @@ export default function ReportsPage() {
       </Card>
 
       {/* NUEVA SECCIÓN: MONEY MAKER DE CATEGORÍAS */}
-      <div style={{ background: 'linear-gradient(135deg, #8b5cf6 0%, #6d28d9 100%)', padding: '12px 20px', borderRadius: 8 }}>
+      <div style={{ background: 'linear-gradient(135deg, #8b5cf6 0%, #6d28d9 100%)', padding: '12px 20px', borderRadius: 8, display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 12 }}>
         <h2 style={{ color: 'white', fontSize: 18, fontWeight: 700, margin: 0 }}>El "Money Maker" de Categorías</h2>
+        <div style={{ display: 'flex', background: 'rgba(255,255,255,0.2)', borderRadius: 6, padding: 2 }}>
+          <button
+            onClick={() => setCategoryViewMode('consolidated')}
+            style={{ padding: '6px 12px', borderRadius: 4, border: 'none', background: categoryViewMode === 'consolidated' ? 'white' : 'transparent', color: categoryViewMode === 'consolidated' ? '#6d28d9' : 'white', fontSize: 13, fontWeight: 600, cursor: 'pointer', transition: 'all 0.2s' }}
+          >
+            General
+          </button>
+          <button
+            onClick={() => setCategoryViewMode('units')}
+            style={{ padding: '6px 12px', borderRadius: 4, border: 'none', background: categoryViewMode === 'units' ? 'white' : 'transparent', color: categoryViewMode === 'units' ? '#6d28d9' : 'white', fontSize: 13, fontWeight: 600, cursor: 'pointer', transition: 'all 0.2s' }}
+          >
+            Desglose Unids
+          </button>
+          <button
+            onClick={() => setCategoryViewMode('cost')}
+            style={{ padding: '6px 12px', borderRadius: 4, border: 'none', background: categoryViewMode === 'cost' ? 'white' : 'transparent', color: categoryViewMode === 'cost' ? '#6d28d9' : 'white', fontSize: 13, fontWeight: 600, cursor: 'pointer', transition: 'all 0.2s' }}
+          >
+            Desglose Costo
+          </button>
+        </div>
       </div>
       <div className="table-card-hover">
         <Card>
@@ -842,81 +864,187 @@ export default function ReportsPage() {
               <div style={{ textAlign: 'center', padding: '30px 0', color: 'var(--muted)' }}>
                 No hay datos de categorías
               </div>
-            ) : (
-              <div className="custom-scrollbar" style={{ maxHeight: 400, overflowY: 'auto', overflowX: 'auto', borderRadius: 8, border: '1px solid var(--border)' }}>
-                <table style={{ width: '100%', minWidth: 600, borderCollapse: 'collapse', fontSize: 13 }}>
-                  <thead>
-                    <tr style={{ background: 'var(--panel)', position: 'sticky', top: 0, zIndex: 1 }}>
-                      <th style={{ padding: '10px 12px', textAlign: 'left', fontWeight: 600, borderBottom: '1px solid var(--border)' }}>Categoría</th>
-                      <th style={{ padding: '10px 12px', textAlign: 'center', fontWeight: 600, borderBottom: '1px solid var(--border)' }}>SKUs Diferentes</th>
-                      <th style={{ padding: '10px 12px', textAlign: 'right', fontWeight: 600, borderBottom: '1px solid var(--border)' }}>Stock Físico (Unids)</th>
-                      <th style={{ padding: '10px 12px', textAlign: 'right', fontWeight: 600, borderBottom: '1px solid var(--border)' }}>Capital Invertido</th>
-                      <th style={{ padding: '10px 12px', textAlign: 'right', fontWeight: 600, borderBottom: '1px solid var(--border)' }}>% del Inventario</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {reportData.moneyMakerCategories.map((cat: any, idx: number) => {
-                      const percentageUnits = stats?.totalStock > 0 ? (cat.stock / stats.totalStock) * 100 : 0;
-                      return (
-                        <tr key={idx} style={{ borderBottom: '1px solid var(--border)', background: idx % 2 === 0 ? 'transparent' : 'var(--panel)' }}>
-                          <td style={{ padding: '8px 12px', fontWeight: 600, color: '#8b5cf6' }}>{cat.label}</td>
-                          <td style={{ padding: '8px 12px', textAlign: 'center' }}>{(cat.uniqueSkus || 0).toLocaleString('es-NI')}</td>
-                          <td style={{ padding: '8px 12px', textAlign: 'right', fontWeight: 600 }}>{(cat.stock || 0).toLocaleString('es-NI')}</td>
-                          <td style={{ padding: '8px 12px', textAlign: 'right', color: '#10b981', fontWeight: 700 }}>
-                            ${(cat.capital || 0).toLocaleString('es-NI', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                          </td>
-                          <td style={{ padding: '8px 12px', textAlign: 'center' }}>
-                            <div style={{ display: 'flex', alignItems: 'center', gap: 8, justifyContent: 'flex-end' }}>
-                              <div style={{ fontWeight: 600 }}>{percentageUnits.toFixed(1)}%</div>
-                              <div style={{ width: 60, height: 6, background: 'var(--border)', borderRadius: 3, overflow: 'hidden' }}>
-                                <div style={{ width: `${percentageUnits}%`, height: '100%', background: '#8b5cf6' }} />
+            ) : (() => {
+              const uniqueWarehouses = new Set<string>();
+              if (categoryViewMode !== 'consolidated') {
+                reportData.moneyMakerCategories.forEach((cat: any) => {
+                  const source = categoryViewMode === 'units' ? cat.byWarehouse : cat.capitalByWarehouse;
+                  if (source) {
+                    Object.keys(source).forEach(w => uniqueWarehouses.add(w));
+                  }
+                });
+              }
+              const warehouseCols = Array.from(uniqueWarehouses).sort();
+
+              return (
+                <div className="custom-scrollbar" style={{ maxHeight: 400, overflowY: 'auto', overflowX: 'auto', borderRadius: 8, border: '1px solid var(--border)' }}>
+                  <table style={{ width: '100%', minWidth: categoryViewMode !== 'consolidated' ? 400 + (warehouseCols.length * 80) : 600, borderCollapse: 'collapse', fontSize: 13 }}>
+                    <thead>
+                      <tr style={{ background: 'var(--panel)', position: 'sticky', top: 0, zIndex: 1 }}>
+                        <th style={{ padding: '10px 12px', textAlign: 'left', fontWeight: 600, borderBottom: '1px solid var(--border)' }}>Categoría</th>
+                        {categoryViewMode !== 'consolidated' ? (
+                          <>
+                            {warehouseCols.map(wh => (
+                              <th key={wh} style={{ padding: '10px 12px', textAlign: 'right', fontWeight: 600, borderBottom: '1px solid var(--border)' }}>{wh}</th>
+                            ))}
+                            <th style={{ padding: '10px 12px', textAlign: 'right', fontWeight: 600, borderBottom: '1px solid var(--border)' }}>
+                              {categoryViewMode === 'units' ? 'Total Unids' : 'Total Costo'}
+                            </th>
+                          </>
+                        ) : (
+                          <>
+                            <th style={{ padding: '10px 12px', textAlign: 'center', fontWeight: 600, borderBottom: '1px solid var(--border)' }}>SKUs Diferentes</th>
+                            <th style={{ padding: '10px 12px', textAlign: 'right', fontWeight: 600, borderBottom: '1px solid var(--border)' }}>Stock Físico (Unids)</th>
+                            <th style={{ padding: '10px 12px', textAlign: 'right', fontWeight: 600, borderBottom: '1px solid var(--border)' }}>Capital Invertido</th>
+                            <th style={{ padding: '10px 12px', textAlign: 'right', fontWeight: 600, borderBottom: '1px solid var(--border)' }}>% del Inventario</th>
+                          </>
+                        )}
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {reportData.moneyMakerCategories.map((cat: any, idx: number) => {
+                        const percentageUnits = stats?.totalStock > 0 ? (cat.stock / stats.totalStock) * 100 : 0;
+                        return (
+                          <tr key={idx} style={{ borderBottom: '1px solid var(--border)', background: idx % 2 === 0 ? 'transparent' : 'var(--panel)' }}>
+                            <td style={{ padding: '8px 12px', fontWeight: 600, color: '#8b5cf6' }}>{cat.label}</td>
+                            {categoryViewMode !== 'consolidated' ? (
+                              <>
+                                {warehouseCols.map(wh => {
+                                  if (categoryViewMode === 'units') {
+                                    const qty = cat.byWarehouse?.[wh] || 0;
+                                    return (
+                                      <td key={wh} style={{ padding: '8px 12px', textAlign: 'right' }}>
+                                        {qty > 0 ? qty.toLocaleString('es-NI') : ''}
+                                      </td>
+                                    );
+                                  } else {
+                                    const cost = cat.capitalByWarehouse?.[wh] || 0;
+                                    return (
+                                      <td key={wh} style={{ padding: '8px 12px', textAlign: 'right', color: '#10b981', fontSize: 12 }}>
+                                        {cost > 0 ? '$' + cost.toLocaleString('es-NI', { minimumFractionDigits: 1, maximumFractionDigits: 1 }) : ''}
+                                      </td>
+                                    );
+                                  }
+                                })}
+                                <td style={{ padding: '8px 12px', textAlign: 'right', fontWeight: 700 }}>
+                                  {categoryViewMode === 'units' 
+                                    ? (cat.stock || 0).toLocaleString('es-NI')
+                                    : '$' + (cat.capital || 0).toLocaleString('es-NI', { minimumFractionDigits: 1, maximumFractionDigits: 1 })
+                                  }
+                                </td>
+                              </>
+                            ) : (
+                              <>
+                                <td style={{ padding: '8px 12px', textAlign: 'center' }}>{(cat.uniqueSkus || 0).toLocaleString('es-NI')}</td>
+                                <td style={{ padding: '8px 12px', textAlign: 'right', fontWeight: 600 }}>{(cat.stock || 0).toLocaleString('es-NI')}</td>
+                                <td style={{ padding: '8px 12px', textAlign: 'right', color: '#10b981', fontWeight: 700 }}>
+                                  ${(cat.capital || 0).toLocaleString('es-NI', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                                </td>
+                                <td style={{ padding: '8px 12px', textAlign: 'center' }}>
+                                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, justifyContent: 'flex-end' }}>
+                                    <div style={{ fontWeight: 600 }}>{percentageUnits.toFixed(1)}%</div>
+                                    <div style={{ width: 60, height: 6, background: 'var(--border)', borderRadius: 3, overflow: 'hidden' }}>
+                                      <div style={{ width: `${percentageUnits}%`, height: '100%', background: '#8b5cf6' }} />
+                                    </div>
+                                  </div>
+                                </td>
+                              </>
+                            )}
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                    <tfoot>
+                      <tr style={{ background: 'var(--panel)', position: 'sticky', bottom: 0, zIndex: 1, boxShadow: '0 -4px 6px -1px rgba(0,0,0,0.05)', borderTop: '2px solid var(--border)', fontWeight: 700 }}>
+                        <td style={{ padding: '10px 12px', textAlign: 'left', color: '#8b5cf6' }}>Total</td>
+                        {categoryViewMode !== 'consolidated' ? (
+                          <>
+                            {warehouseCols.map(wh => {
+                              if (categoryViewMode === 'units') {
+                                const whTotal = reportData.moneyMakerCategories.reduce((acc: number, c: any) => acc + (c.byWarehouse?.[wh] || 0), 0);
+                                return (
+                                  <td key={wh} style={{ padding: '10px 12px', textAlign: 'right' }}>
+                                    {whTotal > 0 ? whTotal.toLocaleString('es-NI') : ''}
+                                  </td>
+                                );
+                              } else {
+                                const whCost = reportData.moneyMakerCategories.reduce((acc: number, c: any) => acc + (c.capitalByWarehouse?.[wh] || 0), 0);
+                                return (
+                                  <td key={wh} style={{ padding: '10px 12px', textAlign: 'right', color: '#10b981' }}>
+                                    {whCost > 0 ? '$' + whCost.toLocaleString('es-NI', { minimumFractionDigits: 1, maximumFractionDigits: 1 }) : ''}
+                                  </td>
+                                );
+                              }
+                            })}
+                            <td style={{ padding: '10px 12px', textAlign: 'right' }}>
+                              {categoryViewMode === 'units'
+                                ? reportData.moneyMakerCategories.reduce((acc: number, c: any) => acc + (c.stock || 0), 0).toLocaleString('es-NI')
+                                : '$' + reportData.moneyMakerCategories.reduce((acc: number, c: any) => acc + (c.capital || 0), 0).toLocaleString('es-NI', { minimumFractionDigits: 1, maximumFractionDigits: 1 })
+                              }
+                            </td>
+                          </>
+                        ) : (
+                          <>
+                            <td style={{ padding: '10px 12px', textAlign: 'center' }}>
+                              {reportData.moneyMakerCategories.reduce((acc: number, c: any) => acc + (c.uniqueSkus || 0), 0).toLocaleString('es-NI')}
+                            </td>
+                            <td style={{ padding: '10px 12px', textAlign: 'right' }}>
+                              {reportData.moneyMakerCategories.reduce((acc: number, c: any) => acc + (c.stock || 0), 0).toLocaleString('es-NI')}
+                            </td>
+                            <td style={{ padding: '10px 12px', textAlign: 'right', color: '#10b981' }}>
+                              ${reportData.moneyMakerCategories.reduce((acc: number, c: any) => acc + (c.capital || 0), 0).toLocaleString('es-NI', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                            </td>
+                            <td style={{ padding: '10px 12px', textAlign: 'center' }}>
+                              <div style={{ display: 'flex', alignItems: 'center', gap: 8, justifyContent: 'flex-end' }}>
+                                <div style={{ fontWeight: 600 }}>
+                                  {(stats?.totalStock > 0
+                                    ? (reportData.moneyMakerCategories.reduce((acc: number, c: any) => acc + (c.stock || 0), 0) / stats.totalStock) * 100
+                                    : 0).toFixed(1)}%
+                                </div>
+                                <div style={{ width: 60, height: 6, background: 'var(--border)', borderRadius: 3, overflow: 'hidden' }}>
+                                  <div style={{
+                                    width: `${Math.min(100, stats?.totalStock > 0 ? (reportData.moneyMakerCategories.reduce((acc: number, c: any) => acc + (c.stock || 0), 0) / stats.totalStock) * 100 : 0)}%`,
+                                    height: '100%',
+                                    background: '#8b5cf6'
+                                  }} />
+                                </div>
                               </div>
-                            </div>
-                          </td>
-                        </tr>
-                      );
-                    })}
-                  </tbody>
-                  <tfoot>
-                    <tr style={{ background: 'var(--panel)', position: 'sticky', bottom: 0, zIndex: 1, boxShadow: '0 -4px 6px -1px rgba(0,0,0,0.05)', borderTop: '2px solid var(--border)', fontWeight: 700 }}>
-                      <td style={{ padding: '10px 12px', textAlign: 'left', color: '#8b5cf6' }}>Total</td>
-                      <td style={{ padding: '10px 12px', textAlign: 'center' }}>
-                        {reportData.moneyMakerCategories.reduce((acc: number, c: any) => acc + (c.uniqueSkus || 0), 0).toLocaleString('es-NI')}
-                      </td>
-                      <td style={{ padding: '10px 12px', textAlign: 'right' }}>
-                        {reportData.moneyMakerCategories.reduce((acc: number, c: any) => acc + (c.stock || 0), 0).toLocaleString('es-NI')}
-                      </td>
-                      <td style={{ padding: '10px 12px', textAlign: 'right', color: '#10b981' }}>
-                        ${reportData.moneyMakerCategories.reduce((acc: number, c: any) => acc + (c.capital || 0), 0).toLocaleString('es-NI', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                      </td>
-                      <td style={{ padding: '10px 12px', textAlign: 'center' }}>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: 8, justifyContent: 'flex-end' }}>
-                          <div style={{ fontWeight: 600 }}>
-                            {(stats?.totalStock > 0
-                              ? (reportData.moneyMakerCategories.reduce((acc: number, c: any) => acc + (c.stock || 0), 0) / stats.totalStock) * 100
-                              : 0).toFixed(1)}%
-                          </div>
-                          <div style={{ width: 60, height: 6, background: 'var(--border)', borderRadius: 3, overflow: 'hidden' }}>
-                            <div style={{
-                              width: `${Math.min(100, stats?.totalStock > 0 ? (reportData.moneyMakerCategories.reduce((acc: number, c: any) => acc + (c.stock || 0), 0) / stats.totalStock) * 100 : 0)}%`,
-                              height: '100%',
-                              background: '#8b5cf6'
-                            }} />
-                          </div>
-                        </div>
-                      </td>
-                    </tr>
-                  </tfoot>
-                </table>
-              </div>
-            )}
+                            </td>
+                          </>
+                        )}
+                      </tr>
+                    </tfoot>
+                  </table>
+                </div>
+              );
+            })()}
           </div>
         </Card>
       </div>
 
       {/* NUEVA SECCIÓN: MONEY MAKER DE MARCAS */}
-      <div style={{ background: 'linear-gradient(135deg, #f59e0b 0%, #d97706 100%)', padding: '12px 20px', borderRadius: 8, marginTop: 16 }}>
+      <div style={{ background: 'linear-gradient(135deg, #f59e0b 0%, #d97706 100%)', padding: '12px 20px', borderRadius: 8, marginTop: 16, display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 12 }}>
         <h2 style={{ color: 'white', fontSize: 18, fontWeight: 700, margin: 0 }}>El "Money Maker" de Marcas</h2>
+        <div style={{ display: 'flex', background: 'rgba(255,255,255,0.2)', borderRadius: 6, padding: 2 }}>
+          <button
+            onClick={() => setBrandViewMode('consolidated')}
+            style={{ padding: '6px 12px', borderRadius: 4, border: 'none', background: brandViewMode === 'consolidated' ? 'white' : 'transparent', color: brandViewMode === 'consolidated' ? '#d97706' : 'white', fontSize: 13, fontWeight: 600, cursor: 'pointer', transition: 'all 0.2s' }}
+          >
+            General
+          </button>
+          <button
+            onClick={() => setBrandViewMode('units')}
+            style={{ padding: '6px 12px', borderRadius: 4, border: 'none', background: brandViewMode === 'units' ? 'white' : 'transparent', color: brandViewMode === 'units' ? '#d97706' : 'white', fontSize: 13, fontWeight: 600, cursor: 'pointer', transition: 'all 0.2s' }}
+          >
+             Desglose Unids
+          </button>
+          <button
+            onClick={() => setBrandViewMode('cost')}
+            style={{ padding: '6px 12px', borderRadius: 4, border: 'none', background: brandViewMode === 'cost' ? 'white' : 'transparent', color: brandViewMode === 'cost' ? '#d97706' : 'white', fontSize: 13, fontWeight: 600, cursor: 'pointer', transition: 'all 0.2s' }}
+          >
+            Desglose Costo
+          </button>
+        </div>
       </div>
       <div className="table-card-hover">
         <Card>
@@ -927,74 +1055,160 @@ export default function ReportsPage() {
               <div style={{ textAlign: 'center', padding: '30px 0', color: 'var(--muted)' }}>
                 No hay datos de marcas
               </div>
-            ) : (
-              <div className="custom-scrollbar" style={{ maxHeight: 400, overflowY: 'auto', overflowX: 'auto', borderRadius: 8, border: '1px solid var(--border)' }}>
-                <table style={{ width: '100%', minWidth: 600, borderCollapse: 'collapse', fontSize: 13 }}>
-                  <thead>
-                    <tr style={{ background: 'var(--panel)', position: 'sticky', top: 0, zIndex: 1 }}>
-                      <th style={{ padding: '10px 12px', textAlign: 'left', fontWeight: 600, borderBottom: '1px solid var(--border)' }}>Marca</th>
-                      <th style={{ padding: '10px 12px', textAlign: 'center', fontWeight: 600, borderBottom: '1px solid var(--border)' }}>SKUs Diferentes</th>
-                      <th style={{ padding: '10px 12px', textAlign: 'right', fontWeight: 600, borderBottom: '1px solid var(--border)' }}>Stock Físico (Unids)</th>
-                      <th style={{ padding: '10px 12px', textAlign: 'right', fontWeight: 600, borderBottom: '1px solid var(--border)' }}>Capital Invertido</th>
-                      <th style={{ padding: '10px 12px', textAlign: 'right', fontWeight: 600, borderBottom: '1px solid var(--border)' }}>% del Inventario</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {reportData.moneyMakerBrands.map((brand: any, idx: number) => {
-                      const percentageUnits = stats?.totalStock > 0 ? (brand.stock / stats.totalStock) * 100 : 0;
-                      return (
-                        <tr key={idx} style={{ borderBottom: '1px solid var(--border)', background: idx % 2 === 0 ? 'transparent' : 'var(--panel)' }}>
-                          <td style={{ padding: '8px 12px', fontWeight: 600, color: '#f59e0b' }}>{brand.label}</td>
-                          <td style={{ padding: '8px 12px', textAlign: 'center' }}>{(brand.uniqueSkus || 0).toLocaleString('es-NI')}</td>
-                          <td style={{ padding: '8px 12px', textAlign: 'right', fontWeight: 600 }}>{(brand.stock || 0).toLocaleString('es-NI')}</td>
-                          <td style={{ padding: '8px 12px', textAlign: 'right', color: '#10b981', fontWeight: 700 }}>
-                            ${(brand.capital || 0).toLocaleString('es-NI', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                          </td>
-                          <td style={{ padding: '8px 12px', textAlign: 'center' }}>
-                            <div style={{ display: 'flex', alignItems: 'center', gap: 8, justifyContent: 'flex-end' }}>
-                              <div style={{ fontWeight: 600 }}>{percentageUnits.toFixed(1)}%</div>
-                              <div style={{ width: 60, height: 6, background: 'var(--border)', borderRadius: 3, overflow: 'hidden' }}>
-                                <div style={{ width: `${percentageUnits}%`, height: '100%', background: '#f59e0b' }} />
+            ) : (() => {
+              const uniqueWarehouses = new Set<string>();
+              if (brandViewMode !== 'consolidated') {
+                reportData.moneyMakerBrands.forEach((brand: any) => {
+                  const source = brandViewMode === 'units' ? brand.byWarehouse : brand.capitalByWarehouse;
+                  if (source) {
+                    Object.keys(source).forEach(w => uniqueWarehouses.add(w));
+                  }
+                });
+              }
+              const warehouseCols = Array.from(uniqueWarehouses).sort();
+
+              return (
+                <div className="custom-scrollbar" style={{ maxHeight: 400, overflowY: 'auto', overflowX: 'auto', borderRadius: 8, border: '1px solid var(--border)' }}>
+                  <table style={{ width: '100%', minWidth: brandViewMode !== 'consolidated' ? 400 + (warehouseCols.length * 80) : 600, borderCollapse: 'collapse', fontSize: 13 }}>
+                    <thead>
+                      <tr style={{ background: 'var(--panel)', position: 'sticky', top: 0, zIndex: 1 }}>
+                        <th style={{ padding: '10px 12px', textAlign: 'left', fontWeight: 600, borderBottom: '1px solid var(--border)' }}>Marca</th>
+                        {brandViewMode !== 'consolidated' ? (
+                          <>
+                            {warehouseCols.map(wh => (
+                              <th key={wh} style={{ padding: '10px 12px', textAlign: 'right', fontWeight: 600, borderBottom: '1px solid var(--border)' }}>{wh}</th>
+                            ))}
+                            <th style={{ padding: '10px 12px', textAlign: 'right', fontWeight: 600, borderBottom: '1px solid var(--border)' }}>
+                              {brandViewMode === 'units' ? 'Total Unids' : 'Total Costo'}
+                            </th>
+                          </>
+                        ) : (
+                          <>
+                            <th style={{ padding: '10px 12px', textAlign: 'center', fontWeight: 600, borderBottom: '1px solid var(--border)' }}>SKUs Diferentes</th>
+                            <th style={{ padding: '10px 12px', textAlign: 'right', fontWeight: 600, borderBottom: '1px solid var(--border)' }}>Stock Físico (Unids)</th>
+                            <th style={{ padding: '10px 12px', textAlign: 'right', fontWeight: 600, borderBottom: '1px solid var(--border)' }}>Capital Invertido</th>
+                            <th style={{ padding: '10px 12px', textAlign: 'right', fontWeight: 600, borderBottom: '1px solid var(--border)' }}>% del Inventario</th>
+                          </>
+                        )}
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {reportData.moneyMakerBrands.map((brand: any, idx: number) => {
+                        const percentageUnits = stats?.totalStock > 0 ? (brand.stock / stats.totalStock) * 100 : 0;
+                        return (
+                          <tr key={idx} style={{ borderBottom: '1px solid var(--border)', background: idx % 2 === 0 ? 'transparent' : 'var(--panel)' }}>
+                            <td style={{ padding: '8px 12px', fontWeight: 600, color: '#f59e0b' }}>{brand.label}</td>
+                            {brandViewMode !== 'consolidated' ? (
+                              <>
+                                {warehouseCols.map(wh => {
+                                  if (brandViewMode === 'units') {
+                                    const qty = brand.byWarehouse?.[wh] || 0;
+                                    return (
+                                      <td key={wh} style={{ padding: '8px 12px', textAlign: 'right' }}>
+                                        {qty > 0 ? qty.toLocaleString('es-NI') : ''}
+                                      </td>
+                                    );
+                                  } else {
+                                    const cost = brand.capitalByWarehouse?.[wh] || 0;
+                                    return (
+                                      <td key={wh} style={{ padding: '8px 12px', textAlign: 'right', color: '#10b981', fontSize: 12 }}>
+                                        {cost > 0 ? '$' + cost.toLocaleString('es-NI', { minimumFractionDigits: 1, maximumFractionDigits: 1 }) : ''}
+                                      </td>
+                                    );
+                                  }
+                                })}
+                                <td style={{ padding: '8px 12px', textAlign: 'right', fontWeight: 700 }}>
+                                  {brandViewMode === 'units'
+                                    ? (brand.stock || 0).toLocaleString('es-NI')
+                                    : '$' + (brand.capital || 0).toLocaleString('es-NI', { minimumFractionDigits: 1, maximumFractionDigits: 1 })
+                                  }
+                                </td>
+                              </>
+                            ) : (
+                              <>
+                                <td style={{ padding: '8px 12px', textAlign: 'center' }}>{(brand.uniqueSkus || 0).toLocaleString('es-NI')}</td>
+                                <td style={{ padding: '8px 12px', textAlign: 'right', fontWeight: 600 }}>{(brand.stock || 0).toLocaleString('es-NI')}</td>
+                                <td style={{ padding: '8px 12px', textAlign: 'right', color: '#10b981', fontWeight: 700 }}>
+                                  ${(brand.capital || 0).toLocaleString('es-NI', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                                </td>
+                                <td style={{ padding: '8px 12px', textAlign: 'center' }}>
+                                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, justifyContent: 'flex-end' }}>
+                                    <div style={{ fontWeight: 600 }}>{percentageUnits.toFixed(1)}%</div>
+                                    <div style={{ width: 60, height: 6, background: 'var(--border)', borderRadius: 3, overflow: 'hidden' }}>
+                                      <div style={{ width: `${percentageUnits}%`, height: '100%', background: '#f59e0b' }} />
+                                    </div>
+                                  </div>
+                                </td>
+                              </>
+                            )}
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                    <tfoot>
+                      <tr style={{ background: 'var(--panel)', position: 'sticky', bottom: 0, zIndex: 1, boxShadow: '0 -4px 6px -1px rgba(0,0,0,0.05)', borderTop: '2px solid var(--border)', fontWeight: 700 }}>
+                        <td style={{ padding: '10px 12px', textAlign: 'left', color: '#f59e0b' }}>Total</td>
+                        {brandViewMode !== 'consolidated' ? (
+                          <>
+                            {warehouseCols.map(wh => {
+                              if (brandViewMode === 'units') {
+                                const whTotal = reportData.moneyMakerBrands.reduce((acc: number, b: any) => acc + (b.byWarehouse?.[wh] || 0), 0);
+                                return (
+                                  <td key={wh} style={{ padding: '10px 12px', textAlign: 'right' }}>
+                                    {whTotal > 0 ? whTotal.toLocaleString('es-NI') : ''}
+                                  </td>
+                                );
+                              } else {
+                                const whCost = reportData.moneyMakerBrands.reduce((acc: number, b: any) => acc + (b.capitalByWarehouse?.[wh] || 0), 0);
+                                return (
+                                  <td key={wh} style={{ padding: '10px 12px', textAlign: 'right', color: '#10b981' }}>
+                                    {whCost > 0 ? '$' + whCost.toLocaleString('es-NI', { minimumFractionDigits: 1, maximumFractionDigits: 1 }) : ''}
+                                  </td>
+                                );
+                              }
+                            })}
+                            <td style={{ padding: '10px 12px', textAlign: 'right' }}>
+                              {brandViewMode === 'units'
+                                ? reportData.moneyMakerBrands.reduce((acc: number, b: any) => acc + (b.stock || 0), 0).toLocaleString('es-NI')
+                                : '$' + reportData.moneyMakerBrands.reduce((acc: number, b: any) => acc + (b.capital || 0), 0).toLocaleString('es-NI', { minimumFractionDigits: 1, maximumFractionDigits: 1 })
+                              }
+                            </td>
+                          </>
+                        ) : (
+                          <>
+                            <td style={{ padding: '10px 12px', textAlign: 'center' }}>
+                              {reportData.moneyMakerBrands.reduce((acc: number, b: any) => acc + (b.uniqueSkus || 0), 0).toLocaleString('es-NI')}
+                            </td>
+                            <td style={{ padding: '10px 12px', textAlign: 'right' }}>
+                              {reportData.moneyMakerBrands.reduce((acc: number, b: any) => acc + (b.stock || 0), 0).toLocaleString('es-NI')}
+                            </td>
+                            <td style={{ padding: '10px 12px', textAlign: 'right', color: '#10b981' }}>
+                              ${reportData.moneyMakerBrands.reduce((acc: number, b: any) => acc + (b.capital || 0), 0).toLocaleString('es-NI', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                            </td>
+                            <td style={{ padding: '10px 12px', textAlign: 'center' }}>
+                              <div style={{ display: 'flex', alignItems: 'center', gap: 8, justifyContent: 'flex-end' }}>
+                                <div style={{ fontWeight: 600 }}>
+                                  {(stats?.totalStock > 0
+                                    ? (reportData.moneyMakerBrands.reduce((acc: number, b: any) => acc + (b.stock || 0), 0) / stats.totalStock) * 100
+                                    : 0).toFixed(1)}%
+                                </div>
+                                <div style={{ width: 60, height: 6, background: 'var(--border)', borderRadius: 3, overflow: 'hidden' }}>
+                                  <div style={{
+                                    width: `${Math.min(100, stats?.totalStock > 0 ? (reportData.moneyMakerBrands.reduce((acc: number, b: any) => acc + (b.stock || 0), 0) / stats.totalStock) * 100 : 0)}%`,
+                                    height: '100%',
+                                    background: '#f59e0b'
+                                  }} />
+                                </div>
                               </div>
-                            </div>
-                          </td>
-                        </tr>
-                      );
-                    })}
-                  </tbody>
-                  <tfoot>
-                    <tr style={{ background: 'var(--panel)', position: 'sticky', bottom: 0, zIndex: 1, boxShadow: '0 -4px 6px -1px rgba(0,0,0,0.05)', borderTop: '2px solid var(--border)', fontWeight: 700 }}>
-                      <td style={{ padding: '10px 12px', textAlign: 'left', color: '#f59e0b' }}>Total</td>
-                      <td style={{ padding: '10px 12px', textAlign: 'center' }}>
-                        {reportData.moneyMakerBrands.reduce((acc: number, b: any) => acc + (b.uniqueSkus || 0), 0).toLocaleString('es-NI')}
-                      </td>
-                      <td style={{ padding: '10px 12px', textAlign: 'right' }}>
-                        {reportData.moneyMakerBrands.reduce((acc: number, b: any) => acc + (b.stock || 0), 0).toLocaleString('es-NI')}
-                      </td>
-                      <td style={{ padding: '10px 12px', textAlign: 'right', color: '#10b981' }}>
-                        ${reportData.moneyMakerBrands.reduce((acc: number, b: any) => acc + (b.capital || 0), 0).toLocaleString('es-NI', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                      </td>
-                      <td style={{ padding: '10px 12px', textAlign: 'center' }}>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: 8, justifyContent: 'flex-end' }}>
-                          <div style={{ fontWeight: 600 }}>
-                            {(stats?.totalStock > 0
-                              ? (reportData.moneyMakerBrands.reduce((acc: number, b: any) => acc + (b.stock || 0), 0) / stats.totalStock) * 100
-                              : 0).toFixed(1)}%
-                          </div>
-                          <div style={{ width: 60, height: 6, background: 'var(--border)', borderRadius: 3, overflow: 'hidden' }}>
-                            <div style={{
-                              width: `${Math.min(100, stats?.totalStock > 0 ? (reportData.moneyMakerBrands.reduce((acc: number, b: any) => acc + (b.stock || 0), 0) / stats.totalStock) * 100 : 0)}%`,
-                              height: '100%',
-                              background: '#f59e0b'
-                            }} />
-                          </div>
-                        </div>
-                      </td>
-                    </tr>
-                  </tfoot>
-                </table>
-              </div>
-            )}
+                            </td>
+                          </>
+                        )}
+                      </tr>
+                    </tfoot>
+                  </table>
+                </div>
+              );
+            })()}
           </div>
         </Card>
       </div>

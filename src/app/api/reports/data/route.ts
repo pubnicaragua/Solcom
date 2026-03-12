@@ -60,7 +60,7 @@ async function getScopedTotalsForItems(
     itemIds: string[],
     allowedWarehouseIds: string[]
 ) {
-    const totals = new Map<string, number>();
+    const totals = new Map<string, { total: number; byWarehouse: Record<string, number> }>();
     if (itemIds.length === 0 || allowedWarehouseIds.length === 0) return totals;
     const ITEM_CHUNK = 250;
     const PAGE_SIZE = 1000;
@@ -87,8 +87,19 @@ async function getScopedTotalsForItems(
                 const rows = balances || [];
                 for (const row of rows) {
                     const itemId = String(row.item_id || '');
+                    const warehouseId = String(row.warehouse_id || '');
                     if (!itemId) continue;
-                    totals.set(itemId, Number(totals.get(itemId) || 0) + Number(row.qty_on_hand || 0));
+                    
+                    if (!totals.has(itemId)) {
+                        totals.set(itemId, { total: 0, byWarehouse: {} });
+                    }
+                    const record = totals.get(itemId)!;
+                    
+                    const qty = Number(row.qty_on_hand || 0);
+                    record.total += qty;
+                    if (warehouseId) {
+                        record.byWarehouse[warehouseId] = (record.byWarehouse[warehouseId] || 0) + qty;
+                    }
                 }
 
                 if (rows.length < PAGE_SIZE) hasMore = false;
@@ -126,7 +137,15 @@ async function getScopedTotalsForItems(
                     const key = `${itemId}__${warehouseId}`;
                     if (latestByItemWarehouse.has(key)) continue;
                     latestByItemWarehouse.add(key);
-                    totals.set(itemId, Number(totals.get(itemId) || 0) + Number(row.qty || 0));
+                    
+                    if (!totals.has(itemId)) {
+                        totals.set(itemId, { total: 0, byWarehouse: {} });
+                    }
+                    const record = totals.get(itemId)!;
+                    
+                    const qty = Number(row.qty || 0);
+                    record.total += qty;
+                    record.byWarehouse[warehouseId] = (record.byWarehouse[warehouseId] || 0) + qty;
                 }
 
                 if (rows.length < PAGE_SIZE) hasMore = false;
@@ -273,7 +292,8 @@ export async function GET(request: Request) {
         const scopedTotals = await getScopedTotalsForItems(supabase, allItemIds, allowedWarehouseIds);
         let allItems = filteredItems.map((item: any) => ({
             ...item,
-            stock_total: scopedTotals.get(item.id) ?? 0,
+            stock_total: scopedTotals.get(item.id)?.total ?? 0,
+            stock_by_warehouse: scopedTotals.get(item.id)?.byWarehouse ?? {},
         }));
 
         // If filtering by warehouse, narrow items to those with stock in that warehouse
@@ -361,8 +381,14 @@ export async function GET(request: Request) {
         lowStockList.sort((a, b) => a.stock_total - b.stock_total);
 
         // 5) Chart breakdowns from items (instant)
-        const categoryBreakdown: Record<string, { stock: number; capital: number; skus: Set<string> }> = {};
-        const brandBreakdown: Record<string, { stock: number; capital: number; skus: Set<string>; label: string }> = {};
+        const categoryBreakdown: Record<string, { stock: number; capital: number; skus: Set<string>; byWarehouse: Record<string, number> }> = {};
+        const brandBreakdown: Record<string, { stock: number; capital: number; skus: Set<string>; label: string; byWarehouse: Record<string, number> }> = {};
+
+        // Prepare warehouse display names mappings
+        const warehouseCodeMap: Record<string, string> = {};
+        activeWarehouses.forEach(w => {
+            warehouseCodeMap[w.id] = w.code || w.name || w.id;
+        });
 
         allItems.forEach((item: any) => {
             const cat = item.category || 'Sin categoría';
@@ -372,18 +398,40 @@ export async function GET(request: Request) {
             const price = item.price || 0;
 
             if (!categoryBreakdown[cat]) {
-                categoryBreakdown[cat] = { stock: 0, capital: 0, skus: new Set() };
+                categoryBreakdown[cat] = { stock: 0, capital: 0, skus: new Set(), byWarehouse: {}, capitalByWarehouse: {} };
             }
             categoryBreakdown[cat].stock += stock;
             categoryBreakdown[cat].capital += (stock * price);
             if (stock > 0) categoryBreakdown[cat].skus.add(item.sku || String(item.id));
+            
+            if (item.stock_by_warehouse) {
+                Object.entries(item.stock_by_warehouse).forEach(([whId, qty]) => {
+                    const wQty = Number(qty);
+                    if (wQty > 0) {
+                        const wCode = warehouseCodeMap[whId] || whId;
+                        categoryBreakdown[cat].byWarehouse[wCode] = (categoryBreakdown[cat].byWarehouse[wCode] || 0) + wQty;
+                        categoryBreakdown[cat].capitalByWarehouse[wCode] = (categoryBreakdown[cat].capitalByWarehouse[wCode] || 0) + (wQty * price);
+                    }
+                });
+            }
 
             if (!brandBreakdown[brandKey]) {
-                brandBreakdown[brandKey] = { stock: 0, capital: 0, skus: new Set(), label: brandRaw };
+                brandBreakdown[brandKey] = { stock: 0, capital: 0, skus: new Set(), label: brandRaw, byWarehouse: {}, capitalByWarehouse: {} };
             }
             brandBreakdown[brandKey].stock += stock;
             brandBreakdown[brandKey].capital += (stock * price);
             if (stock > 0) brandBreakdown[brandKey].skus.add(item.sku || String(item.id));
+
+            if (item.stock_by_warehouse) {
+                Object.entries(item.stock_by_warehouse).forEach(([whId, qty]) => {
+                    const wQty = Number(qty);
+                    if (wQty > 0) {
+                        const wCode = warehouseCodeMap[whId] || whId;
+                        brandBreakdown[brandKey].byWarehouse[wCode] = (brandBreakdown[brandKey].byWarehouse[wCode] || 0) + wQty;
+                        brandBreakdown[brandKey].capitalByWarehouse[wCode] = (brandBreakdown[brandKey].capitalByWarehouse[wCode] || 0) + (wQty * price);
+                    }
+                });
+            }
         });
 
         // 6) Aging data (items with stock > 0 updated > 90 days ago)
@@ -424,7 +472,9 @@ export async function GET(request: Request) {
                 label,
                 stock: data.stock,
                 capital: data.capital,
-                uniqueSkus: data.skus.size
+                uniqueSkus: data.skus.size,
+                byWarehouse: data.byWarehouse,
+                capitalByWarehouse: (data as any).capitalByWarehouse
             }))
             .filter(c => c.stock > 0 || c.capital > 0)
             .sort((a, b) => b.capital - a.capital); // Sort by capital invested
@@ -435,7 +485,9 @@ export async function GET(request: Request) {
                 label: b.label,
                 stock: b.stock,
                 capital: b.capital,
-                uniqueSkus: b.skus.size
+                uniqueSkus: b.skus.size,
+                byWarehouse: b.byWarehouse,
+                capitalByWarehouse: b.capitalByWarehouse
             }))
             .filter(b => b.stock > 0 || b.capital > 0)
             .sort((a, b) => b.capital - a.capital); // Sort by capital invested
