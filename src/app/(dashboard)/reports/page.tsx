@@ -35,6 +35,7 @@ export default function ReportsPage() {
   const [exporting, setExporting] = useState<'pdf' | 'excel' | null>(null);
   const [categoryViewMode, setCategoryViewMode] = useState<'consolidated' | 'units' | 'cost'>('consolidated');
   const [brandViewMode, setBrandViewMode] = useState<'consolidated' | 'units' | 'cost'>('consolidated');
+  const [topItemsViewMode, setTopItemsViewMode] = useState<'units' | 'cost'>('units');
 
   useEffect(() => {
     setIsMobile(window.innerWidth < 640);
@@ -1214,8 +1215,22 @@ export default function ReportsPage() {
       </div>
 
       {/* NUEVA SECCIÓN: TOP INVENTARIO POR EQUIPO UNIDAD */}
-      <div style={{ background: 'linear-gradient(135deg, #1e3a8a 0%, #172554 100%)', padding: '12px 20px', borderRadius: 8, marginTop: 16 }}>
-        <h2 style={{ color: 'white', fontSize: 18, fontWeight: 700, margin: 0 }}>Top Inventario por Equipo Unidad</h2>
+      <div style={{ background: 'linear-gradient(135deg, #1e3a8a 0%, #172554 100%)', padding: '12px 20px', borderRadius: 8, marginTop: 16, display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 12 }}>
+        <h2 style={{ color: 'white', fontSize: 18, fontWeight: 700, margin: 0 }}>Top Inventario por Equipo ({topItemsViewMode === 'units' ? 'Unidad' : 'al Costo'})</h2>
+        <div style={{ display: 'flex', background: 'rgba(255,255,255,0.2)', borderRadius: 6, padding: 2 }}>
+          <button
+            onClick={() => setTopItemsViewMode('units')}
+            style={{ padding: '6px 12px', borderRadius: 4, border: 'none', background: topItemsViewMode === 'units' ? 'white' : 'transparent', color: topItemsViewMode === 'units' ? '#1e3a8a' : 'white', fontSize: 13, fontWeight: 600, cursor: 'pointer', transition: 'all 0.2s' }}
+          >
+            Unidades
+          </button>
+          <button
+            onClick={() => setTopItemsViewMode('cost')}
+            style={{ padding: '6px 12px', borderRadius: 4, border: 'none', background: topItemsViewMode === 'cost' ? 'white' : 'transparent', color: topItemsViewMode === 'cost' ? '#1e3a8a' : 'white', fontSize: 13, fontWeight: 600, cursor: 'pointer', transition: 'all 0.2s' }}
+          >
+            Al Costo
+          </button>
+        </div>
       </div>
       <div className="table-card-hover" style={{ marginTop: 14 }}>
         <Card>
@@ -1227,8 +1242,20 @@ export default function ReportsPage() {
                 No hay datos de productos
               </div>
             ) : (() => {
+              const currentItems = topItemsViewMode === 'units' 
+                ? reportData.topInventoryItems || [] 
+                : reportData.topInventoryItemsByCost || [];
+              
+              if (currentItems.length === 0) {
+                return (
+                  <div style={{ textAlign: 'center', padding: '30px 0', color: 'var(--muted)' }}>
+                    No hay datos de productos para esta vista
+                  </div>
+                );
+              }
+
               const uniqueWarehouses = new Set<string>();
-              reportData.topInventoryItems.forEach((item: any) => {
+              currentItems.forEach((item: any) => {
                 const source = item.byWarehouse;
                 if (source) {
                   Object.keys(source).forEach(w => uniqueWarehouses.add(w));
@@ -1249,20 +1276,32 @@ export default function ReportsPage() {
                       </tr>
                     </thead>
                     <tbody>
-                      {reportData.topInventoryItems.map((item: any, idx: number) => {
+                      {currentItems.map((item: any, idx: number) => {
                         return (
                           <tr key={idx} style={{ borderBottom: '1px solid var(--border)', background: idx % 2 === 0 ? 'transparent' : 'var(--panel)' }}>
                             <td style={{ padding: '8px 12px', fontWeight: 600, color: '#ffffffff' }}>{item.name}</td>
                             {warehouseCols.map(wh => {
-                              const qty = item.byWarehouse?.[wh] || 0;
-                              return (
-                                <td key={wh} style={{ padding: '8px 12px', textAlign: 'right' }}>
-                                  {qty > 0 ? qty.toLocaleString('es-NI') : ''}
-                                </td>
-                              );
+                              if (topItemsViewMode === 'units') {
+                                const qty = item.byWarehouse?.[wh] || 0;
+                                return (
+                                  <td key={wh} style={{ padding: '8px 12px', textAlign: 'right' }}>
+                                    {qty > 0 ? qty.toLocaleString('es-NI') : ''}
+                                  </td>
+                                );
+                              } else {
+                                const cost = item.capitalByWarehouse?.[wh] || 0;
+                                return (
+                                  <td key={wh} style={{ padding: '8px 12px', textAlign: 'right', color: '#10b981', fontSize: 12 }}>
+                                    {cost > 0 ? '$' + cost.toLocaleString('es-NI', { minimumFractionDigits: 1, maximumFractionDigits: 1 }) : ''}
+                                  </td>
+                                );
+                              }
                             })}
                             <td style={{ padding: '8px 12px', textAlign: 'right', fontWeight: 700 }}>
-                              {(item.stock_total || 0).toLocaleString('es-NI')}
+                              {topItemsViewMode === 'units'
+                                ? (item.stock_total || 0).toLocaleString('es-NI')
+                                : '$' + (item.capital || 0).toLocaleString('es-NI', { minimumFractionDigits: 1, maximumFractionDigits: 1 })
+                              }
                             </td>
                           </tr>
                         );
@@ -1272,15 +1311,27 @@ export default function ReportsPage() {
                       <tr style={{ background: 'var(--panel)', position: 'sticky', bottom: 0, zIndex: 1, boxShadow: '0 -4px 6px -1px rgba(0,0,0,0.05)', borderTop: '2px solid var(--border)', fontWeight: 700 }}>
                         <td style={{ padding: '10px 12px', textAlign: 'left', color: '#ffffffff' }}>Total</td>
                         {warehouseCols.map(wh => {
-                          const whTotal = reportData.topInventoryItems.reduce((acc: number, item: any) => acc + (item.byWarehouse?.[wh] || 0), 0);
-                          return (
-                            <td key={wh} style={{ padding: '10px 12px', textAlign: 'right' }}>
-                              {whTotal > 0 ? whTotal.toLocaleString('es-NI') : ''}
-                            </td>
-                          );
+                          if (topItemsViewMode === 'units') {
+                            const whTotal = currentItems.reduce((acc: number, item: any) => acc + (item.byWarehouse?.[wh] || 0), 0);
+                            return (
+                              <td key={wh} style={{ padding: '10px 12px', textAlign: 'right' }}>
+                                {whTotal > 0 ? whTotal.toLocaleString('es-NI') : ''}
+                              </td>
+                            );
+                          } else {
+                            const whCost = currentItems.reduce((acc: number, item: any) => acc + (item.capitalByWarehouse?.[wh] || 0), 0);
+                            return (
+                              <td key={wh} style={{ padding: '10px 12px', textAlign: 'right', color: '#10b981' }}>
+                                {whCost > 0 ? '$' + whCost.toLocaleString('es-NI', { minimumFractionDigits: 1, maximumFractionDigits: 1 }) : ''}
+                              </td>
+                            );
+                          }
                         })}
                         <td style={{ padding: '10px 12px', textAlign: 'right' }}>
-                          {reportData.topInventoryItems.reduce((acc: number, item: any) => acc + (item.stock_total || 0), 0).toLocaleString('es-NI')}
+                          {topItemsViewMode === 'units'
+                            ? currentItems.reduce((acc: number, item: any) => acc + (item.stock_total || 0), 0).toLocaleString('es-NI')
+                            : '$' + currentItems.reduce((acc: number, item: any) => acc + (item.capital || 0), 0).toLocaleString('es-NI', { minimumFractionDigits: 1, maximumFractionDigits: 1 })
+                          }
                         </td>
                       </tr>
                     </tfoot>
@@ -1458,6 +1509,24 @@ export default function ReportsPage() {
             <div style={{ height: 300, background: 'var(--panel)', borderRadius: 4, animation: 'pulse 1.5s infinite' }} />
           ) : (() => {
             const data = charts?.brandBreakdown;
+            return data && data.length > 0 ? (
+              <PieChart data={data.map((d: any, i: number) => ({ ...d, color: generateColors(data.length)[i] }))} size={250} innerRadius={65} />
+            ) : (
+              <ReportPlaceholder title="Sin datos" height={300} />
+            );
+          })()}
+        </ChartCard>
+      </div>
+
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(400px, 100%), 1fr))', gap: 14, marginTop: 14 }}>
+        <ChartCard title="Participación - Top Inventario Equipos">
+          {loading ? (
+            <div style={{ height: 300, background: 'var(--panel)', borderRadius: 4, animation: 'pulse 1.5s infinite' }} />
+          ) : (() => {
+            const data = reportData?.topInventoryItems?.map((item: any) => ({
+              label: item.name,
+              value: item.stock_total
+            })) || [];
             return data && data.length > 0 ? (
               <PieChart data={data.map((d: any, i: number) => ({ ...d, color: generateColors(data.length)[i] }))} size={250} innerRadius={65} />
             ) : (

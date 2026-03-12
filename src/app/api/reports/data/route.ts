@@ -497,29 +497,42 @@ export async function GET(request: Request) {
         // 7) Top 10 Inventory Items by stock (Equipos/Unidades only, excluding accessories)
         const accessoryKeywords = ['lamina', 'lámina', 'hidrogel', 'hydrogel', 'cable', 'cargador', 'case', 'funda', 'protector', 'mica', 'vidrio', 'templado', 'correa', 'accesorio', 'soporte', 'holder', 'cargador', 'adaptador', 'silicone', 'tpu'];
         
-        const topInventoryItems = [...allItems]
+        // Map items without taking the top N yet
+        const topInventoryItemsAll = [...allItems]
             .filter((item: any) => {
                 const name = (item.name || '').toLowerCase();
                 const category = (item.category || '').toLowerCase();
                 return !accessoryKeywords.some(kw => name.includes(kw) || category.includes(kw));
             })
-            .sort((a: any, b: any) => (b.stock_total || 0) - (a.stock_total || 0))
-            .slice(0, 10)
             .map((item: any) => {
                 const byWarehouseMapped: Record<string, number> = {};
+                const capitalByWarehouseMapped: Record<string, number> = {};
                 if (item.stock_by_warehouse) {
                     Object.entries(item.stock_by_warehouse).forEach(([whId, qty]) => {
                         const wCode = warehouseCodeMap[whId] || whId;
                         byWarehouseMapped[wCode] = Number(qty);
+                        capitalByWarehouseMapped[wCode] = Number(qty) * (item.price || 0);
                     });
                 }
                 return {
                     id: item.id,
                     name: item.name,
                     stock_total: item.stock_total,
-                    byWarehouse: byWarehouseMapped
+                    capital: (item.stock_total || 0) * (item.price || 0),
+                    byWarehouse: byWarehouseMapped,
+                    capitalByWarehouse: capitalByWarehouseMapped
                 };
             });
+
+        // Top 10 by Units
+        const topInventoryItems = [...topInventoryItemsAll]
+            .sort((a: any, b: any) => (b.stock_total || 0) - (a.stock_total || 0))
+            .slice(0, 10);
+
+        // Top 10 by Cost
+        const topInventoryItemsByCost = [...topInventoryItemsAll]
+            .sort((a: any, b: any) => (b.capital || 0) - (a.capital || 0))
+            .slice(0, 10);
 
         return NextResponse.json({
             stats: {
@@ -537,6 +550,7 @@ export async function GET(request: Request) {
             moneyMakerCategories,
             moneyMakerBrands,
             topInventoryItems,
+            topInventoryItemsByCost,
             filterOptions,
             aging: {
                 items: agingItems,
