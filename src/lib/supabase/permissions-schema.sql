@@ -74,6 +74,9 @@ INSERT INTO permissions (code, name, description, module) VALUES
   -- Ventas
   ('ventas.read', 'Ver Ventas', 'Permite ver el módulo de ventas', 'ventas'),
   ('ventas.write', 'Crear Ventas', 'Permite crear y modificar ventas', 'ventas'),
+  ('ventas.create_quote', 'Crear Cotización', 'Permite crear cotizaciones', 'ventas'),
+  ('ventas.create_invoice', 'Crear Factura', 'Permite crear facturas', 'ventas'),
+  ('ventas.create_sales_order', 'Crear Orden de Venta', 'Permite crear órdenes de venta', 'ventas'),
   
   -- Transferencias
   ('transfers.read', 'Ver Transferencias', 'Permite ver transferencias entre bodegas', 'transfers'),
@@ -113,6 +116,9 @@ INSERT INTO role_permissions (role, permission_code) VALUES
   ('manager', 'reports.read'),
   ('manager', 'reports.export'),
   ('manager', 'ventas.read'),
+  ('manager', 'ventas.create_quote'),
+  ('manager', 'ventas.create_invoice'),
+  ('manager', 'ventas.create_sales_order'),
   ('manager', 'branding.view')
 ON CONFLICT (role, permission_code) DO NOTHING;
 
@@ -122,6 +128,9 @@ INSERT INTO role_permissions (role, permission_code) VALUES
   ('operator', 'reports.read'),
   ('operator', 'ventas.read'),
   ('operator', 'ventas.write'),
+  ('operator', 'ventas.create_quote'),
+  ('operator', 'ventas.create_invoice'),
+  ('operator', 'ventas.create_sales_order'),
   ('operator', 'branding.view')
 ON CONFLICT (role, permission_code) DO NOTHING;
 

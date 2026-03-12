@@ -1,6 +1,13 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createRouteHandlerClient } from '@supabase/auth-helpers-nextjs';
 import { cookies } from 'next/headers';
+import { getAuthenticatedProfile } from '@/lib/auth/warehouse-permissions';
+import { getEffectiveModuleAccess, hasModuleAccess } from '@/lib/auth/module-permissions';
+import {
+    canCreateVentasDocument,
+    createPermissionDeniedMessage,
+    resolveRoleForPermissionChecks,
+} from '@/lib/auth/ventas-document-permissions';
 import { createZohoBooksClient } from '@/lib/zoho/books-client';
 import { withWarrantyInDescription } from '@/lib/ventas/fiscal';
 import {
@@ -553,6 +560,33 @@ export async function POST(
 
         if (!user) {
             return NextResponse.json({ error: 'No autorizado' }, { status: 401 });
+        }
+
+        const auth = await getAuthenticatedProfile(supabase);
+        if (!auth.ok) {
+            return NextResponse.json({ error: auth.error }, { status: auth.status });
+        }
+
+        const moduleAccess = await getEffectiveModuleAccess(supabase, auth.userId, auth.role);
+        if (!hasModuleAccess(moduleAccess, 'ventas')) {
+            return NextResponse.json({ error: 'No autorizado para este módulo' }, { status: 403 });
+        }
+
+        const roleForPermission = await resolveRoleForPermissionChecks(
+            supabase,
+            auth.userId,
+            auth.role
+        );
+        const canCreateInvoice = await canCreateVentasDocument(
+            supabase,
+            roleForPermission,
+            'invoice'
+        );
+        if (!canCreateInvoice) {
+            return NextResponse.json(
+                { error: createPermissionDeniedMessage('invoice') },
+                { status: 403 }
+            );
         }
 
         const idempotencyStart = await beginIdempotentRequest({

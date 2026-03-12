@@ -19,6 +19,7 @@ export interface CartItem {
 }
 
 export type CartType = 'cotizacion' | 'factura' | 'orden_venta';
+type CartTypePermissionMap = Record<CartType, boolean>;
 
 interface Customer {
     id: string;
@@ -182,6 +183,12 @@ export default function InventoryCart({
     const [error, setError] = useState('');
     const [success, setSuccess] = useState(false);
     const [createdDocNumber, setCreatedDocNumber] = useState('');
+    const [canAccessVentasModule, setCanAccessVentasModule] = useState(true);
+    const [cartTypePermissions, setCartTypePermissions] = useState<CartTypePermissionMap>({
+        cotizacion: true,
+        factura: true,
+        orden_venta: true,
+    });
 
     // Shared fields
     const [customers, setCustomers] = useState<Customer[]>([]);
@@ -228,6 +235,28 @@ export default function InventoryCart({
     const totalItems = items.length;
     const totalUnits = items.reduce((sum, item) => sum + item.quantity, 0);
     const config = CART_TYPE_CONFIG[cartType];
+    const availableCartTypes = (['cotizacion', 'factura', 'orden_venta'] as CartType[]).filter(
+        (type) => cartTypePermissions[type]
+    );
+    const canSubmitCurrentType = canAccessVentasModule && Boolean(cartTypePermissions[cartType]);
+
+    const fetchCartPermissions = useCallback(async () => {
+        try {
+            const res = await fetch('/api/ventas/permissions', { cache: 'no-store' });
+            const data = await res.json().catch(() => ({}));
+            if (!res.ok) return;
+
+            const nextPermissions: CartTypePermissionMap = {
+                cotizacion: Boolean(data?.can_create_quote),
+                factura: Boolean(data?.can_create_invoice),
+                orden_venta: Boolean(data?.can_create_sales_order),
+            };
+            setCanAccessVentasModule(Boolean(data?.module_access));
+            setCartTypePermissions(nextPermissions);
+        } catch {
+            // No-op: en caso de falla de red, backend mantiene validación final.
+        }
+    }, []);
 
     function getItemFiscal(itemId: string): ItemFiscalInput {
         return itemFiscalByItemId[itemId] || {
@@ -353,12 +382,21 @@ export default function InventoryCart({
     // Load data when cart opens
     useEffect(() => {
         if (isOpen) {
+            void fetchCartPermissions();
             fetchCustomers('');
             fetchParentWarehouses();
             fetchSalespeople();
             fetchTaxes();
         }
-    }, [isOpen, fetchCustomers, fetchParentWarehouses, fetchSalespeople, fetchTaxes]);
+    }, [isOpen, fetchCartPermissions, fetchCustomers, fetchParentWarehouses, fetchSalespeople, fetchTaxes]);
+
+    useEffect(() => {
+        if (!isOpen) return;
+        if (availableCartTypes.length === 0) return;
+        if (!availableCartTypes.includes(cartType)) {
+            setCartType(availableCartTypes[0]);
+        }
+    }, [isOpen, cartType, availableCartTypes.join('|')]);
 
     useEffect(() => {
         setItemFiscalByItemId((prev) => {
@@ -505,6 +543,10 @@ export default function InventoryCart({
 
     async function handleSubmit() {
         if (items.length === 0) return;
+        if (!canSubmitCurrentType) {
+            setError('Tu rol no tiene permiso para crear este tipo de documento.');
+            return;
+        }
         if (!validate()) return;
         const selectedSalesperson = salespeople.find((seller) => seller.id === selectedSalespersonId) || null;
         const docItems = items.map((item) => {
@@ -760,10 +802,10 @@ export default function InventoryCart({
                     display: 'flex',
                     gap: 6,
                 }}>
-                    {(['cotizacion', 'factura', 'orden_venta'] as CartType[]).map((type) => {
+                    {availableCartTypes.map((type) => {
                         const tc = CART_TYPE_CONFIG[type];
                         const isActive = cartType === type;
-                        const disabled = !warehouseId;
+                        const disabled = !warehouseId || !canAccessVentasModule;
                         const Icon = tc.icon;
                         return (
                             <button
@@ -881,6 +923,23 @@ export default function InventoryCart({
                         </div>
                     </div>
                 )}
+
+                {!canAccessVentasModule || availableCartTypes.length === 0 ? (
+                    <div
+                        style={{
+                            margin: '12px 16px 0',
+                            padding: '10px 12px',
+                            borderRadius: 8,
+                            border: '1px solid rgba(251,191,36,0.35)',
+                            background: 'rgba(120,53,15,0.3)',
+                            color: '#FCD34D',
+                            fontSize: 12,
+                            fontWeight: 700,
+                        }}
+                    >
+                        Tu rol no tiene permisos para crear documentos desde el carrito.
+                    </div>
+                ) : null}
 
                 {/* Error */}
                 {error && (
@@ -1663,7 +1722,7 @@ export default function InventoryCart({
 
                             <button
                                 onClick={handleSubmit}
-                                disabled={creating}
+                                disabled={creating || !canSubmitCurrentType}
                                 style={{
                                     flex: 1,
                                     padding: '10px 16px',
@@ -1671,16 +1730,18 @@ export default function InventoryCart({
                                     border: 'none',
                                     background: creating
                                         ? config.bg
+                                        : !canSubmitCurrentType
+                                            ? 'rgba(148,163,184,0.25)'
                                         : `linear-gradient(135deg, ${config.color} 0%, ${config.color}dd 100%)`,
                                     color: 'white',
                                     fontSize: 14,
                                     fontWeight: 800,
-                                    cursor: creating ? 'wait' : 'pointer',
+                                    cursor: creating || !canSubmitCurrentType ? 'not-allowed' : 'pointer',
                                     display: 'flex',
                                     alignItems: 'center',
                                     justifyContent: 'center',
                                     gap: 8,
-                                    boxShadow: creating ? 'none' : `0 4px 16px ${config.color}44`,
+                                    boxShadow: creating || !canSubmitCurrentType ? 'none' : `0 4px 16px ${config.color}44`,
                                     transition: 'all 0.2s',
                                 }}
                             >
@@ -1692,9 +1753,11 @@ export default function InventoryCart({
                                 ) : (
                                     <>
                                         <CartTypeIcon size={16} />
-                                        {cartType === 'factura'
-                                            ? 'Continuar a Factura'
-                                            : `Crear ${config.label}`}
+                                        {!canSubmitCurrentType
+                                            ? 'Sin permiso'
+                                            : (cartType === 'factura'
+                                                ? 'Continuar a Factura'
+                                                : `Crear ${config.label}`)}
                                     </>
                                 )}
                             </button>

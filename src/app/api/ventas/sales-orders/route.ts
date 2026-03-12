@@ -7,6 +7,13 @@ import { createZohoBooksClient } from '@/lib/zoho/books-client';
 import { deterministicUuidFromExternalId } from '@/lib/identifiers';
 import { fetchZohoSalespeople } from '@/lib/zoho/salespeople';
 import { buildTaxCatalogMap, getZohoTaxCatalog } from '@/lib/zoho/tax-catalog';
+import { getAuthenticatedProfile } from '@/lib/auth/warehouse-permissions';
+import { getEffectiveModuleAccess, hasModuleAccess } from '@/lib/auth/module-permissions';
+import {
+    canCreateVentasDocument,
+    createPermissionDeniedMessage,
+    resolveRoleForPermissionChecks,
+} from '@/lib/auth/ventas-document-permissions';
 import {
     computeFiscalTotals,
     FiscalValidationError,
@@ -642,6 +649,33 @@ export async function POST(req: NextRequest) {
 
         if (!user) {
             return NextResponse.json({ error: 'No autorizado' }, { status: 401 });
+        }
+
+        const auth = await getAuthenticatedProfile(supabase);
+        if (!auth.ok) {
+            return NextResponse.json({ error: auth.error }, { status: auth.status });
+        }
+
+        const moduleAccess = await getEffectiveModuleAccess(supabase, auth.userId, auth.role);
+        if (!hasModuleAccess(moduleAccess, 'ventas')) {
+            return NextResponse.json({ error: 'No autorizado para este módulo' }, { status: 403 });
+        }
+
+        const roleForPermission = await resolveRoleForPermissionChecks(
+            supabase,
+            auth.userId,
+            auth.role
+        );
+        const canCreateSalesOrder = await canCreateVentasDocument(
+            supabase,
+            roleForPermission,
+            'sales_order'
+        );
+        if (!canCreateSalesOrder) {
+            return NextResponse.json(
+                { error: createPermissionDeniedMessage('sales_order') },
+                { status: 403 }
+            );
         }
 
         const body = await req.json();
