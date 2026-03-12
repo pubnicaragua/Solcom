@@ -836,81 +836,81 @@ export default function ReportsPage() {
       <div className="table-card-hover">
         <Card>
           <div style={{ padding: 16 }}>
-          {loading ? (
-            <div style={{ height: 200, background: 'var(--panel)', borderRadius: 4, animation: 'pulse 1.5s infinite' }} />
-          ) : !reportData?.moneyMakerCategories || reportData.moneyMakerCategories.length === 0 ? (
-            <div style={{ textAlign: 'center', padding: '30px 0', color: 'var(--muted)' }}>
-              No hay datos de categorías
-            </div>
-          ) : (
-            <div className="custom-scrollbar" style={{ maxHeight: 400, overflowY: 'auto', overflowX: 'auto', borderRadius: 8, border: '1px solid var(--border)' }}>
-              <table style={{ width: '100%', minWidth: 600, borderCollapse: 'collapse', fontSize: 13 }}>
-                <thead>
-                  <tr style={{ background: 'var(--panel)', position: 'sticky', top: 0, zIndex: 1 }}>
-                    <th style={{ padding: '10px 12px', textAlign: 'left', fontWeight: 600, borderBottom: '1px solid var(--border)' }}>Categoría</th>
-                    <th style={{ padding: '10px 12px', textAlign: 'center', fontWeight: 600, borderBottom: '1px solid var(--border)' }}>SKUs Diferentes</th>
-                    <th style={{ padding: '10px 12px', textAlign: 'right', fontWeight: 600, borderBottom: '1px solid var(--border)' }}>Stock Físico (Unids)</th>
-                    <th style={{ padding: '10px 12px', textAlign: 'right', fontWeight: 600, borderBottom: '1px solid var(--border)' }}>Capital Invertido</th>
-                    <th style={{ padding: '10px 12px', textAlign: 'right', fontWeight: 600, borderBottom: '1px solid var(--border)' }}>% del Inventario</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {reportData.moneyMakerCategories.map((cat: any, idx: number) => {
-                    const percentageUnits = stats?.totalStock > 0 ? (cat.stock / stats.totalStock) * 100 : 0;
-                    return (
-                      <tr key={idx} style={{ borderBottom: '1px solid var(--border)', background: idx % 2 === 0 ? 'transparent' : 'var(--panel)' }}>
-                        <td style={{ padding: '8px 12px', fontWeight: 600, color: '#8b5cf6' }}>{cat.label}</td>
-                        <td style={{ padding: '8px 12px', textAlign: 'center' }}>{(cat.uniqueSkus || 0).toLocaleString('es-NI')}</td>
-                        <td style={{ padding: '8px 12px', textAlign: 'right', fontWeight: 600 }}>{(cat.stock || 0).toLocaleString('es-NI')}</td>
-                        <td style={{ padding: '8px 12px', textAlign: 'right', color: '#10b981', fontWeight: 700 }}>
-                          ${(cat.capital || 0).toLocaleString('es-NI', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                        </td>
-                        <td style={{ padding: '8px 12px', textAlign: 'center' }}>
-                          <div style={{ display: 'flex', alignItems: 'center', gap: 8, justifyContent: 'flex-end' }}>
-                            <div style={{ fontWeight: 600 }}>{percentageUnits.toFixed(1)}%</div>
-                            <div style={{ width: 60, height: 6, background: 'var(--border)', borderRadius: 3, overflow: 'hidden' }}>
-                              <div style={{ width: `${percentageUnits}%`, height: '100%', background: '#8b5cf6' }} />
+            {loading ? (
+              <div style={{ height: 200, background: 'var(--panel)', borderRadius: 4, animation: 'pulse 1.5s infinite' }} />
+            ) : !reportData?.moneyMakerCategories || reportData.moneyMakerCategories.length === 0 ? (
+              <div style={{ textAlign: 'center', padding: '30px 0', color: 'var(--muted)' }}>
+                No hay datos de categorías
+              </div>
+            ) : (
+              <div className="custom-scrollbar" style={{ maxHeight: 400, overflowY: 'auto', overflowX: 'auto', borderRadius: 8, border: '1px solid var(--border)' }}>
+                <table style={{ width: '100%', minWidth: 600, borderCollapse: 'collapse', fontSize: 13 }}>
+                  <thead>
+                    <tr style={{ background: 'var(--panel)', position: 'sticky', top: 0, zIndex: 1 }}>
+                      <th style={{ padding: '10px 12px', textAlign: 'left', fontWeight: 600, borderBottom: '1px solid var(--border)' }}>Categoría</th>
+                      <th style={{ padding: '10px 12px', textAlign: 'center', fontWeight: 600, borderBottom: '1px solid var(--border)' }}>SKUs Diferentes</th>
+                      <th style={{ padding: '10px 12px', textAlign: 'right', fontWeight: 600, borderBottom: '1px solid var(--border)' }}>Stock Físico (Unids)</th>
+                      <th style={{ padding: '10px 12px', textAlign: 'right', fontWeight: 600, borderBottom: '1px solid var(--border)' }}>Capital Invertido</th>
+                      <th style={{ padding: '10px 12px', textAlign: 'right', fontWeight: 600, borderBottom: '1px solid var(--border)' }}>% del Inventario</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {reportData.moneyMakerCategories.map((cat: any, idx: number) => {
+                      const percentageUnits = stats?.totalStock > 0 ? (cat.stock / stats.totalStock) * 100 : 0;
+                      return (
+                        <tr key={idx} style={{ borderBottom: '1px solid var(--border)', background: idx % 2 === 0 ? 'transparent' : 'var(--panel)' }}>
+                          <td style={{ padding: '8px 12px', fontWeight: 600, color: '#8b5cf6' }}>{cat.label}</td>
+                          <td style={{ padding: '8px 12px', textAlign: 'center' }}>{(cat.uniqueSkus || 0).toLocaleString('es-NI')}</td>
+                          <td style={{ padding: '8px 12px', textAlign: 'right', fontWeight: 600 }}>{(cat.stock || 0).toLocaleString('es-NI')}</td>
+                          <td style={{ padding: '8px 12px', textAlign: 'right', color: '#10b981', fontWeight: 700 }}>
+                            ${(cat.capital || 0).toLocaleString('es-NI', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                          </td>
+                          <td style={{ padding: '8px 12px', textAlign: 'center' }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: 8, justifyContent: 'flex-end' }}>
+                              <div style={{ fontWeight: 600 }}>{percentageUnits.toFixed(1)}%</div>
+                              <div style={{ width: 60, height: 6, background: 'var(--border)', borderRadius: 3, overflow: 'hidden' }}>
+                                <div style={{ width: `${percentageUnits}%`, height: '100%', background: '#8b5cf6' }} />
+                              </div>
                             </div>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                  <tfoot>
+                    <tr style={{ background: 'var(--panel)', position: 'sticky', bottom: 0, zIndex: 1, boxShadow: '0 -4px 6px -1px rgba(0,0,0,0.05)', borderTop: '2px solid var(--border)', fontWeight: 700 }}>
+                      <td style={{ padding: '10px 12px', textAlign: 'left', color: '#8b5cf6' }}>Total</td>
+                      <td style={{ padding: '10px 12px', textAlign: 'center' }}>
+                        {reportData.moneyMakerCategories.reduce((acc: number, c: any) => acc + (c.uniqueSkus || 0), 0).toLocaleString('es-NI')}
+                      </td>
+                      <td style={{ padding: '10px 12px', textAlign: 'right' }}>
+                        {reportData.moneyMakerCategories.reduce((acc: number, c: any) => acc + (c.stock || 0), 0).toLocaleString('es-NI')}
+                      </td>
+                      <td style={{ padding: '10px 12px', textAlign: 'right', color: '#10b981' }}>
+                        ${reportData.moneyMakerCategories.reduce((acc: number, c: any) => acc + (c.capital || 0), 0).toLocaleString('es-NI', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                      </td>
+                      <td style={{ padding: '10px 12px', textAlign: 'center' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 8, justifyContent: 'flex-end' }}>
+                          <div style={{ fontWeight: 600 }}>
+                            {(stats?.totalStock > 0
+                              ? (reportData.moneyMakerCategories.reduce((acc: number, c: any) => acc + (c.stock || 0), 0) / stats.totalStock) * 100
+                              : 0).toFixed(1)}%
                           </div>
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-                <tfoot>
-                  <tr style={{ background: 'var(--panel)', position: 'sticky', bottom: 0, zIndex: 1, boxShadow: '0 -4px 6px -1px rgba(0,0,0,0.05)', borderTop: '2px solid var(--border)', fontWeight: 700 }}>
-                    <td style={{ padding: '10px 12px', textAlign: 'left', color: '#8b5cf6' }}>Total</td>
-                    <td style={{ padding: '10px 12px', textAlign: 'center' }}>
-                      {reportData.moneyMakerCategories.reduce((acc: number, c: any) => acc + (c.uniqueSkus || 0), 0).toLocaleString('es-NI')}
-                    </td>
-                    <td style={{ padding: '10px 12px', textAlign: 'right' }}>
-                      {reportData.moneyMakerCategories.reduce((acc: number, c: any) => acc + (c.stock || 0), 0).toLocaleString('es-NI')}
-                    </td>
-                    <td style={{ padding: '10px 12px', textAlign: 'right', color: '#10b981' }}>
-                      ${reportData.moneyMakerCategories.reduce((acc: number, c: any) => acc + (c.capital || 0), 0).toLocaleString('es-NI', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                    </td>
-                    <td style={{ padding: '10px 12px', textAlign: 'center' }}>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 8, justifyContent: 'flex-end' }}>
-                        <div style={{ fontWeight: 600 }}>
-                          {(stats?.totalStock > 0 
-                            ? (reportData.moneyMakerCategories.reduce((acc: number, c: any) => acc + (c.stock || 0), 0) / stats.totalStock) * 100 
-                            : 0).toFixed(1)}%
+                          <div style={{ width: 60, height: 6, background: 'var(--border)', borderRadius: 3, overflow: 'hidden' }}>
+                            <div style={{
+                              width: `${Math.min(100, stats?.totalStock > 0 ? (reportData.moneyMakerCategories.reduce((acc: number, c: any) => acc + (c.stock || 0), 0) / stats.totalStock) * 100 : 0)}%`,
+                              height: '100%',
+                              background: '#8b5cf6'
+                            }} />
+                          </div>
                         </div>
-                        <div style={{ width: 60, height: 6, background: 'var(--border)', borderRadius: 3, overflow: 'hidden' }}>
-                          <div style={{ 
-                            width: `${Math.min(100, stats?.totalStock > 0 ? (reportData.moneyMakerCategories.reduce((acc: number, c: any) => acc + (c.stock || 0), 0) / stats.totalStock) * 100 : 0)}%`, 
-                            height: '100%', 
-                            background: '#8b5cf6' 
-                          }} />
-                        </div>
-                      </div>
-                    </td>
-                  </tr>
-                </tfoot>
-              </table>
-            </div>
-          )}
-        </div>
+                      </td>
+                    </tr>
+                  </tfoot>
+                </table>
+              </div>
+            )}
+          </div>
         </Card>
       </div>
 
@@ -921,81 +921,81 @@ export default function ReportsPage() {
       <div className="table-card-hover">
         <Card>
           <div style={{ padding: 16 }}>
-          {loading ? (
-            <div style={{ height: 200, background: 'var(--panel)', borderRadius: 4, animation: 'pulse 1.5s infinite' }} />
-          ) : !reportData?.moneyMakerBrands || reportData.moneyMakerBrands.length === 0 ? (
-            <div style={{ textAlign: 'center', padding: '30px 0', color: 'var(--muted)' }}>
-              No hay datos de marcas
-            </div>
-          ) : (
-            <div className="custom-scrollbar" style={{ maxHeight: 400, overflowY: 'auto', overflowX: 'auto', borderRadius: 8, border: '1px solid var(--border)' }}>
-              <table style={{ width: '100%', minWidth: 600, borderCollapse: 'collapse', fontSize: 13 }}>
-                <thead>
-                  <tr style={{ background: 'var(--panel)', position: 'sticky', top: 0, zIndex: 1 }}>
-                    <th style={{ padding: '10px 12px', textAlign: 'left', fontWeight: 600, borderBottom: '1px solid var(--border)' }}>Marca</th>
-                    <th style={{ padding: '10px 12px', textAlign: 'center', fontWeight: 600, borderBottom: '1px solid var(--border)' }}>SKUs Diferentes</th>
-                    <th style={{ padding: '10px 12px', textAlign: 'right', fontWeight: 600, borderBottom: '1px solid var(--border)' }}>Stock Físico (Unids)</th>
-                    <th style={{ padding: '10px 12px', textAlign: 'right', fontWeight: 600, borderBottom: '1px solid var(--border)' }}>Capital Invertido</th>
-                    <th style={{ padding: '10px 12px', textAlign: 'right', fontWeight: 600, borderBottom: '1px solid var(--border)' }}>% del Inventario</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {reportData.moneyMakerBrands.map((brand: any, idx: number) => {
-                    const percentageUnits = stats?.totalStock > 0 ? (brand.stock / stats.totalStock) * 100 : 0;
-                    return (
-                      <tr key={idx} style={{ borderBottom: '1px solid var(--border)', background: idx % 2 === 0 ? 'transparent' : 'var(--panel)' }}>
-                        <td style={{ padding: '8px 12px', fontWeight: 600, color: '#f59e0b' }}>{brand.label}</td>
-                        <td style={{ padding: '8px 12px', textAlign: 'center' }}>{(brand.uniqueSkus || 0).toLocaleString('es-NI')}</td>
-                        <td style={{ padding: '8px 12px', textAlign: 'right', fontWeight: 600 }}>{(brand.stock || 0).toLocaleString('es-NI')}</td>
-                        <td style={{ padding: '8px 12px', textAlign: 'right', color: '#10b981', fontWeight: 700 }}>
-                          ${(brand.capital || 0).toLocaleString('es-NI', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                        </td>
-                        <td style={{ padding: '8px 12px', textAlign: 'center' }}>
-                          <div style={{ display: 'flex', alignItems: 'center', gap: 8, justifyContent: 'flex-end' }}>
-                            <div style={{ fontWeight: 600 }}>{percentageUnits.toFixed(1)}%</div>
-                            <div style={{ width: 60, height: 6, background: 'var(--border)', borderRadius: 3, overflow: 'hidden' }}>
-                              <div style={{ width: `${percentageUnits}%`, height: '100%', background: '#f59e0b' }} />
+            {loading ? (
+              <div style={{ height: 200, background: 'var(--panel)', borderRadius: 4, animation: 'pulse 1.5s infinite' }} />
+            ) : !reportData?.moneyMakerBrands || reportData.moneyMakerBrands.length === 0 ? (
+              <div style={{ textAlign: 'center', padding: '30px 0', color: 'var(--muted)' }}>
+                No hay datos de marcas
+              </div>
+            ) : (
+              <div className="custom-scrollbar" style={{ maxHeight: 400, overflowY: 'auto', overflowX: 'auto', borderRadius: 8, border: '1px solid var(--border)' }}>
+                <table style={{ width: '100%', minWidth: 600, borderCollapse: 'collapse', fontSize: 13 }}>
+                  <thead>
+                    <tr style={{ background: 'var(--panel)', position: 'sticky', top: 0, zIndex: 1 }}>
+                      <th style={{ padding: '10px 12px', textAlign: 'left', fontWeight: 600, borderBottom: '1px solid var(--border)' }}>Marca</th>
+                      <th style={{ padding: '10px 12px', textAlign: 'center', fontWeight: 600, borderBottom: '1px solid var(--border)' }}>SKUs Diferentes</th>
+                      <th style={{ padding: '10px 12px', textAlign: 'right', fontWeight: 600, borderBottom: '1px solid var(--border)' }}>Stock Físico (Unids)</th>
+                      <th style={{ padding: '10px 12px', textAlign: 'right', fontWeight: 600, borderBottom: '1px solid var(--border)' }}>Capital Invertido</th>
+                      <th style={{ padding: '10px 12px', textAlign: 'right', fontWeight: 600, borderBottom: '1px solid var(--border)' }}>% del Inventario</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {reportData.moneyMakerBrands.map((brand: any, idx: number) => {
+                      const percentageUnits = stats?.totalStock > 0 ? (brand.stock / stats.totalStock) * 100 : 0;
+                      return (
+                        <tr key={idx} style={{ borderBottom: '1px solid var(--border)', background: idx % 2 === 0 ? 'transparent' : 'var(--panel)' }}>
+                          <td style={{ padding: '8px 12px', fontWeight: 600, color: '#f59e0b' }}>{brand.label}</td>
+                          <td style={{ padding: '8px 12px', textAlign: 'center' }}>{(brand.uniqueSkus || 0).toLocaleString('es-NI')}</td>
+                          <td style={{ padding: '8px 12px', textAlign: 'right', fontWeight: 600 }}>{(brand.stock || 0).toLocaleString('es-NI')}</td>
+                          <td style={{ padding: '8px 12px', textAlign: 'right', color: '#10b981', fontWeight: 700 }}>
+                            ${(brand.capital || 0).toLocaleString('es-NI', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                          </td>
+                          <td style={{ padding: '8px 12px', textAlign: 'center' }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: 8, justifyContent: 'flex-end' }}>
+                              <div style={{ fontWeight: 600 }}>{percentageUnits.toFixed(1)}%</div>
+                              <div style={{ width: 60, height: 6, background: 'var(--border)', borderRadius: 3, overflow: 'hidden' }}>
+                                <div style={{ width: `${percentageUnits}%`, height: '100%', background: '#f59e0b' }} />
+                              </div>
                             </div>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                  <tfoot>
+                    <tr style={{ background: 'var(--panel)', position: 'sticky', bottom: 0, zIndex: 1, boxShadow: '0 -4px 6px -1px rgba(0,0,0,0.05)', borderTop: '2px solid var(--border)', fontWeight: 700 }}>
+                      <td style={{ padding: '10px 12px', textAlign: 'left', color: '#f59e0b' }}>Total</td>
+                      <td style={{ padding: '10px 12px', textAlign: 'center' }}>
+                        {reportData.moneyMakerBrands.reduce((acc: number, b: any) => acc + (b.uniqueSkus || 0), 0).toLocaleString('es-NI')}
+                      </td>
+                      <td style={{ padding: '10px 12px', textAlign: 'right' }}>
+                        {reportData.moneyMakerBrands.reduce((acc: number, b: any) => acc + (b.stock || 0), 0).toLocaleString('es-NI')}
+                      </td>
+                      <td style={{ padding: '10px 12px', textAlign: 'right', color: '#10b981' }}>
+                        ${reportData.moneyMakerBrands.reduce((acc: number, b: any) => acc + (b.capital || 0), 0).toLocaleString('es-NI', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                      </td>
+                      <td style={{ padding: '10px 12px', textAlign: 'center' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 8, justifyContent: 'flex-end' }}>
+                          <div style={{ fontWeight: 600 }}>
+                            {(stats?.totalStock > 0
+                              ? (reportData.moneyMakerBrands.reduce((acc: number, b: any) => acc + (b.stock || 0), 0) / stats.totalStock) * 100
+                              : 0).toFixed(1)}%
                           </div>
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-                <tfoot>
-                  <tr style={{ background: 'var(--panel)', position: 'sticky', bottom: 0, zIndex: 1, boxShadow: '0 -4px 6px -1px rgba(0,0,0,0.05)', borderTop: '2px solid var(--border)', fontWeight: 700 }}>
-                    <td style={{ padding: '10px 12px', textAlign: 'left', color: '#f59e0b' }}>Total</td>
-                    <td style={{ padding: '10px 12px', textAlign: 'center' }}>
-                      {reportData.moneyMakerBrands.reduce((acc: number, b: any) => acc + (b.uniqueSkus || 0), 0).toLocaleString('es-NI')}
-                    </td>
-                    <td style={{ padding: '10px 12px', textAlign: 'right' }}>
-                      {reportData.moneyMakerBrands.reduce((acc: number, b: any) => acc + (b.stock || 0), 0).toLocaleString('es-NI')}
-                    </td>
-                    <td style={{ padding: '10px 12px', textAlign: 'right', color: '#10b981' }}>
-                      ${reportData.moneyMakerBrands.reduce((acc: number, b: any) => acc + (b.capital || 0), 0).toLocaleString('es-NI', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                    </td>
-                    <td style={{ padding: '10px 12px', textAlign: 'center' }}>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 8, justifyContent: 'flex-end' }}>
-                        <div style={{ fontWeight: 600 }}>
-                          {(stats?.totalStock > 0 
-                            ? (reportData.moneyMakerBrands.reduce((acc: number, b: any) => acc + (b.stock || 0), 0) / stats.totalStock) * 100 
-                            : 0).toFixed(1)}%
+                          <div style={{ width: 60, height: 6, background: 'var(--border)', borderRadius: 3, overflow: 'hidden' }}>
+                            <div style={{
+                              width: `${Math.min(100, stats?.totalStock > 0 ? (reportData.moneyMakerBrands.reduce((acc: number, b: any) => acc + (b.stock || 0), 0) / stats.totalStock) * 100 : 0)}%`,
+                              height: '100%',
+                              background: '#f59e0b'
+                            }} />
+                          </div>
                         </div>
-                        <div style={{ width: 60, height: 6, background: 'var(--border)', borderRadius: 3, overflow: 'hidden' }}>
-                          <div style={{ 
-                            width: `${Math.min(100, stats?.totalStock > 0 ? (reportData.moneyMakerBrands.reduce((acc: number, b: any) => acc + (b.stock || 0), 0) / stats.totalStock) * 100 : 0)}%`, 
-                            height: '100%', 
-                            background: '#f59e0b' 
-                          }} />
-                        </div>
-                      </div>
-                    </td>
-                  </tr>
-                </tfoot>
-              </table>
-            </div>
-          )}
-        </div>
+                      </td>
+                    </tr>
+                  </tfoot>
+                </table>
+              </div>
+            )}
+          </div>
         </Card>
       </div>
 
@@ -1084,6 +1084,60 @@ export default function ReportsPage() {
                 showPercentage={true}
                 totalValue={total}
                 valueFormatter={(v) => '$' + v.toLocaleString('es-NI', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+              />
+            ) : (
+              <ReportPlaceholder title="Sin datos" height={300} />
+            );
+          })()}
+        </ChartCard>
+      </div>
+
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(400px, 100%), 1fr))', gap: 14 }}>
+        <ChartCard title={
+          <div style={{ backgroundColor: '#1dac3cff', color: 'white', padding: '8px 12px', borderRadius: '4px', fontSize: '1rem', fontWeight: 'bold' }}>
+            Top 5 - Inventario en Existencia por Almacén
+          </div>
+        }>
+          {warehouseLoading ? (
+            <div style={{ height: 300, background: 'var(--panel)', borderRadius: 4, animation: 'pulse 1.5s infinite' }} />
+          ) : (() => {
+            const rawData = warehouseData ? [...warehouseData].sort((a: any, b: any) => b.value - a.value).slice(0, 5) : [];
+            const data = rawData.map(w => ({ label: w.label || w.code, value: w.value }));
+            const total = rawData.reduce((sum: number, w: any) => sum + (w.value || 0), 0);
+            return data && data.length > 0 ? (
+              <HorizontalBarChart
+                data={data.map((d: any, i: number) => ({ ...d, color: generateColors(5)[i] }))}
+                height={300}
+                showValues={true}
+                showPercentage={true}
+                totalValue={total}
+              />
+            ) : (
+              <ReportPlaceholder title="Sin datos" height={300} />
+            );
+          })()}
+        </ChartCard>
+
+        <ChartCard
+          title={
+            <div style={{ backgroundColor: '#ca3131ff', color: 'white', padding: '8px 12px', borderRadius: '4px', fontSize: '1rem', fontWeight: 'bold' }}>
+              Bottom 5 - Inventario en Existencia por Almacén
+            </div>
+          }
+        >
+          {warehouseLoading ? (
+            <div style={{ height: 300, background: 'var(--panel)', borderRadius: 4, animation: 'pulse 1.5s infinite' }} />
+          ) : (() => {
+            const rawData = warehouseData ? [...warehouseData].filter((w: any) => w.value > 0).sort((a: any, b: any) => a.value - b.value).slice(0, 5) : [];
+            const data = rawData.map(w => ({ label: w.label || w.code, value: w.value }));
+            const total = rawData.reduce((sum: number, w: any) => sum + (w.value || 0), 0);
+            return data && data.length > 0 ? (
+              <HorizontalBarChart
+                data={data.map((d: any, i: number) => ({ ...d, color: generateColors(5)[i] }))}
+                height={300}
+                showValues={true}
+                showPercentage={true}
+                totalValue={total}
               />
             ) : (
               <ReportPlaceholder title="Sin datos" height={300} />

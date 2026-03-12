@@ -3,7 +3,7 @@
 import Card from '@/components/ui/Card';
 
 interface ChartCardProps {
-  title: string;
+  title: React.ReactNode;
   children: React.ReactNode;
   actions?: React.ReactNode;
 }
