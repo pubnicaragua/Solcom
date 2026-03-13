@@ -7,6 +7,7 @@ export interface ModuleAccess {
   can_edit: boolean;
   can_delete: boolean;
   can_export: boolean;
+  can_import: boolean;
 }
 
 export function useRoleAccess(moduleCode: string) {
@@ -15,7 +16,8 @@ export function useRoleAccess(moduleCode: string) {
     can_create: false,
     can_edit: false,
     can_delete: false,
-    can_export: false
+    can_export: false,
+    can_import: false
   });
   const [loading, setLoading] = useState(true);
 
@@ -53,7 +55,7 @@ export function useRoleAccess(moduleCode: string) {
         // Admin siempre tiene acceso total
         if (role === 'admin') {
           if (!canceled) {
-            setAccess({ can_view: true, can_create: true, can_edit: true, can_delete: true, can_export: true });
+            setAccess({ can_view: true, can_create: true, can_edit: true, can_delete: true, can_export: true, can_import: true });
             setLoading(false);
           }
           return;
@@ -69,11 +71,12 @@ export function useRoleAccess(moduleCode: string) {
         if (!canceled) {
           const codes = new Set((rolePerms || []).map((rp: any) => rp.permission_code));
           setAccess({
-            can_view: codes.has(`${moduleCode}.view`),
-            can_create: codes.has(`${moduleCode}.create`),
-            can_edit: codes.has(`${moduleCode}.edit`),
+            can_view: codes.has(`${moduleCode}.view`) || codes.has(`${moduleCode}.read`),
+            can_create: codes.has(`${moduleCode}.create`) || codes.has(`${moduleCode}.write`),
+            can_edit: codes.has(`${moduleCode}.edit`) || codes.has(`${moduleCode}.write`),
             can_delete: codes.has(`${moduleCode}.delete`),
             can_export: codes.has(`${moduleCode}.export`),
+            can_import: codes.has(`${moduleCode}.import`),
           });
         }
       } catch (error) {

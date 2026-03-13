@@ -543,14 +543,16 @@ export default function InventoryPage() {
               </Button>
             </>
           )}
-          <Button
-            variant="primary"
-            size="sm"
-            onClick={() => setImportModalOpen(true)}
-          >
-            <Upload size={16} />
-            <span className="btn-label">Importar</span>
-          </Button>
+          {!inventoryAccessLoading && inventoryAccess.can_import && (
+            <Button
+              variant="primary"
+              size="sm"
+              onClick={() => setImportModalOpen(true)}
+            >
+              <Upload size={16} />
+              <span className="btn-label">Importar</span>
+            </Button>
+          )}
         </div>
       </div>
 
