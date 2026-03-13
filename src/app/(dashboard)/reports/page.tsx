@@ -376,14 +376,54 @@ export default function ReportsPage() {
         return cy + 4;
       };
 
+      // === LOAD LOGO IMAGE ===
+      let logoDataUrl: string | null = null;
+      try {
+        logoDataUrl = await new Promise<string | null>((resolve) => {
+          const img = new Image();
+          img.onload = () => {
+            const canvas = document.createElement('canvas');
+            canvas.width = img.naturalWidth;
+            canvas.height = img.naturalHeight;
+            const ctx = canvas.getContext('2d');
+            if (ctx) {
+              ctx.drawImage(img, 0, 0);
+              resolve(canvas.toDataURL('image/png'));
+            } else {
+              resolve(null);
+            }
+          };
+          img.onerror = () => resolve(null);
+          img.src = '/solcom-logo.png';
+        });
+      } catch { /* logo will be skipped if load fails */ }
+
       // === CABECERA ===
       doc.setFillColor(220, 38, 38);
       doc.rect(0, 0, pageWidth, 24, 'F');
       doc.setTextColor(255, 255, 255);
       doc.setFontSize(16);
-      doc.text('SOLCOM · Reporte Ejecutivo de Inventario', marginLeft, 14);
+      doc.text('Reporte Ejecutivo de Inventario', marginLeft, 14);
       doc.setFontSize(9);
       doc.text(`Generado: ${new Date().toLocaleString('es-NI')}`, marginLeft, 20);
+      // SOLCOM logo image — top right
+      if (logoDataUrl) {
+        const logoH = 18;
+        const logoW = 28;
+        const logoX = pageWidth - marginRight - logoW;
+        const logoY = 3;
+        // White background behind logo for contrast
+        doc.setFillColor(255, 255, 255);
+        doc.roundedRect(logoX - 2, logoY - 1, logoW + 4, logoH + 2, 2, 2, 'F');
+        doc.addImage(logoDataUrl, 'PNG', logoX, logoY, logoW, logoH);
+      } else {
+        // Fallback text
+        doc.setFontSize(22);
+        doc.setFont('helvetica', 'bold');
+        doc.setTextColor(255, 255, 255);
+        doc.text('SOLCOM', pageWidth - marginRight, 16, { align: 'right' });
+        doc.setFont('helvetica', 'normal');
+      }
 
       doc.setTextColor(31, 41, 55);
       doc.setFontSize(11);
@@ -486,7 +526,7 @@ export default function ReportsPage() {
             exportMoneyCats.reduce((sum: number, c: any) => sum + (c.uniqueSkus || 0), 0).toLocaleString('es-NI'),
             exportMoneyCats.reduce((sum: number, c: any) => sum + (c.stock || 0), 0).toLocaleString('es-NI'),
             `$${exportMoneyCats.reduce((sum: number, c: any) => sum + (c.capital || 0), 0).toLocaleString('es-NI', { maximumFractionDigits: 2 })}`,
-            ''
+            '100%'
           ]],
           theme: 'striped',
           styles: { fontSize: 8, cellPadding: 1.8 },
@@ -524,6 +564,7 @@ export default function ReportsPage() {
             footStyles: { fillColor: [241, 245, 249], textColor: 31, fontStyle: 'bold' },
             alternateRowStyles: { fillColor: [248, 250, 252] },
             margin: { left: marginLeft, right: marginRight },
+            showFoot: 'lastPage',
           });
           nextY = (doc as any).lastAutoTable.finalY + 12;
         }
@@ -554,6 +595,7 @@ export default function ReportsPage() {
             footStyles: { fillColor: [241, 245, 249], textColor: 31, fontStyle: 'bold' },
             alternateRowStyles: { fillColor: [248, 250, 252] },
             margin: { left: marginLeft, right: marginRight },
+            showFoot: 'lastPage',
           });
           nextY = (doc as any).lastAutoTable.finalY + 12;
         }
@@ -581,7 +623,7 @@ export default function ReportsPage() {
             exportMoneyBrands.reduce((sum: number, b: any) => sum + (b.uniqueSkus || 0), 0).toLocaleString('es-NI'),
             exportMoneyBrands.reduce((sum: number, b: any) => sum + (b.stock || 0), 0).toLocaleString('es-NI'),
             `$${exportMoneyBrands.reduce((sum: number, b: any) => sum + (b.capital || 0), 0).toLocaleString('es-NI', { maximumFractionDigits: 2 })}`,
-            ''
+            '100%'
           ]],
           theme: 'striped',
           styles: { fontSize: 8, cellPadding: 1.8 },
@@ -619,6 +661,7 @@ export default function ReportsPage() {
             footStyles: { fillColor: [241, 245, 249], textColor: 31, fontStyle: 'bold' },
             alternateRowStyles: { fillColor: [248, 250, 252] },
             margin: { left: marginLeft, right: marginRight },
+            showFoot: 'lastPage',
           });
           nextY = (doc as any).lastAutoTable.finalY + 12;
         }
@@ -649,6 +692,7 @@ export default function ReportsPage() {
             footStyles: { fillColor: [241, 245, 249], textColor: 31, fontStyle: 'bold' },
             alternateRowStyles: { fillColor: [248, 250, 252] },
             margin: { left: marginLeft, right: marginRight },
+            showFoot: 'lastPage',
           });
           nextY = (doc as any).lastAutoTable.finalY + 12;
         }
@@ -902,6 +946,7 @@ export default function ReportsPage() {
           footStyles: { fillColor: [241, 245, 249], textColor: 31, fontStyle: 'bold' },
           alternateRowStyles: { fillColor: [248, 250, 252] },
           margin: { left: marginLeft, right: marginRight },
+          showFoot: 'lastPage',
         });
         nextY = (doc as any).lastAutoTable.finalY + 12;
       }
@@ -927,6 +972,7 @@ export default function ReportsPage() {
           footStyles: { fillColor: [241, 245, 249], textColor: 31, fontStyle: 'bold' },
           alternateRowStyles: { fillColor: [248, 250, 252] },
           margin: { left: marginLeft, right: marginRight },
+          showFoot: 'lastPage',
         });
       }
       // === 9. INVENTARIO POR ALMACÉN (Gráficos) ===
@@ -970,7 +1016,12 @@ export default function ReportsPage() {
         }
 
         nextY = maxY + 25;
-        // Row 2: Top Item Units + Cost
+        // Row 2: Top Item Units + Cost — ensure enough space, else new page
+        const neededForRow2 = radius * 2 + 60; // chart height + legend + margins
+        if (nextY + neededForRow2 > pageHeight - 10) {
+          doc.addPage();
+          nextY = 25;
+        }
         if (exportTopItems.length > 0) {
           const cy3 = drawDonutChart(exportTopItems.map((i: any) => ({ label: i.name, value: i.stock_total })), 75, nextY + radius + 10, radius, inner, 'Top Equipos (Unidades)', [30, 58, 138]);
           maxY = Math.max(maxY, cy3);
