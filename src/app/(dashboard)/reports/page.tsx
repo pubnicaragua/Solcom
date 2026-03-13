@@ -157,24 +157,196 @@ export default function ReportsPage() {
 
       const exportStats = freshData?.stats || stats;
       const exportWarehouses = whDataJson.warehouseBreakdown || [];
-      const exportLowStock = freshData?.lowStockList || [];
       const exportMoneyCats = freshData?.moneyMakerCategories || [];
       const exportMoneyBrands = freshData?.moneyMakerBrands || [];
+      const exportTopItems = freshData?.topInventoryItems || [];
+      const exportTopItemsByCost = freshData?.topInventoryItemsByCost || [];
 
       const doc = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' });
+      const pageWidth = 297;
+      const pageHeight = 210;
+      const marginLeft = 14;
+      const marginRight = 14;
+      const pageBreakThreshold = 170;
+
+      // Helper: check page break
+      const ensureSpace = (y: number, needed: number = 30) => {
+        if (y > pageBreakThreshold || y + needed > pageHeight - 15) {
+          doc.addPage();
+          return 20;
+        }
+        return y;
+      };
+
+      // Helper: section title — ensures title + at least header+2 rows stay together
+      const sectionTitle = (title: string, y: number, color: [number, number, number]) => {
+        // Need ~45mm minimum for title + header + 2-3 data rows
+        if (y + 45 > pageHeight - 10) {
+          doc.addPage();
+          y = 20;
+        }
+        doc.setFontSize(13);
+        doc.setTextColor(color[0], color[1], color[2]);
+        doc.text(title, marginLeft, y);
+        return y;
+      };
+
+      // Color palette matching UI
+      const pdfColors: [number, number, number][] = [
+        [59,130,246],[139,92,246],[16,185,129],[245,158,11],[239,68,68],
+        [236,72,153],[20,184,166],[249,115,22],[99,102,241],[132,204,22]
+      ];
+      const getColor = (i: number): [number, number, number] => pdfColors[i % pdfColors.length];
+
+      // Helper: draw donut chart on PDF
+      const drawDonutChart = (
+        chartData: Array<{ label: string; value: number }>,
+        centerX: number, centerY: number,
+        radius: number, innerRadius: number,
+        title: string, titleColor: [number, number, number]
+      ) => {
+        const total = chartData.reduce((s, d) => s + d.value, 0);
+        if (total === 0) return centerY;
+        // Title
+        doc.setFontSize(10);
+        doc.setTextColor(titleColor[0], titleColor[1], titleColor[2]);
+        doc.text(title, centerX, centerY - radius - 6, { align: 'center' });
+        // Draw slices
+        let startAngle = -90;
+        chartData.forEach((item, idx) => {
+          const sweepAngle = (item.value / total) * 360;
+          if (sweepAngle <= 0) return;
+          const endAngle = startAngle + sweepAngle;
+          const c = getColor(idx);
+          doc.setFillColor(c[0], c[1], c[2]);
+          // Draw filled arc as polygon segments
+          const steps = Math.max(Math.ceil(sweepAngle / 1.5), 8); // Smoother arcs
+          const points: number[][] = [];
+          for (let s = 0; s <= steps; s++) {
+            const a = ((startAngle + (sweepAngle * s) / steps) * Math.PI) / 180;
+            points.push([centerX + radius * Math.cos(a), centerY + radius * Math.sin(a)]);
+          }
+          for (let s = steps; s >= 0; s--) {
+            const a = ((startAngle + (sweepAngle * s) / steps) * Math.PI) / 180;
+            points.push([centerX + innerRadius * Math.cos(a), centerY + innerRadius * Math.sin(a)]);
+          }
+          if (points.length > 2) {
+            doc.setDrawColor(255, 255, 255);
+            doc.setLineWidth(0.15); // Thinner border for cleaner look
+            doc.moveTo(points[0][0], points[0][1]);
+            for (let p = 1; p < points.length; p++) doc.lineTo(points[p][0], points[p][1]);
+            (doc as any).fill('F');
+          }
+          // Percentage label
+          if (sweepAngle > 15) {
+            const midA = ((startAngle + sweepAngle / 2) * Math.PI) / 180;
+            const lr = (radius + innerRadius) / 2;
+            const lx = centerX + lr * Math.cos(midA);
+            const ly = centerY + lr * Math.sin(midA);
+            doc.setFontSize(7);
+            doc.setTextColor(255, 255, 255);
+            doc.text(`${((item.value / total) * 100).toFixed(1)}%`, lx, ly, { align: 'center' });
+          }
+          startAngle = endAngle;
+        });
+        // Center total
+        doc.setFontSize(9);
+        doc.setTextColor(31, 41, 55);
+        doc.text(total.toLocaleString('es-NI'), centerX, centerY + 1.5, { align: 'center' });
+        // Legend below
+        const legendY = centerY + radius + 8;
+        const colWidth = 40;
+        const cols = 3;
+        let lastY = legendY;
+        chartData.forEach((item, idx) => {
+          const col = idx % cols;
+          const row = Math.floor(idx / cols);
+          const lx = centerX - ((cols * colWidth) / 2) + col * colWidth;
+          const ly = legendY + row * 5;
+          const c = getColor(idx);
+          doc.setFillColor(c[0], c[1], c[2]);
+          doc.rect(lx, ly - 1.8, 2.5, 2.5, 'F');
+          doc.setFontSize(5.5);
+          doc.setTextColor(80, 80, 80);
+          const label = item.label.length > 22 ? item.label.substring(0, 21) + '…' : item.label;
+          doc.text(label, lx + 4, ly + 0.2);
+          lastY = Math.max(lastY, ly + 4);
+        });
+        return lastY;
+      };
+
+      // Helper: draw horizontal bar chart on PDF
+      const drawHorizontalBarChart = (
+        chartData: Array<{ label: string; value: number }>,
+        x: number, y: number, width: number, maxHeight: number,
+        title: string, titleColor: [number, number, number],
+        valueFormatter?: (v: number) => string
+      ) => {
+        const maxVal = Math.max(...chartData.map(d => d.value), 1);
+        const total = chartData.reduce((s, d) => s + d.value, 0);
+        const barH = 5;
+        const gap = 2;
+        const labelW = 35;
+        const barAreaW = width - labelW - 30;
+        // Title
+        doc.setFontSize(10);
+        doc.setTextColor(titleColor[0], titleColor[1], titleColor[2]);
+        doc.text(title, x, y);
+        let cy = y + 4;
+        chartData.forEach((item, idx) => {
+          const pct = (item.value / maxVal) * 100;
+          const barW = (pct / 100) * barAreaW;
+          const c = getColor(idx);
+          // Label
+          doc.setFontSize(6);
+          doc.setTextColor(80, 80, 80);
+          const label = item.label.length > 18 ? item.label.substring(0, 17) + '…' : item.label;
+          doc.text(label, x + labelW - 1, cy + barH / 2 + 0.5, { align: 'right' });
+          // Bar
+          doc.setFillColor(c[0], c[1], c[2]);
+          doc.rect(x + labelW, cy, Math.max(barW, 1), barH, 'F');
+          // Value
+          doc.setFontSize(6);
+          doc.setTextColor(31, 41, 55);
+          const valTxt = valueFormatter ? valueFormatter(item.value) : item.value.toLocaleString('es-NI');
+          const pctTxt = total > 0 ? ` (${((item.value / total) * 100).toFixed(1)}%)` : '';
+          doc.text(valTxt + pctTxt, x + labelW + barW + 2, cy + barH / 2 + 0.5);
+          cy += barH + gap;
+        });
+        return cy + 4;
+      };
+
+      // === CABECERA ===
       doc.setFillColor(220, 38, 38);
-      doc.rect(0, 0, 297, 24, 'F');
+      doc.rect(0, 0, pageWidth, 24, 'F');
       doc.setTextColor(255, 255, 255);
       doc.setFontSize(16);
-      doc.text('SOLCOM · Reporte Ejecutivo de Inventario', 14, 14);
+      doc.text('SOLCOM · Reporte Ejecutivo de Inventario', marginLeft, 14);
       doc.setFontSize(9);
-      doc.text(`Generado: ${new Date().toLocaleString('es-NI')}`, 14, 20);
+      doc.text(`Generado: ${new Date().toLocaleString('es-NI')}`, marginLeft, 20);
 
       doc.setTextColor(31, 41, 55);
       doc.setFontSize(11);
-      doc.text(`Período: Últimos ${period} días`, 14, 34);
+      doc.text(`Período: Últimos ${period} días`, marginLeft, 34);
 
-      // 1. Resumen General
+      let nextY = 38;
+
+      // === FILTROS ACTIVOS ===
+      const activeFilters: string[] = [];
+      if (globalFilters.category) activeFilters.push(`Categoría: ${globalFilters.category}`);
+      if (globalFilters.marca) activeFilters.push(`Marca: ${globalFilters.marca}`);
+      if (globalFilters.warehouse) activeFilters.push(`Almacén: ${globalFilters.warehouse}`);
+      if (globalFilters.state) activeFilters.push(`Estado: ${globalFilters.state}`);
+      if (globalFilters.color) activeFilters.push(`Color: ${globalFilters.color}`);
+
+      if (activeFilters.length > 0) {
+        doc.setFontSize(9);
+        doc.setTextColor(220, 38, 38);
+        doc.text(`Filtros aplicados: ${activeFilters.join(' | ')}`, marginLeft, nextY);
+        nextY += 6;
+      }
+
+      // === 1. RESUMEN GENERAL ===
       const summaryRows = [
         ['Total Productos', String(exportStats?.totalProducts || 0)],
         ['Total Stock', `${(exportStats?.totalStock || 0).toLocaleString('es-NI')} unidades`],
@@ -185,87 +357,30 @@ export default function ReportsPage() {
       ];
 
       autoTable(doc, {
-        startY: 38,
+        startY: nextY,
         head: [['Indicador', 'Valor']],
         body: summaryRows,
         theme: 'grid',
         styles: { fontSize: 9, cellPadding: 2.4 },
         headStyles: { fillColor: [31, 41, 55], textColor: 255 },
         columnStyles: { 0: { cellWidth: 50 }, 1: { cellWidth: 70 } },
-        margin: { left: 14 },
+        margin: { left: marginLeft },
         tableWidth: 120,
       });
+      nextY = (doc as any).lastAutoTable.finalY + 12;
 
-      let nextY = (doc as any).lastAutoTable.finalY + 12;
-
-      // 1b. Existencias Generales: Categorías y Marcas
-      const catChartData = freshData?.charts?.categoryBreakdown || [];
-      const totalUnitsCats = catChartData.reduce((acc: number, c: any) => acc + (c.value || 0), 0);
-      const brandChartData = freshData?.charts?.brandBreakdown || [];
-      const totalUnitsBrands = brandChartData.reduce((acc: number, b: any) => acc + (b.value || 0), 0);
-
-      if (catChartData.length > 0) {
-        if (nextY > 170) { doc.addPage(); nextY = 20; }
-        doc.setFontSize(14);
-        doc.setTextColor(139, 92, 246); // purple
-        doc.text('Inventario por Categorías (Existencias Generales)', 14, nextY);
-
-        const catRowsPDF = catChartData.map((cat: any) => {
-          const percentageUnits = totalUnitsCats > 0 ? ((cat.value || 0) / totalUnitsCats) * 100 : 0;
-          return [cat.label, (cat.value || 0).toLocaleString('es-NI'), `${percentageUnits.toFixed(1)}%`];
-        });
-
-        autoTable(doc, {
-          startY: nextY + 4,
-          head: [['Categoría', 'Unidades Totales', '% del Inventario']],
-          body: catRowsPDF,
-          theme: 'striped',
-          styles: { fontSize: 8, cellPadding: 1.8 },
-          headStyles: { fillColor: [139, 92, 246], textColor: 255 },
-          alternateRowStyles: { fillColor: [248, 250, 252] },
-          margin: { left: 14, right: 14 },
-        });
-        nextY = (doc as any).lastAutoTable.finalY + 12;
-      }
-
-      if (brandChartData.length > 0) {
-        if (nextY > 170) { doc.addPage(); nextY = 20; }
-        doc.setFontSize(14);
-        doc.setTextColor(245, 158, 11); // orange
-        doc.text('Inventario por Marcas (Existencias Generales)', 14, nextY);
-
-        const brandRowsPDF = brandChartData.map((brand: any) => {
-          const percentageUnits = totalUnitsBrands > 0 ? ((brand.value || 0) / totalUnitsBrands) * 100 : 0;
-          return [brand.label, (brand.value || 0).toLocaleString('es-NI'), `${percentageUnits.toFixed(1)}%`];
-        });
-
-        autoTable(doc, {
-          startY: nextY + 4,
-          head: [['Marca', 'Unidades Totales', '% del Inventario']],
-          body: brandRowsPDF,
-          theme: 'striped',
-          styles: { fontSize: 8, cellPadding: 1.8 },
-          headStyles: { fillColor: [245, 158, 11], textColor: 255 },
-          alternateRowStyles: { fillColor: [248, 250, 252] },
-          margin: { left: 14, right: 14 },
-        });
-        nextY = (doc as any).lastAutoTable.finalY + 12;
-      }
-
-      // 2. Bodegas
+      // === 2. DISTRIBUCIÓN DE CAPITAL POR BODEGA ===
       if (exportWarehouses.length > 0) {
-        if (nextY > 170) { doc.addPage(); nextY = 20; }
-        doc.setFontSize(14);
-        doc.setTextColor(14, 165, 233); // #0ea5e9
-        doc.text('Inventario y Distribución por Almacén', 14, nextY);
+        nextY = sectionTitle('Distribución de Capital por Bodega', nextY, [14, 165, 233]);
+        const totalUnitsAll = exportWarehouses.reduce((acc: number, w: any) => acc + (w.value || 0), 0);
+        const totalCapitalAll = exportWarehouses.reduce((acc: number, w: any) => acc + (w.capital || 0), 0);
 
         const whRowsPDF = exportWarehouses.map((wh: any) => {
-          const totalUnitsAll = exportWarehouses.reduce((acc: number, w: any) => acc + (w.value || 0), 0);
-          const totalCapitalAll = exportWarehouses.reduce((acc: number, w: any) => acc + (w.capital || 0), 0);
           const percentageUnits = totalUnitsAll > 0 ? ((wh.value || 0) / totalUnitsAll) * 100 : 0;
           const percentageCapital = totalCapitalAll > 0 ? ((wh.capital || 0) / totalCapitalAll) * 100 : 0;
           return [
             wh.label || wh.code,
+            (wh.uniqueSkus || 0).toLocaleString('es-NI'),
             (wh.value || 0).toLocaleString('es-NI'),
             `${percentageUnits.toFixed(1)}%`,
             `$${(wh.capital || 0).toLocaleString('es-NI', { maximumFractionDigits: 2 })}`,
@@ -275,76 +390,535 @@ export default function ReportsPage() {
 
         autoTable(doc, {
           startY: nextY + 4,
-          head: [['Bodega/Almacén', 'Unidades Totales', '% de Unidades', 'Capital Invertido', '% del Capital']],
+          head: [['Bodega/Almacén', 'SKUs Únicos', 'Unidades', '% Unids', 'Capital Invertido', '% Capital']],
           body: whRowsPDF,
+          foot: [['TOTAL', '', totalUnitsAll.toLocaleString('es-NI'), '100%', `$${totalCapitalAll.toLocaleString('es-NI', { maximumFractionDigits: 2 })}`, '100%']],
           theme: 'striped',
           styles: { fontSize: 8, cellPadding: 1.8 },
           headStyles: { fillColor: [14, 165, 233], textColor: 255 },
+          footStyles: { fillColor: [241, 245, 249], textColor: 31, fontStyle: 'bold' },
           alternateRowStyles: { fillColor: [248, 250, 252] },
-          margin: { left: 14, right: 14 },
+          margin: { left: marginLeft, right: marginRight },
+          showFoot: 'lastPage',
         });
         nextY = (doc as any).lastAutoTable.finalY + 12;
       }
 
-      // 4. Money Maker Categorías
+      // === 3. MONEY MAKER CATEGORÍAS (3 tablas) ===
       if (exportMoneyCats.length > 0) {
-        if (nextY > 170) { doc.addPage(); nextY = 20; }
-        doc.setFontSize(14);
-        doc.setTextColor(139, 92, 246); // #8b5cf6
-        doc.text('El "Money Maker" de Categorías', 14, nextY);
-
-        const catRowsPDF = exportMoneyCats.map((cat: any) => {
-          const percentageUnits = exportStats?.totalStock > 0 ? (cat.stock / exportStats.totalStock) * 100 : 0;
-          return [
-            cat.label,
-            String(cat.uniqueSkus || 0),
-            (cat.stock || 0).toLocaleString('es-NI'),
-            `$${(cat.capital || 0).toLocaleString('es-NI', { maximumFractionDigits: 2 })}`,
-            `${percentageUnits.toFixed(1)}%`
-          ];
-        });
-
+        // 3a. General
+        nextY = sectionTitle('Money Maker Categorías — General', nextY, [139, 92, 246]);
         autoTable(doc, {
           startY: nextY + 4,
           head: [['Categoría', 'SKUs Diferentes', 'Stock Físico (Unids)', 'Capital Invertido', '% del Inventario']],
-          body: catRowsPDF,
+          body: exportMoneyCats.map((cat: any) => {
+            const pct = exportStats?.totalStock > 0 ? (cat.stock / exportStats.totalStock) * 100 : 0;
+            return [
+              cat.label,
+              String(cat.uniqueSkus || 0),
+              (cat.stock || 0).toLocaleString('es-NI'),
+              `$${(cat.capital || 0).toLocaleString('es-NI', { maximumFractionDigits: 2 })}`,
+              `${pct.toFixed(1)}%`
+            ];
+          }),
+          foot: [[
+            'TOTAL',
+            exportMoneyCats.reduce((sum: number, c: any) => sum + (c.uniqueSkus || 0), 0).toLocaleString('es-NI'),
+            exportMoneyCats.reduce((sum: number, c: any) => sum + (c.stock || 0), 0).toLocaleString('es-NI'),
+            `$${exportMoneyCats.reduce((sum: number, c: any) => sum + (c.capital || 0), 0).toLocaleString('es-NI', { maximumFractionDigits: 2 })}`,
+            ''
+          ]],
           theme: 'striped',
           styles: { fontSize: 8, cellPadding: 1.8 },
           headStyles: { fillColor: [139, 92, 246], textColor: 255 },
+          footStyles: { fillColor: [241, 245, 249], textColor: 31, fontStyle: 'bold' },
           alternateRowStyles: { fillColor: [248, 250, 252] },
-          margin: { left: 14, right: 14 },
+          margin: { left: marginLeft, right: marginRight },
+          showFoot: 'lastPage',
+        });
+        nextY = (doc as any).lastAutoTable.finalY + 12;
+
+        // 3b. Desglose Unidades por Bodega
+        const catWhUnits = new Set<string>();
+        exportMoneyCats.forEach((c: any) => { if (c.byWarehouse) Object.keys(c.byWarehouse).forEach(w => catWhUnits.add(w)); });
+        const catWhUnitsCols = Array.from(catWhUnits).sort();
+
+        if (catWhUnitsCols.length > 0) {
+          nextY = sectionTitle('Money Maker Categorías — Desglose Unidades por Bodega', nextY, [139, 92, 246]);
+          autoTable(doc, {
+            startY: nextY + 4,
+            head: [['Categoría', ...catWhUnitsCols, 'Total Unids']],
+            body: exportMoneyCats.map((cat: any) => [
+              cat.label,
+              ...catWhUnitsCols.map(wh => { const q = cat.byWarehouse?.[wh] || 0; return q > 0 ? q.toLocaleString('es-NI') : ''; }),
+              (cat.stock || 0).toLocaleString('es-NI')
+            ]),
+            foot: [[
+              'TOTAL',
+              ...catWhUnitsCols.map(wh => exportMoneyCats.reduce((sum: number, c: any) => sum + (c.byWarehouse?.[wh] || 0), 0).toLocaleString('es-NI')),
+              exportMoneyCats.reduce((sum: number, c: any) => sum + (c.stock || 0), 0).toLocaleString('es-NI')
+            ]],
+            theme: 'striped',
+            styles: { fontSize: 7, cellPadding: 1.5 },
+            headStyles: { fillColor: [139, 92, 246], textColor: 255 },
+            footStyles: { fillColor: [241, 245, 249], textColor: 31, fontStyle: 'bold' },
+            alternateRowStyles: { fillColor: [248, 250, 252] },
+            margin: { left: marginLeft, right: marginRight },
+          });
+          nextY = (doc as any).lastAutoTable.finalY + 12;
+        }
+
+        // 3c. Desglose Costo por Bodega
+        const catWhCost = new Set<string>();
+        exportMoneyCats.forEach((c: any) => { if (c.capitalByWarehouse) Object.keys(c.capitalByWarehouse).forEach(w => catWhCost.add(w)); });
+        const catWhCostCols = Array.from(catWhCost).sort();
+
+        if (catWhCostCols.length > 0) {
+          nextY = sectionTitle('Money Maker Categorías — Desglose Costo por Bodega', nextY, [139, 92, 246]);
+          autoTable(doc, {
+            startY: nextY + 4,
+            head: [['Categoría', ...catWhCostCols, 'Total Costo']],
+            body: exportMoneyCats.map((cat: any) => [
+              cat.label,
+              ...catWhCostCols.map(wh => { const c = cat.capitalByWarehouse?.[wh] || 0; return c > 0 ? '$' + c.toLocaleString('es-NI', { maximumFractionDigits: 1 }) : ''; }),
+              '$' + (cat.capital || 0).toLocaleString('es-NI', { maximumFractionDigits: 1 })
+            ]),
+            foot: [[
+              'TOTAL',
+              ...catWhCostCols.map(wh => '$' + exportMoneyCats.reduce((sum: number, c: any) => sum + (c.capitalByWarehouse?.[wh] || 0), 0).toLocaleString('es-NI', { maximumFractionDigits: 1 })),
+              '$' + exportMoneyCats.reduce((sum: number, c: any) => sum + (c.capital || 0), 0).toLocaleString('es-NI', { maximumFractionDigits: 1 })
+            ]],
+            theme: 'striped',
+            styles: { fontSize: 7, cellPadding: 1.5 },
+            headStyles: { fillColor: [139, 92, 246], textColor: 255 },
+            footStyles: { fillColor: [241, 245, 249], textColor: 31, fontStyle: 'bold' },
+            alternateRowStyles: { fillColor: [248, 250, 252] },
+            margin: { left: marginLeft, right: marginRight },
+          });
+          nextY = (doc as any).lastAutoTable.finalY + 12;
+        }
+      }
+
+      // === 4. MONEY MAKER MARCAS (3 tablas) ===
+      if (exportMoneyBrands.length > 0) {
+        // 4a. General
+        nextY = sectionTitle('Money Maker Marcas — General', nextY, [245, 158, 11]);
+        autoTable(doc, {
+          startY: nextY + 4,
+          head: [['Marca', 'SKUs Diferentes', 'Stock Físico (Unids)', 'Capital Invertido', '% del Inventario']],
+          body: exportMoneyBrands.map((brand: any) => {
+            const pct = exportStats?.totalStock > 0 ? (brand.stock / exportStats.totalStock) * 100 : 0;
+            return [
+              brand.label,
+              String(brand.uniqueSkus || 0),
+              (brand.stock || 0).toLocaleString('es-NI'),
+              `$${(brand.capital || 0).toLocaleString('es-NI', { maximumFractionDigits: 2 })}`,
+              `${pct.toFixed(1)}%`
+            ];
+          }),
+          foot: [[
+            'TOTAL',
+            exportMoneyBrands.reduce((sum: number, b: any) => sum + (b.uniqueSkus || 0), 0).toLocaleString('es-NI'),
+            exportMoneyBrands.reduce((sum: number, b: any) => sum + (b.stock || 0), 0).toLocaleString('es-NI'),
+            `$${exportMoneyBrands.reduce((sum: number, b: any) => sum + (b.capital || 0), 0).toLocaleString('es-NI', { maximumFractionDigits: 2 })}`,
+            ''
+          ]],
+          theme: 'striped',
+          styles: { fontSize: 8, cellPadding: 1.8 },
+          headStyles: { fillColor: [245, 158, 11], textColor: 255 },
+          footStyles: { fillColor: [241, 245, 249], textColor: 31, fontStyle: 'bold' },
+          alternateRowStyles: { fillColor: [248, 250, 252] },
+          margin: { left: marginLeft, right: marginRight },
+          showFoot: 'lastPage',
+        });
+        nextY = (doc as any).lastAutoTable.finalY + 12;
+
+        // 4b. Desglose Unidades por Bodega
+        const brandWhUnits = new Set<string>();
+        exportMoneyBrands.forEach((b: any) => { if (b.byWarehouse) Object.keys(b.byWarehouse).forEach(w => brandWhUnits.add(w)); });
+        const brandWhUnitsCols = Array.from(brandWhUnits).sort();
+
+        if (brandWhUnitsCols.length > 0) {
+          nextY = sectionTitle('Money Maker Marcas — Desglose Unidades por Bodega', nextY, [245, 158, 11]);
+          autoTable(doc, {
+            startY: nextY + 4,
+            head: [['Marca', ...brandWhUnitsCols, 'Total Unids']],
+            body: exportMoneyBrands.map((brand: any) => [
+              brand.label,
+              ...brandWhUnitsCols.map(wh => { const q = brand.byWarehouse?.[wh] || 0; return q > 0 ? q.toLocaleString('es-NI') : ''; }),
+              (brand.stock || 0).toLocaleString('es-NI')
+            ]),
+            foot: [[
+              'TOTAL',
+              ...brandWhUnitsCols.map(wh => exportMoneyBrands.reduce((sum: number, b: any) => sum + (b.byWarehouse?.[wh] || 0), 0).toLocaleString('es-NI')),
+              exportMoneyBrands.reduce((sum: number, b: any) => sum + (b.stock || 0), 0).toLocaleString('es-NI')
+            ]],
+            theme: 'striped',
+            styles: { fontSize: 7, cellPadding: 1.5 },
+            headStyles: { fillColor: [245, 158, 11], textColor: 255 },
+            footStyles: { fillColor: [241, 245, 249], textColor: 31, fontStyle: 'bold' },
+            alternateRowStyles: { fillColor: [248, 250, 252] },
+            margin: { left: marginLeft, right: marginRight },
+          });
+          nextY = (doc as any).lastAutoTable.finalY + 12;
+        }
+
+        // 4c. Desglose Costo por Bodega
+        const brandWhCost = new Set<string>();
+        exportMoneyBrands.forEach((b: any) => { if (b.capitalByWarehouse) Object.keys(b.capitalByWarehouse).forEach(w => brandWhCost.add(w)); });
+        const brandWhCostCols = Array.from(brandWhCost).sort();
+
+        if (brandWhCostCols.length > 0) {
+          nextY = sectionTitle('Money Maker Marcas — Desglose Costo por Bodega', nextY, [245, 158, 11]);
+          autoTable(doc, {
+            startY: nextY + 4,
+            head: [['Marca', ...brandWhCostCols, 'Total Costo']],
+            body: exportMoneyBrands.map((brand: any) => [
+              brand.label,
+              ...brandWhCostCols.map(wh => { const c = brand.capitalByWarehouse?.[wh] || 0; return c > 0 ? '$' + c.toLocaleString('es-NI', { maximumFractionDigits: 1 }) : ''; }),
+              '$' + (brand.capital || 0).toLocaleString('es-NI', { maximumFractionDigits: 1 })
+            ]),
+            foot: [[
+              'TOTAL',
+              ...brandWhCostCols.map(wh => '$' + exportMoneyBrands.reduce((sum: number, b: any) => sum + (b.capitalByWarehouse?.[wh] || 0), 0).toLocaleString('es-NI', { maximumFractionDigits: 1 })),
+              '$' + exportMoneyBrands.reduce((sum: number, b: any) => sum + (b.capital || 0), 0).toLocaleString('es-NI', { maximumFractionDigits: 1 })
+            ]],
+            theme: 'striped',
+            styles: { fontSize: 7, cellPadding: 1.5 },
+            headStyles: { fillColor: [245, 158, 11], textColor: 255 },
+            footStyles: { fillColor: [241, 245, 249], textColor: 31, fontStyle: 'bold' },
+            alternateRowStyles: { fillColor: [248, 250, 252] },
+            margin: { left: marginLeft, right: marginRight },
+          });
+          nextY = (doc as any).lastAutoTable.finalY + 12;
+        }
+      }
+
+      // === 5. TOP INVENTARIO POR EQUIPO (2 tablas) ===
+      // 5a. Top 10 por Unidades
+      if (exportTopItems.length > 0) {
+        const topWhUnits = new Set<string>();
+        exportTopItems.forEach((item: any) => { if (item.byWarehouse) Object.keys(item.byWarehouse).forEach(w => topWhUnits.add(w)); });
+        const topWhUnitsCols = Array.from(topWhUnits).sort();
+
+        nextY = sectionTitle('Top Inventario por Equipo — Unidades', nextY, [30, 58, 138]);
+        autoTable(doc, {
+          startY: nextY + 4,
+          head: [['Producto', ...topWhUnitsCols, 'Total']],
+          body: exportTopItems.map((item: any) => [
+            item.name,
+            ...topWhUnitsCols.map(wh => { const q = item.byWarehouse?.[wh] || 0; return q > 0 ? q.toLocaleString('es-NI') : ''; }),
+            (item.stock_total || 0).toLocaleString('es-NI')
+          ]),
+          foot: [[
+            'TOTAL',
+            ...topWhUnitsCols.map(wh => exportTopItems.reduce((sum: number, item: any) => sum + (item.byWarehouse?.[wh] || 0), 0).toLocaleString('es-NI')),
+            exportTopItems.reduce((sum: number, item: any) => sum + (item.stock_total || 0), 0).toLocaleString('es-NI')
+          ]],
+          theme: 'striped',
+          styles: { fontSize: 7, cellPadding: 1.5 },
+          headStyles: { fillColor: [30, 58, 138], textColor: 255 },
+          footStyles: { fillColor: [241, 245, 249], textColor: 31, fontStyle: 'bold' },
+          alternateRowStyles: { fillColor: [248, 250, 252] },
+          margin: { left: marginLeft, right: marginRight },
+          showFoot: 'lastPage',
+          columnStyles: { 0: { cellWidth: 60 } },
         });
         nextY = (doc as any).lastAutoTable.finalY + 12;
       }
 
-      // 5. Money Maker Marcas
-      if (exportMoneyBrands.length > 0) {
-        if (nextY > 170) { doc.addPage(); nextY = 20; }
-        doc.setFontSize(14);
-        doc.setTextColor(245, 158, 11); // #f59e0b
-        doc.text('El "Money Maker" de Marcas', 14, nextY);
+      // 5b. Top 10 al Costo
+      if (exportTopItemsByCost.length > 0) {
+        const topWhCost = new Set<string>();
+        exportTopItemsByCost.forEach((item: any) => { if (item.capitalByWarehouse) Object.keys(item.capitalByWarehouse).forEach(w => topWhCost.add(w)); });
+        const topWhCostCols = Array.from(topWhCost).sort();
 
-        const brandRowsPDF = exportMoneyBrands.map((brand: any) => {
-          const percentageUnits = exportStats?.totalStock > 0 ? (brand.stock / exportStats.totalStock) * 100 : 0;
-          return [
-            brand.label,
-            String(brand.uniqueSkus || 0),
-            (brand.stock || 0).toLocaleString('es-NI'),
-            `$${(brand.capital || 0).toLocaleString('es-NI', { maximumFractionDigits: 2 })}`,
-            `${percentageUnits.toFixed(1)}%`
-          ];
-        });
-
+        nextY = sectionTitle('Top Inventario por Equipo — al Costo', nextY, [30, 58, 138]);
         autoTable(doc, {
           startY: nextY + 4,
-          head: [['Marca', 'SKUs Diferentes', 'Stock Físico (Unids)', 'Capital Invertido', '% del Inventario']],
-          body: brandRowsPDF,
+          head: [['Producto', ...topWhCostCols, 'Total Costo']],
+          body: exportTopItemsByCost.map((item: any) => [
+            item.name,
+            ...topWhCostCols.map(wh => { const c = item.capitalByWarehouse?.[wh] || 0; return c > 0 ? '$' + c.toLocaleString('es-NI', { maximumFractionDigits: 1 }) : ''; }),
+            '$' + (item.capital || 0).toLocaleString('es-NI', { maximumFractionDigits: 1 })
+          ]),
+          foot: [[
+            'TOTAL',
+            ...topWhCostCols.map(wh => '$' + exportTopItemsByCost.reduce((sum: number, item: any) => sum + (item.capitalByWarehouse?.[wh] || 0), 0).toLocaleString('es-NI', { maximumFractionDigits: 1 })),
+            '$' + exportTopItemsByCost.reduce((sum: number, item: any) => sum + (item.capital || 0), 0).toLocaleString('es-NI', { maximumFractionDigits: 1 })
+          ]],
+          theme: 'striped',
+          styles: { fontSize: 7, cellPadding: 1.5 },
+          headStyles: { fillColor: [30, 58, 138], textColor: 255 },
+          footStyles: { fillColor: [241, 245, 249], textColor: 31, fontStyle: 'bold' },
+          alternateRowStyles: { fillColor: [248, 250, 252] },
+          margin: { left: marginLeft, right: marginRight },
+          showFoot: 'lastPage',
+          columnStyles: { 0: { cellWidth: 60 } },
+        });
+        nextY = (doc as any).lastAutoTable.finalY + 12;
+      }
+
+      // === 6. EXISTENCIAS GENERALES ===
+      const catChartData = freshData?.charts?.categoryBreakdown || [];
+      const totalUnitsCats = catChartData.reduce((acc: number, c: any) => acc + (c.value || 0), 0);
+      const brandChartData = freshData?.charts?.brandBreakdown || [];
+      const totalUnitsBrands = brandChartData.reduce((acc: number, b: any) => acc + (b.value || 0), 0);
+
+      // 6a. Inventario por Categorías (Unidades)
+      if (catChartData.length > 0) {
+        nextY = sectionTitle('Inventario por Categorías en Unidades', nextY, [139, 92, 246]);
+        autoTable(doc, {
+          startY: nextY + 4,
+          head: [['Categoría', 'Unidades Totales', '% del Inventario']],
+          body: catChartData.map((cat: any) => {
+            const pct = totalUnitsCats > 0 ? ((cat.value || 0) / totalUnitsCats) * 100 : 0;
+            return [cat.label, (cat.value || 0).toLocaleString('es-NI'), `${pct.toFixed(1)}%`];
+          }),
+          foot: [['TOTAL', totalUnitsCats.toLocaleString('es-NI'), '100%']],
+          theme: 'striped',
+          styles: { fontSize: 8, cellPadding: 1.8 },
+          headStyles: { fillColor: [139, 92, 246], textColor: 255 },
+          footStyles: { fillColor: [241, 245, 249], textColor: 31, fontStyle: 'bold' },
+          alternateRowStyles: { fillColor: [248, 250, 252] },
+          margin: { left: marginLeft, right: marginRight },
+          showFoot: 'lastPage',
+        });
+        nextY = (doc as any).lastAutoTable.finalY + 12;
+      }
+
+      // 6b. Inventario por Categoría al Costo
+      if (exportMoneyCats.length > 0) {
+        const totalCatCapital = exportMoneyCats.reduce((acc: number, c: any) => acc + (c.capital || 0), 0);
+        nextY = sectionTitle('Inventario por Categoría al Costo', nextY, [139, 92, 246]);
+        autoTable(doc, {
+          startY: nextY + 4,
+          head: [['Categoría', 'Capital Invertido', '% del Capital']],
+          body: exportMoneyCats.map((cat: any) => {
+            const pct = totalCatCapital > 0 ? ((cat.capital || 0) / totalCatCapital) * 100 : 0;
+            return [
+              cat.label,
+              `$${(cat.capital || 0).toLocaleString('es-NI', { maximumFractionDigits: 2 })}`,
+              `${pct.toFixed(1)}%`
+            ];
+          }),
+          foot: [['TOTAL', `$${totalCatCapital.toLocaleString('es-NI', { maximumFractionDigits: 2 })}`, '100%']],
+          theme: 'striped',
+          styles: { fontSize: 8, cellPadding: 1.8 },
+          headStyles: { fillColor: [139, 92, 246], textColor: 255 },
+          footStyles: { fillColor: [241, 245, 249], textColor: 31, fontStyle: 'bold' },
+          alternateRowStyles: { fillColor: [248, 250, 252] },
+          margin: { left: marginLeft, right: marginRight },
+          showFoot: 'lastPage',
+        });
+        nextY = (doc as any).lastAutoTable.finalY + 12;
+      }
+
+      // 6c. Inventario por Marcas (Unidades)
+      if (brandChartData.length > 0) {
+        nextY = sectionTitle('Top Inventario por Marcas en Unidades', nextY, [245, 158, 11]);
+        autoTable(doc, {
+          startY: nextY + 4,
+          head: [['Marca', 'Unidades Totales', '% del Inventario']],
+          body: brandChartData.map((brand: any) => {
+            const pct = totalUnitsBrands > 0 ? ((brand.value || 0) / totalUnitsBrands) * 100 : 0;
+            return [brand.label, (brand.value || 0).toLocaleString('es-NI'), `${pct.toFixed(1)}%`];
+          }),
+          foot: [['TOTAL', totalUnitsBrands.toLocaleString('es-NI'), '100%']],
           theme: 'striped',
           styles: { fontSize: 8, cellPadding: 1.8 },
           headStyles: { fillColor: [245, 158, 11], textColor: 255 },
+          footStyles: { fillColor: [241, 245, 249], textColor: 31, fontStyle: 'bold' },
           alternateRowStyles: { fillColor: [248, 250, 252] },
-          margin: { left: 14, right: 14 },
+          margin: { left: marginLeft, right: marginRight },
+          showFoot: 'lastPage',
         });
+        nextY = (doc as any).lastAutoTable.finalY + 12;
+      }
+
+      // 6d. Inventario por Marcas al Costo
+      if (exportMoneyBrands.length > 0) {
+        const totalBrandCapital = exportMoneyBrands.reduce((acc: number, b: any) => acc + (b.capital || 0), 0);
+        nextY = sectionTitle('Top Inventario por Marcas al Costo', nextY, [245, 158, 11]);
+        autoTable(doc, {
+          startY: nextY + 4,
+          head: [['Marca', 'Capital Invertido', '% del Capital']],
+          body: exportMoneyBrands.map((brand: any) => {
+            const pct = totalBrandCapital > 0 ? ((brand.capital || 0) / totalBrandCapital) * 100 : 0;
+            return [
+              brand.label,
+              `$${(brand.capital || 0).toLocaleString('es-NI', { maximumFractionDigits: 2 })}`,
+              `${pct.toFixed(1)}%`
+            ];
+          }),
+          foot: [['TOTAL', `$${totalBrandCapital.toLocaleString('es-NI', { maximumFractionDigits: 2 })}`, '100%']],
+          theme: 'striped',
+          styles: { fontSize: 8, cellPadding: 1.8 },
+          headStyles: { fillColor: [245, 158, 11], textColor: 255 },
+          footStyles: { fillColor: [241, 245, 249], textColor: 31, fontStyle: 'bold' },
+          alternateRowStyles: { fillColor: [248, 250, 252] },
+          margin: { left: marginLeft, right: marginRight },
+          showFoot: 'lastPage',
+        });
+        nextY = (doc as any).lastAutoTable.finalY + 12;
+      }
+
+      // === 7. TOP 5 / BOTTOM 5 INVENTARIO POR ALMACÉN ===
+      if (exportWarehouses.length > 0) {
+        const sortedByUnits = [...exportWarehouses].sort((a: any, b: any) => (b.value || 0) - (a.value || 0));
+        const top5 = sortedByUnits.slice(0, 5);
+        const bottom5 = sortedByUnits.filter((w: any) => (w.value || 0) > 0).reverse().slice(0, 5);
+
+        // 7a. Top 5
+        nextY = sectionTitle('Top 5 — Inventario en Existencia por Almacén', nextY, [29, 172, 60]);
+        autoTable(doc, {
+          startY: nextY + 4,
+          head: [['Bodega', 'Unidades', 'Capital Invertido']],
+          body: top5.map((wh: any) => [
+            wh.label || wh.code,
+            (wh.value || 0).toLocaleString('es-NI'),
+            `$${(wh.capital || 0).toLocaleString('es-NI', { maximumFractionDigits: 2 })}`
+          ]),
+          foot: [[
+            'TOTAL (Top 5)',
+            top5.reduce((sum, wh: any) => sum + (wh.value || 0), 0).toLocaleString('es-NI'),
+            `$${top5.reduce((sum, wh: any) => sum + (wh.capital || 0), 0).toLocaleString('es-NI', { maximumFractionDigits: 2 })}`
+          ]],
+          theme: 'striped',
+          styles: { fontSize: 8, cellPadding: 1.8 },
+          headStyles: { fillColor: [29, 172, 60], textColor: 255 },
+          footStyles: { fillColor: [241, 245, 249], textColor: 31, fontStyle: 'bold' },
+          alternateRowStyles: { fillColor: [248, 250, 252] },
+          margin: { left: marginLeft, right: marginRight },
+          showFoot: 'lastPage',
+          tableWidth: 160,
+        });
+        nextY = (doc as any).lastAutoTable.finalY + 12;
+
+        // 7b. Bottom 5
+        if (bottom5.length > 0) {
+          nextY = sectionTitle('Bottom 5 — Inventario en Existencia por Almacén', nextY, [202, 49, 49]);
+          autoTable(doc, {
+            startY: nextY + 4,
+            head: [['Bodega', 'Unidades', 'Capital Invertido']],
+            body: bottom5.map((wh: any) => [
+              wh.label || wh.code,
+              (wh.value || 0).toLocaleString('es-NI'),
+              `$${(wh.capital || 0).toLocaleString('es-NI', { maximumFractionDigits: 2 })}`
+            ]),
+            foot: [[
+              'TOTAL (Bottom 5)',
+              bottom5.reduce((sum, wh: any) => sum + (wh.value || 0), 0).toLocaleString('es-NI'),
+              `$${bottom5.reduce((sum, wh: any) => sum + (wh.capital || 0), 0).toLocaleString('es-NI', { maximumFractionDigits: 2 })}`
+            ]],
+            theme: 'striped',
+            styles: { fontSize: 8, cellPadding: 1.8 },
+            headStyles: { fillColor: [202, 49, 49], textColor: 255 },
+            footStyles: { fillColor: [241, 245, 249], textColor: 31, fontStyle: 'bold' },
+            alternateRowStyles: { fillColor: [248, 250, 252] },
+            margin: { left: marginLeft, right: marginRight },
+            showFoot: 'lastPage',
+            tableWidth: 160,
+          });
+          nextY = (doc as any).lastAutoTable.finalY + 12;
+        }
+      }
+
+      // === 8. PARTICIPACIÓN — TOP INVENTARIO EQUIPOS ===
+      if (exportTopItems.length > 0) {
+        const totalTopUnits = exportTopItems.reduce((acc: number, item: any) => acc + (item.stock_total || 0), 0);
+        nextY = sectionTitle('Participación — Top Inventario Equipos (Unidades)', nextY, [30, 58, 138]);
+        autoTable(doc, {
+          startY: nextY + 4,
+          head: [['Producto', 'Unidades', '% Participación']],
+          body: exportTopItems.map((item: any) => {
+            const pct = totalTopUnits > 0 ? ((item.stock_total || 0) / totalTopUnits) * 100 : 0;
+            return [item.name, (item.stock_total || 0).toLocaleString('es-NI'), `${pct.toFixed(1)}%`];
+          }),
+          foot: [['TOTAL', totalTopUnits.toLocaleString('es-NI'), '100%']],
+          theme: 'striped',
+          styles: { fontSize: 8, cellPadding: 1.8 },
+          headStyles: { fillColor: [30, 58, 138], textColor: 255 },
+          footStyles: { fillColor: [241, 245, 249], textColor: 31, fontStyle: 'bold' },
+          alternateRowStyles: { fillColor: [248, 250, 252] },
+          margin: { left: marginLeft, right: marginRight },
+        });
+        nextY = (doc as any).lastAutoTable.finalY + 12;
+      }
+
+      if (exportTopItemsByCost.length > 0) {
+        const totalTopCost = exportTopItemsByCost.reduce((acc: number, item: any) => acc + (item.capital || 0), 0);
+        nextY = sectionTitle('Participación — Top Inventario Equipos (al Costo)', nextY, [30, 58, 138]);
+        autoTable(doc, {
+          startY: nextY + 4,
+          head: [['Producto', 'Capital', '% Participación']],
+          body: exportTopItemsByCost.map((item: any) => {
+            const pct = totalTopCost > 0 ? ((item.capital || 0) / totalTopCost) * 100 : 0;
+            return [
+              item.name,
+              `$${(item.capital || 0).toLocaleString('es-NI', { maximumFractionDigits: 2 })}`,
+              `${pct.toFixed(1)}%`
+            ];
+          }),
+          foot: [['TOTAL', `$${totalTopCost.toLocaleString('es-NI', { maximumFractionDigits: 2 })}`, '100%']],
+          theme: 'striped',
+          styles: { fontSize: 8, cellPadding: 1.8 },
+          headStyles: { fillColor: [30, 58, 138], textColor: 255 },
+          footStyles: { fillColor: [241, 245, 249], textColor: 31, fontStyle: 'bold' },
+          alternateRowStyles: { fillColor: [248, 250, 252] },
+          margin: { left: marginLeft, right: marginRight },
+        });
+      }
+      // === 9. INVENTARIO POR ALMACÉN (Gráficos) ===
+      if (exportWarehouses.length > 0) {
+        const whChartData = exportWarehouses.map((wh: any) => ({ label: wh.label || wh.code, value: wh.value || 0 }));
+        // Warehouse bar chart + donut side by side
+        doc.addPage();
+        nextY = 20;
+        // Bar chart left side
+        nextY = drawHorizontalBarChart(
+          whChartData, marginLeft, nextY, 130, 80,
+          'Inventario por Almacén (Unidades)', [14, 165, 233]
+        );
+        // Donut chart right side
+        drawDonutChart(
+          whChartData,
+          230, 65, 30, 18,
+          'Participación - Unidades por Almacén', [14, 165, 233]
+        );
+        nextY = Math.max(nextY, 120);
+      }
+
+      // === 10. GRÁFICOS DE PARTICIPACIÓN (Donut Charts) ===
+      if (catChartData.length > 0 || brandChartData.length > 0 || exportTopItems.length > 0) {
+        doc.addPage();
+        nextY = 25;
+        sectionTitle('Resumen de Participación de Inventario', nextY, [14, 165, 233]);
+        nextY += 15;
+
+        // Row 1: Category + Brand
+        const radius = 26;
+        const inner = 16;
+        let maxY = nextY;
+        if (catChartData.length > 0) {
+          const cy1 = drawDonutChart(catChartData, 75, nextY + radius + 10, radius, inner, 'Unidades por Categoría', [139, 92, 246]);
+          maxY = Math.max(maxY, cy1);
+        }
+        if (brandChartData.length > 0) {
+          const cy2 = drawDonutChart(brandChartData, 215, nextY + radius + 10, radius, inner, 'Unidades por Marca', [245, 158, 11]);
+          maxY = Math.max(maxY, cy2);
+        }
+        
+        nextY = maxY + 25;
+        // Row 2: Top Item Units + Cost
+        if (exportTopItems.length > 0) {
+          const cy3 = drawDonutChart(exportTopItems.map((i: any) => ({ label: i.name, value: i.stock_total })), 75, nextY + radius + 10, radius, inner, 'Top Equipos (Unidades)', [30, 58, 138]);
+          maxY = Math.max(maxY, cy3);
+        }
+        if (exportTopItemsByCost.length > 0) {
+          const cy4 = drawDonutChart(exportTopItemsByCost.map((i: any) => ({ label: i.name, value: i.capital })), 215, nextY + radius + 10, radius, inner, 'Top Equipos (al Costo)', [30, 58, 138]);
+          maxY = Math.max(maxY, cy4);
+        }
       }
 
       doc.save(`reporte_inventario_${new Date().toISOString().split('T')[0]}.pdf`);
