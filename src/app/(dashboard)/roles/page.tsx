@@ -560,7 +560,8 @@ export default function RolesPage() {
       description: role.description || defaultDef.description || '',
       color: defaultDef.color || CUSTOM_ROLE_COLORS[index % CUSTOM_ROLE_COLORS.length] || '#6366f1',
       userCount: getRoleCount(roleName),
-      is_custom: role.is_custom !== false && !baseRoleKeys.has(normalized)
+      is_custom: role.is_custom !== false && !baseRoleKeys.has(normalized),
+      created_by_name: role.created_by_name || null
     });
   });
 
@@ -572,7 +573,8 @@ export default function RolesPage() {
         id: roleKey,
         ...roleInfo,
         userCount: getRoleCount(roleKey),
-        is_custom: false
+        is_custom: false,
+        created_by_name: null
       });
     }
   });
@@ -761,6 +763,10 @@ export default function RolesPage() {
                     </div>
                     <div style={{ fontSize: 13, color: 'var(--muted)' }}>
                       {role.description}
+                    </div>
+                    <div style={{ fontSize: 11, color: 'var(--muted)', marginTop: 6, display: 'flex', alignItems: 'center', gap: 4 }}>
+                      <UserCircle size={12} />
+                      Creado por: {role.created_by_name || 'Sistema'}
                     </div>
                   </div>
                 ))}

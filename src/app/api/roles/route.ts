@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 
 
-export const dynamic = 'force-dynamic';import { createServerClient, type CookieOptions } from '@supabase/ssr';
+export const dynamic = 'force-dynamic'; import { createServerClient, type CookieOptions } from '@supabase/ssr';
 import { cookies } from 'next/headers';
 
 export async function GET() {
@@ -21,20 +21,27 @@ export async function GET() {
   try {
     const { data: roles, error } = await supabase
       .from('roles')
-      .select('*')
+      .select('*, creator:created_by(id, full_name)')
       .order('created_at', { ascending: true });
 
     if (error) throw error;
 
-    return NextResponse.json(roles);
+    // Aplanar el campo creator para la UI
+    const rolesWithCreator = (roles || []).map((role: any) => ({
+      ...role,
+      created_by_name: role.creator?.full_name || null,
+      creator: undefined,
+    }));
+
+    return NextResponse.json(rolesWithCreator);
   } catch (error: any) {
     // FALLBACK para cuando la tabla 'roles' aún no se ha creado en Supabase
     console.warn('Tabla roles no encontrada, usando datos mock:', error.message);
     return NextResponse.json([
-      { id: 'mock-1', name: 'admin', description: 'Administrador', is_custom: false },
-      { id: 'mock-2', name: 'manager', description: 'Gerente de Bodega', is_custom: false },
-      { id: 'mock-3', name: 'operator', description: 'Vendedor', is_custom: false },
-      { id: 'mock-4', name: 'auditor', description: 'Auditor', is_custom: false }
+      { id: 'mock-1', name: 'admin', description: 'Administrador', is_custom: false, created_by_name: null },
+      { id: 'mock-2', name: 'manager', description: 'Gerente de Bodega', is_custom: false, created_by_name: null },
+      { id: 'mock-3', name: 'operator', description: 'Vendedor', is_custom: false, created_by_name: null },
+      { id: 'mock-4', name: 'auditor', description: 'Auditor', is_custom: false, created_by_name: null }
     ]);
   }
 }
@@ -56,6 +63,9 @@ export async function POST(request: Request) {
   try {
     const { name, description, is_custom } = await request.json();
 
+    // Obtener el usuario autenticado
+    const { data: { user } } = await supabase.auth.getUser();
+
     // Verificar si el rol ya existe
     const { data: existingRole } = await supabase
       .from('roles')
@@ -70,7 +80,7 @@ export async function POST(request: Request) {
     const { data: role, error } = await supabase
       .from('roles')
       .insert([
-        { name, description, is_custom }
+        { name, description, is_custom, created_by: user?.id || null }
       ])
       .select()
       .single();
