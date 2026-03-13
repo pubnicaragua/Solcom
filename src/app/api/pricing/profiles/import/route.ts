@@ -69,6 +69,10 @@ function parsePrice(value: unknown): number | null {
     return Math.max(0, parsed);
 }
 
+function isUuid(value: string): boolean {
+    return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value);
+}
+
 function isMissingTable(error: any): boolean {
     return String(error?.code || '') === '42P01';
 }
@@ -102,7 +106,14 @@ async function fetchItemMaps(
         const itemId = normalizeText(row[keyMap.item_id]);
         const sku = normalizeText(row[keyMap.sku]);
         const zohoItemId = normalizeText(row[keyMap.zoho_item_id]);
-        if (itemId) itemIds.add(itemId);
+        if (itemId) {
+            if (isUuid(itemId)) {
+                itemIds.add(itemId);
+            } else {
+                // "Item ID" puede venir desde Zoho (numérico), en ese caso es zoho_item_id
+                zohoIds.add(itemId);
+            }
+        }
         if (sku) skus.add(sku);
         if (zohoItemId) zohoIds.add(zohoItemId);
     }
@@ -362,8 +373,9 @@ export async function POST(req: NextRequest) {
             const skuRaw = normalizeText(row[keyMap.sku]).toLowerCase();
             const zohoItemIdRaw = normalizeText(row[keyMap.zoho_item_id]);
 
+            // "Item ID" de Zoho export no es UUID local, por lo tanto lo tratamos como Zoho ID
             const resolvedItemId = (
-                (itemIdRaw ? itemsByKey.byId.get(itemIdRaw) : '')
+                (itemIdRaw ? itemsByKey.byZoho.get(itemIdRaw) : '')
                 || (skuRaw ? itemsByKey.bySku.get(skuRaw) : '')
                 || (zohoItemIdRaw ? itemsByKey.byZoho.get(zohoItemIdRaw) : '')
                 || ''
