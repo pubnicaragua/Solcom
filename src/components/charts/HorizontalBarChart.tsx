@@ -14,70 +14,74 @@ export default function HorizontalBarChart({ data, height = 300, showValues = tr
   return (
     <div className="table-card-hover" style={{ height, display: 'flex', flexDirection: 'column', position: 'relative' }}>
       <div className="custom-scrollbar" style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 12, padding: '16px 0', overflowY: 'auto', overflowX: 'hidden' }}>
-      {data.map((item, idx) => {
-        const percentage = (item.value / maxValue) * 100;
-        const percentageOfTotal = total > 0 ? (item.value / total) * 100 : 0;
-        const color = item.color || `hsl(${(idx * 360) / data.length}, 70%, 60%)`;
+        {data.map((item, idx) => {
+          const percentage = (item.value / maxValue) * 100;
+          const percentageOfTotal = total > 0 ? (item.value / total) * 100 : 0;
+          const color = item.color || `hsl(${(idx * 360) / data.length}, 70%, 60%)`;
 
-        return (
-          <div key={idx} style={{ display: 'flex', alignItems: 'center', gap: 12, width: '100%' }}>
-            <div style={{
-              minWidth: 120,
-              fontSize: 13,
-              color: 'var(--text)',
-              textAlign: 'right',
-              fontWeight: 500
-            }}>
-              {item.label}
-            </div>
-            <div style={{ flex: 1, position: 'relative', height: 28 }}>
+          return (
+            <div key={idx} style={{ display: 'flex', alignItems: 'center', gap: 12, width: '100%' }}>
               <div style={{
-                position: 'absolute',
-                left: 0,
-                top: 0,
-                height: '100%',
-                width: `${percentage}%`,
-                background: color,
-                borderRadius: 4,
-                transition: 'width 0.3s ease'
-              }} />
-              {showValues && (
+                width: 'clamp(80px, 20vw, 150px)',
+                minWidth: 'clamp(80px, 20vw, 150px)',
+                fontSize: 'clamp(10px, 2.5vw, 13px)',
+                color: 'var(--text)',
+                textAlign: 'right',
+                fontWeight: 500,
+                overflow: 'hidden',
+                textOverflow: 'ellipsis',
+                whiteSpace: 'nowrap'
+              }}>
+                {item.label}
+              </div>
+              <div style={{ flex: 1, position: 'relative', height: 28 }}>
                 <div style={{
                   position: 'absolute',
-                  right: 8,
-                  top: '50%',
-                  transform: 'translateY(-50%)',
+                  left: 0,
+                  top: 0,
+                  height: '100%',
+                  width: `${percentage}%`,
+                  background: color,
+                  borderRadius: 4,
+                  transition: 'width 0.3s ease'
+                }} />
+                {showValues && (
+                  <div style={{
+                    position: 'absolute',
+                    right: 8,
+                    top: '50%',
+                    transform: 'translateY(-50%)',
+                    fontSize: 12,
+                    fontWeight: 600,
+                    color: percentage > 50 ? 'white' : 'var(--text)',
+                    zIndex: 1,
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 8
+                  }}>
+                    <span>{valueFormatter ? valueFormatter(item.value) : item.value.toLocaleString()}</span>
+                    {showPercentage && (
+                      <span style={{ fontSize: 11, opacity: 0.8 }}>
+                        ({percentageOfTotal.toFixed(1)}%)
+                      </span>
+                    )}
+                  </div>
+                )}
+              </div>
+              {showPercentage && !showValues && (
+                <div style={{
+                  minWidth: 60,
                   fontSize: 12,
                   fontWeight: 600,
-                  color: percentage > 50 ? 'white' : 'var(--text)',
-                  zIndex: 1,
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: 8
+                  color: 'var(--muted)',
+                  textAlign: 'right'
                 }}>
-                  <span>{valueFormatter ? valueFormatter(item.value) : item.value.toLocaleString()}</span>
-                  {showPercentage && (
-                    <span style={{ fontSize: 11, opacity: 0.8 }}>
-                      ({percentageOfTotal.toFixed(1)}%)
-                    </span>
-                  )}
+                  {percentageOfTotal.toFixed(1)}%
                 </div>
               )}
             </div>
-            {showPercentage && !showValues && (
-              <div style={{
-                minWidth: 60,
-                fontSize: 12,
-                fontWeight: 600,
-                color: 'var(--muted)',
-                textAlign: 'right'
-              }}>
-                {percentageOfTotal.toFixed(1)}%
-              </div>
-            )}
-          </div>
-        );
-      })}
+          );
+        })}
       </div>
       {showPercentage && (
         <div style={{

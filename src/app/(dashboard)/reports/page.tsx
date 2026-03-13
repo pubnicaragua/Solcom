@@ -193,8 +193,8 @@ export default function ReportsPage() {
 
       // Color palette matching UI
       const pdfColors: [number, number, number][] = [
-        [59,130,246],[139,92,246],[16,185,129],[245,158,11],[239,68,68],
-        [236,72,153],[20,184,166],[249,115,22],[99,102,241],[132,204,22]
+        [59, 130, 246], [139, 92, 246], [16, 185, 129], [245, 158, 11], [239, 68, 68],
+        [236, 72, 153], [20, 184, 166], [249, 115, 22], [99, 102, 241], [132, 204, 22]
       ];
       const getColor = (i: number): [number, number, number] => pdfColors[i % pdfColors.length];
 
@@ -908,7 +908,7 @@ export default function ReportsPage() {
           const cy2 = drawDonutChart(brandChartData, 215, nextY + radius + 10, radius, inner, 'Unidades por Marca', [245, 158, 11]);
           maxY = Math.max(maxY, cy2);
         }
-        
+
         nextY = maxY + 25;
         // Row 2: Top Item Units + Cost
         if (exportTopItems.length > 0) {
@@ -1130,6 +1130,11 @@ export default function ReportsPage() {
         .custom-scrollbar::-webkit-scrollbar-thumb:hover {
           background: #94a3b8 !important;
         }
+        @media (max-width: 640px) {
+          .h-title { font-size: 1.25rem !important; }
+          .money-maker-header { flex-direction: column; align-items: flex-start !important; }
+          .money-maker-btns { width: 100%; justify-content: space-between; }
+        }
       `}</style>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 12 }}>
         <div className="h-title" style={{ fontSize: 'clamp(18px, 5vw, 24px)' }}>Reportes de Inventario</div>
@@ -1344,7 +1349,7 @@ export default function ReportsPage() {
             </div>
           ) : (
             <div className="custom-scrollbar" style={{ overflowX: 'auto', borderRadius: 8, border: '1px solid var(--border)' }}>
-              <table style={{ width: '100%', minWidth: 600, borderCollapse: 'collapse', fontSize: 13 }}>
+              <table style={{ width: '100%', minWidth: 500, borderCollapse: 'collapse', fontSize: 13 }}>
                 <thead>
                   <tr style={{ background: 'var(--panel)' }}>
                     <th style={{ padding: '10px 12px', textAlign: 'left', fontWeight: 600, borderBottom: '1px solid var(--border)' }}>Bodega</th>
@@ -1407,9 +1412,9 @@ export default function ReportsPage() {
       </Card>
 
       {/* NUEVA SECCIÓN: MONEY MAKER DE CATEGORÍAS */}
-      <div style={{ background: 'linear-gradient(135deg, #8b5cf6 0%, #6d28d9 100%)', padding: '12px 20px', borderRadius: 8, display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 12 }}>
-        <h2 style={{ color: 'white', fontSize: 18, fontWeight: 700, margin: 0 }}>El "Money Maker" de Categorías</h2>
-        <div style={{ display: 'flex', background: 'rgba(255,255,255,0.2)', borderRadius: 6, padding: 2 }}>
+      <div className="money-maker-header" style={{ background: 'linear-gradient(135deg, #8b5cf6 0%, #6d28d9 100%)', padding: '12px 20px', borderRadius: 8, display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 12 }}>
+        <h2 style={{ color: 'white', fontSize: 'clamp(15px, 4vw, 18px)', fontWeight: 700, margin: 0 }}>El "Money Maker" de Categorías</h2>
+        <div className="money-maker-btns" style={{ display: 'flex', background: 'rgba(255,255,255,0.2)', borderRadius: 6, padding: 2, flexWrap: 'wrap' }}>
           <button
             onClick={() => setCategoryViewMode('consolidated')}
             style={{ padding: '6px 12px', borderRadius: 4, border: 'none', background: categoryViewMode === 'consolidated' ? 'white' : 'transparent', color: categoryViewMode === 'consolidated' ? '#6d28d9' : 'white', fontSize: 13, fontWeight: 600, cursor: 'pointer', transition: 'all 0.2s' }}
@@ -1453,7 +1458,7 @@ export default function ReportsPage() {
 
               return (
                 <div className="custom-scrollbar" style={{ maxHeight: 400, overflowY: 'auto', overflowX: 'auto', borderRadius: 8, border: '1px solid var(--border)' }}>
-                  <table style={{ width: '100%', minWidth: categoryViewMode !== 'consolidated' ? 400 + (warehouseCols.length * 80) : 600, borderCollapse: 'collapse', fontSize: 13 }}>
+                  <table style={{ width: '100%', minWidth: categoryViewMode !== 'consolidated' ? 300 + (warehouseCols.length * 70) : 500, borderCollapse: 'collapse', fontSize: 13 }}>
                     <thead>
                       <tr style={{ background: 'var(--panel)', position: 'sticky', top: 0, zIndex: 1 }}>
                         <th style={{ padding: '10px 12px', textAlign: 'left', fontWeight: 600, borderBottom: '1px solid var(--border)' }}>Categoría</th>
@@ -1598,9 +1603,9 @@ export default function ReportsPage() {
       </div>
 
       {/* NUEVA SECCIÓN: MONEY MAKER DE MARCAS */}
-      <div style={{ background: 'linear-gradient(135deg, #f59e0b 0%, #d97706 100%)', padding: '12px 20px', borderRadius: 8, marginTop: 16, display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 12 }}>
-        <h2 style={{ color: 'white', fontSize: 18, fontWeight: 700, margin: 0 }}>El "Money Maker" de Marcas</h2>
-        <div style={{ display: 'flex', background: 'rgba(255,255,255,0.2)', borderRadius: 6, padding: 2 }}>
+      <div className="money-maker-header" style={{ background: 'linear-gradient(135deg, #f59e0b 0%, #d97706 100%)', padding: '12px 20px', borderRadius: 8, marginTop: 16, display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 12 }}>
+        <h2 style={{ color: 'white', fontSize: 'clamp(15px, 4vw, 18px)', fontWeight: 700, margin: 0 }}>El "Money Maker" de Marcas</h2>
+        <div className="money-maker-btns" style={{ display: 'flex', background: 'rgba(255,255,255,0.2)', borderRadius: 6, padding: 2, flexWrap: 'wrap' }}>
           <button
             onClick={() => setBrandViewMode('consolidated')}
             style={{ padding: '6px 12px', borderRadius: 4, border: 'none', background: brandViewMode === 'consolidated' ? 'white' : 'transparent', color: brandViewMode === 'consolidated' ? '#d97706' : 'white', fontSize: 13, fontWeight: 600, cursor: 'pointer', transition: 'all 0.2s' }}
@@ -1644,7 +1649,7 @@ export default function ReportsPage() {
 
               return (
                 <div className="custom-scrollbar" style={{ maxHeight: 400, overflowY: 'auto', overflowX: 'auto', borderRadius: 8, border: '1px solid var(--border)' }}>
-                  <table style={{ width: '100%', minWidth: brandViewMode !== 'consolidated' ? 400 + (warehouseCols.length * 80) : 600, borderCollapse: 'collapse', fontSize: 13 }}>
+                  <table style={{ width: '100%', minWidth: brandViewMode !== 'consolidated' ? 300 + (warehouseCols.length * 70) : 500, borderCollapse: 'collapse', fontSize: 13 }}>
                     <thead>
                       <tr style={{ background: 'var(--panel)', position: 'sticky', top: 0, zIndex: 1 }}>
                         <th style={{ padding: '10px 12px', textAlign: 'left', fontWeight: 600, borderBottom: '1px solid var(--border)' }}>Marca</th>
@@ -1789,9 +1794,9 @@ export default function ReportsPage() {
       </div>
 
       {/* NUEVA SECCIÓN: TOP INVENTARIO POR EQUIPO UNIDAD */}
-      <div style={{ background: 'linear-gradient(135deg, #1e3a8a 0%, #172554 100%)', padding: '12px 20px', borderRadius: 8, marginTop: 16, display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 12 }}>
-        <h2 style={{ color: 'white', fontSize: 18, fontWeight: 700, margin: 0 }}>Top Inventario por Equipo ({topItemsViewMode === 'units' ? 'Unidad' : 'al Costo'})</h2>
-        <div style={{ display: 'flex', background: 'rgba(255,255,255,0.2)', borderRadius: 6, padding: 2 }}>
+      <div className="money-maker-header" style={{ background: 'linear-gradient(135deg, #1e3a8a 0%, #172554 100%)', padding: '12px 20px', borderRadius: 8, marginTop: 16, display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 12 }}>
+        <h2 style={{ color: 'white', fontSize: 'clamp(15px, 4vw, 18px)', fontWeight: 700, margin: 0 }}>Top Inventario por Equipo ({topItemsViewMode === 'units' ? 'Unidad' : 'al Costo'})</h2>
+        <div className="money-maker-btns" style={{ display: 'flex', background: 'rgba(255,255,255,0.2)', borderRadius: 6, padding: 2, flexWrap: 'wrap' }}>
           <button
             onClick={() => setTopItemsViewMode('units')}
             style={{ padding: '6px 12px', borderRadius: 4, border: 'none', background: topItemsViewMode === 'units' ? 'white' : 'transparent', color: topItemsViewMode === 'units' ? '#1e3a8a' : 'white', fontSize: 13, fontWeight: 600, cursor: 'pointer', transition: 'all 0.2s' }}
@@ -1816,10 +1821,10 @@ export default function ReportsPage() {
                 No hay datos de productos
               </div>
             ) : (() => {
-              const currentItems = topItemsViewMode === 'units' 
-                ? reportData.topInventoryItems || [] 
+              const currentItems = topItemsViewMode === 'units'
+                ? reportData.topInventoryItems || []
                 : reportData.topInventoryItemsByCost || [];
-              
+
               if (currentItems.length === 0) {
                 return (
                   <div style={{ textAlign: 'center', padding: '30px 0', color: 'var(--muted)' }}>
@@ -1839,7 +1844,7 @@ export default function ReportsPage() {
 
               return (
                 <div className="custom-scrollbar" style={{ maxHeight: 400, overflowY: 'auto', overflowX: 'auto', borderRadius: 8, border: '1px solid var(--border)' }}>
-                  <table style={{ width: '100%', minWidth: 400 + (warehouseCols.length * 80), borderCollapse: 'collapse', fontSize: 13 }}>
+                  <table style={{ width: '100%', minWidth: 300 + (warehouseCols.length * 70), borderCollapse: 'collapse', fontSize: 13 }}>
                     <thead>
                       <tr style={{ background: 'var(--panel)', position: 'sticky', top: 0, zIndex: 1 }}>
                         <th style={{ padding: '10px 12px', textAlign: 'left', fontWeight: 600, borderBottom: '1px solid var(--border)' }}>Nombre del Producto</th>
@@ -1924,7 +1929,7 @@ export default function ReportsPage() {
         <h2 style={{ color: 'white', fontSize: 18, fontWeight: 700, margin: 0 }}>EXISTENCIAS GENERALES</h2>
       </div>
 
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(400px, 100%), 1fr))', gap: 14 }}>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(320px, 100%), 1fr))', gap: 14 }}>
         <ChartCard title="Inventario por Categorías en Unidades">
           {loading ? (
             <div style={{ height: 300, background: 'var(--panel)', borderRadius: 4, animation: 'pulse 1.5s infinite' }} />
@@ -1967,7 +1972,7 @@ export default function ReportsPage() {
         </ChartCard>
       </div>
 
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(400px, 100%), 1fr))', gap: 14 }}>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(320px, 100%), 1fr))', gap: 14 }}>
         <ChartCard title="Top Inventario por Marcas en Unidades">
           {loading ? (
             <div style={{ height: 300, background: 'var(--panel)', borderRadius: 4, animation: 'pulse 1.5s infinite' }} />
@@ -2010,7 +2015,7 @@ export default function ReportsPage() {
         </ChartCard>
       </div>
 
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(400px, 100%), 1fr))', gap: 14 }}>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(320px, 100%), 1fr))', gap: 14 }}>
         <ChartCard title={
           <div style={{ backgroundColor: '#1dac3cff', color: 'white', padding: '8px 12px', borderRadius: '4px', fontSize: '1rem', fontWeight: 'bold' }}>
             Top 5 - Inventario en Existencia por Almacén
@@ -2064,7 +2069,7 @@ export default function ReportsPage() {
         </ChartCard>
       </div>
 
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(400px, 100%), 1fr))', gap: 14 }}>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(320px, 100%), 1fr))', gap: 14 }}>
         <ChartCard title="Participación de Inventario - Unidades por Categoría">
           {loading ? (
             <div style={{ height: 300, background: 'var(--panel)', borderRadius: 4, animation: 'pulse 1.5s infinite' }} />
@@ -2092,7 +2097,7 @@ export default function ReportsPage() {
         </ChartCard>
       </div>
 
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(400px, 100%), 1fr))', gap: 14, marginTop: 14 }}>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(320px, 100%), 1fr))', gap: 14, marginTop: 14 }}>
         <ChartCard title="Participación - Top Inventario Equipos (Unidades)">
           {loading ? (
             <div style={{ height: 300, background: 'var(--panel)', borderRadius: 4, animation: 'pulse 1.5s infinite' }} />
@@ -2134,7 +2139,7 @@ export default function ReportsPage() {
       {/* SECCIÓN TOTALES */}
 
       {/* WAREHOUSE CHARTS - loaded lazily */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(400px, 100%), 1fr))', gap: 14 }}>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(320px, 100%), 1fr))', gap: 14 }}>
         <ChartCard title="Inventario por Almacén (Unidades)">
           {warehouseLoading ? (
             <div style={{ height: 300, display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--muted)', gap: 8 }}>

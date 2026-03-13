@@ -198,10 +198,10 @@ export default function PieChart({
         <div
           style={{
             display: 'grid',
-            gridTemplateColumns: slices.length > 6 ? 'repeat(3, 1fr)' : 'repeat(2, 1fr)',
+            gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))',
             gap: 8,
             width: '100%',
-            maxHeight: 250,
+            maxHeight: 300,
             overflowY: 'auto'
           }}
         >
