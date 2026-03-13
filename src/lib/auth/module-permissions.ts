@@ -125,16 +125,16 @@ export async function hasRolePermissionCode(
   role: string,
   permissionCode: string
 ): Promise<boolean> {
-  const normalizedRole = String(role || '').trim().toLowerCase();
+  const normalizedRole = String(role || '').trim();
+  const normalizedRoleLower = normalizedRole.toLowerCase();
   if (!normalizedRole) return false;
-  if (normalizedRole === 'admin') return true;
+  if (normalizedRoleLower === 'admin') return true;
 
   const { data, error } = await (supabase as any)
     .from('role_permissions')
-    .select('id')
-    .eq('role', normalizedRole)
+    .select('role')
     .eq('permission_code', permissionCode)
-    .limit(1);
+    .limit(500);
 
   if (error) {
     if (isMissingTable(error)) {
@@ -144,7 +144,9 @@ export async function hasRolePermissionCode(
     throw error;
   }
 
-  return Array.isArray(data) && data.length > 0;
+  if (!Array.isArray(data) || data.length === 0) return false;
+
+  return data.some((row: any) => String(row?.role || '').trim().toLowerCase() === normalizedRoleLower);
 }
 
 export async function getUserModuleOverrides(

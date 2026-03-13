@@ -169,6 +169,7 @@ function FacturacionPageContent() {
               tax_id: String(line?.tax_id || '').trim() || null,
               tax_name: String(line?.tax_name || '').trim() || null,
               tax_percentage: Math.max(0, Number(line?.tax_percentage ?? 0) || 0),
+              price_profile_code: String(line?.price_profile_code || '').trim() || null,
               warranty: String(line?.warranty || '').trim() || null,
             };
           })

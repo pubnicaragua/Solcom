@@ -10,6 +10,7 @@ export interface InvoicePrefillItem {
     tax_id?: string | null;
     tax_name?: string | null;
     tax_percentage?: number | null;
+    price_profile_code?: string | null;
     warranty?: string | null;
 }
 

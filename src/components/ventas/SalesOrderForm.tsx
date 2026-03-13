@@ -37,6 +37,14 @@ interface TaxOption {
     is_editable: boolean;
 }
 
+interface PriceProfileOption {
+    code: string;
+    name: string;
+    currency_code?: string | null;
+    active?: boolean;
+    item_count?: number;
+}
+
 interface OrderLine {
     id?: string;
     item_id: string | null;
@@ -48,6 +56,7 @@ interface OrderLine {
     tax_id: string;
     tax_name: string;
     tax_percentage: number;
+    price_profile_code: string;
     warranty: string;
     serial_number_value: string;
     available_serials: Array<{
@@ -121,6 +130,8 @@ export default function SalesOrderForm({ isOpen, orderId, onClose, onSaved }: Sa
     const [salespeople, setSalespeople] = useState<SalespersonOption[]>([]);
     const [syncingSalespeople, setSyncingSalespeople] = useState(false);
     const [taxOptions, setTaxOptions] = useState<TaxOption[]>([]);
+    const [priceProfiles, setPriceProfiles] = useState<PriceProfileOption[]>([]);
+    const [selectedPriceProfileCode, setSelectedPriceProfileCode] = useState('');
 
     const [orderNumber, setOrderNumber] = useState('');
     const [customerId, setCustomerId] = useState('');
@@ -229,6 +240,23 @@ export default function SalesOrderForm({ isOpen, orderId, onClose, onSaved }: Sa
         }
     }
 
+    async function fetchPriceProfiles() {
+        try {
+            const response = await fetch('/api/pricing/profiles?view=summary', { cache: 'no-store' });
+            const data = await response.json().catch(() => ({}));
+            if (!response.ok) {
+                setPriceProfiles([]);
+                return [];
+            }
+            const parsed: PriceProfileOption[] = Array.isArray(data?.profiles) ? data.profiles : [];
+            setPriceProfiles(parsed);
+            return parsed;
+        } catch {
+            setPriceProfiles([]);
+            return [];
+        }
+    }
+
     async function fetchFamilyWarehouses(parentWarehouseId: string): Promise<WarehouseOption[]> {
         const parentId = String(parentWarehouseId || '').trim();
         if (!parentId) return [];
@@ -282,6 +310,66 @@ export default function SalesOrderForm({ isOpen, orderId, onClose, onSaved }: Sa
             lineZohoWarehouseId: selectedZohoWarehouseId,
             mixed: false,
         };
+    }
+
+    function getUniformProfileCode(lines: OrderLine[]): string {
+        const codes = Array.from(new Set(
+            lines
+                .map((line) => String(line.price_profile_code || '').trim())
+                .filter(Boolean)
+        ));
+        return codes.length === 1 ? codes[0] : '';
+    }
+
+    async function applyPriceProfileToLines(profileCode: string, warehouseIdOverride?: string | null) {
+        const normalizedCode = String(profileCode || '').trim();
+        const effectiveWarehouseId = String((warehouseIdOverride ?? warehouseId) || '').trim();
+        if (!normalizedCode) {
+            setItems((current) => current.map((line) => ({ ...line, price_profile_code: '' })));
+            return;
+        }
+
+        const snapshot = [...items];
+        const updates = await Promise.all(snapshot.map(async (line, index) => {
+            const itemId = String(line.item_id || '').trim();
+            if (!itemId) {
+                return { index, unit_price: line.unit_price, profile_code: normalizedCode };
+            }
+
+            try {
+                const params = new URLSearchParams();
+                params.set('item_id', itemId);
+                params.set('profile_code', normalizedCode);
+                if (effectiveWarehouseId) params.set('warehouse_id', effectiveWarehouseId);
+                const response = await fetch(`/api/pricing/resolve?${params.toString()}`, { cache: 'no-store' });
+                const data = await response.json().catch(() => ({}));
+                if (!response.ok) {
+                    return { index, unit_price: line.unit_price, profile_code: normalizedCode };
+                }
+                return {
+                    index,
+                    unit_price: Math.max(0, normalizeNumber(data?.unit_price, line.unit_price)),
+                    profile_code: String(data?.profile_code || normalizedCode).trim() || normalizedCode,
+                };
+            } catch {
+                return { index, unit_price: line.unit_price, profile_code: normalizedCode };
+            }
+        }));
+
+        setItems((current) => current.map((line, idx) => {
+            const resolved = updates.find((entry) => entry.index === idx);
+            if (!resolved) return line;
+            return {
+                ...line,
+                unit_price: resolved.unit_price,
+                price_profile_code: resolved.profile_code,
+            };
+        }));
+    }
+
+    async function handlePriceProfileChange(nextCode: string) {
+        setSelectedPriceProfileCode(nextCode);
+        await applyPriceProfileToLines(nextCode);
     }
 
     async function fetchLineSerials(
@@ -441,6 +529,9 @@ export default function SalesOrderForm({ isOpen, orderId, onClose, onSaved }: Sa
                 void fetchLineSerials(index, line.zoho_item_id, line.item_id, family);
             }
         });
+        if (selectedPriceProfileCode) {
+            await applyPriceProfileToLines(selectedPriceProfileCode, nextWarehouseId);
+        }
     }
 
     function handleCustomerSearchChange(value: string) {
@@ -472,11 +563,12 @@ export default function SalesOrderForm({ isOpen, orderId, onClose, onSaved }: Sa
         setLoading(true);
         setError('');
         try {
-            const [orderRes, warehousesRes, loadedSalespeople, loadedTaxes] = await Promise.all([
+            const [orderRes, warehousesRes, loadedSalespeople] = await Promise.all([
                 fetch(`/api/ventas/sales-orders/${id}`, { cache: 'no-store' }),
                 fetch('/api/warehouses?type=empresarial', { cache: 'no-store' }),
                 fetchSalespeople(),
                 fetchTaxes(),
+                fetchPriceProfiles(),
             ]);
 
             const [orderData, warehousesData] = await Promise.all([
@@ -529,6 +621,7 @@ export default function SalesOrderForm({ isOpen, orderId, onClose, onSaved }: Sa
                     tax_id: String(line.tax_id || '').trim(),
                     tax_name: String(line.tax_name || '').trim(),
                     tax_percentage: normalizeNumber(line.tax_percentage, 0),
+                    price_profile_code: String(line.price_profile_code || '').trim(),
                     warranty: String(line.warranty || ''),
                     serial_number_value: normalizeSerialInput(line.serial_number_value || ''),
                     available_serials: [],
@@ -546,6 +639,7 @@ export default function SalesOrderForm({ isOpen, orderId, onClose, onSaved }: Sa
                     tax_id: '',
                     tax_name: '',
                     tax_percentage: 0,
+                    price_profile_code: '',
                     warranty: '',
                     serial_number_value: '',
                     available_serials: [],
@@ -554,6 +648,7 @@ export default function SalesOrderForm({ isOpen, orderId, onClose, onSaved }: Sa
                     line_zoho_warehouse_id: null,
                 }];
             setItems(normalizedLines);
+            setSelectedPriceProfileCode(getUniformProfileCode(normalizedLines));
 
             const family = await fetchFamilyWarehouses(order.warehouse_id || '');
             setFamilyWarehouses(family);
@@ -631,6 +726,7 @@ export default function SalesOrderForm({ isOpen, orderId, onClose, onSaved }: Sa
                 tax_id: '',
                 tax_name: '',
                 tax_percentage: 0,
+                price_profile_code: selectedPriceProfileCode || '',
                 warranty: '',
                 serial_number_value: '',
                 available_serials: [],
@@ -737,6 +833,7 @@ export default function SalesOrderForm({ isOpen, orderId, onClose, onSaved }: Sa
                 tax_id: String(line.tax_id || '').trim(),
                 tax_name: String(line.tax_name || '').trim(),
                 tax_percentage: Math.max(0, normalizeNumber(line.tax_percentage, 0)),
+                price_profile_code: String(line.price_profile_code || selectedPriceProfileCode || '').trim() || null,
                 warranty: String(line.warranty || '').trim(),
                 serial_number_value: normalizeSerialInput(line.serial_number_value) || null,
                 line_warehouse_id: line.line_warehouse_id || null,
@@ -1029,6 +1126,20 @@ export default function SalesOrderForm({ isOpen, orderId, onClose, onSaved }: Sa
                                 <select value={paymentTerms} onChange={(e) => setPaymentTerms(e.target.value)} style={inputStyle}>
                                     {PAYMENT_TERMS_OPTIONS.map((term) => (
                                         <option key={term.value} value={term.value}>{term.label}</option>
+                                    ))}
+                                </select>
+                            </Field>
+                            <Field label="Lista de precios">
+                                <select
+                                    value={selectedPriceProfileCode}
+                                    onChange={(e) => { void handlePriceProfileChange(e.target.value); }}
+                                    style={inputStyle}
+                                >
+                                    <option value="">Sin lista (precio manual/base)</option>
+                                    {priceProfiles.map((profile) => (
+                                        <option key={profile.code} value={profile.code}>
+                                            {profile.name} ({profile.item_count || 0} SKUs)
+                                        </option>
                                     ))}
                                 </select>
                             </Field>

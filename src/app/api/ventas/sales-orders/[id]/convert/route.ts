@@ -2,7 +2,6 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createRouteHandlerClient } from '@supabase/auth-helpers-nextjs';
 import { cookies } from 'next/headers';
 import { getAuthenticatedProfile } from '@/lib/auth/warehouse-permissions';
-import { getEffectiveModuleAccess, hasModuleAccess } from '@/lib/auth/module-permissions';
 import {
     canCreateVentasDocument,
     createPermissionDeniedMessage,
@@ -565,11 +564,6 @@ export async function POST(
         const auth = await getAuthenticatedProfile(supabase);
         if (!auth.ok) {
             return NextResponse.json({ error: auth.error }, { status: auth.status });
-        }
-
-        const moduleAccess = await getEffectiveModuleAccess(supabase, auth.userId, auth.role);
-        if (!hasModuleAccess(moduleAccess, 'ventas')) {
-            return NextResponse.json({ error: 'No autorizado para este módulo' }, { status: 403 });
         }
 
         const roleForPermission = await resolveRoleForPermissionChecks(

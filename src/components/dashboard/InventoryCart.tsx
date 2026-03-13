@@ -183,7 +183,6 @@ export default function InventoryCart({
     const [error, setError] = useState('');
     const [success, setSuccess] = useState(false);
     const [createdDocNumber, setCreatedDocNumber] = useState('');
-    const [canAccessVentasModule, setCanAccessVentasModule] = useState(true);
     const [cartTypePermissions, setCartTypePermissions] = useState<CartTypePermissionMap>({
         cotizacion: true,
         factura: true,
@@ -238,7 +237,7 @@ export default function InventoryCart({
     const availableCartTypes = (['cotizacion', 'factura', 'orden_venta'] as CartType[]).filter(
         (type) => cartTypePermissions[type]
     );
-    const canSubmitCurrentType = canAccessVentasModule && Boolean(cartTypePermissions[cartType]);
+    const canSubmitCurrentType = Boolean(cartTypePermissions[cartType]);
 
     const fetchCartPermissions = useCallback(async () => {
         try {
@@ -251,7 +250,6 @@ export default function InventoryCart({
                 factura: Boolean(data?.can_create_invoice),
                 orden_venta: Boolean(data?.can_create_sales_order),
             };
-            setCanAccessVentasModule(Boolean(data?.module_access));
             setCartTypePermissions(nextPermissions);
         } catch {
             // No-op: en caso de falla de red, backend mantiene validación final.
@@ -805,7 +803,7 @@ export default function InventoryCart({
                     {availableCartTypes.map((type) => {
                         const tc = CART_TYPE_CONFIG[type];
                         const isActive = cartType === type;
-                        const disabled = !warehouseId || !canAccessVentasModule;
+                        const disabled = !warehouseId;
                         const Icon = tc.icon;
                         return (
                             <button
@@ -924,7 +922,7 @@ export default function InventoryCart({
                     </div>
                 )}
 
-                {!canAccessVentasModule || availableCartTypes.length === 0 ? (
+                {availableCartTypes.length === 0 ? (
                     <div
                         style={{
                             margin: '12px 16px 0',

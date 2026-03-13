@@ -26,6 +26,7 @@ const menuItems = [
 const billingSubItems = [
   { label: 'Facturas', href: '/ventas' },
   { label: 'Cotizaciones', href: '/ventas/cotizaciones' },
+  { label: 'Listas de Precios', href: '/ventas/listas-precios' },
 ];
 
 import { useSidebar } from '@/contexts/SidebarContext';

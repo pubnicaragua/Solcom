@@ -37,6 +37,23 @@ const MOCK_PERMISSIONS = [
   { code: 'branding.view',    name: 'Ver Logo de Marca',      module: 'branding',  description: 'Permite ver el logo de la marca en la navegación' },
 ];
 
+async function ensureBasePermissions(supabase: ReturnType<typeof createRouteHandlerClient>) {
+  const baseRows = MOCK_PERMISSIONS.map((permission) => ({
+    code: permission.code,
+    name: permission.name,
+    description: permission.description,
+    module: permission.module,
+  }));
+
+  const { error } = await (supabase as any)
+    .from('permissions')
+    .upsert(baseRows, { onConflict: 'code' });
+
+  if (error) {
+    throw error;
+  }
+}
+
 export async function GET() {
   try {
     const supabase = createRouteHandlerClient({ cookies });
@@ -47,6 +64,16 @@ export async function GET() {
     const moduleAccess = await getEffectiveModuleAccess(supabase, auth.userId, auth.role);
     if (!hasModuleAccess(moduleAccess, 'roles')) {
       return NextResponse.json({ error: 'No autorizado para este módulo' }, { status: 403 });
+    }
+
+    try {
+      await ensureBasePermissions(supabase);
+    } catch (seedError: any) {
+      if (!isMissingTable(seedError)) {
+        console.warn('No se pudo sembrar permisos base:', seedError?.message || seedError);
+      } else {
+        throw seedError;
+      }
     }
 
     const { data: permissions, error } = await supabase

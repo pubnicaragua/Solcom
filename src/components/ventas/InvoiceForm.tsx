@@ -21,6 +21,7 @@ interface InvoiceFormItem {
     tax_id: string;
     tax_name: string;
     tax_percentage: number;
+    price_profile_code: string;
     warranty: string;
     serial_number_value: string;
     available_serials: Array<{
@@ -82,6 +83,15 @@ interface TaxOption {
     is_editable: boolean;
 }
 
+interface PriceProfileOption {
+    code: string;
+    name: string;
+    description?: string | null;
+    currency_code?: string | null;
+    active?: boolean;
+    item_count?: number;
+}
+
 interface InvoiceFormProps {
     isOpen: boolean;
     onClose: () => void;
@@ -133,6 +143,8 @@ export default function InvoiceForm({ isOpen, onClose, onSaved, editInvoice, pre
     const [salespersonId, setSalespersonId] = useState('');
     const [syncingSalespeople, setSyncingSalespeople] = useState(false);
     const [taxOptions, setTaxOptions] = useState<TaxOption[]>([]);
+    const [priceProfiles, setPriceProfiles] = useState<PriceProfileOption[]>([]);
+    const [selectedPriceProfileCode, setSelectedPriceProfileCode] = useState('');
 
     // Delivery
     const [deliveryRequested, setDeliveryRequested] = useState(false);
@@ -159,6 +171,7 @@ export default function InvoiceForm({ isOpen, onClose, onSaved, editInvoice, pre
             tax_id: '',
             tax_name: '',
             tax_percentage: 0,
+            price_profile_code: '',
             warranty: '',
             serial_number_value: '',
             available_serials: [],
@@ -188,6 +201,7 @@ export default function InvoiceForm({ isOpen, onClose, onSaved, editInvoice, pre
             fetchWarehouses();
             fetchSalespeople();
             fetchTaxes();
+            fetchPriceProfiles();
         }
     }, [isOpen]);
 
@@ -215,6 +229,7 @@ export default function InvoiceForm({ isOpen, onClose, onSaved, editInvoice, pre
                         tax_id: String((item as any)?.tax_id || '').trim(),
                         tax_name: String((item as any)?.tax_name || '').trim(),
                         tax_percentage: Math.max(0, Number((item as any)?.tax_percentage ?? 0) || 0),
+                        price_profile_code: String((item as any)?.price_profile_code || '').trim(),
                         warranty: String((item as any)?.warranty || ''),
                         serial_number_value: normalizeSerialInput(item?.serial_number_value || ''),
                         available_serials: [],
@@ -253,26 +268,27 @@ export default function InvoiceForm({ isOpen, onClose, onSaved, editInvoice, pre
             setSalespersonId(prefilledSalespersonId);
         }
 
-        setLineItems(
-            normalizedItems.length > 0
-                ? normalizedItems
-                : [{
-                    item_id: null,
-                    zoho_item_id: null,
-                    description: '',
-                    quantity: 1,
-                    max_available_qty: null,
-                    unit_price: 0,
-                    discount_percent: 0,
-                    tax_id: '',
-                    tax_name: '',
-                    tax_percentage: 0,
-                    warranty: '',
-                    serial_number_value: '',
-                    available_serials: [],
-                    loading_serials: false,
-                }]
-        );
+        const nextLines = normalizedItems.length > 0
+            ? normalizedItems
+            : [{
+                item_id: null,
+                zoho_item_id: null,
+                description: '',
+                quantity: 1,
+                max_available_qty: null,
+                unit_price: 0,
+                discount_percent: 0,
+                tax_id: '',
+                tax_name: '',
+                tax_percentage: 0,
+                price_profile_code: '',
+                warranty: '',
+                serial_number_value: '',
+                available_serials: [],
+                loading_serials: false,
+            }];
+        setLineItems(nextLines);
+        setSelectedPriceProfileCode(getUniformProfileCode(nextLines));
         setError('');
     }, [isOpen, editInvoice, prefillData]);
 
@@ -294,6 +310,7 @@ export default function InvoiceForm({ isOpen, onClose, onSaved, editInvoice, pre
                         tax_id: String(item?.tax_id || '').trim(),
                         tax_name: String(item?.tax_name || '').trim(),
                         tax_percentage: Math.max(0, Number(item?.tax_percentage ?? 0) || 0),
+                        price_profile_code: String(item?.price_profile_code || '').trim(),
                         warranty: String(item?.warranty || ''),
                         serial_number_value: normalizeSerialInput(
                             item?.serial_number_value ?? item?.serial_numbers ?? item?.serials
@@ -343,26 +360,27 @@ export default function InvoiceForm({ isOpen, onClose, onSaved, editInvoice, pre
         setCancellationComments(String(editInvoice?.cancellation_comments || '').trim());
         setShowCancellation(Boolean(editInvoice?.cancellation_reason_id || editInvoice?.cancellation_comments));
 
-        setLineItems(
-            normalizedItems.length > 0
-                ? normalizedItems
-                : [{
-                    item_id: null,
-                    zoho_item_id: null,
-                    description: '',
-                    quantity: 1,
-                    max_available_qty: null,
-                    unit_price: 0,
-                    discount_percent: 0,
-                    tax_id: '',
-                    tax_name: '',
-                    tax_percentage: 0,
-                    warranty: '',
-                    serial_number_value: '',
-                    available_serials: [],
-                    loading_serials: false,
-                }]
-        );
+        const nextLines = normalizedItems.length > 0
+            ? normalizedItems
+            : [{
+                item_id: null,
+                zoho_item_id: null,
+                description: '',
+                quantity: 1,
+                max_available_qty: null,
+                unit_price: 0,
+                discount_percent: 0,
+                tax_id: '',
+                tax_name: '',
+                tax_percentage: 0,
+                price_profile_code: '',
+                warranty: '',
+                serial_number_value: '',
+                available_serials: [],
+                loading_serials: false,
+            }];
+        setLineItems(nextLines);
+        setSelectedPriceProfileCode(getUniformProfileCode(nextLines));
         setError('');
     }, [isOpen, editInvoice]);
 
@@ -552,6 +570,9 @@ export default function InvoiceForm({ isOpen, onClose, onSaved, editInvoice, pre
             available_serials: [],
             loading_serials: false,
         })));
+        if (selectedPriceProfileCode) {
+            void applyPriceProfileToLines(selectedPriceProfileCode);
+        }
 
         return () => {
             cancelled = true;
@@ -614,6 +635,79 @@ export default function InvoiceForm({ isOpen, onClose, onSaved, editInvoice, pre
             setTaxOptions([]);
             return [];
         }
+    };
+
+    const fetchPriceProfiles = async () => {
+        try {
+            const response = await fetch('/api/pricing/profiles?view=summary', { cache: 'no-store' });
+            const data = await response.json().catch(() => ({}));
+            if (!response.ok) {
+                setPriceProfiles([]);
+                return;
+            }
+            const list: PriceProfileOption[] = Array.isArray(data?.profiles) ? data.profiles : [];
+            setPriceProfiles(list);
+        } catch {
+            setPriceProfiles([]);
+        }
+    };
+
+    const getUniformProfileCode = (rows: InvoiceFormItem[]): string => {
+        const codes = Array.from(new Set(
+            rows
+                .map((line) => String(line.price_profile_code || '').trim())
+                .filter(Boolean)
+        ));
+        return codes.length === 1 ? codes[0] : '';
+    };
+
+    const applyPriceProfileToLines = async (profileCode: string) => {
+        const normalizedCode = String(profileCode || '').trim();
+        if (!normalizedCode) {
+            setLineItems((current) => current.map((line) => ({ ...line, price_profile_code: '' })));
+            return;
+        }
+
+        const currentLines = [...lineItems];
+        const updates = await Promise.all(currentLines.map(async (line, index) => {
+            const itemId = String(line.item_id || '').trim();
+            if (!itemId) {
+                return { index, unit_price: line.unit_price, profile_code: normalizedCode };
+            }
+            try {
+                const params = new URLSearchParams();
+                params.set('item_id', itemId);
+                params.set('profile_code', normalizedCode);
+                if (warehouseId) params.set('warehouse_id', warehouseId);
+                const response = await fetch(`/api/pricing/resolve?${params.toString()}`, { cache: 'no-store' });
+                const data = await response.json().catch(() => ({}));
+                if (!response.ok) {
+                    return { index, unit_price: line.unit_price, profile_code: normalizedCode };
+                }
+                return {
+                    index,
+                    unit_price: Math.max(0, Number(data?.unit_price ?? line.unit_price) || line.unit_price),
+                    profile_code: String(data?.profile_code || normalizedCode).trim() || normalizedCode,
+                };
+            } catch {
+                return { index, unit_price: line.unit_price, profile_code: normalizedCode };
+            }
+        }));
+
+        setLineItems((current) => current.map((line, idx) => {
+            const resolved = updates.find((entry) => entry.index === idx);
+            if (!resolved) return line;
+            return {
+                ...line,
+                unit_price: resolved.unit_price,
+                price_profile_code: resolved.profile_code,
+            };
+        }));
+    };
+
+    const handlePriceProfileChange = async (nextCode: string) => {
+        setSelectedPriceProfileCode(nextCode);
+        await applyPriceProfileToLines(nextCode);
     };
 
     const filteredCustomers = customers;
@@ -859,9 +953,29 @@ export default function InvoiceForm({ isOpen, onClose, onSaved, editInvoice, pre
         }
     };
 
-    const selectProduct = (product: Product, rowIndex: number) => {
+    const selectProduct = async (product: Product, rowIndex: number) => {
         const zohoItemId = String(product.zoho_item_id || '').trim() || null;
         const maxAvailable = Math.max(0, Math.floor(Number(product.quantity) || 0));
+        let resolvedUnitPrice = product.unit_price || 0;
+        let resolvedProfileCode = '';
+
+        if (selectedPriceProfileCode && product.item_id) {
+            try {
+                const params = new URLSearchParams();
+                params.set('item_id', String(product.item_id));
+                params.set('profile_code', selectedPriceProfileCode);
+                if (warehouseId) params.set('warehouse_id', warehouseId);
+
+                const response = await fetch(`/api/pricing/resolve?${params.toString()}`, { cache: 'no-store' });
+                const data = await response.json().catch(() => ({}));
+                if (response.ok) {
+                    resolvedUnitPrice = Math.max(0, Number(data?.unit_price ?? resolvedUnitPrice) || resolvedUnitPrice);
+                    resolvedProfileCode = String(data?.profile_code || selectedPriceProfileCode).trim();
+                }
+            } catch {
+                // Sin bloqueo: si falla resolve, se mantiene precio base del item.
+            }
+        }
 
         setLineItems((current) => current.map((line, idx) => {
             if (idx !== rowIndex) return line;
@@ -872,10 +986,11 @@ export default function InvoiceForm({ isOpen, onClose, onSaved, editInvoice, pre
                 description: product.name,
                 quantity: 1,
                 max_available_qty: maxAvailable > 0 ? maxAvailable : null,
-                unit_price: product.unit_price || 0,
+                unit_price: resolvedUnitPrice,
                 tax_id: line.tax_id || '',
                 tax_name: line.tax_name || '',
                 tax_percentage: line.tax_id ? line.tax_percentage : 0,
+                price_profile_code: resolvedProfileCode,
                 serial_number_value: '',
                 available_serials: [],
                 loading_serials: false,
@@ -939,6 +1054,7 @@ export default function InvoiceForm({ isOpen, onClose, onSaved, editInvoice, pre
                 tax_id: '',
                 tax_name: '',
                 tax_percentage: 0,
+                price_profile_code: selectedPriceProfileCode || '',
                 warranty: '',
                 serial_number_value: '',
                 available_serials: [],
@@ -1035,6 +1151,7 @@ export default function InvoiceForm({ isOpen, onClose, onSaved, editInvoice, pre
                     tax_id: item.tax_id,
                     tax_name: item.tax_name,
                     tax_percentage: item.tax_percentage,
+                    price_profile_code: item.price_profile_code || selectedPriceProfileCode || null,
                     warranty: item.warranty || null,
                     serial_number_value: normalizeSerialInput(item.serial_number_value) || null,
                     serial_numbers: serialArray(item.serial_number_value),
@@ -1141,6 +1258,7 @@ export default function InvoiceForm({ isOpen, onClose, onSaved, editInvoice, pre
         setSalespersonId('');
         setDeliveryRequested(false);
         setDeliveryId(null);
+        setSelectedPriceProfileCode('');
         setCancellationReasonId(null);
         setCancellationComments('');
         setShowCancellation(false);
@@ -1156,6 +1274,7 @@ export default function InvoiceForm({ isOpen, onClose, onSaved, editInvoice, pre
             tax_id: '',
             tax_name: '',
             tax_percentage: 0,
+            price_profile_code: '',
             warranty: '',
             serial_number_value: '',
             available_serials: [],
@@ -1399,7 +1518,27 @@ export default function InvoiceForm({ isOpen, onClose, onSaved, editInvoice, pre
                             </div>
                         </div>
 
-                        {/* ===== ROW 4: Asignación Delivery + Detalle de crédito ===== */}
+                        {/* ===== ROW 4: Lista de precios ===== */}
+                        <div style={{ marginBottom: '20px' }}>
+                            <label style={labelStyle}>Lista de precios (opcional)</label>
+                            <div style={{ position: 'relative' }}>
+                                <select
+                                    value={selectedPriceProfileCode}
+                                    onChange={(e) => { void handlePriceProfileChange(e.target.value); }}
+                                    style={{ ...inputStyle, appearance: 'none', cursor: 'pointer' }}
+                                >
+                                    <option value="">Sin lista (precio manual/base)</option>
+                                    {priceProfiles.map((profile) => (
+                                        <option key={profile.code} value={profile.code}>
+                                            {profile.name} ({profile.item_count || 0} SKUs)
+                                        </option>
+                                    ))}
+                                </select>
+                                <ChevronDown size={14} style={{ position: 'absolute', right: '10px', top: '12px', color: 'var(--muted)', pointerEvents: 'none' }} />
+                            </div>
+                        </div>
+
+                        {/* ===== ROW 5: Asignación Delivery + Detalle de crédito ===== */}
                         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px', marginBottom: '24px' }}>
                             <DeliverySelector
                                 value={deliveryId}

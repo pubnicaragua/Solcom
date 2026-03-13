@@ -6,7 +6,6 @@ import { buildTaxCatalogMap, getZohoTaxCatalog } from '@/lib/zoho/tax-catalog';
 import { createZohoBooksClient } from '@/lib/zoho/books-client';
 import { fetchZohoSalespeople } from '@/lib/zoho/salespeople';
 import { getAuthenticatedProfile } from '@/lib/auth/warehouse-permissions';
-import { getEffectiveModuleAccess, hasModuleAccess } from '@/lib/auth/module-permissions';
 import {
     canCreateVentasDocument,
     createPermissionDeniedMessage,
@@ -1136,11 +1135,6 @@ export async function POST(req: NextRequest) {
         const auth = await getAuthenticatedProfile(supabase);
         if (!auth.ok) {
             return NextResponse.json({ error: auth.error }, { status: auth.status });
-        }
-
-        const moduleAccess = await getEffectiveModuleAccess(supabase, auth.userId, auth.role);
-        if (!hasModuleAccess(moduleAccess, 'ventas')) {
-            return NextResponse.json({ error: 'No autorizado para este módulo' }, { status: 403 });
         }
 
         const roleForPermission = await resolveRoleForPermissionChecks(

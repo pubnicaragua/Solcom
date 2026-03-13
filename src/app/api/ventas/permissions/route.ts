@@ -20,14 +20,6 @@ export async function GET() {
 
     const moduleAccess = await getEffectiveModuleAccess(supabase, auth.userId, auth.role);
     const canAccessVentasModule = hasModuleAccess(moduleAccess, 'ventas');
-    if (!canAccessVentasModule) {
-      return NextResponse.json({
-        module_access: false,
-        can_create_quote: false,
-        can_create_invoice: false,
-        can_create_sales_order: false,
-      });
-    }
 
     const roleForPermission = await resolveRoleForPermissionChecks(
       supabase,
@@ -42,7 +34,7 @@ export async function GET() {
     ]);
 
     return NextResponse.json({
-      module_access: true,
+      module_access: canAccessVentasModule,
       can_create_quote: canCreateQuote,
       can_create_invoice: canCreateInvoice,
       can_create_sales_order: canCreateSalesOrder,
