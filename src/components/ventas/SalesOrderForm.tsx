@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from 'react';
 import type { CSSProperties, ReactNode } from 'react';
-import { X, Loader2, Save, Plus, Trash2, Search, User, ChevronDown } from 'lucide-react';
+import { X, Loader2, Save, Plus, Trash2, Search, User, ChevronDown, RefreshCw, Calendar, Tag, MapPin, Truck, FileText } from 'lucide-react';
 
 interface CustomerOption {
     id: string;
@@ -1022,253 +1022,174 @@ export default function SalesOrderForm({ isOpen, orderId, onClose, onSaved }: Sa
                             </div>
                         )}
 
-                        <div style={{
-                            display: 'grid',
-                            gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))',
-                            gap: 12,
-                            background: 'rgba(255,255,255,0.015)',
-                            border: '1px solid rgba(255,255,255,0.06)',
-                            borderRadius: 12,
-                            padding: '16px 18px',
-                        }}>
-                            <Field label="Cliente *">
-                                <div ref={customerRef} style={{ position: 'relative' }}>
-                                    <Search
-                                        size={14}
-                                        style={{
-                                            position: 'absolute',
-                                            left: 10,
-                                            top: 10,
-                                            color: 'var(--muted)',
-                                            pointerEvents: 'none',
-                                            zIndex: 2,
-                                        }}
-                                    />
-                                    <input
-                                        type="text"
-                                        value={customerSearch}
-                                        onChange={(event) => handleCustomerSearchChange(event.target.value)}
-                                        onFocus={() => {
-                                            setShowCustomerDropdown(true);
-                                            if (customers.length === 0) {
-                                                void fetchCustomers('', customerId ? customers.find((c) => c.id === customerId) || null : null);
-                                            }
-                                        }}
-                                        placeholder="Buscar cliente..."
-                                        style={{ ...inputStyle, paddingLeft: 32 }}
-                                    />
-                                    {showCustomerDropdown && (
-                                        <div style={customerDropdownStyle}>
-                                            {customers.length === 0 ? (
-                                                <div style={customerEmptyStyle}>Sin resultados</div>
-                                            ) : (
-                                                customers.map((customer) => {
-                                                    const isActive = customer.id === customerId;
-                                                    return (
-                                                        <button
-                                                            key={customer.id}
-                                                            type="button"
-                                                            onClick={() => selectCustomer(customer)}
-                                                            style={{
-                                                                ...customerOptionStyle,
-                                                                background: isActive ? 'rgba(59,130,246,0.12)' : 'transparent',
-                                                                borderColor: isActive ? 'rgba(59,130,246,0.28)' : 'transparent',
-                                                            }}
-                                                        >
-                                                            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
-                                                                <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--text)' }}>
-                                                                    {customer.name}
-                                                                </span>
-                                                                {customer.source === 'zoho' && (
-                                                                    <span style={customerBadgeStyle}>Zoho</span>
-                                                                )}
-                                                            </div>
-                                                            <div style={{ fontSize: 11, color: 'var(--muted)' }}>
-                                                                {customer.ruc || customer.email || 'Sin identificación'}
-                                                            </div>
-                                                        </button>
-                                                    );
-                                                })
-                                            )}
-                                        </div>
-                                    )}
-                                </div>
-                            </Field>
-                            <Field label="Bodega empresarial *">
-                                <select
-                                    value={warehouseId}
-                                    onChange={(e) => { void handleWarehouseChange(e.target.value); }}
-                                    style={inputStyle}
-                                >
-                                    <option value="">Seleccionar bodega...</option>
-                                    {warehouses.map((warehouse) => (
-                                        <option key={warehouse.id} value={warehouse.id}>
-                                            {warehouse.code} — {warehouse.name}
-                                        </option>
-                                    ))}
-                                </select>
-                                {warehouseId && familyWarehouses.length > 0 && (
-                                    <div style={{ fontSize: 11, color: 'var(--muted)', marginTop: 4 }}>
-                                        Disponible para seriales en: {familyWarehouses.map((warehouse) => warehouse.code).join(', ')}
-                                    </div>
-                                )}
-                            </Field>
-                            <Field label="Fecha *">
-                                <input type="date" value={date} onChange={(e) => setDate(e.target.value)} style={inputStyle} />
-                            </Field>
-                            <Field label="Fecha envío esperada">
-                                <input type="date" value={expectedDeliveryDate} onChange={(e) => setExpectedDeliveryDate(e.target.value)} style={inputStyle} />
-                            </Field>
-                            <Field label="N.° referencia">
-                                <input type="text" value={referenceNumber} onChange={(e) => setReferenceNumber(e.target.value)} placeholder="Referencia cliente/externa" style={inputStyle} />
-                            </Field>
-                            <Field label="Términos de pago">
-                                <select value={paymentTerms} onChange={(e) => setPaymentTerms(e.target.value)} style={inputStyle}>
-                                    {PAYMENT_TERMS_OPTIONS.map((term) => (
-                                        <option key={term.value} value={term.value}>{term.label}</option>
-                                    ))}
-                                </select>
-                            </Field>
-                            <Field label="Lista de precios">
-                                <select
-                                    value={selectedPriceProfileCode}
-                                    onChange={(e) => { void handlePriceProfileChange(e.target.value); }}
-                                    style={inputStyle}
-                                >
-                                    <option value="">Sin lista (precio manual/base)</option>
-                                    {priceProfiles.map((profile) => (
-                                        <option key={profile.code} value={profile.code}>
-                                            {profile.name} ({profile.item_count || 0} SKUs)
-                                        </option>
-                                    ))}
-                                </select>
-                            </Field>
-                            <Field label="Método de entrega">
-                                <input type="text" value={deliveryMethod} onChange={(e) => setDeliveryMethod(e.target.value)} placeholder="Retiro, envío, etc." style={inputStyle} />
-                            </Field>
-                            <Field label="Zona de envío">
-                                <input type="text" value={shippingZone} onChange={(e) => setShippingZone(e.target.value)} placeholder="Managua, León, etc." style={inputStyle} />
-                            </Field>
-                            <Field label="Vendedor">
-                                <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 6 }}>
-                                    <button
-                                        type="button"
-                                        onClick={syncSalespeople}
-                                        disabled={syncingSalespeople}
-                                        style={{
-                                            border: '1px solid var(--border)',
-                                            background: 'transparent',
-                                            color: 'var(--muted)',
-                                            borderRadius: 6,
-                                            padding: '4px 8px',
-                                            fontSize: 11,
-                                            display: 'inline-flex',
-                                            alignItems: 'center',
-                                            gap: 6,
-                                            cursor: syncingSalespeople ? 'wait' : 'pointer',
-                                            opacity: syncingSalespeople ? 0.7 : 1,
-                                        }}
-                                    >
-                                        {syncingSalespeople ? <Loader2 size={12} className="animate-spin" /> : null}
-                                        {syncingSalespeople ? 'Sincronizando...' : 'Actualizar'}
-                                    </button>
-                                </div>
-                                <div style={{ position: 'relative' }}>
-                                    <User
-                                        size={14}
-                                        style={{
-                                            position: 'absolute',
-                                            left: 10,
-                                            top: 10,
-                                            color: 'var(--muted)',
-                                            pointerEvents: 'none',
-                                        }}
-                                    />
-                                    <select
-                                        value={salespersonId}
-                                        onChange={(e) => {
-                                            const selectedId = e.target.value;
-                                            setSalespersonId(selectedId);
-                                            const selectedSeller = salespeople.find((seller) => seller.id === selectedId) || null;
-                                            setSalespersonName(selectedSeller?.name || '');
-                                        }}
-                                        style={{ ...inputStyle, paddingLeft: 32, appearance: 'none', cursor: 'pointer' }}
-                                    >
-                                        <option value="">Seleccionar vendedor...</option>
-                                        {salespeople.length === 0 && (
-                                            <option value="" disabled>
-                                                Sin vendedores disponibles
-                                            </option>
+                        {/* ══ Sección 1: Datos principales ══ */}
+                        <FormSection title="Datos principales" accent="#10B981" icon={<User size={13} />}>
+                            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: 14 }}>
+                                <Field label="Cliente *">
+                                    <div ref={customerRef} style={{ position: 'relative' }}>
+                                        <Search size={14} style={{ position: 'absolute', left: 10, top: 11, color: 'var(--muted)', pointerEvents: 'none', zIndex: 2 }} />
+                                        <input
+                                            type="text"
+                                            value={customerSearch}
+                                            onChange={(event) => handleCustomerSearchChange(event.target.value)}
+                                            onFocus={() => {
+                                                setShowCustomerDropdown(true);
+                                                if (customers.length === 0) {
+                                                    void fetchCustomers('', customerId ? customers.find((c) => c.id === customerId) || null : null);
+                                                }
+                                            }}
+                                            placeholder="Buscar cliente..."
+                                            style={{ ...inputStyle, paddingLeft: 34 }}
+                                        />
+                                        {showCustomerDropdown && (
+                                            <div style={customerDropdownStyle}>
+                                                {customers.length === 0 ? (
+                                                    <div style={customerEmptyStyle}>Sin resultados</div>
+                                                ) : (
+                                                    customers.map((customer) => {
+                                                        const isActive = customer.id === customerId;
+                                                        return (
+                                                            <button
+                                                                key={customer.id}
+                                                                type="button"
+                                                                onClick={() => selectCustomer(customer)}
+                                                                style={{ ...customerOptionStyle, background: isActive ? 'rgba(59,130,246,0.12)' : 'transparent', borderColor: isActive ? 'rgba(59,130,246,0.28)' : 'transparent' }}
+                                                            >
+                                                                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
+                                                                    <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--text)' }}>{customer.name}</span>
+                                                                    {customer.source === 'zoho' && <span style={customerBadgeStyle}>Zoho</span>}
+                                                                </div>
+                                                                <div style={{ fontSize: 11, color: 'var(--muted)' }}>{customer.ruc || customer.email || 'Sin identificación'}</div>
+                                                            </button>
+                                                        );
+                                                    })
+                                                )}
+                                            </div>
                                         )}
-                                        {salespeople.map((seller) => (
-                                            <option key={seller.id} value={seller.id}>
-                                                {seller.name} — {seller.role}
-                                            </option>
+                                    </div>
+                                </Field>
+
+                                <Field label="Bodega empresarial *">
+                                    <select value={warehouseId} onChange={(e) => { void handleWarehouseChange(e.target.value); }} style={inputStyle}>
+                                        <option value="">Seleccionar bodega...</option>
+                                        {warehouses.map((warehouse) => (
+                                            <option key={warehouse.id} value={warehouse.id}>{warehouse.code} — {warehouse.name}</option>
                                         ))}
                                     </select>
-                                    <ChevronDown
-                                        size={14}
-                                        style={{
-                                            position: 'absolute',
-                                            right: 10,
-                                            top: 12,
-                                            color: 'var(--muted)',
-                                            pointerEvents: 'none',
-                                        }}
-                                    />
-                                </div>
-                            </Field>
-                        </div>
+                                    {warehouseId && familyWarehouses.length > 0 && (
+                                        <div style={{ display: 'flex', alignItems: 'center', gap: 5, marginTop: 5, flexWrap: 'wrap' }}>
+                                            <span style={{ fontSize: 10, color: 'var(--muted)' }}>Seriales en:</span>
+                                            {familyWarehouses.map((w) => (
+                                                <span key={w.id} style={{ fontSize: 10, fontWeight: 700, background: 'rgba(16,185,129,0.1)', border: '1px solid rgba(16,185,129,0.2)', color: '#6ee7b7', borderRadius: 5, padding: '1px 7px' }}>{w.code}</span>
+                                            ))}
+                                        </div>
+                                    )}
+                                </Field>
 
-                        {/* Vendedor + Nota de impuestos */}
-                        <div style={{
-                            display: 'grid',
-                            gridTemplateColumns: '1fr 1fr',
-                            gap: 12,
-                            background: 'rgba(255,255,255,0.015)',
-                            border: '1px solid rgba(255,255,255,0.06)',
-                            borderRadius: 12,
-                            padding: '16px 18px',
-                        }}>
-                            <Field label="Notas">
+                                <Field label="Vendedor">
+                                    <div style={{ display: 'flex', gap: 7, alignItems: 'center' }}>
+                                        <div style={{ flex: 1, position: 'relative' }}>
+                                            <User size={14} style={{ position: 'absolute', left: 10, top: 11, color: 'var(--muted)', pointerEvents: 'none' }} />
+                                            <select
+                                                value={salespersonId}
+                                                onChange={(e) => {
+                                                    const selectedId = e.target.value;
+                                                    setSalespersonId(selectedId);
+                                                    const selectedSeller = salespeople.find((seller) => seller.id === selectedId) || null;
+                                                    setSalespersonName(selectedSeller?.name || '');
+                                                }}
+                                                style={{ ...inputStyle, paddingLeft: 34, appearance: 'none', cursor: 'pointer' }}
+                                            >
+                                                <option value="">Seleccionar vendedor...</option>
+                                                {salespeople.length === 0 && <option value="" disabled>Sin vendedores disponibles</option>}
+                                                {salespeople.map((seller) => (
+                                                    <option key={seller.id} value={seller.id}>{seller.name} — {seller.role}</option>
+                                                ))}
+                                            </select>
+                                            <ChevronDown size={14} style={{ position: 'absolute', right: 10, top: 11, color: 'var(--muted)', pointerEvents: 'none' }} />
+                                        </div>
+                                        <button
+                                            type="button"
+                                            onClick={syncSalespeople}
+                                            disabled={syncingSalespeople}
+                                            title="Sincronizar desde Zoho"
+                                            style={{ flexShrink: 0, width: 36, height: 36, display: 'flex', alignItems: 'center', justifyContent: 'center', borderRadius: 8, border: '1px solid var(--border)', background: 'transparent', color: 'var(--muted)', cursor: syncingSalespeople ? 'wait' : 'pointer', opacity: syncingSalespeople ? 0.55 : 1, transition: 'all 0.18s' }}
+                                        >
+                                            {syncingSalespeople ? <Loader2 size={13} style={{ animation: 'spin 1s linear infinite' }} /> : <RefreshCw size={13} />}
+                                        </button>
+                                    </div>
+                                </Field>
+                            </div>
+                        </FormSection>
+
+                        {/* ══ Sección 2: Fechas y condiciones ══ */}
+                        <FormSection title="Fechas y condiciones" accent="#60a5fa" icon={<Calendar size={13} />}>
+                            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: 14 }}>
+                                <Field label="Fecha de orden *">
+                                    <input type="date" value={date} onChange={(e) => setDate(e.target.value)} style={inputStyle} />
+                                </Field>
+                                <Field label="Fecha de entrega esperada">
+                                    <input type="date" value={expectedDeliveryDate} onChange={(e) => setExpectedDeliveryDate(e.target.value)} style={inputStyle} />
+                                </Field>
+                                <Field label="Términos de pago">
+                                    <select value={paymentTerms} onChange={(e) => setPaymentTerms(e.target.value)} style={inputStyle}>
+                                        {PAYMENT_TERMS_OPTIONS.map((term) => (
+                                            <option key={term.value} value={term.value}>{term.label}</option>
+                                        ))}
+                                    </select>
+                                </Field>
+                                <Field label="N.° referencia / PO">
+                                    <input type="text" value={referenceNumber} onChange={(e) => setReferenceNumber(e.target.value)} placeholder="Referencia del cliente" style={inputStyle} />
+                                </Field>
+                            </div>
+                        </FormSection>
+
+                        {/* ══ Sección 3: Logística y precios ══ */}
+                        <FormSection title="Logística y precios" accent="#a78bfa" icon={<Truck size={13} />}>
+                            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: 14 }}>
+                                <Field label="Lista de precios">
+                                    <select value={selectedPriceProfileCode} onChange={(e) => { void handlePriceProfileChange(e.target.value); }} style={inputStyle}>
+                                        <option value="">Sin lista (precio manual/base)</option>
+                                        {priceProfiles.map((profile) => (
+                                            <option key={profile.code} value={profile.code}>{profile.name} ({profile.item_count || 0} SKUs)</option>
+                                        ))}
+                                    </select>
+                                </Field>
+                                <Field label="Método de entrega">
+                                    <input type="text" value={deliveryMethod} onChange={(e) => setDeliveryMethod(e.target.value)} placeholder="Retiro, courier, envío..." style={inputStyle} />
+                                </Field>
+                                <Field label="Zona de envío">
+                                    <input type="text" value={shippingZone} onChange={(e) => setShippingZone(e.target.value)} placeholder="Managua, León, etc." style={inputStyle} />
+                                </Field>
+                            </div>
+                        </FormSection>
+
+                        {/* ══ Notas ══ */}
+                        <FormSection title="Notas" accent="rgba(255,255,255,0.18)" icon={<FileText size={13} />}>
+                            <div style={{ display: 'grid', gap: 10 }}>
                                 <textarea
                                     value={notes}
                                     onChange={(e) => setNotes(e.target.value)}
                                     rows={2}
-                                    style={{ ...inputStyle, minHeight: 56, resize: 'vertical' }}
-                                    placeholder="Notas internas/comerciales..."
+                                    style={{ ...inputStyle, minHeight: 62, resize: 'vertical' }}
+                                    placeholder="Notas internas o instrucciones comerciales para esta orden..."
                                 />
-                            </Field>
-                            <div style={{
-                                display: 'flex',
-                                alignItems: 'center',
-                                padding: '10px 14px',
-                                borderRadius: 10,
-                                background: 'rgba(59,130,246,0.06)',
-                                border: '1px solid rgba(59,130,246,0.12)',
-                                fontSize: 11,
-                                color: 'rgba(147,197,253,0.9)',
-                                lineHeight: 1.5,
-                            }}>
-                                💡 Impuesto y descuento se calculan por línea individual (impuesto opcional por artículo).
+                                <div style={{ display: 'inline-flex', alignItems: 'center', gap: 7, padding: '7px 12px', borderRadius: 8, background: 'rgba(59,130,246,0.06)', border: '1px solid rgba(59,130,246,0.12)', fontSize: 11, color: 'rgba(147,197,253,0.85)' }}>
+                                    💡 Impuesto y descuento se configuran por línea de artículo de forma individual.
+                                </div>
                             </div>
-                        </div>
+                        </FormSection>
 
-                        {/* Líneas de artículos — card-based layout */}
+                        {/* ══ Líneas de artículos ══ */}
                         <div style={{ display: 'grid', gap: 10 }}>
-                            <div style={{
-                                display: 'flex',
-                                alignItems: 'center',
-                                justifyContent: 'space-between',
-                                padding: '0 4px',
-                            }}>
-                                <span style={{
-                                    fontSize: 10,
-                                    fontWeight: 800,
-                                    textTransform: 'uppercase',
-                                    letterSpacing: '0.08em',
-                                    color: 'var(--muted)',
-                                }}>Artículos ({items.length})</span>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                                <div style={{ width: 3, height: 14, borderRadius: 2, background: '#f97316', flexShrink: 0 }} />
+                                <span style={{ fontSize: 11, fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.07em', color: 'var(--muted)' }}>
+                                    Artículos
+                                </span>
+                                <span style={{ fontSize: 11, fontWeight: 700, color: '#f97316', background: 'rgba(249,115,22,0.12)', border: '1px solid rgba(249,115,22,0.25)', borderRadius: 999, padding: '1px 8px' }}>
+                                    {items.length}
+                                </span>
                             </div>
 
                             {items.map((line, index) => {
@@ -1293,32 +1214,48 @@ export default function SalesOrderForm({ isOpen, orderId, onClose, onSaved }: Sa
                                             transition: 'border-color 0.2s ease',
                                         }}
                                     >
-                                        {/* Fila 1: Descripción + Subtotal + Eliminar */}
+                                        {/* Fila 1: Nro línea + Descripción + Subtotal + Eliminar */}
                                         <div style={{
                                             display: 'flex',
                                             alignItems: 'center',
                                             gap: 10,
-                                            padding: '12px 16px',
+                                            padding: '12px 14px',
                                             borderBottom: '1px solid rgba(255,255,255,0.05)',
-                                            background: 'rgba(255,255,255,0.02)',
+                                            background: 'rgba(255,255,255,0.025)',
                                         }}>
+                                            <span style={{
+                                                flexShrink: 0,
+                                                width: 24,
+                                                height: 24,
+                                                borderRadius: 7,
+                                                background: 'rgba(249,115,22,0.12)',
+                                                border: '1px solid rgba(249,115,22,0.22)',
+                                                color: '#fdba74',
+                                                fontSize: 11,
+                                                fontWeight: 800,
+                                                display: 'flex',
+                                                alignItems: 'center',
+                                                justifyContent: 'center',
+                                            }}>
+                                                {index + 1}
+                                            </span>
                                             <input
                                                 type="text"
                                                 value={line.description}
                                                 onChange={(e) => updateLine(index, { description: e.target.value })}
-                                                placeholder="Descripción del artículo"
-                                                style={{ ...inputStyle, flex: 1, fontWeight: 600 }}
+                                                placeholder="Descripción del artículo..."
+                                                style={{ ...inputStyle, flex: 1, fontWeight: 600, fontSize: 13 }}
                                             />
                                             <div style={{
-                                                fontSize: 14,
-                                                fontWeight: 800,
-                                                color: '#10B981',
-                                                fontFamily: 'monospace',
-                                                whiteSpace: 'nowrap',
-                                                minWidth: 70,
-                                                textAlign: 'right',
+                                                display: 'flex',
+                                                flexDirection: 'column',
+                                                alignItems: 'flex-end',
+                                                flexShrink: 0,
                                             }}>
-                                                {lineSubtotal.toFixed(2)}
+                                                <span style={{ fontSize: 10, color: 'var(--muted)', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.04em' }}>Subtotal</span>
+                                                <span style={{ fontSize: 14, fontWeight: 800, color: '#10B981', fontFamily: 'monospace', whiteSpace: 'nowrap' }}>
+                                                    ${lineSubtotal.toFixed(2)}
+                                                </span>
                                             </div>
                                             <button
                                                 type="button"
@@ -1327,11 +1264,11 @@ export default function SalesOrderForm({ isOpen, orderId, onClose, onSaved }: Sa
                                                     width: 32,
                                                     height: 32,
                                                     borderRadius: 8,
-                                                    border: '1px solid rgba(239,68,68,0.3)',
-                                                    background: 'rgba(239,68,68,0.08)',
+                                                    border: '1px solid rgba(239,68,68,0.25)',
+                                                    background: 'rgba(239,68,68,0.07)',
                                                     color: '#F87171',
                                                     cursor: items.length <= 1 ? 'default' : 'pointer',
-                                                    opacity: items.length <= 1 ? 0.35 : 1,
+                                                    opacity: items.length <= 1 ? 0.3 : 1,
                                                     display: 'flex',
                                                     alignItems: 'center',
                                                     justifyContent: 'center',
@@ -1410,73 +1347,81 @@ export default function SalesOrderForm({ isOpen, orderId, onClose, onSaved }: Sa
                                         )}
 
                                         {/* Fila 3: Campos numéricos + Impuesto + Garantía */}
-                                        <div style={{
-                                            display: 'grid',
-                                            gridTemplateColumns: 'repeat(5, 1fr)',
-                                            gap: 8,
-                                            padding: '10px 16px',
-                                        }}>
-                                            <Field label="Cantidad">
-                                                <input
-                                                    type="number"
-                                                    min={0}
-                                                    step={0.01}
-                                                    value={line.quantity}
-                                                    onChange={(e) => updateLine(index, { quantity: normalizeNumber(e.target.value, 0) })}
-                                                    style={{ ...inputStyle, textAlign: 'center', fontSize: 13, fontWeight: 600 }}
-                                                />
-                                            </Field>
-                                            <Field label="P. Unitario">
-                                                <input
-                                                    type="number"
-                                                    min={0}
-                                                    step={0.01}
-                                                    value={line.unit_price}
-                                                    onChange={(e) => updateLine(index, { unit_price: normalizeNumber(e.target.value, 0) })}
-                                                    style={{ ...inputStyle, textAlign: 'center', fontSize: 13, fontWeight: 600 }}
-                                                />
-                                            </Field>
-                                            <Field label="Desc. %">
-                                                <input
-                                                    type="number"
-                                                    min={0}
-                                                    max={100}
-                                                    step={0.01}
-                                                    value={line.discount_percent}
-                                                    onChange={(e) => updateLine(index, { discount_percent: normalizeNumber(e.target.value, 0) })}
-                                                    style={{ ...inputStyle, textAlign: 'center', fontSize: 13, fontWeight: 600 }}
-                                                />
-                                            </Field>
-                                            <Field label="Impuesto (opcional)">
-                                                <select
-                                                    value={line.tax_id}
-                                                    onChange={(e) => {
-                                                        const selectedTax = taxOptions.find((tax) => tax.tax_id === e.target.value) || null;
-                                                        updateLine(index, {
-                                                            tax_id: selectedTax?.tax_id || '',
-                                                            tax_name: selectedTax?.tax_name || '',
-                                                            tax_percentage: normalizeNumber(selectedTax?.tax_percentage, 0),
-                                                        });
-                                                    }}
-                                                    style={{ ...inputStyle, fontSize: 12, padding: '9px 8px' }}
-                                                >
-                                                    <option value="">Seleccionar...</option>
-                                                    {taxOptions.map((tax) => (
-                                                        <option key={tax.tax_id} value={tax.tax_id}>
-                                                            {tax.tax_name} ({Number(tax.tax_percentage || 0).toFixed(2)}%)
-                                                        </option>
-                                                    ))}
-                                                </select>
-                                            </Field>
-                                            <Field label="Garantía">
-                                                <input
-                                                    type="text"
-                                                    value={line.warranty || ''}
-                                                    onChange={(e) => updateLine(index, { warranty: e.target.value })}
-                                                    placeholder="ej. 3 meses"
-                                                    style={{ ...inputStyle, fontSize: 12, padding: '9px 8px' }}
-                                                />
-                                            </Field>
+                                        <div style={{ padding: '12px 16px', display: 'grid', gap: 10 }}>
+                                            {/* Row A: cantidades y precios */}
+                                            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1.4fr 1fr', gap: 10 }}>
+                                                <Field label="Cantidad">
+                                                    <div style={{ position: 'relative' }}>
+                                                        <input
+                                                            type="number"
+                                                            min={0}
+                                                            step={0.01}
+                                                            value={line.quantity}
+                                                            onChange={(e) => updateLine(index, { quantity: normalizeNumber(e.target.value, 0) })}
+                                                            style={{ ...inputStyle, textAlign: 'center', fontSize: 14, fontWeight: 700 }}
+                                                        />
+                                                    </div>
+                                                </Field>
+                                                <Field label="Precio unitario ($)">
+                                                    <input
+                                                        type="number"
+                                                        min={0}
+                                                        step={0.01}
+                                                        value={line.unit_price}
+                                                        onChange={(e) => updateLine(index, { unit_price: normalizeNumber(e.target.value, 0) })}
+                                                        style={{ ...inputStyle, textAlign: 'right', fontSize: 14, fontWeight: 700, fontFamily: 'monospace' }}
+                                                    />
+                                                </Field>
+                                                <Field label="Descuento %">
+                                                    <div style={{ position: 'relative' }}>
+                                                        <input
+                                                            type="number"
+                                                            min={0}
+                                                            max={100}
+                                                            step={0.01}
+                                                            value={line.discount_percent}
+                                                            onChange={(e) => updateLine(index, { discount_percent: normalizeNumber(e.target.value, 0) })}
+                                                            style={{ ...inputStyle, textAlign: 'center', fontSize: 14, fontWeight: 700, color: normalizeNumber(line.discount_percent, 0) > 0 ? '#f87171' : 'var(--text)' }}
+                                                        />
+                                                        {normalizeNumber(line.discount_percent, 0) > 0 && (
+                                                            <span style={{ position: 'absolute', right: 10, top: 10, fontSize: 10, color: '#f87171', pointerEvents: 'none' }}>%</span>
+                                                        )}
+                                                    </div>
+                                                </Field>
+                                            </div>
+                                            {/* Row B: impuesto y garantía */}
+                                            <div style={{ display: 'grid', gridTemplateColumns: '1.5fr 1fr', gap: 10 }}>
+                                                <Field label="Impuesto (opcional)">
+                                                    <select
+                                                        value={line.tax_id}
+                                                        onChange={(e) => {
+                                                            const selectedTax = taxOptions.find((tax) => tax.tax_id === e.target.value) || null;
+                                                            updateLine(index, {
+                                                                tax_id: selectedTax?.tax_id || '',
+                                                                tax_name: selectedTax?.tax_name || '',
+                                                                tax_percentage: normalizeNumber(selectedTax?.tax_percentage, 0),
+                                                            });
+                                                        }}
+                                                        style={{ ...inputStyle, fontSize: 12 }}
+                                                    >
+                                                        <option value="">Sin impuesto</option>
+                                                        {taxOptions.map((tax) => (
+                                                            <option key={tax.tax_id} value={tax.tax_id}>
+                                                                {tax.tax_name} ({Number(tax.tax_percentage || 0).toFixed(2)}%)
+                                                            </option>
+                                                        ))}
+                                                    </select>
+                                                </Field>
+                                                <Field label="Garantía">
+                                                    <input
+                                                        type="text"
+                                                        value={line.warranty || ''}
+                                                        onChange={(e) => updateLine(index, { warranty: e.target.value })}
+                                                        placeholder="ej. 3 meses"
+                                                        style={{ ...inputStyle, fontSize: 12 }}
+                                                    />
+                                                </Field>
+                                            </div>
                                         </div>
                                     </div>
                                 );
@@ -1507,40 +1452,37 @@ export default function SalesOrderForm({ isOpen, orderId, onClose, onSaved }: Sa
                             </button>
 
                             <div style={{
-                                display: 'grid',
-                                gap: 6,
-                                fontSize: 12,
-                                color: 'var(--muted)',
-                                minWidth: 260,
-                                background: 'rgba(255,255,255,0.02)',
-                                border: '1px solid rgba(255,255,255,0.06)',
-                                borderRadius: 12,
-                                padding: '14px 18px',
+                                minWidth: 280,
+                                background: 'rgba(16,185,129,0.04)',
+                                border: '1px solid rgba(16,185,129,0.15)',
+                                borderRadius: 14,
+                                overflow: 'hidden',
                             }}>
-                                <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                                    <span>Subtotal</span>
-                                    <span style={{ fontFamily: 'monospace' }}>{totals.subtotal.toFixed(2)}</span>
+                                <div style={{ padding: '10px 16px', borderBottom: '1px solid rgba(255,255,255,0.05)', display: 'flex', alignItems: 'center', gap: 6 }}>
+                                    <div style={{ width: 3, height: 12, borderRadius: 2, background: '#10B981' }} />
+                                    <span style={{ fontSize: 10, fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.06em', color: 'var(--muted)' }}>Resumen de orden</span>
                                 </div>
-                                <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                                    <span>Impuestos (por línea)</span>
-                                    <span style={{ fontFamily: 'monospace' }}>{totals.taxAmount.toFixed(2)}</span>
-                                </div>
-                                <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                                    <span>Descuento aplicado</span>
-                                    <span style={{ fontFamily: 'monospace', color: '#F87171' }}>-{totals.discountTotal.toFixed(2)}</span>
-                                </div>
-                                <div style={{
-                                    display: 'flex',
-                                    justifyContent: 'space-between',
-                                    fontSize: 16,
-                                    fontWeight: 800,
-                                    color: 'var(--text)',
-                                    borderTop: '1px solid rgba(255,255,255,0.08)',
-                                    paddingTop: 8,
-                                    marginTop: 4,
-                                }}>
-                                    <span>Total</span>
-                                    <span style={{ fontFamily: 'monospace', color: '#10B981' }}>{totals.total.toFixed(2)}</span>
+                                <div style={{ padding: '12px 16px', display: 'grid', gap: 7 }}>
+                                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: 12, color: 'var(--muted)' }}>
+                                        <span>Subtotal</span>
+                                        <span style={{ fontFamily: 'monospace', color: 'var(--text)' }}>${totals.subtotal.toFixed(2)}</span>
+                                    </div>
+                                    {totals.taxAmount > 0 && (
+                                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: 12, color: 'var(--muted)' }}>
+                                            <span>Impuestos</span>
+                                            <span style={{ fontFamily: 'monospace', color: '#fde68a' }}>${totals.taxAmount.toFixed(2)}</span>
+                                        </div>
+                                    )}
+                                    {totals.discountTotal > 0 && (
+                                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: 12, color: 'var(--muted)' }}>
+                                            <span>Descuento</span>
+                                            <span style={{ fontFamily: 'monospace', color: '#f87171' }}>− ${totals.discountTotal.toFixed(2)}</span>
+                                        </div>
+                                    )}
+                                    <div style={{ borderTop: '1px solid rgba(16,185,129,0.2)', paddingTop: 10, marginTop: 2, display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
+                                        <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--text)' }}>Total</span>
+                                        <span style={{ fontFamily: 'monospace', fontSize: 20, fontWeight: 800, color: '#10B981', letterSpacing: '-0.01em' }}>${totals.total.toFixed(2)}</span>
+                                    </div>
                                 </div>
                             </div>
                         </div>
@@ -1600,9 +1542,36 @@ export default function SalesOrderForm({ isOpen, orderId, onClose, onSaved }: Sa
     );
 }
 
+function FormSection({ title, accent, icon, children }: { title: string; accent: string; icon?: ReactNode; children: ReactNode }) {
+    return (
+        <div style={{
+            border: '1px solid rgba(255,255,255,0.07)',
+            borderRadius: 14,
+            overflow: 'hidden',
+            background: 'rgba(255,255,255,0.012)',
+        }}>
+            <div style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: 8,
+                padding: '10px 16px',
+                borderBottom: '1px solid rgba(255,255,255,0.06)',
+                background: 'rgba(255,255,255,0.02)',
+            }}>
+                <div style={{ width: 3, height: 14, borderRadius: 2, background: accent, flexShrink: 0 }} />
+                {icon && <span style={{ color: accent, display: 'flex', alignItems: 'center', opacity: 0.9 }}>{icon}</span>}
+                <span style={{ fontSize: 11, fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.06em', color: 'var(--muted)' }}>{title}</span>
+            </div>
+            <div style={{ padding: '16px 16px' }}>
+                {children}
+            </div>
+        </div>
+    );
+}
+
 function Field({ label, children }: { label: string; children: ReactNode }) {
     return (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 5 }}>
             <label style={{
                 fontSize: 10,
                 color: 'var(--muted)',
@@ -1618,13 +1587,14 @@ function Field({ label, children }: { label: string; children: ReactNode }) {
 const inputStyle: CSSProperties = {
     width: '100%',
     padding: '9px 12px',
-    borderRadius: 8,
+    borderRadius: 9,
     border: '1px solid rgba(255,255,255,0.1)',
-    background: 'rgba(255,255,255,0.04)',
+    background: 'rgba(255,255,255,0.05)',
     color: 'var(--text)',
     fontSize: 13,
     outline: 'none',
     transition: 'border-color 0.2s ease, box-shadow 0.2s ease',
+    boxSizing: 'border-box',
 };
 
 const serialInfoStyle: CSSProperties = {

@@ -484,6 +484,7 @@ export async function POST(req: NextRequest) {
                 name: profileNamesByCode.get(code) || defaultProfileNameFromCode(code),
                 currency_code: currencyCode,
                 active: true,
+                updated_at: new Date().toISOString(),
             }));
 
             const defsUpsert = await (supabase as any)

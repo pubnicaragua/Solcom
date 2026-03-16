@@ -14,6 +14,7 @@ type SummaryProfile = {
     active: boolean;
     item_count: number;
     updated_at: string | null;
+    _updated_at_ms?: number | null;
 };
 
 function normalizeText(value: unknown): string {
@@ -64,6 +65,8 @@ async function getSummaryProfiles(
             const code = normalizeProfileCode(row?.code);
             if (!code) continue;
             if (activeOnly && row?.active === false) continue;
+            const updatedAt = normalizeText(row?.updated_at) || null;
+            const updatedAtMs = updatedAt ? Date.parse(updatedAt) : null;
             profileMap.set(code, {
                 code,
                 name: normalizeText(row?.name) || defaultProfileNameFromCode(code),
@@ -71,52 +74,75 @@ async function getSummaryProfiles(
                 currency_code: normalizeText(row?.currency_code) || null,
                 active: row?.active !== false,
                 item_count: 0,
-                updated_at: normalizeText(row?.updated_at) || null,
-            });
-        }
-    }
-
-    let pricesQuery = (supabase as any)
-        .from('item_price_profiles')
-        .select('profile_code, active, updated_at')
-        .limit(10000);
-
-    if (activeOnly) {
-        pricesQuery = pricesQuery.eq('active', true);
-    }
-
-    const prices = await pricesQuery;
-    if (prices.error) {
-        if (isMissingTable(prices.error)) {
-            return Array.from(profileMap.values());
-        }
-        throw prices.error;
-    }
-
-    for (const row of prices.data || []) {
-        const code = normalizeProfileCode(row?.profile_code);
-        if (!code) continue;
-        const existing = profileMap.get(code);
-        const updatedAt = normalizeText(row?.updated_at) || null;
-        if (!existing) {
-            profileMap.set(code, {
-                code,
-                name: defaultProfileNameFromCode(code),
-                description: null,
-                currency_code: null,
-                active: row?.active !== false,
-                item_count: 1,
                 updated_at: updatedAt,
+                _updated_at_ms: Number.isFinite(updatedAtMs) ? updatedAtMs : null,
             });
-            continue;
-        }
-        existing.item_count += 1;
-        if (updatedAt && (!existing.updated_at || updatedAt > existing.updated_at)) {
-            existing.updated_at = updatedAt;
         }
     }
 
-    return Array.from(profileMap.values()).sort((a, b) => {
+    const pageSize = 1000;
+    let offset = 0;
+    while (true) {
+        let pricesQuery = (supabase as any)
+            .from('item_price_profiles')
+            .select('profile_code, active, updated_at')
+            .range(offset, offset + pageSize - 1);
+
+        if (activeOnly) {
+            pricesQuery = pricesQuery.eq('active', true);
+        }
+
+        const prices = await pricesQuery;
+        if (prices.error) {
+            if (isMissingTable(prices.error)) {
+                return Array.from(profileMap.values());
+            }
+            throw prices.error;
+        }
+
+        const rows = prices.data || [];
+        if (rows.length === 0) break;
+
+        for (const row of rows) {
+            const code = normalizeProfileCode(row?.profile_code);
+            if (!code) continue;
+            const existing = profileMap.get(code);
+            const updatedAt = normalizeText(row?.updated_at) || null;
+            const updatedAtMs = updatedAt ? Date.parse(updatedAt) : null;
+            if (!existing) {
+                profileMap.set(code, {
+                    code,
+                    name: defaultProfileNameFromCode(code),
+                    description: null,
+                    currency_code: null,
+                    active: row?.active !== false,
+                    item_count: 1,
+                    updated_at: updatedAt,
+                    _updated_at_ms: Number.isFinite(updatedAtMs) ? updatedAtMs : null,
+                });
+                continue;
+            }
+            existing.item_count += 1;
+            if (updatedAt && Number.isFinite(updatedAtMs || NaN)) {
+                const existingMs = existing._updated_at_ms ?? (existing.updated_at ? Date.parse(existing.updated_at) : null);
+                if (!Number.isFinite(existingMs || NaN) || (updatedAtMs as number) > (existingMs as number)) {
+                    existing.updated_at = updatedAt;
+                    existing._updated_at_ms = updatedAtMs as number;
+                }
+            }
+        }
+
+        if (rows.length < pageSize) break;
+        offset += pageSize;
+    }
+
+    return Array.from(profileMap.values()).map((profile) => {
+        // Limpia la clave interna antes de responder.
+        if ('_updated_at_ms' in profile) {
+            delete profile._updated_at_ms;
+        }
+        return profile;
+    }).sort((a, b) => {
         const byName = a.name.localeCompare(b.name, 'es', { sensitivity: 'base' });
         if (byName !== 0) return byName;
         return a.code.localeCompare(b.code, 'es', { sensitivity: 'base' });
@@ -216,6 +242,7 @@ export async function POST(req: NextRequest) {
             description: normalizeText(body?.description) || null,
             currency_code: normalizeText(body?.currency_code) || null,
             active: body?.active !== false,
+            updated_at: new Date().toISOString(),
         };
 
         const { data, error } = await (supabase as any)

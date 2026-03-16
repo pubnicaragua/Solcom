@@ -3,15 +3,20 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import {
+  Activity,
   AlertTriangle,
+  BarChart3,
   CheckCircle2,
   Clock3,
+  Filter,
   Hand,
   PackageSearch,
   PlayCircle,
   RefreshCw,
+  Timer,
   Truck,
   UserRound,
+  Zap,
 } from 'lucide-react';
 import Card from '@/components/ui/Card';
 import Button from '@/components/ui/Button';
@@ -133,10 +138,10 @@ function statusLabel(status: PickStatus): string {
 }
 
 function actionForStatus(status: PickStatus): { action: PickAction; label: string } | null {
-  if (status === 'queued') return { action: 'claim', label: 'Tomar' };
-  if (status === 'claimed') return { action: 'start', label: 'Iniciar' };
+  if (status === 'queued') return { action: 'claim', label: 'Tomar orden' };
+  if (status === 'claimed') return { action: 'start', label: 'Iniciar alistamiento' };
   if (status === 'picking') return { action: 'ready', label: 'Marcar lista' };
-  if (status === 'ready') return { action: 'complete', label: 'Completar' };
+  if (status === 'ready') return { action: 'complete', label: 'Completar entrega' };
   return null;
 }
 
@@ -573,29 +578,53 @@ export default function PickingBoardPage() {
     setSelectedOrderId(null);
   }
 
+  const kpiItems = [
+    { label: 'En cola', value: effectiveSummary.queued, accent: '#fbbf24', bg: 'rgba(251,191,36,0.08)', icon: <Clock3 size={18} /> },
+    { label: 'En proceso', value: effectiveSummary.in_progress, accent: '#60a5fa', bg: 'rgba(96,165,250,0.08)', icon: <Activity size={18} /> },
+    { label: 'Listas', value: effectiveSummary.ready, accent: '#34d399', bg: 'rgba(52,211,153,0.08)', icon: <CheckCircle2 size={18} /> },
+    { label: 'p95 espera', value: `${p95Queue.toFixed(1)} min`, accent: '#f97316', bg: 'rgba(249,115,22,0.08)', icon: <Timer size={18} /> },
+    { label: 'Prom. alistamiento', value: `${avgPick.toFixed(1)} min`, accent: '#22d3ee', bg: 'rgba(34,211,238,0.08)', icon: <BarChart3 size={18} /> },
+    { label: 'Throughput/h', value: throughput.toFixed(3), accent: '#a78bfa', bg: 'rgba(167,139,250,0.08)', icon: <Zap size={18} /> },
+  ];
+
+  const columns = [
+    { key: 'queued', title: 'En Cola', subtitle: 'FIFO + Urgente primero', accent: '#fbbf24', rows: board.queued },
+    { key: 'processing', title: 'En Proceso', subtitle: 'Tomadas y en alistamiento', accent: '#60a5fa', rows: board.processing },
+    { key: 'ready', title: 'Listas', subtitle: 'Esperando despacho', accent: '#34d399', rows: board.ready },
+  ];
+
   return (
-    <div style={{ display: 'grid', gap: 14 }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
-        <div>
-          <div className="h-title" style={{ fontSize: 'clamp(18px, 4vw, 24px)' }}>Alistamiento de Bodega</div>
-          <div style={{ fontSize: 13, color: 'var(--muted)', marginTop: 4 }}>
-            Cola operativa por bodega con control de toma, tiempos e insights.
+    <div style={{ display: 'grid', gap: 16 }}>
+
+      {/* ── Header ── */}
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+          <div style={{
+            width: 44, height: 44, borderRadius: 12, flexShrink: 0,
+            background: 'linear-gradient(135deg, rgba(220,38,38,0.25) 0%, rgba(239,68,68,0.1) 100%)',
+            border: '1px solid rgba(220,38,38,0.28)',
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+          }}>
+            <PackageSearch size={22} style={{ color: 'var(--brand-accent)' }} />
+          </div>
+          <div>
+            <div className="h-title" style={{ fontSize: 'clamp(18px, 4vw, 24px)', lineHeight: 1.2 }}>
+              Alistamiento de Bodega
+            </div>
+            <div style={{ fontSize: 13, color: 'var(--muted)', marginTop: 3 }}>
+              Cola operativa con control de toma, tiempos e insights en tiempo real
+            </div>
           </div>
         </div>
         <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
           <Link href="/ventas" style={{ textDecoration: 'none' }}>
             <Button variant="secondary" size="sm">Ver Ventas</Button>
           </Link>
-          <Button
-            variant={demoMode ? 'primary' : 'secondary'}
-            size="sm"
-            onClick={toggleDemoMode}
-          >
+          <Button variant={demoMode ? 'primary' : 'secondary'} size="sm" onClick={toggleDemoMode}>
             {demoMode ? 'Salir demo' : 'Cargar ejemplo'}
           </Button>
           <Button
-            variant="secondary"
-            size="sm"
+            variant="secondary" size="sm"
             onClick={() => void loadData(false)}
             disabled={refreshing || loading || demoMode}
           >
@@ -605,33 +634,40 @@ export default function PickingBoardPage() {
         </div>
       </div>
 
+      {/* ── Demo banner ── */}
       {demoMode && (
-        <Card style={{ borderColor: 'rgba(56,189,248,0.45)', background: 'rgba(8,47,73,0.45)' }}>
-          <div style={{ fontSize: 13, color: '#bae6fd' }}>
+        <Card style={{ borderColor: 'rgba(56,189,248,0.4)', background: 'rgba(8,47,73,0.4)' }}>
+          <div style={{ fontSize: 13, color: '#bae6fd', display: 'flex', alignItems: 'center', gap: 8 }}>
+            <span style={{ fontSize: 16 }}>👁</span>
             Vista demo activa: estás viendo datos estáticos de ejemplo para presentar la UI de alistamiento.
           </div>
         </Card>
       )}
 
-      <Card>
-        <div className="filters-grid">
+      {/* ── Filters Toolbar ── */}
+      <div className="filters-toolbar">
+        <div className="filters-toolbar-label">
+          <Filter size={13} />
+          <span>Filtros</span>
+        </div>
+        <div className="filters-sep" />
+        <div className="filters-fields">
           <Select
             label="Bodega"
             value={warehouseId}
-            onChange={(event) => setWarehouseId(event.target.value)}
+            onChange={(e) => setWarehouseId(e.target.value)}
             options={[
               { value: '', label: 'Todas las bodegas' },
-              ...warehouses.map((warehouse) => ({
-                value: warehouse.id,
-                label: warehouse.code ? `${warehouse.code} — ${warehouse.name}` : warehouse.name,
+              ...warehouses.map((w) => ({
+                value: w.id,
+                label: w.code ? `${w.code} — ${w.name}` : w.name,
               })),
             ]}
           />
-
           <Select
             label="Estado"
             value={statusFilter}
-            onChange={(event) => setStatusFilter(event.target.value)}
+            onChange={(e) => setStatusFilter(e.target.value)}
             options={[
               { value: 'active', label: 'Activas' },
               { value: 'all', label: 'Todas' },
@@ -642,150 +678,167 @@ export default function PickingBoardPage() {
               { value: 'cancelled', label: 'Canceladas' },
             ]}
           />
-
           <Select
             label="Rango Insights"
             value={range}
-            onChange={(event) => setRange(event.target.value as '7d' | '30d')}
+            onChange={(e) => setRange(e.target.value as '7d' | '30d')}
             options={[
               { value: '7d', label: 'Últimos 7 días' },
               { value: '30d', label: 'Últimos 30 días' },
             ]}
           />
-
           <Input
             label="Buscar"
-            placeholder="OV o cliente"
+            placeholder="Número OV o cliente..."
             value={search}
-            onChange={(event) => setSearch(event.target.value)}
+            onChange={(e) => setSearch(e.target.value)}
           />
-
-          <div style={{ display: 'flex', alignItems: 'flex-end' }}>
-            <Button
-              variant={mine ? 'primary' : 'secondary'}
-              size="sm"
-              onClick={() => setMine((value) => !value)}
-            >
-              <UserRound size={14} />
-              {mine ? 'Solo mis órdenes' : 'Ver todas'}
-            </Button>
-          </div>
         </div>
-      </Card>
+        <div className="filters-sep" />
+        <button
+          className={`mine-toggle ${mine ? 'mine-toggle--on' : ''}`}
+          onClick={() => setMine((v) => !v)}
+          type="button"
+        >
+          <UserRound size={13} />
+          {mine ? 'Solo mis órdenes' : 'Ver todas'}
+        </button>
+      </div>
 
+      {/* ── Error ── */}
       {error && (
-        <Card style={{ borderColor: 'rgba(239,68,68,0.45)', background: 'rgba(127,29,29,0.28)' }}>
-          <div style={{ display: 'flex', alignItems: 'flex-start', gap: 8, color: '#fecaca' }}>
-            <AlertTriangle size={16} style={{ marginTop: 2, flexShrink: 0 }} />
+        <Card style={{ borderColor: 'rgba(239,68,68,0.4)', background: 'rgba(127,29,29,0.22)' }}>
+          <div style={{ display: 'flex', alignItems: 'flex-start', gap: 10, color: '#fecaca' }}>
+            <AlertTriangle size={16} style={{ marginTop: 2, flexShrink: 0, color: '#f87171' }} />
             <div style={{ fontSize: 13 }}>
               {error}
-              <div style={{ marginTop: 4, color: '#fca5a5' }}>
-                Si el mensaje indica migración faltante, ejecuta `warehouse-picking-v1.sql` y activa `SALES_PICKING_FLOW_ENABLED=true`.
+              <div style={{ marginTop: 5, color: '#fca5a5', fontSize: 12 }}>
+                Si el mensaje indica migración faltante, ejecuta <code>warehouse-picking-v1.sql</code> y activa <code>SALES_PICKING_FLOW_ENABLED=true</code>.
               </div>
             </div>
           </div>
         </Card>
       )}
 
+      {/* ── KPI Grid ── */}
       <div className="kpi-grid">
-        {[
-          { label: 'En cola', value: effectiveSummary.queued, accent: '#fbbf24' },
-          { label: 'En proceso', value: effectiveSummary.in_progress, accent: '#60a5fa' },
-          { label: 'Listas', value: effectiveSummary.ready, accent: '#34d399' },
-          { label: 'p95 espera', value: `${p95Queue.toFixed(1)} min`, accent: '#f97316' },
-          { label: 'Prom. alistamiento', value: `${avgPick.toFixed(1)} min`, accent: '#22d3ee' },
-          { label: 'Throughput/h', value: throughput.toFixed(3), accent: '#a78bfa' },
-        ].map((kpi) => (
-          <Card key={kpi.label} style={{ padding: 12, borderColor: `${kpi.accent}55` }}>
-            <div style={{ fontSize: 11, color: kpi.accent, fontWeight: 700, letterSpacing: '0.04em', textTransform: 'uppercase' }}>
-              {kpi.label}
+        {kpiItems.map((kpi) => (
+          <div key={kpi.label} className="kpi-card" style={{ borderColor: `${kpi.accent}38`, background: kpi.bg }}>
+            <div className="kpi-icon" style={{ color: kpi.accent, background: `${kpi.accent}18` }}>
+              {kpi.icon}
             </div>
-            <div style={{ marginTop: 6, fontSize: 22, fontWeight: 800 }}>
-              {kpi.value}
+            <div>
+              <div className="kpi-label" style={{ color: kpi.accent }}>{kpi.label}</div>
+              <div className="kpi-value">{kpi.value}</div>
             </div>
-          </Card>
+          </div>
         ))}
       </div>
 
+      {/* ── Board + Detail Panel ── */}
       <div className="board-layout">
-        <Card style={{ padding: 12 }}>
+
+        {/* Kanban Board */}
+        <div className="board-wrap">
           {loading ? (
-            <div style={{ padding: 24, color: 'var(--muted)', textAlign: 'center' }}>Cargando tablero de alistamiento...</div>
+            <div className="board-loading">
+              <RefreshCw size={26} className="spin" style={{ opacity: 0.3 }} />
+              <span>Cargando tablero de alistamiento...</span>
+            </div>
           ) : (
             <div className="columns-grid">
-              {[
-                { key: 'queued', title: 'En cola (FIFO + urgente)', rows: board.queued },
-                { key: 'processing', title: 'Tomadas / En proceso', rows: board.processing },
-                { key: 'ready', title: 'Listas', rows: board.ready },
-              ].map((column) => (
-                <div key={column.key} className="column-block">
-                  <div className="column-title">
-                    <span>{column.title}</span>
-                    <span style={{ color: 'var(--muted)' }}>{column.rows.length}</span>
+              {columns.map((col) => (
+                <div key={col.key} className="column-block" style={{ borderTopColor: col.accent }}>
+                  <div className="column-header">
+                    <div>
+                      <div className="column-title">{col.title}</div>
+                      <div className="column-subtitle">{col.subtitle}</div>
+                    </div>
+                    <span
+                      className="column-count"
+                      style={{ color: col.accent, background: `${col.accent}18`, border: `1px solid ${col.accent}38` }}
+                    >
+                      {col.rows.length}
+                    </span>
                   </div>
 
                   <div style={{ display: 'grid', gap: 8 }}>
-                    {column.rows.length === 0 ? (
-                      <div className="empty-col">Sin órdenes</div>
+                    {col.rows.length === 0 ? (
+                      <div className="empty-col">
+                        <PackageSearch size={22} style={{ opacity: 0.25, margin: '0 auto 6px' }} />
+                        Sin órdenes en este estado
+                      </div>
                     ) : (
-                      column.rows.map((order) => {
+                      col.rows.map((order) => {
                         const action = actionForStatus(order.status);
                         const actionKey = action ? `${order.id}:${action.action}` : null;
-                        const deliveryBadge = order.delivery_requested ? 'Delivery' : 'Cliente en piso';
+                        const isActive = selectedOrderId === order.id;
 
                         return (
                           <button
                             key={order.id}
-                            className={`pick-card ${selectedOrderId === order.id ? 'pick-card--active' : ''}`}
+                            className={`pick-card${isActive ? ' pick-card--active' : ''}${order.priority === 'urgent' ? ' pick-card--urgent' : ''}`}
                             onClick={() => setSelectedOrderId(order.id)}
                             type="button"
                           >
-                            <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8 }}>
-                              <div style={{ fontWeight: 700, fontSize: 13 }}>
+                            {/* Row 1: OV number + priority badge */}
+                            <div className="pc-top">
+                              <span className="pc-order-num">
                                 {order.sales_order_number || order.sales_order_id.slice(0, 8)}
-                              </div>
-                              <div className={`priority-badge ${order.priority === 'urgent' ? 'priority-urgent' : 'priority-normal'}`}>
+                              </span>
+                              <span className={`pri-badge ${order.priority === 'urgent' ? 'pri-urgent' : 'pri-normal'}`}>
+                                {order.priority === 'urgent' && <AlertTriangle size={9} />}
                                 {order.priority === 'urgent' ? 'Urgente' : 'Normal'}
-                              </div>
+                              </span>
                             </div>
 
-                            <div style={{ fontSize: 12, marginTop: 6 }}>{order.customer?.name || 'Cliente no disponible'}</div>
-
-                            <div className="meta-row">
-                              <span><Clock3 size={12} /> {ageLabel(order.queued_at)}</span>
-                              <span>{formatCurrency(order.sales_order_total || 0)}</span>
+                            {/* Row 2: Customer name */}
+                            <div className="pc-customer">
+                              {order.customer?.name || 'Cliente no disponible'}
                             </div>
 
-                            <div className="meta-row" style={{ marginTop: 4 }}>
-                              <span><UserRound size={12} /> {order.salesperson_name || 'Sin vendedor'}</span>
-                              <span>{statusLabel(order.status)}</span>
+                            {/* Row 3 & 4: Meta grid */}
+                            <div className="pc-meta">
+                              <span className="pc-meta-item">
+                                <Clock3 size={11} />
+                                {ageLabel(order.queued_at)}
+                              </span>
+                              <span className="pc-meta-item pc-amount">
+                                {formatCurrency(order.sales_order_total || 0)}
+                              </span>
+                              <span className="pc-meta-item">
+                                <UserRound size={11} />
+                                {order.salesperson_name || 'Sin vendedor'}
+                              </span>
+                              <span className="pc-meta-item pc-status-lbl">
+                                {statusLabel(order.status)}
+                              </span>
                             </div>
 
-                            <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginTop: 8 }}>
-                              <span className={`delivery-badge ${order.delivery_requested ? 'delivery-yes' : 'delivery-no'}`}>
-                                {order.delivery_requested ? <Truck size={12} /> : <PackageSearch size={12} />}
-                                {deliveryBadge}
+                            {/* Row 5: Badges */}
+                            <div className="pc-badges">
+                              <span className={`dlv-badge ${order.delivery_requested ? 'dlv-yes' : 'dlv-no'}`}>
+                                {order.delivery_requested ? <Truck size={10} /> : <PackageSearch size={10} />}
+                                {order.delivery_requested ? 'Delivery' : 'En piso'}
                               </span>
                               {order.status === 'queued' && Number(order.queue_position || 0) > 0 && (
-                                <span className="queue-badge">#{order.queue_position}</span>
+                                <span className="q-pos-badge">#{order.queue_position} en cola</span>
                               )}
                             </div>
 
+                            {/* CTA */}
                             {action && (
-                              <div style={{ marginTop: 10, display: 'flex', justifyContent: 'flex-end' }}>
-                                <Button
-                                  size="sm"
-                                  variant="secondary"
-                                  onClick={(event) => {
-                                    event.stopPropagation();
-                                    void runAction(order, action.action);
-                                  }}
-                                  disabled={demoMode || actionLoading === actionKey}
-                                >
-                                  {actionLoading === actionKey ? <RefreshCw size={13} className="spin" /> : actionIcon(action.action)}
-                                  {action.label}
-                                </Button>
-                              </div>
+                              <button
+                                className={`pick-cta pick-cta--${action.action}`}
+                                onClick={(e) => { e.stopPropagation(); void runAction(order, action.action); }}
+                                disabled={demoMode || actionLoading === actionKey}
+                                type="button"
+                              >
+                                {actionLoading === actionKey
+                                  ? <RefreshCw size={13} className="spin" />
+                                  : actionIcon(action.action)}
+                                {action.label}
+                              </button>
                             )}
                           </button>
                         );
@@ -796,99 +849,95 @@ export default function PickingBoardPage() {
               ))}
             </div>
           )}
-        </Card>
+        </div>
 
-        <Card style={{ padding: 12 }}>
+        {/* Detail Panel */}
+        <Card style={{ padding: 16 }}>
           {!selectedOrder ? (
-            <div style={{ color: 'var(--muted)', fontSize: 13, padding: 8 }}>
-              Selecciona una orden para ver el detalle y el historial de eventos.
+            <div className="detail-empty">
+              <PackageSearch size={40} style={{ opacity: 0.15, marginBottom: 12 }} />
+              <div style={{ fontSize: 14, fontWeight: 600, color: 'var(--muted)', marginBottom: 6 }}>
+                Ninguna orden seleccionada
+              </div>
+              <div style={{ fontSize: 12, color: 'var(--muted)', opacity: 0.7, textAlign: 'center', lineHeight: 1.6 }}>
+                Haz clic en cualquier tarjeta del tablero para ver el detalle completo y el historial de eventos.
+              </div>
             </div>
           ) : (
-            <div style={{ display: 'grid', gap: 10 }}>
-              <div>
-                <div style={{ fontSize: 16, fontWeight: 800 }}>
-                  {selectedOrder.sales_order_number || selectedOrder.sales_order_id}
+            <div style={{ display: 'grid', gap: 16 }}>
+
+              {/* Detail header */}
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 8 }}>
+                <div>
+                  <div style={{ fontSize: 20, fontWeight: 800, letterSpacing: '0.01em' }}>
+                    {selectedOrder.sales_order_number || selectedOrder.sales_order_id}
+                  </div>
+                  <div style={{ fontSize: 13, color: 'var(--muted)', marginTop: 3 }}>
+                    {selectedOrder.customer?.name || 'Cliente no disponible'}
+                  </div>
                 </div>
-                <div style={{ fontSize: 12, color: 'var(--muted)' }}>
-                  {selectedOrder.customer?.name || 'Cliente no disponible'}
-                </div>
+                <span className={`pri-badge ${selectedOrder.priority === 'urgent' ? 'pri-urgent' : 'pri-normal'}`} style={{ marginTop: 4 }}>
+                  {selectedOrder.priority === 'urgent' && <AlertTriangle size={10} />}
+                  {selectedOrder.priority === 'urgent' ? 'Urgente' : 'Normal'}
+                </span>
               </div>
 
+              {/* Detail fields */}
               <div className="detail-grid">
-                <div>
-                  <div className="detail-label">Estado</div>
-                  <div>{statusLabel(selectedOrder.status)}</div>
-                </div>
-                <div>
-                  <div className="detail-label">Bodega</div>
-                  <div>{selectedOrder.warehouse?.code || selectedOrder.warehouse?.name || '—'}</div>
-                </div>
-                <div>
-                  <div className="detail-label">Vendedor</div>
-                  <div>{selectedOrder.salesperson_name || '—'}</div>
-                </div>
-                <div>
-                  <div className="detail-label">Asignado a</div>
-                  <div>{selectedOrder.assigned_user?.full_name || selectedOrder.assigned_user?.email || 'Sin asignar'}</div>
-                </div>
-                <div>
-                  <div className="detail-label">Total OV</div>
-                  <div>{formatCurrency(selectedOrder.sales_order_total || 0)}</div>
-                </div>
-                <div>
-                  <div className="detail-label">Espera promedio</div>
-                  <div>{avgQueue.toFixed(1)} min</div>
-                </div>
-                <div>
-                  <div className="detail-label">En cola desde</div>
-                  <div>{formatDateTime(selectedOrder.queued_at)}</div>
-                </div>
-                <div>
-                  <div className="detail-label">Lista desde</div>
-                  <div>{formatDateTime(selectedOrder.ready_at)}</div>
-                </div>
+                {[
+                  { label: 'Estado', value: statusLabel(selectedOrder.status) },
+                  { label: 'Bodega', value: selectedOrder.warehouse?.code || selectedOrder.warehouse?.name || '—' },
+                  { label: 'Vendedor', value: selectedOrder.salesperson_name || '—' },
+                  { label: 'Asignado a', value: selectedOrder.assigned_user?.full_name || selectedOrder.assigned_user?.email || 'Sin asignar' },
+                  { label: 'Total OV', value: formatCurrency(selectedOrder.sales_order_total || 0) },
+                  { label: 'Espera promedio', value: `${avgQueue.toFixed(1)} min` },
+                  { label: 'En cola desde', value: formatDateTime(selectedOrder.queued_at) },
+                  { label: 'Lista desde', value: formatDateTime(selectedOrder.ready_at) },
+                ].map(({ label, value }) => (
+                  <div key={label} className="detail-field">
+                    <div className="detail-lbl">{label}</div>
+                    <div className="detail-val">{value}</div>
+                  </div>
+                ))}
               </div>
 
+              {/* Items */}
               <div>
                 <div className="section-title">Líneas de alistamiento</div>
-                <div style={{ display: 'grid', gap: 8 }}>
-                  {(selectedOrder.items || []).map((item) => (
+                <div style={{ display: 'grid', gap: 6, marginTop: 8 }}>
+                  {selectedOrder.items.length === 0 ? (
+                    <div style={{ color: 'var(--muted)', fontSize: 12 }}>No hay snapshot de líneas.</div>
+                  ) : selectedOrder.items.map((item) => (
                     <div key={item.id} className="line-card">
-                      <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8 }}>
-                        <div style={{ fontWeight: 600, fontSize: 13 }}>{item.description || 'Artículo'}</div>
-                        <div style={{ fontSize: 12, color: '#93c5fd' }}>Cant: {normalizeNumber(item.quantity, 0)}</div>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8, alignItems: 'flex-start' }}>
+                        <div style={{ fontWeight: 600, fontSize: 13, lineHeight: 1.4 }}>{item.description || 'Artículo'}</div>
+                        <span className="qty-badge">×{normalizeNumber(item.quantity, 0)}</span>
                       </div>
-
                       {item.serials_required && (
-                        <div style={{ marginTop: 6, fontSize: 12, color: 'var(--muted)' }}>
-                          <div>Solicitados: {splitSerials(item.serial_numbers_requested).join(', ') || '—'}</div>
-                          <div>Seleccionados: {splitSerials(item.serial_numbers_selected).join(', ') || '—'}</div>
+                        <div style={{ marginTop: 6, fontSize: 11, color: 'var(--muted)', display: 'grid', gap: 2 }}>
+                          <div>Solicitados: <span style={{ color: '#93c5fd' }}>{splitSerials(item.serial_numbers_requested).join(', ') || '—'}</span></div>
+                          <div>Seleccionados: <span style={{ color: '#6ee7b7' }}>{splitSerials(item.serial_numbers_selected).join(', ') || '—'}</span></div>
                         </div>
                       )}
                     </div>
                   ))}
-
-                  {selectedOrder.items.length === 0 && (
-                    <div style={{ color: 'var(--muted)', fontSize: 12 }}>No hay snapshot de líneas.</div>
-                  )}
                 </div>
               </div>
 
+              {/* Events */}
               <div>
                 <div className="section-title">Historial de eventos</div>
-                <div style={{ display: 'grid', gap: 6 }}>
-                  {(selectedOrder.events || []).slice(0, 12).map((event) => (
-                    <div key={event.id} className="event-row">
-                      <div style={{ fontWeight: 600, fontSize: 12 }}>{event.event_type}</div>
-                      <div style={{ fontSize: 11, color: 'var(--muted)' }}>
-                        {event.from_status || '—'} → {event.to_status || '—'} · {formatDateTime(event.created_at)}
+                <div style={{ display: 'grid', gap: 4, marginTop: 8 }}>
+                  {(selectedOrder.events || []).length === 0 ? (
+                    <div style={{ color: 'var(--muted)', fontSize: 12 }}>Sin eventos registrados.</div>
+                  ) : (selectedOrder.events || []).slice(0, 12).map((ev) => (
+                    <div key={ev.id} className="event-row">
+                      <div style={{ fontWeight: 600, fontSize: 12 }}>{ev.event_type}</div>
+                      <div style={{ fontSize: 11, color: 'var(--muted)', marginTop: 2 }}>
+                        {ev.from_status || '—'} → {ev.to_status || '—'} · {formatDateTime(ev.created_at)}
                       </div>
                     </div>
                   ))}
-
-                  {(selectedOrder.events || []).length === 0 && (
-                    <div style={{ color: 'var(--muted)', fontSize: 12 }}>Sin eventos registrados.</div>
-                  )}
                 </div>
               </div>
             </div>
@@ -896,14 +945,15 @@ export default function PickingBoardPage() {
         </Card>
       </div>
 
+      {/* ── Recommendations ── */}
       {(effectiveInsights?.recommendations || []).length > 0 && (
         <Card>
-          <div className="section-title" style={{ marginBottom: 8 }}>Recomendaciones operativas</div>
+          <div className="section-title" style={{ marginBottom: 10 }}>Recomendaciones operativas</div>
           <div style={{ display: 'grid', gap: 8 }}>
-            {(effectiveInsights?.recommendations || []).map((recommendation) => (
-              <div key={recommendation.code} className={`recommendation recommendation-${recommendation.severity}`}>
-                <AlertTriangle size={14} />
-                <span>{recommendation.message}</span>
+            {(effectiveInsights?.recommendations || []).map((rec) => (
+              <div key={rec.code} className={`recom recom--${rec.severity}`}>
+                <AlertTriangle size={14} style={{ flexShrink: 0, marginTop: 1 }} />
+                <span>{rec.message}</span>
               </div>
             ))}
           </div>
@@ -911,209 +961,602 @@ export default function PickingBoardPage() {
       )}
 
       <style jsx>{`
-        .filters-grid {
-          display: grid;
-          grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
-          gap: 10px;
-          align-items: end;
+
+        /* ════════════════════════════════
+           FILTERS TOOLBAR
+        ════════════════════════════════ */
+        .filters-toolbar {
+          display: flex;
+          align-items: flex-end;
+          gap: 0;
+          background: var(--panel);
+          border: 1px solid var(--border);
+          border-radius: 16px;
+          padding: 14px 18px;
+          box-shadow: 0 2px 14px rgba(0,0,0,0.22);
+          flex-wrap: wrap;
+          gap: 0;
         }
 
+        .filters-toolbar-label {
+          display: flex;
+          align-items: center;
+          gap: 6px;
+          font-size: 11px;
+          font-weight: 700;
+          letter-spacing: 0.06em;
+          text-transform: uppercase;
+          color: var(--muted);
+          white-space: nowrap;
+          padding-right: 0;
+          align-self: flex-end;
+          padding-bottom: 6px;
+        }
+
+        .filters-sep {
+          width: 1px;
+          height: 40px;
+          background: var(--border);
+          margin: 0 16px;
+          flex-shrink: 0;
+          align-self: flex-end;
+        }
+
+        .filters-fields {
+          display: flex;
+          gap: 10px;
+          flex: 1;
+          flex-wrap: wrap;
+          align-items: flex-end;
+          min-width: 0;
+        }
+
+        .filters-fields > * {
+          flex: 1;
+          min-width: 150px;
+        }
+
+        .mine-toggle {
+          display: inline-flex;
+          align-items: center;
+          gap: 7px;
+          padding: 8px 16px;
+          border-radius: 999px;
+          border: 1px solid var(--border);
+          background: transparent;
+          color: var(--muted);
+          font-size: 12px;
+          font-weight: 600;
+          cursor: pointer;
+          transition: all 0.18s ease;
+          white-space: nowrap;
+          align-self: flex-end;
+        }
+
+        .mine-toggle:hover {
+          border-color: rgba(96,165,250,0.5);
+          color: #93c5fd;
+          background: rgba(96,165,250,0.07);
+        }
+
+        .mine-toggle--on {
+          border-color: rgba(52,211,153,0.55);
+          background: rgba(52,211,153,0.1);
+          color: #6ee7b7;
+        }
+
+        .mine-toggle--on:hover {
+          border-color: rgba(52,211,153,0.75);
+          background: rgba(52,211,153,0.16);
+          color: #34d399;
+        }
+
+        /* ════════════════════════════════
+           KPI GRID
+        ════════════════════════════════ */
         .kpi-grid {
           display: grid;
-          grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+          grid-template-columns: repeat(auto-fit, minmax(148px, 1fr));
           gap: 10px;
         }
 
+        .kpi-card {
+          display: flex;
+          align-items: center;
+          gap: 12px;
+          padding: 14px 16px;
+          border: 1px solid;
+          border-radius: 14px;
+          transition: transform 0.18s ease, box-shadow 0.18s ease;
+          cursor: default;
+        }
+
+        .kpi-card:hover {
+          transform: translateY(-2px);
+          box-shadow: 0 6px 22px rgba(0,0,0,0.28);
+        }
+
+        .kpi-icon {
+          width: 38px;
+          height: 38px;
+          border-radius: 10px;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          flex-shrink: 0;
+        }
+
+        .kpi-label {
+          font-size: 10px;
+          font-weight: 700;
+          letter-spacing: 0.06em;
+          text-transform: uppercase;
+          margin-bottom: 5px;
+        }
+
+        .kpi-value {
+          font-size: 22px;
+          font-weight: 800;
+          line-height: 1;
+          letter-spacing: -0.01em;
+        }
+
+        /* ════════════════════════════════
+           BOARD LAYOUT
+        ════════════════════════════════ */
         .board-layout {
           display: grid;
           grid-template-columns: minmax(0, 2fr) minmax(300px, 1fr);
-          gap: 10px;
+          gap: 12px;
           align-items: start;
         }
 
+        .board-wrap {
+          background: var(--panel);
+          border: 1px solid var(--border);
+          border-radius: 16px;
+          padding: 14px;
+          overflow-x: auto;
+        }
+
+        .board-loading {
+          display: flex;
+          flex-direction: column;
+          align-items: center;
+          justify-content: center;
+          gap: 12px;
+          padding: 56px 24px;
+          color: var(--muted);
+          font-size: 14px;
+        }
+
+        /* ════════════════════════════════
+           KANBAN COLUMNS
+        ════════════════════════════════ */
         .columns-grid {
           display: grid;
           grid-template-columns: repeat(3, minmax(220px, 1fr));
           gap: 10px;
+          min-width: 0;
         }
 
         .column-block {
-          border: 1px solid rgba(255, 255, 255, 0.08);
-          border-radius: 8px;
-          padding: 10px;
-          background: rgba(255, 255, 255, 0.02);
+          border: 1px solid rgba(255,255,255,0.07);
+          border-top: 3px solid;
+          border-radius: 14px;
+          padding: 12px;
+          background: rgba(255,255,255,0.018);
+        }
+
+        .column-header {
+          display: flex;
+          justify-content: space-between;
+          align-items: flex-start;
+          gap: 8px;
+          margin-bottom: 12px;
         }
 
         .column-title {
-          display: flex;
-          justify-content: space-between;
-          align-items: center;
-          gap: 6px;
-          margin-bottom: 8px;
-          font-size: 12px;
-          font-weight: 700;
-          letter-spacing: 0.03em;
-          text-transform: uppercase;
+          font-size: 13px;
+          font-weight: 800;
+          letter-spacing: 0.02em;
         }
 
+        .column-subtitle {
+          font-size: 10px;
+          color: var(--muted);
+          margin-top: 2px;
+          letter-spacing: 0.02em;
+        }
+
+        .column-count {
+          font-size: 13px;
+          font-weight: 800;
+          padding: 2px 10px;
+          border-radius: 999px;
+          line-height: 1.5;
+          flex-shrink: 0;
+        }
+
+        /* ════════════════════════════════
+           EMPTY STATE
+        ════════════════════════════════ */
         .empty-col {
-          border: 1px dashed rgba(255, 255, 255, 0.14);
-          border-radius: 8px;
-          padding: 12px;
+          border: 1px dashed rgba(255,255,255,0.1);
+          border-radius: 12px;
+          padding: 24px 12px;
           font-size: 12px;
           color: var(--muted);
           text-align: center;
+          display: flex;
+          flex-direction: column;
+          align-items: center;
+          line-height: 1.5;
         }
 
+        /* ════════════════════════════════
+           PICK CARDS
+        ════════════════════════════════ */
         .pick-card {
-          border: 1px solid rgba(255, 255, 255, 0.1);
-          border-radius: 8px;
-          background: rgba(10, 19, 37, 0.7);
-          padding: 10px;
+          border: 1px solid rgba(255,255,255,0.08);
+          border-radius: 13px;
+          background: rgba(10,19,37,0.65);
+          padding: 12px;
           width: 100%;
           text-align: left;
           cursor: pointer;
-          transition: border-color 0.18s ease, transform 0.18s ease;
+          transition: border-color 0.18s ease, transform 0.18s ease, box-shadow 0.18s ease;
           color: inherit;
+          display: block;
         }
 
         .pick-card:hover {
-          border-color: rgba(96, 165, 250, 0.6);
-          transform: translateY(-1px);
+          border-color: rgba(96,165,250,0.45);
+          transform: translateY(-2px);
+          box-shadow: 0 6px 18px rgba(0,0,0,0.35);
         }
 
         .pick-card--active {
-          border-color: rgba(52, 211, 153, 0.7);
-          box-shadow: 0 0 0 1px rgba(52, 211, 153, 0.3) inset;
+          border-color: rgba(52,211,153,0.55) !important;
+          box-shadow: 0 0 0 1px rgba(52,211,153,0.18) inset, 0 6px 18px rgba(52,211,153,0.08) !important;
         }
 
-        .priority-badge {
-          font-size: 10px;
-          font-weight: 700;
-          border-radius: 999px;
-          padding: 2px 8px;
-          text-transform: uppercase;
-          letter-spacing: 0.03em;
+        .pick-card--urgent {
+          border-left: 3px solid rgba(251,191,36,0.65);
         }
 
-        .priority-urgent {
-          color: #fbbf24;
-          background: rgba(245, 158, 11, 0.16);
+        .pc-top {
+          display: flex;
+          justify-content: space-between;
+          align-items: center;
+          gap: 8px;
+          margin-bottom: 5px;
         }
 
-        .priority-normal {
-          color: #93c5fd;
-          background: rgba(59, 130, 246, 0.16);
+        .pc-order-num {
+          font-weight: 800;
+          font-size: 14px;
+          letter-spacing: 0.01em;
         }
 
-        .delivery-badge {
+        .pc-customer {
+          font-size: 13px;
+          font-weight: 500;
+          color: #e2e8f0;
+          margin-bottom: 8px;
+          white-space: nowrap;
+          overflow: hidden;
+          text-overflow: ellipsis;
+        }
+
+        .pc-meta {
+          display: grid;
+          grid-template-columns: 1fr 1fr;
+          gap: 4px 8px;
+          margin-bottom: 8px;
+        }
+
+        .pc-meta-item {
           display: inline-flex;
           align-items: center;
           gap: 4px;
-          padding: 2px 7px;
+          font-size: 11px;
+          color: var(--muted);
+          min-width: 0;
+          overflow: hidden;
+          text-overflow: ellipsis;
+          white-space: nowrap;
+        }
+
+        .pc-amount {
+          color: #93c5fd;
+          font-weight: 600;
+          justify-content: flex-end;
+        }
+
+        .pc-status-lbl {
+          font-size: 10px;
+          font-weight: 600;
+          justify-content: flex-end;
+          opacity: 0.75;
+        }
+
+        .pc-badges {
+          display: flex;
+          gap: 6px;
+          flex-wrap: wrap;
+        }
+
+        /* ════════════════════════════════
+           PRIORITY BADGES
+        ════════════════════════════════ */
+        .pri-badge {
+          display: inline-flex;
+          align-items: center;
+          gap: 4px;
+          font-size: 10px;
+          font-weight: 700;
+          border-radius: 999px;
+          padding: 2px 9px;
+          text-transform: uppercase;
+          letter-spacing: 0.04em;
+          flex-shrink: 0;
+        }
+
+        .pri-urgent {
+          color: #fde68a;
+          background: rgba(245,158,11,0.18);
+          border: 1px solid rgba(245,158,11,0.32);
+        }
+
+        .pri-normal {
+          color: #93c5fd;
+          background: rgba(59,130,246,0.12);
+          border: 1px solid rgba(59,130,246,0.22);
+        }
+
+        /* ════════════════════════════════
+           DELIVERY & QUEUE BADGES
+        ════════════════════════════════ */
+        .dlv-badge {
+          display: inline-flex;
+          align-items: center;
+          gap: 4px;
+          padding: 2px 8px;
           border-radius: 999px;
           font-size: 10px;
           font-weight: 700;
         }
 
-        .delivery-no {
+        .dlv-no {
           color: #fbbf24;
-          background: rgba(245, 158, 11, 0.15);
+          background: rgba(245,158,11,0.12);
+          border: 1px solid rgba(245,158,11,0.22);
         }
 
-        .delivery-yes {
+        .dlv-yes {
           color: #22d3ee;
-          background: rgba(34, 211, 238, 0.12);
+          background: rgba(34,211,238,0.1);
+          border: 1px solid rgba(34,211,238,0.2);
         }
 
-        .queue-badge {
+        .q-pos-badge {
           display: inline-flex;
           align-items: center;
-          padding: 2px 7px;
+          padding: 2px 8px;
           border-radius: 999px;
           font-size: 10px;
           font-weight: 700;
           color: #fde68a;
-          background: rgba(245, 158, 11, 0.2);
+          background: rgba(245,158,11,0.14);
+          border: 1px solid rgba(245,158,11,0.24);
         }
 
-        .meta-row {
+        /* ════════════════════════════════
+           CTA BUTTON (full-width inside card)
+        ════════════════════════════════ */
+        .pick-cta {
+          width: 100%;
+          margin-top: 10px;
+          padding: 9px 12px;
+          border-radius: 10px;
+          border: 1px solid transparent;
+          cursor: pointer;
           display: flex;
-          justify-content: space-between;
-          gap: 8px;
           align-items: center;
-          font-size: 11px;
-          color: var(--muted);
-          margin-top: 6px;
+          justify-content: center;
+          gap: 6px;
+          font-size: 12px;
+          font-weight: 700;
+          letter-spacing: 0.04em;
+          transition: all 0.18s ease;
+          text-transform: uppercase;
         }
 
-        .meta-row span {
-          display: inline-flex;
+        .pick-cta:disabled {
+          opacity: 0.45;
+          cursor: not-allowed;
+          transform: none !important;
+        }
+
+        .pick-cta--claim {
+          background: rgba(59,130,246,0.14);
+          border-color: rgba(59,130,246,0.32);
+          color: #93c5fd;
+        }
+        .pick-cta--claim:hover:not(:disabled) {
+          background: rgba(59,130,246,0.24);
+          border-color: rgba(59,130,246,0.52);
+          color: #bfdbfe;
+          transform: translateY(-1px);
+        }
+
+        .pick-cta--start {
+          background: rgba(249,115,22,0.14);
+          border-color: rgba(249,115,22,0.32);
+          color: #fdba74;
+        }
+        .pick-cta--start:hover:not(:disabled) {
+          background: rgba(249,115,22,0.24);
+          border-color: rgba(249,115,22,0.52);
+          color: #fed7aa;
+          transform: translateY(-1px);
+        }
+
+        .pick-cta--ready {
+          background: rgba(16,185,129,0.14);
+          border-color: rgba(16,185,129,0.32);
+          color: #6ee7b7;
+        }
+        .pick-cta--ready:hover:not(:disabled) {
+          background: rgba(16,185,129,0.24);
+          border-color: rgba(16,185,129,0.52);
+          color: #a7f3d0;
+          transform: translateY(-1px);
+        }
+
+        .pick-cta--complete {
+          background: rgba(34,197,94,0.14);
+          border-color: rgba(34,197,94,0.32);
+          color: #86efac;
+        }
+        .pick-cta--complete:hover:not(:disabled) {
+          background: rgba(34,197,94,0.24);
+          border-color: rgba(34,197,94,0.52);
+          color: #bbf7d0;
+          transform: translateY(-1px);
+        }
+
+        /* ════════════════════════════════
+           DETAIL PANEL
+        ════════════════════════════════ */
+        .detail-empty {
+          display: flex;
+          flex-direction: column;
           align-items: center;
-          gap: 4px;
+          justify-content: center;
+          padding: 36px 20px;
         }
 
         .detail-grid {
           display: grid;
-          grid-template-columns: repeat(2, minmax(0, 1fr));
+          grid-template-columns: repeat(2, minmax(0,1fr));
           gap: 8px;
+        }
+
+        .detail-field {
+          background: rgba(255,255,255,0.025);
+          border: 1px solid rgba(255,255,255,0.06);
+          border-radius: 10px;
+          padding: 9px 11px;
+        }
+
+        .detail-lbl {
+          color: var(--muted);
+          font-size: 10px;
+          font-weight: 700;
+          text-transform: uppercase;
+          letter-spacing: 0.05em;
+          margin-bottom: 4px;
+        }
+
+        .detail-val {
           font-size: 13px;
+          font-weight: 500;
+          line-height: 1.4;
         }
 
-        .detail-label {
-          color: var(--muted);
-          font-size: 11px;
-          margin-bottom: 2px;
-          text-transform: uppercase;
-          letter-spacing: 0.03em;
-        }
-
+        /* ════════════════════════════════
+           SECTION TITLE
+        ════════════════════════════════ */
         .section-title {
-          font-size: 12px;
+          font-size: 11px;
           font-weight: 800;
-          letter-spacing: 0.03em;
+          letter-spacing: 0.06em;
           text-transform: uppercase;
           color: var(--muted);
+          display: flex;
+          align-items: center;
+          gap: 8px;
         }
 
+        .section-title::before {
+          content: '';
+          display: block;
+          width: 3px;
+          height: 13px;
+          border-radius: 2px;
+          background: var(--brand-primary);
+          flex-shrink: 0;
+        }
+
+        /* ════════════════════════════════
+           LINE CARD & QUANTITY BADGE
+        ════════════════════════════════ */
         .line-card {
-          border: 1px solid rgba(255, 255, 255, 0.08);
-          border-radius: 8px;
-          background: rgba(255, 255, 255, 0.02);
-          padding: 8px;
+          border: 1px solid rgba(255,255,255,0.07);
+          border-radius: 10px;
+          background: rgba(255,255,255,0.02);
+          padding: 10px;
         }
 
+        .qty-badge {
+          font-size: 11px;
+          font-weight: 700;
+          color: #93c5fd;
+          background: rgba(59,130,246,0.12);
+          border: 1px solid rgba(59,130,246,0.2);
+          border-radius: 999px;
+          padding: 2px 9px;
+          white-space: nowrap;
+          flex-shrink: 0;
+          line-height: 1.6;
+        }
+
+        /* ════════════════════════════════
+           EVENT ROW
+        ════════════════════════════════ */
         .event-row {
-          border: 1px solid rgba(255, 255, 255, 0.08);
-          border-radius: 8px;
-          background: rgba(255, 255, 255, 0.02);
-          padding: 8px;
+          border-left: 2px solid rgba(255,255,255,0.1);
+          padding: 6px 10px;
+          border-radius: 0 8px 8px 0;
+          background: rgba(255,255,255,0.02);
         }
 
-        .recommendation {
+        /* ════════════════════════════════
+           RECOMMENDATIONS
+        ════════════════════════════════ */
+        .recom {
           display: flex;
           align-items: flex-start;
-          gap: 8px;
-          border-radius: 8px;
-          padding: 8px 10px;
+          gap: 10px;
+          border-radius: 10px;
+          padding: 10px 14px;
           font-size: 13px;
+          line-height: 1.5;
         }
 
-        .recommendation-low {
-          background: rgba(59, 130, 246, 0.12);
-          border: 1px solid rgba(59, 130, 246, 0.3);
+        .recom--low {
+          background: rgba(59,130,246,0.09);
+          border: 1px solid rgba(59,130,246,0.24);
+          color: #93c5fd;
         }
 
-        .recommendation-medium {
-          background: rgba(245, 158, 11, 0.14);
-          border: 1px solid rgba(245, 158, 11, 0.32);
+        .recom--medium {
+          background: rgba(245,158,11,0.09);
+          border: 1px solid rgba(245,158,11,0.26);
+          color: #fde68a;
         }
 
-        .recommendation-high {
-          background: rgba(239, 68, 68, 0.14);
-          border: 1px solid rgba(239, 68, 68, 0.34);
+        .recom--high {
+          background: rgba(239,68,68,0.09);
+          border: 1px solid rgba(239,68,68,0.26);
+          color: #fca5a5;
         }
 
+        /* ════════════════════════════════
+           SPINNER
+        ════════════════════════════════ */
         .spin {
           animation: spin 1s linear infinite;
         }
@@ -1123,11 +1566,13 @@ export default function PickingBoardPage() {
           to { transform: rotate(360deg); }
         }
 
+        /* ════════════════════════════════
+           RESPONSIVE
+        ════════════════════════════════ */
         @media (max-width: 1280px) {
           .board-layout {
             grid-template-columns: minmax(0, 1fr);
           }
-
           .columns-grid {
             grid-template-columns: repeat(2, minmax(220px, 1fr));
           }
@@ -1137,9 +1582,28 @@ export default function PickingBoardPage() {
           .columns-grid {
             grid-template-columns: minmax(0, 1fr);
           }
-
           .detail-grid {
             grid-template-columns: minmax(0, 1fr);
+          }
+          .filters-toolbar {
+            flex-direction: column;
+            align-items: stretch;
+          }
+          .filters-sep {
+            width: 100%;
+            height: 1px;
+            margin: 8px 0;
+          }
+          .filters-fields {
+            flex-direction: column;
+          }
+          .filters-fields > * {
+            min-width: unset;
+            flex: none;
+          }
+          .mine-toggle {
+            width: 100%;
+            justify-content: center;
           }
         }
       `}</style>
