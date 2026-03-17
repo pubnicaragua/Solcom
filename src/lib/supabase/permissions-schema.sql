@@ -97,7 +97,9 @@ INSERT INTO permissions (code, name, description, module) VALUES
   
   -- IA
   ('ai.use', 'Usar Agentes IA', 'Permite usar los agentes de IA', 'ai-agents'),
-  ('branding.view', 'Ver Logo de Marca', 'Permite ver el logo de la marca en la navegación', 'branding')
+  ('branding.view', 'Ver Logo de Marca', 'Permite ver el logo de la marca en la navegación', 'branding'),
+  ('alistamiento.read', 'Ver Alistamiento', 'Visualizar el tablero de órdenes de alistamiento', 'alistamiento'),
+  ('alistamiento.write', 'Operar Alistamiento', 'Gestionar toma e inicio de órdenes de alistamiento', 'alistamiento')
 ON CONFLICT (code) DO NOTHING;
 
 -- 7. Asignar permisos por defecto a roles
@@ -119,7 +121,9 @@ INSERT INTO role_permissions (role, permission_code) VALUES
   ('manager', 'ventas.create_quote'),
   ('manager', 'ventas.create_invoice'),
   ('manager', 'ventas.create_sales_order'),
-  ('manager', 'branding.view')
+  ('manager', 'branding.view'),
+  ('manager', 'alistamiento.read'),
+  ('manager', 'alistamiento.write')
 ON CONFLICT (role, permission_code) DO NOTHING;
 
 -- Operator (Vendedor): Solo lectura de inventario
@@ -131,7 +135,9 @@ INSERT INTO role_permissions (role, permission_code) VALUES
   ('operator', 'ventas.create_quote'),
   ('operator', 'ventas.create_invoice'),
   ('operator', 'ventas.create_sales_order'),
-  ('operator', 'branding.view')
+  ('operator', 'branding.view'),
+  ('operator', 'alistamiento.read'),
+  ('operator', 'alistamiento.write')
 ON CONFLICT (role, permission_code) DO NOTHING;
 
 -- Auditor: Solo lectura de reportes

@@ -35,6 +35,8 @@ const MOCK_PERMISSIONS = [
   { code: 'settings.edit',    name: 'Modificar Configuración', module: 'settings', description: 'Modificar configuración del sistema' },
   { code: 'ai-agents.use',    name: 'Usar Agentes IA',        module: 'ai-agents', description: 'Acceder y usar agentes de inteligencia artificial' },
   { code: 'branding.view',    name: 'Ver Logo de Marca',      module: 'branding',  description: 'Permite ver el logo de la marca en la navegación' },
+  { code: 'alistamiento.read',  name: 'Ver Alistamiento',      module: 'alistamiento', description: 'Visualizar el tablero de órdenes de alistamiento' },
+  { code: 'alistamiento.write', name: 'Operar Alistamiento',   module: 'alistamiento', description: 'Gestionar toma e inicio de órdenes de alistamiento' },
 ];
 
 async function ensureBasePermissions(supabase: ReturnType<typeof createRouteHandlerClient>) {

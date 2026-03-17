@@ -35,8 +35,8 @@ export const MODULE_KEYS = MODULE_DEFINITIONS.map((module) => module.key);
 
 const ROLE_BASE_MODULES: Record<AppRole, string[]> = {
   admin: MODULE_KEYS,
-  manager: ['inventory', 'ventas', 'alistamiento', 'reports', 'ai-agents', 'transfers', 'how-it-works', 'cliente', 'entregables'],
-  operator: ['inventory', 'ventas', 'alistamiento', 'how-it-works', 'cliente', 'entregables'],
+  manager: ['inventory', 'ventas', 'reports', 'ai-agents', 'transfers', 'how-it-works', 'cliente', 'entregables'],
+  operator: ['inventory', 'ventas', 'how-it-works', 'cliente', 'entregables'],
   auditor: ['reports', 'how-it-works', 'cliente', 'entregables'],
 };
 
@@ -172,6 +172,30 @@ export async function getEffectiveModuleAccess(
   role: AppRole
 ): Promise<Record<string, boolean>> {
   const base = getDefaultModuleAccess(role);
+
+  // Si no es admin, intentamos cargar permisos adicionales por rol desde la DB
+  if (role !== 'admin') {
+    try {
+      const { data: rolePerms } = await supabase
+        .from('role_permissions')
+        .select('permission_code')
+        .eq('role', role);
+
+      if (rolePerms) {
+        for (const rp of rolePerms) {
+          const code = String(rp.permission_code);
+          const modulePart = code.split('.')[0];
+          // Si tiene un permiso de 'read' o 'view', o simplemente está en la tabla, activamos el módulo
+          if (code.endsWith('.read') || code.endsWith('.view') || code.endsWith('.write') || code.endsWith('.use')) {
+            base[modulePart] = true;
+          }
+        }
+      }
+    } catch (e) {
+      console.warn('Error fetching role permissions for module access:', e);
+    }
+  }
+
   const overrides = await getUserModuleOverrides(supabase, userId);
   return mergeModuleOverrides(base, overrides);
 }

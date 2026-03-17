@@ -22,6 +22,8 @@ import Card from '@/components/ui/Card';
 import Button from '@/components/ui/Button';
 import Input from '@/components/ui/Input';
 import Select from '@/components/ui/Select';
+import { useRoleAccess } from '@/hooks/useRoleAccess';
+import { useUserRole } from '@/hooks/useUserRole';
 
 type PickStatus =
   | 'queued'
@@ -382,6 +384,9 @@ const DEMO_INSIGHTS: InsightsResponse = {
 };
 
 export default function PickingBoardPage() {
+  const { access: pickingAccess, loading: accessLoading } = useRoleAccess('alistamiento');
+  const { loading: authLoading } = useUserRole();
+
   const [warehouseId, setWarehouseId] = useState('');
   const [statusFilter, setStatusFilter] = useState('active');
   const [range, setRange] = useState<'7d' | '30d'>('7d');
@@ -592,6 +597,22 @@ export default function PickingBoardPage() {
     { key: 'processing', title: 'En Proceso', subtitle: 'Tomadas y en alistamiento', accent: '#60a5fa', rows: board.processing },
     { key: 'ready', title: 'Listas', subtitle: 'Esperando despacho', accent: '#34d399', rows: board.ready },
   ];
+
+  if (!accessLoading && !pickingAccess.can_view) {
+    return (
+      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '60vh', gap: 16 }}>
+        <AlertTriangle size={48} style={{ color: 'var(--brand-accent)' }} />
+        <div style={{ fontSize: 18, fontWeight: 700 }}>Acceso Denegado</div>
+        <p style={{ color: 'var(--muted)', textAlign: 'center', maxWidth: 400 }}>
+          No tienes permisos para visualizar el módulo de Alistamiento de Bodega. 
+          Contacta a un administrador para solicitar acceso.
+        </p>
+        <Link href="/">
+          <Button variant="primary">Volver al Inicio</Button>
+        </Link>
+      </div>
+    );
+  }
 
   return (
     <div style={{ display: 'grid', gap: 16 }}>
@@ -831,7 +852,7 @@ export default function PickingBoardPage() {
                               <button
                                 className={`pick-cta pick-cta--${action.action}`}
                                 onClick={(e) => { e.stopPropagation(); void runAction(order, action.action); }}
-                                disabled={demoMode || actionLoading === actionKey}
+                                disabled={demoMode || actionLoading === actionKey || !pickingAccess.can_edit}
                                 type="button"
                               >
                                 {actionLoading === actionKey

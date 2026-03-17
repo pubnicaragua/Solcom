@@ -71,6 +71,23 @@ export function useUserRole() {
           overridesMap = mapOverrides(overrides || []);
         }
 
+        // --- Carga dinámica por Role Permissions ---
+        const { data: rolePerms } = await supabase
+          .from('role_permissions')
+          .select('permission_code')
+          .eq('role', normalizedRole);
+
+        if (rolePerms) {
+          for (const rp of rolePerms) {
+            const code = String(rp.permission_code);
+            const modulePart = code.split('.')[0];
+            if (code.endsWith('.read') || code.endsWith('.view') || code.endsWith('.write') || code.endsWith('.use')) {
+              baseAccess[modulePart] = true;
+            }
+          }
+        }
+        // ------------------------------------------
+
         if (!canceled) {
           setRole(normalizedRole);
           setModuleAccess(mergeModuleOverrides(baseAccess, overridesMap));
