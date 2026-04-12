@@ -63,17 +63,9 @@ export async function GET(request: NextRequest) {
       color: item.color,
     });
 
-    if (sku) {
-      // Si buscaron por SKU, sabemos que máximo hay 1 resultado, mandamos el objeto directo
-      return NextResponse.json({
-        data: formatItem(data[0]),
-      });
-    } else {
-      // Si buscaron por search, mandamos la lista de sugerencias
-      return NextResponse.json({
-        results: data.map(formatItem),
-      });
-    }
+    // Enviar solo el primer resultado de forma plana para que Zoho lo lea sin problema
+    // Zoho tiene bugs leyendo arreglos multidimensionales en variables de texto.
+    return NextResponse.json(formatItem(data[0]));
   } catch (error) {
     console.error('SalesIQ Webhook error:', error);
     return NextResponse.json(
