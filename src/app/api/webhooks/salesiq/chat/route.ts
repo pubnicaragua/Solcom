@@ -43,7 +43,7 @@ export async function POST(request: NextRequest) {
     // Extraer palabras clave para la búsqueda en BD ignorando palabras comunes de conexión
     const cleanMsg = userMessage.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[?¿!¡.,:;()"']/g, '');
     const stopWords = ['hay', 'tienen', 'tienes', 'quiero', 'busco', 'necesito', 'para', 'con', 'los', 'las', 'el', 'la', 'un', 'una', 'me', 'puede', 'puedes', 'dar', 'precio', 'de', 'en', 'es', 'que', 'a', 'por', 'favor', 'saber', 'si', 'hola', 'buenas', 'tardes', 'dias', 'noches', 'algun', 'alguna', 'alguno', 'estoy', 'buscando'];
-    const searchWords = cleanMsg.split(/\s+/).filter((w: string) => w.length > 2 && !stopWords.includes(w));
+    const searchWords = cleanMsg.split(/\s+/).filter((w: string) => w.length > 1 && !stopWords.includes(w));
 
     // Buscar productos relevantes en la BD
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
@@ -63,7 +63,7 @@ export async function POST(request: NextRequest) {
       query = query.limit(0);
     }
     
-    const { data: products } = await query.limit(10);
+    const { data: products } = await query.limit(30);
 
     // Si encontramos productos, vamos a buscar su precio oficial en la lista llamada "barato"
     if (products && products.length > 0) {
