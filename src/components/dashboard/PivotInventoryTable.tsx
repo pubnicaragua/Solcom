@@ -1415,16 +1415,11 @@ function MobileProductCard({ node, warehouseCodes, data, cartMode, cartReady, on
                                 const rowItem = variant.items?.[0];
                                 return (
                                     <div key={variant.label} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '6px 0', fontSize: 13, borderBottom: '1px solid rgba(255,255,255,0.03)' }}>
-                                        <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                                            {rowItem?.color && (
-                                                <div style={{
-                                                    width: 12, height: 12, borderRadius: '50%',
-                                                    backgroundColor: rowItem.color_hex || rowItem.color,
-                                                    border: '1px solid rgba(255,255,255,0.2)',
-                                                    flexShrink: 0
-                                                }} />
-                                            )}
+                                        <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
                                             <span style={{ color: '#cbd5e1', fontWeight: 500 }}>{variant.label}</span>
+                                            {rowItem?.color && (
+                                                <span style={{ color: '#94a3b8', fontSize: 12 }}>• {rowItem.color}</span>
+                                            )}
                                         </div>
                                         <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
                                             <span style={{ color: '#f8fafc', fontWeight: 600 }}>{variant.grandTotal}</span>
