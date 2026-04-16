@@ -10,6 +10,7 @@ const openai = new OpenAI({
 });
 
 export const dynamic = 'force-dynamic';
+export const runtime = 'edge';
 
 // Prompt del sistema para Mía
 const SYSTEM_PROMPT = `Sos Mía, la asistente virtual de Solis Comercial. Tu estilo es energético, vendedor, amable y directo al punto.
