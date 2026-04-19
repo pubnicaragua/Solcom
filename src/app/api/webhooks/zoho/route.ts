@@ -359,6 +359,57 @@ export async function POST(request: NextRequest) {
             else debugLog.push('Transfer Order upserted locally');
         }
 
+        // --- SPECIAL HANDLING: Sales Invoice Registration ---
+        // Registrar salidas para el Análisis de Restock
+        const invoiceNode = payload.invoice || (payload.salesorder?.status === 'invoiced' ? payload.salesorder : null);
+        if (invoiceNode && invoiceNode.line_items) {
+            const zohoIds = invoiceNode.line_items.map((l: any) => normalizeItemId(l.item_id || l.product_id)).filter(Boolean);
+            
+            if (zohoIds.length > 0) {
+                // Obtener IDs locales
+                const { data: localItems } = await supabase.from('items').select('id, zoho_item_id').in('zoho_item_id', zohoIds);
+                const localItemMap = new Map(localItems?.map((i: any) => [i.zoho_item_id, i.id]) || []);
+                const defaultWh = Array.from(warehouseMap.values()).find(w => w.active)?.id;
+
+                const salesEvents = [];
+                const invoiceId = invoiceNode.invoice_id || invoiceNode.salesorder_id || `sales-${Date.now()}`;
+                const invoiceDate = invoiceNode.date || new Date().toISOString();
+                
+                for (const line of invoiceNode.line_items) {
+                    const zId = normalizeItemId(line.item_id || line.product_id);
+                    const localId = localItemMap.get(zId);
+                    if (localId) {
+                        const qty = Number(line.quantity || 1);
+                        const userWh = warehouseMap.get(String(line.warehouse_id))?.id || defaultWh;
+                        if (userWh) {
+                            salesEvents.push({
+                                idempotency_key: `sale-${invoiceId}-${line.line_item_id || zId}`,
+                                source: 'webhook_invoice',
+                                event_type: 'sale',
+                                item_id: localId,
+                                warehouse_id: userWh,
+                                qty_delta: -qty, // Movimiento negativo (salida)
+                                payload: { invoice_id: invoiceId, line_item_id: line.line_item_id, price: line.rate },
+                                external_ts: invoiceDate
+                            });
+                        }
+                    }
+                }
+                
+                if (salesEvents.length > 0) {
+                    // Try to insert, ignoring duplicates
+                    const { error: saleErr } = await supabase.from('inventory_events').insert(salesEvents);
+                    if (saleErr) {
+                        if (!saleErr.message.includes('duplicate key')) {
+                            debugLog.push(`Sales event insert error: ${saleErr.message}`);
+                        }
+                    } else {
+                        debugLog.push(`Recorded ${salesEvents.length} sales events locally for restock analysis.`);
+                    }
+                }
+            }
+        }
+
         // 4. EXECUTE SYNC for all extracted items (NOW ASYNCHRONOUS USING QUEUE)
         const queuedCount = 0;
         const queueErrors = [];
