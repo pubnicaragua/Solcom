@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useRef, useEffect } from 'react';
+import { useState, useRef, useEffect, useMemo } from 'react';
 import Card from '@/components/ui/Card';
 import Button from '@/components/ui/Button';
 import { RefreshCw, Send, TrendingUp, AlertCircle, ShoppingCart, Loader2, Database, UploadCloud, Flame } from 'lucide-react';
@@ -27,13 +27,23 @@ interface TopSaleRow {
   price: number;
 }
 
+interface PageNotice {
+  type: 'error' | 'success' | 'info';
+  text: string;
+}
+
 export default function ComprasRestockPage() {
   const [isProcessing, setIsProcessing] = useState(false);
   const [results, setResults] = useState<RestockRow[] | null>(null);
   const [topSales, setTopSales] = useState<TopSaleRow[]>([]);
   const [totalUnidades, setTotalUnidades] = useState(0);
   const [totalDinero, setTotalDinero] = useState(0);
+  const [searchTerm, setSearchTerm] = useState('');
+  const [onlyNeedsRestock, setOnlyNeedsRestock] = useState(true);
+  const [notice, setNotice] = useState<PageNotice | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const formatCurrency = (value: number) => `C$ ${Math.round(value).toLocaleString('es-NI')}`;
 
   // Cargar ventas del día al montar la página
   useEffect(() => {
@@ -44,11 +54,15 @@ export default function ComprasRestockPage() {
           setTopSales(json.data);
         }
       })
-      .catch(e => console.error("Error top sales:", e));
+      .catch(e => {
+        console.error("Error top sales:", e);
+        setNotice({ type: 'info', text: 'No se pudo cargar el top de ventas del dia, pero puedes generar el analisis con normalidad.' });
+      });
   }, []);
 
   const fetchLiveAnalytics = async () => {
     setIsProcessing(true);
+    setNotice(null);
     try {
       const res = await fetch('/api/compras/restock?weeks=4');
       const json = await res.json();
@@ -65,12 +79,13 @@ export default function ComprasRestockPage() {
         
         setTotalUnidades(totalU);
         setTotalDinero(totalD);
+        setNotice({ type: 'success', text: `Analisis generado con ${json.data.length} referencias.` });
       } else {
-        alert("Error al obtener análisis: " + (json.error || 'Desconocido'));
+        setNotice({ type: 'error', text: `Error al obtener analisis: ${json.error || 'Desconocido'}` });
       }
     } catch (error) {
       console.error("Error Fetch:", error);
-      alert("Hubo un error de conexión al generar el análisis.");
+      setNotice({ type: 'error', text: 'Hubo un error de conexion al generar el analisis.' });
     } finally {
       setIsProcessing(false);
     }
@@ -83,6 +98,7 @@ export default function ComprasRestockPage() {
     try {
       const reader = new FileReader();
       reader.onload = async (e) => {
+        setNotice(null);
         const data = e.target?.result;
         const workbook = XLSX.read(data, { type: 'binary' });
         const targetSheetName = workbook.SheetNames.includes('Matriz') ? 'Matriz' : workbook.SheetNames[0];
@@ -93,10 +109,10 @@ export default function ComprasRestockPage() {
         const analisisAntiguo = processRestockExcel(jsonData);
         
         if (analisisAntiguo.rows.length === 0) {
-           alert("El excel parece estar vacío o no coincide el formato.");
+           setNotice({ type: 'error', text: 'El Excel parece vacio o no coincide con el formato esperado.' });
            setIsProcessing(false);
            return;
-        }
+         }
 
         // Inyectamos a la DB local
         const res = await fetch('/api/compras/restock/seed', {
@@ -108,22 +124,54 @@ export default function ComprasRestockPage() {
         const json = await res.json();
         
         if (json.success) {
-           alert("¡Listo! Historial inyectado. Ahora presiona Generar Análisis.");
+           setNotice({ type: 'success', text: 'Historial inyectado correctamente. Ahora puedes generar el analisis.' });
         } else {
-           alert("Fallo inyectando historial: " + json.error);
+           setNotice({ type: 'error', text: `Fallo inyectando historial: ${json.error}` });
         }
         setIsProcessing(false);
       };
       reader.readAsBinaryString(file);
     } catch (error) {
       console.error(error);
-      alert("Hubo un error inyectando.");
+      setNotice({ type: 'error', text: 'Hubo un error inyectando el historial.' });
       setIsProcessing(false);
     }
   };
 
+  const filteredResults = useMemo(() => {
+    if (!results) return [];
+
+    return [...results]
+      .filter((row) => (onlyNeedsRestock ? row.restock_sugerido > 0 : true))
+      .filter((row) => {
+        if (!searchTerm.trim()) return true;
+        const term = searchTerm.toLowerCase().trim();
+        return row.name.toLowerCase().includes(term) || row.sku.toLowerCase().includes(term);
+      })
+      .sort((a, b) => b.restock_sugerido - a.restock_sugerido);
+  }, [results, onlyNeedsRestock, searchTerm]);
+
+  const noticePalette: Record<PageNotice['type'], { bg: string; color: string; border: string }> = {
+    error: { bg: 'rgba(239, 68, 68, 0.12)', color: '#fecaca', border: 'rgba(239, 68, 68, 0.25)' },
+    success: { bg: 'rgba(16, 185, 129, 0.12)', color: '#bbf7d0', border: 'rgba(16, 185, 129, 0.25)' },
+    info: { bg: 'rgba(59, 130, 246, 0.12)', color: '#bfdbfe', border: 'rgba(59, 130, 246, 0.25)' }
+  };
+
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 24, paddingBottom: 40 }}>
+      <input
+        ref={fileInputRef}
+        type="file"
+        accept=".xlsx,.xls"
+        style={{ display: 'none' }}
+        onChange={(e) => {
+          const file = e.target.files?.[0];
+          if (file) {
+            handleSeedUpload(file);
+          }
+        }}
+      />
+
       {/* Cabecera */}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 16 }}>
         <div>
@@ -135,18 +183,49 @@ export default function ComprasRestockPage() {
             El sistema calcula automáticamente el requerimiento de reposición de inventario usando el historial de las últimas 4 semanas directo de la base de datos mediante webhooks. Ya no es necesario procesar archivos de Excel manualmente.
           </p>
         </div>
+        <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+          <Button variant="secondary" onClick={() => fileInputRef.current?.click()} disabled={isProcessing}>
+            <UploadCloud size={15} style={{ marginRight: 6 }} /> Cargar historial Excel
+          </Button>
+          <Button variant="primary" onClick={fetchLiveAnalytics} disabled={isProcessing}>
+            {isProcessing ? (
+              <><Loader2 size={16} className="animate-spin" style={{ marginRight: 6 }} /> Procesando...</>
+            ) : (
+              <><RefreshCw size={15} style={{ marginRight: 6 }} /> Generar analisis</>
+            )}
+          </Button>
+        </div>
       </div>
+
+      {notice && (
+        <div
+          style={{
+            border: `1px solid ${noticePalette[notice.type].border}`,
+            background: noticePalette[notice.type].bg,
+            color: noticePalette[notice.type].color,
+            borderRadius: 12,
+            padding: '12px 14px',
+            fontSize: 13,
+            display: 'flex',
+            alignItems: 'center',
+            gap: 8
+          }}
+        >
+          <AlertCircle size={15} />
+          {notice.text}
+        </div>
+      )}
 
       {topSales.length > 0 && (
         <Card style={{ background: 'linear-gradient(135deg, rgba(239, 68, 68, 0.05), rgba(0, 0, 0, 0))' }}>
            <div style={{ padding: '20px 24px' }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 16 }}>
                  <Flame size={20} color="#ef4444" />
-                 <h3 style={{ fontSize: 16, fontWeight: 700, margin: 0, color: '#e2e8f0' }}>Top 5 Ventas del Día</h3>
-                 <span style={{ fontSize: 12, color: 'var(--muted)', marginLeft: 8 }}>(Basado en webhooks de facturas en tiempo real de hoy)</span>
-              </div>
-              <div style={{ display: 'flex', gap: 16, overflowX: 'auto', paddingBottom: 8 }}>
-                {topSales.map((sale, idx) => (
+                  <h3 style={{ fontSize: 16, fontWeight: 700, margin: 0, color: '#e2e8f0' }}>Top 5 Ventas del dia</h3>
+                  <span style={{ fontSize: 12, color: 'var(--muted)', marginLeft: 8 }}>(Basado en webhooks de facturas en tiempo real de hoy)</span>
+               </div>
+               <div style={{ display: 'flex', gap: 16, overflowX: 'auto', paddingBottom: 8 }}>
+                 {topSales.map((sale, idx) => (
                   <div key={idx} style={{ 
                     minWidth: 200, 
                     border: '1px solid rgba(239, 68, 68, 0.2)', 
@@ -154,18 +233,21 @@ export default function ComprasRestockPage() {
                     padding: 16, 
                     background: 'rgba(0,0,0,0.2)' 
                   }}>
-                     <div style={{ fontSize: 18, fontWeight: 800, color: '#ef4444', marginBottom: 4 }}>
-                       {sale.sales_sum} uds.
+                     <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6 }}>
+                       <div style={{ fontSize: 18, fontWeight: 800, color: '#ef4444' }}>
+                        {sale.sales_sum} uds.
+                       </div>
+                       <span style={{ fontSize: 11, color: '#fca5a5', fontWeight: 700 }}>#{idx + 1}</span>
                      </div>
                      <div style={{ fontSize: 13, fontWeight: 600, color: '#f8fafc', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                       {sale.name}
+                        {sale.name}
                      </div>
-                     <div style={{ fontSize: 12, color: 'var(--muted)' }}>C$ {Math.round(sale.price * sale.sales_sum).toLocaleString('es-NI')} generados</div>
-                  </div>
-                ))}
-              </div>
-           </div>
-        </Card>
+                     <div style={{ fontSize: 12, color: 'var(--muted)' }}>{formatCurrency(sale.price * sale.sales_sum)} generados</div>
+                   </div>
+                 ))}
+               </div>
+            </div>
+         </Card>
       )}
 
       {!results && (
@@ -185,8 +267,8 @@ export default function ComprasRestockPage() {
               Las métricas están listas
             </h3>
             <p style={{ color: 'var(--muted)', fontSize: 14, maxWidth: 450, margin: '0 auto 32px' }}>
-              Haz clic en el botón de abajo para explorar la base de datos y generar tu reporte de restock sugerido al instante con los datos más recientes de Zoho.
-            </p>
+               Haz clic en el boton para explorar la base de datos y generar tu reporte de restock sugerido con los datos mas recientes de Zoho.
+             </p>
             
             <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 16 }}>
               <Button 
@@ -198,7 +280,7 @@ export default function ComprasRestockPage() {
                 {isProcessing ? (
                   <><Loader2 size={20} className="animate-spin" style={{ marginRight: 8 }} /> Procesando base de datos...</>
                 ) : (
-                  <><RefreshCw size={20} style={{ marginRight: 8 }} /> Generar Análisis del Mes</>
+                  <><RefreshCw size={20} style={{ marginRight: 8 }} /> Generar analisis del mes</>
                 )}
               </Button>
             </div>
@@ -231,36 +313,71 @@ export default function ComprasRestockPage() {
                      </div>
                      <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--muted)' }}>Presupuesto Estimado</span>
                   </div>
-                  <div style={{ fontSize: 36, fontWeight: 800, color: '#e2e8f0' }}>
-                     C$ {Math.round(totalDinero).toLocaleString('es-NI')}
-                  </div>
+                   <div style={{ fontSize: 36, fontWeight: 800, color: '#e2e8f0' }}>
+                      {formatCurrency(totalDinero)}
+                   </div>
+                </div>
+             </Card>
+
+             <Card>
+               <div style={{ padding: '24px' }}>
+                 <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 12 }}>
+                   <div style={{ width: 40, height: 40, borderRadius: 10, background: 'rgba(245, 158, 11, 0.15)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                     <ShoppingCart size={20} color="#f59e0b" />
+                   </div>
+                   <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--muted)' }}>Referencias en pantalla</span>
+                 </div>
+                 <div style={{ fontSize: 36, fontWeight: 800, color: '#e2e8f0' }}>
+                   {filteredResults.length}
+                 </div>
                </div>
-            </Card>
+             </Card>
           </div>
 
           <Card>
-             <div style={{ padding: '24px', borderBottom: '1px solid rgba(255,255,255,0.05)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                <h3 style={{ margin: 0, fontSize: 16, fontWeight: 600, color: '#e2e8f0', display: 'flex', alignItems: 'center', gap: 8 }}>
-                  Desglose de Reposición ({results.length} refs)
-                </h3>
-                <div style={{ display: 'flex', gap: 12 }}>
-                    <Button variant="secondary" onClick={fetchLiveAnalytics}>
-                       <RefreshCw size={14} style={{ marginRight: 6 }}/> Refrescar
-                    </Button>
-                   <Button variant="secondary" onClick={() => setResults(null)}>
-                     Limpiar
-                   </Button>
-                   <Button variant="primary" style={{ gap: 8 }}>
-                     <Send size={16} /> Enviar al Bot (Fase 3)
-                   </Button>
-                </div>
+             <div style={{ padding: '20px 24px', borderBottom: '1px solid rgba(255,255,255,0.05)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 12 }}>
+               <h3 style={{ margin: 0, fontSize: 16, fontWeight: 600, color: '#e2e8f0', display: 'flex', alignItems: 'center', gap: 8 }}>
+                 Desglose de reposicion ({filteredResults.length} refs)
+               </h3>
+               <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+                 <Button variant="secondary" onClick={fetchLiveAnalytics}>
+                   <RefreshCw size={14} style={{ marginRight: 6 }} /> Refrescar
+                 </Button>
+                 <Button variant="secondary" onClick={() => setResults(null)}>
+                   Limpiar
+                 </Button>
+                 <Button variant="primary" style={{ gap: 8 }}>
+                   <Send size={16} /> Enviar al bot (Fase 3)
+                 </Button>
+               </div>
              </div>
-             
-             {(() => {
-              const productosFiltrados = [...results]
-                .sort((a, b) => b.restock_sugerido - a.restock_sugerido);
-                
-              return (
+
+             <div style={{ padding: '14px 24px', borderBottom: '1px solid rgba(255,255,255,0.05)', display: 'grid', gridTemplateColumns: '1fr auto', gap: 12, alignItems: 'center' }}>
+               <input
+                 value={searchTerm}
+                 onChange={(e) => setSearchTerm(e.target.value)}
+                 placeholder="Buscar por nombre o SKU"
+                 style={{
+                   width: '100%',
+                   background: 'rgba(255,255,255,0.03)',
+                   border: '1px solid rgba(255,255,255,0.08)',
+                   color: 'var(--text)',
+                   borderRadius: 10,
+                   padding: '10px 12px',
+                   fontSize: 13,
+                   outline: 'none'
+                 }}
+               />
+               <label style={{ display: 'inline-flex', alignItems: 'center', gap: 8, color: 'var(--muted)', fontSize: 13 }}>
+                 <input
+                   type="checkbox"
+                   checked={onlyNeedsRestock}
+                   onChange={(e) => setOnlyNeedsRestock(e.target.checked)}
+                 />
+                 Solo con reposicion
+               </label>
+             </div>
+              
                 <div style={{ overflowX: 'auto', maxHeight: '600px', overflowY: 'auto' }}>
                   <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: 13 }}>
                      <thead style={{ background: 'rgba(255,255,255,0.02)', position: 'sticky', top: 0, zIndex: 1, backdropFilter: 'blur(10px)' }}>
@@ -273,14 +390,14 @@ export default function ComprasRestockPage() {
                         </tr>
                      </thead>
                      <tbody>
-                        {productosFiltrados.length === 0 ? (
+                        {filteredResults.length === 0 ? (
                            <tr>
-                              <td colSpan={5} style={{ padding: '40px', textAlign: 'center', color: 'var(--muted)' }}>No hay productos que requieran restock según los promedios en vivo.</td>
+                              <td colSpan={5} style={{ padding: '40px', textAlign: 'center', color: 'var(--muted)' }}>No hay resultados con los filtros aplicados.</td>
                            </tr>
-                        ) : productosFiltrados.map((r, idx) => (
+                        ) : filteredResults.map((r, idx) => (
                            <tr key={idx} style={{ borderBottom: '1px solid rgba(255,255,255,0.02)', background: idx % 2 === 0 ? 'transparent' : 'rgba(255,255,255,0.01)' }}>
                               <td style={{ padding: '14px 20px' }}>
-                                <div style={{ color: '#e2e8f0', fontWeight: 500, marginBottom: 4 }}>{r.name}</div>
+                                 <div style={{ color: '#e2e8f0', fontWeight: 500, marginBottom: 4 }}>{r.name}</div>
                                 <div style={{ color: 'var(--muted)', fontSize: 12 }}>SKU: {r.sku} • Stock Actual: {r.stock_total}</div>
                               </td>
                               <td style={{ padding: '14px 20px', color: 'var(--muted)', textAlign: 'right' }}>
@@ -290,20 +407,18 @@ export default function ComprasRestockPage() {
                                 {Math.round(r.restock_sugerido)} unds
                               </td>
                               <td style={{ padding: '14px 20px', color: 'var(--muted)', textAlign: 'right' }}>
-                                {r.price ? `C$ ${r.price.toLocaleString('es-NI')}` : '-'}
+                                 {r.price ? `C$ ${r.price.toLocaleString('es-NI')}` : '-'}
                               </td>
                               <td style={{ padding: '14px 20px', color: '#10b981', fontWeight: 600, textAlign: 'right' }}>
-                                C$ {Math.round(r.presupuesto).toLocaleString('es-NI')}
+                                 {formatCurrency(r.presupuesto)}
                               </td>
                            </tr>
                         ))}
                      </tbody>
                   </table>
                </div>
-              );
-             })()}
-          </Card>
-        </div>
+           </Card>
+         </div>
       )}
 
     </div>

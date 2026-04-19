@@ -373,8 +373,7 @@ export async function POST(request: NextRequest) {
 
                 const salesEvents = [];
                 const invoiceId = invoiceNode.invoice_id || invoiceNode.salesorder_id || `sales-${Date.now()}`;
-                const invoiceDate = invoiceNode.date; // Fecha original del doc en Zoho
-                const eventTs = new Date().toISOString(); // Momento real de recepción del webhook
+                const invoiceDate = invoiceNode.date ? new Date(invoiceNode.date).toISOString() : new Date().toISOString();
                 
                 for (const line of invoiceNode.line_items) {
                     const zId = normalizeItemId(line.item_id || line.product_id);
@@ -389,9 +388,9 @@ export async function POST(request: NextRequest) {
                                 event_type: 'sale',
                                 item_id: localId,
                                 warehouse_id: userWh,
-                                qty_delta: -qty, // Movimiento negativo (salida)
-                                payload: { invoice_id: invoiceId, line_item_id: line.line_item_id, price: line.rate, invoice_date: invoiceDate },
-                                external_ts: eventTs  // Momento real cuando llegó el evento
+                                qty_delta: -qty,
+                                payload: { invoice_id: invoiceId, line_item_id: line.line_item_id, price: line.rate },
+                                external_ts: invoiceDate  // Fecha real de la factura en Zoho
                             });
                         }
                     }
