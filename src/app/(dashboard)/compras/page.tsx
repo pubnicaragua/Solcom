@@ -8,6 +8,7 @@ import {
   Database,
   Flame,
   Loader2,
+  LineChart,
   RefreshCw,
   Search,
   Send,
@@ -44,6 +45,13 @@ interface PageNotice {
   text: string;
 }
 
+interface InsightTip {
+  id: string;
+  title: string;
+  value: string;
+  description: string;
+}
+
 export default function ComprasRestockPage() {
   const [isProcessing, setIsProcessing] = useState(false);
   const [results, setResults] = useState<RestockRow[] | null>(null);
@@ -54,6 +62,8 @@ export default function ComprasRestockPage() {
   const [onlyNeedsRestock, setOnlyNeedsRestock] = useState(true);
   const [mobileView, setMobileView] = useState(false);
   const [notice, setNotice] = useState<PageNotice | null>(null);
+  const [isGeneratePressed, setIsGeneratePressed] = useState(false);
+  const [hoveredItemId, setHoveredItemId] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const formatCurrency = (value: number) => `C$ ${Math.round(value).toLocaleString('es-NI')}`;
@@ -178,6 +188,86 @@ export default function ComprasRestockPage() {
     return results.filter((row) => row.stock_total <= row.weekly_avg).length;
   }, [results]);
 
+  const insights = useMemo<InsightTip[]>(() => {
+    const tips: InsightTip[] = [];
+
+    if (topSales.length > 0) {
+      const top = topSales[0];
+      tips.push({
+        id: 'top-sale',
+        title: 'Producto con mayor salida hoy',
+        value: `${top.sales_sum} uds`,
+        description: `${top.name}. Conviene mantenerlo dentro del primer bloque de compra.`,
+      });
+    }
+
+    if (results && results.length > 0) {
+      const critical = results.filter((row) => row.stock_total <= row.weekly_avg && row.restock_sugerido > 0);
+      if (critical.length > 0) {
+        tips.push({
+          id: 'critical',
+          title: 'Riesgo de quiebre',
+          value: `${critical.length} items`,
+          description: 'Tienen cobertura menor a una semana; dejalos en prioridad alta.',
+        });
+      }
+
+      const sortedByBudget = [...results].sort((a, b) => b.presupuesto - a.presupuesto);
+      const top5Budget = sortedByBudget.slice(0, 5).reduce((sum, row) => sum + Number(row.presupuesto), 0);
+      const budgetShare = totalDinero > 0 ? top5Budget / totalDinero : 0;
+      if (budgetShare >= 0.45) {
+        tips.push({
+          id: 'budget-share',
+          title: 'Concentracion de presupuesto',
+          value: `${Math.round(budgetShare * 100)}%`,
+          description: 'Se concentra en los 5 productos de mayor costo. Revisa volumen y margen.',
+        });
+      }
+
+      const noRestockNeeded = results.filter((row) => row.restock_sugerido <= 0).length;
+      if (noRestockNeeded > 0) {
+        tips.push({
+          id: 'restock-optimized',
+          title: 'Items que no requieren compra',
+          value: `${noRestockNeeded} refs`,
+          description: 'Puedes pausar reposicion y mover presupuesto a referencias de mayor rotacion.',
+        });
+      }
+    }
+
+    return tips.slice(0, 4);
+  }, [results, topSales, totalDinero]);
+
+  const getPriorityMeta = (row: RestockRow) => {
+    const weeklyAvg = row.weekly_avg > 0 ? row.weekly_avg : 1;
+    const coverageWeeks = row.stock_total / weeklyAvg;
+
+    if (coverageWeeks <= 0.8 || row.restock_sugerido >= weeklyAvg * 2) {
+      return {
+        label: 'Alta',
+        color: '#fecaca',
+        bg: 'rgba(239,68,68,0.18)',
+        border: 'rgba(239,68,68,0.35)',
+      };
+    }
+
+    if (coverageWeeks <= 1.6 || row.restock_sugerido > 0) {
+      return {
+        label: 'Media',
+        color: '#fde68a',
+        bg: 'rgba(245,158,11,0.16)',
+        border: 'rgba(245,158,11,0.32)',
+      };
+    }
+
+    return {
+      label: 'Baja',
+      color: '#bbf7d0',
+      bg: 'rgba(16,185,129,0.16)',
+      border: 'rgba(16,185,129,0.32)',
+    };
+  };
+
   const noticePalette: Record<PageNotice['type'], { bg: string; color: string; border: string }> = {
     error: { bg: 'rgba(239, 68, 68, 0.14)', color: '#fecaca', border: 'rgba(239, 68, 68, 0.28)' },
     success: { bg: 'rgba(16, 185, 129, 0.14)', color: '#bbf7d0', border: 'rgba(16, 185, 129, 0.28)' },
@@ -189,6 +279,34 @@ export default function ComprasRestockPage() {
     gridTemplateColumns: mobileView ? '1fr' : '320px 1fr',
     gap: 18,
     paddingBottom: 40,
+  };
+
+  const primaryActionButtonStyle: React.CSSProperties = {
+    justifyContent: 'center',
+    minHeight: 46,
+    borderRadius: 12,
+    fontWeight: 700,
+    border: '1px solid rgba(96,165,250,0.55)',
+    background: isProcessing
+      ? 'linear-gradient(135deg, rgba(37,99,235,0.85), rgba(29,78,216,0.9))'
+      : 'linear-gradient(135deg, #3b82f6, #1d4ed8)',
+    boxShadow: isGeneratePressed
+      ? '0 6px 18px rgba(37,99,235,0.35)'
+      : '0 12px 28px rgba(37,99,235,0.35)',
+    transform: isGeneratePressed ? 'scale(0.98)' : 'scale(1)',
+    transition: 'transform 160ms cubic-bezier(0.23, 1, 0.32, 1), box-shadow 200ms cubic-bezier(0.23, 1, 0.32, 1)',
+  };
+
+  const iconStyle: React.CSSProperties = {
+    display: 'block',
+    flexShrink: 0,
+  };
+
+  const buttonContentStyle: React.CSSProperties = {
+    display: 'inline-flex',
+    alignItems: 'center',
+    gap: 8,
+    lineHeight: 1,
   };
 
   return (
@@ -268,15 +386,26 @@ export default function ComprasRestockPage() {
           </div>
 
           <div style={{ display: 'grid', gap: 10 }}>
-            <Button variant="primary" onClick={fetchLiveAnalytics} disabled={isProcessing} style={{ justifyContent: 'center' }}>
+            <Button
+              variant="primary"
+              onClick={fetchLiveAnalytics}
+              disabled={isProcessing}
+              onMouseDown={() => setIsGeneratePressed(true)}
+              onMouseUp={() => setIsGeneratePressed(false)}
+              onMouseLeave={() => setIsGeneratePressed(false)}
+              onBlur={() => setIsGeneratePressed(false)}
+              style={primaryActionButtonStyle}
+            >
               {isProcessing ? (
-                <>
-                  <Loader2 size={16} className="animate-spin" style={{ marginRight: 6 }} /> Procesando analisis...
-                </>
+                <span style={buttonContentStyle}>
+                  <Loader2 size={16} className="animate-spin" style={iconStyle} />
+                  Procesando analisis...
+                </span>
               ) : (
-                <>
-                  <RefreshCw size={16} style={{ marginRight: 6 }} /> Generar analisis en vivo
-                </>
+                <span style={buttonContentStyle}>
+                  <RefreshCw size={16} style={iconStyle} />
+                  Generar analisis en vivo
+                </span>
               )}
             </Button>
             <Button variant="secondary" onClick={() => fileInputRef.current?.click()} disabled={isProcessing} style={{ justifyContent: 'center' }}>
@@ -357,6 +486,34 @@ export default function ComprasRestockPage() {
           </Card>
         )}
 
+        {insights.length > 0 && (
+          <Card style={{ border: '1px solid rgba(255,255,255,0.08)' }}>
+            <div style={{ padding: '16px 18px', borderBottom: '1px solid rgba(255,255,255,0.06)', display: 'flex', alignItems: 'center', gap: 8 }}>
+              <LineChart size={16} color="#93c5fd" />
+              <h3 style={{ margin: 0, fontSize: 14, fontWeight: 700, color: '#e2e8f0' }}>Radar de compra</h3>
+            </div>
+            <div style={{ padding: 12, display: 'grid', gap: 10, gridTemplateColumns: mobileView ? '1fr' : 'repeat(2, minmax(0, 1fr))' }}>
+              {insights.map((tip) => (
+                <div
+                  key={tip.id}
+                  style={{
+                    borderRadius: 12,
+                    padding: '12px 13px',
+                    border: '1px solid rgba(148,163,184,0.22)',
+                    background: 'linear-gradient(180deg, rgba(15,23,42,0.75), rgba(15,23,42,0.45))',
+                  }}
+                >
+                  <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: 10, marginBottom: 6 }}>
+                    <div style={{ color: '#e2e8f0', fontSize: 13, fontWeight: 650 }}>{tip.title}</div>
+                    <div style={{ color: '#93c5fd', fontSize: 12, fontWeight: 700, whiteSpace: 'nowrap' }}>{tip.value}</div>
+                  </div>
+                  <div style={{ color: '#94a3b8', fontSize: 12, lineHeight: 1.5 }}>{tip.description}</div>
+                </div>
+              ))}
+            </div>
+          </Card>
+        )}
+
         {!results && (
           <Card
             style={{
@@ -383,6 +540,26 @@ export default function ComprasRestockPage() {
               <p style={{ margin: '10px auto 0 auto', maxWidth: 520, color: '#94a3b8', fontSize: 14, lineHeight: 1.6 }}>
                 Carga historial en Excel o usa datos en vivo de Zoho para ver prioridades, presupuesto y productos con mayor urgencia.
               </p>
+              <div style={{ marginTop: 18 }}>
+                <Button
+                  variant="primary"
+                  onClick={fetchLiveAnalytics}
+                  disabled={isProcessing}
+                  style={{ ...primaryActionButtonStyle, minHeight: 44, paddingInline: 20 }}
+                >
+                  {isProcessing ? (
+                    <span style={buttonContentStyle}>
+                      <Loader2 size={16} className="animate-spin" style={iconStyle} />
+                      Procesando analisis...
+                    </span>
+                  ) : (
+                    <span style={buttonContentStyle}>
+                      <RefreshCw size={16} style={iconStyle} />
+                      Generar analisis en vivo
+                    </span>
+                  )}
+                </Button>
+              </div>
             </div>
           </Card>
         )}
@@ -464,6 +641,7 @@ export default function ComprasRestockPage() {
                   <thead style={{ background: 'rgba(255,255,255,0.02)', position: 'sticky', top: 0, zIndex: 1 }}>
                     <tr>
                       <th style={{ padding: '14px 18px', color: 'var(--muted)', fontWeight: 600 }}>Producto</th>
+                      <th style={{ padding: '14px 18px', color: 'var(--muted)', fontWeight: 600, textAlign: 'center' }}>Prioridad</th>
                       <th style={{ padding: '14px 18px', color: 'var(--muted)', fontWeight: 600, textAlign: 'right' }}>Ventas</th>
                       <th style={{ padding: '14px 18px', color: 'var(--muted)', fontWeight: 600, textAlign: 'right' }}>Sugerido</th>
                       <th style={{ padding: '14px 18px', color: 'var(--muted)', fontWeight: 600, textAlign: 'right' }}>P. Unitario</th>
@@ -473,24 +651,65 @@ export default function ComprasRestockPage() {
                   <tbody>
                     {filteredResults.length === 0 ? (
                       <tr>
-                        <td colSpan={5} style={{ padding: 34, textAlign: 'center', color: 'var(--muted)' }}>
+                        <td colSpan={6} style={{ padding: 34, textAlign: 'center', color: 'var(--muted)' }}>
                           No hay resultados con los filtros aplicados.
                         </td>
                       </tr>
                     ) : (
                       filteredResults.map((row, idx) => (
+                        (() => {
+                          const priority = getPriorityMeta(row);
+                          const isHovered = hoveredItemId === row.item_id;
+                          return (
                         <tr
                           key={idx}
+                          onMouseEnter={() => setHoveredItemId(row.item_id)}
+                          onMouseLeave={() => setHoveredItemId(null)}
                           style={{
                             borderBottom: '1px solid rgba(255,255,255,0.05)',
-                            background: idx % 2 === 0 ? 'transparent' : 'rgba(255,255,255,0.02)',
+                            background: isHovered ? 'rgba(59,130,246,0.08)' : idx % 2 === 0 ? 'transparent' : 'rgba(255,255,255,0.02)',
+                            transition: 'background-color 180ms cubic-bezier(0.23, 1, 0.32, 1)',
                           }}
                         >
                           <td style={{ padding: '13px 18px' }}>
-                            <div style={{ color: '#e2e8f0', fontWeight: 600 }}>{row.name}</div>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                              <span
+                                style={{
+                                  minWidth: 24,
+                                  height: 24,
+                                  borderRadius: 999,
+                                  background: 'rgba(59,130,246,0.18)',
+                                  border: '1px solid rgba(59,130,246,0.28)',
+                                  color: '#bfdbfe',
+                                  display: 'inline-flex',
+                                  alignItems: 'center',
+                                  justifyContent: 'center',
+                                  fontSize: 11,
+                                  fontWeight: 700,
+                                }}
+                              >
+                                #{idx + 1}
+                              </span>
+                              <div style={{ color: '#e2e8f0', fontWeight: 600 }}>{row.name}</div>
+                            </div>
                             <div style={{ color: 'var(--muted)', fontSize: 12, marginTop: 3 }}>
                               SKU: {row.sku} | Stock actual: {row.stock_total}
                             </div>
+                          </td>
+                          <td style={{ padding: '13px 18px', textAlign: 'center' }}>
+                            <span
+                              style={{
+                                color: priority.color,
+                                background: priority.bg,
+                                border: `1px solid ${priority.border}`,
+                                padding: '4px 10px',
+                                borderRadius: 999,
+                                fontWeight: 700,
+                                fontSize: 12,
+                              }}
+                            >
+                              {priority.label}
+                            </span>
                           </td>
                           <td style={{ padding: '13px 18px', color: '#cbd5e1', textAlign: 'right' }}>{row.sales_sum} uds</td>
                           <td style={{ padding: '13px 18px', textAlign: 'right' }}>
@@ -514,6 +733,8 @@ export default function ComprasRestockPage() {
                             {formatCurrency(row.presupuesto)}
                           </td>
                         </tr>
+                          );
+                        })()
                       ))
                     )}
                   </tbody>
