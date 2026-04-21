@@ -11,7 +11,11 @@ const roleSchema = z.string().trim().min(1, 'role es requerido');
 
 const payloadSchema = z.object({
   role: z.string().trim().min(1, 'role es requerido'),
-  permission_code: z.string().trim().min(1, 'permission_code es requerido'),
+  permission_code: z.string().trim().optional(),
+  permission_codes: z.array(z.string().trim()).optional(),
+}).refine(data => data.permission_code || data.permission_codes, {
+  message: "Debe proporcionar permission_code o permission_codes",
+  path: ["permission_code"]
 });
 
 function isMissingTable(error: any): boolean {
@@ -94,11 +98,22 @@ export async function POST(request: Request) {
         { status: 400 }
       );
     }
-    const { role, permission_code } = parsed.data;
+    const { role, permission_code, permission_codes } = parsed.data;
+
+    let insertData: { role: string; permission_code: string }[] = [];
+    if (permission_codes && permission_codes.length > 0) {
+      insertData = permission_codes.map(code => ({ role, permission_code: code }));
+    } else if (permission_code) {
+      insertData = [{ role, permission_code }];
+    }
+
+    if (insertData.length === 0) {
+      return NextResponse.json({ success: true, message: 'Nada que insertar' });
+    }
 
     const { error } = await supabase
       .from('role_permissions')
-      .insert([{ role, permission_code }]);
+      .insert(insertData);
 
     if (error) {
       if (isMissingTable(error)) {
@@ -108,6 +123,17 @@ export async function POST(request: Request) {
         );
       }
       throw error;
+    }
+
+    const { data: { user } } = await supabase.auth.getUser();
+    if (user?.id) {
+      await supabase.from('role_audit_logs').insert({
+        role_identifier: role,
+        actor_id: user.id,
+        action: 'PERMISSIONS_MODIFIED',
+        details: `Se añadieron permisos al rol`,
+        new_state: { added_permissions: insertData.map(d => d.permission_code) }
+      });
     }
 
     return NextResponse.json({ success: true });
@@ -133,13 +159,22 @@ export async function DELETE(request: Request) {
         { status: 400 }
       );
     }
-    const { role, permission_code } = parsed.data;
+    const { role, permission_code, permission_codes } = parsed.data;
 
-    const { error } = await supabase
+    const query = supabase
       .from('role_permissions')
       .delete()
-      .eq('role', role)
-      .eq('permission_code', permission_code);
+      .eq('role', role);
+
+    if (permission_codes && permission_codes.length > 0) {
+      query.in('permission_code', permission_codes);
+    } else if (permission_code) {
+      query.eq('permission_code', permission_code);
+    } else {
+      return NextResponse.json({ error: 'Debe proporcionar permission_code o permission_codes' }, { status: 400 });
+    }
+
+    const { error } = await query;
 
     if (error) {
       if (isMissingTable(error)) {
@@ -149,6 +184,18 @@ export async function DELETE(request: Request) {
         );
       }
       throw error;
+    }
+
+    const { data: { user } } = await supabase.auth.getUser();
+    if (user?.id) {
+      const deletedPerms = permission_codes && permission_codes.length > 0 ? permission_codes : [permission_code];
+      await supabase.from('role_audit_logs').insert({
+        role_identifier: role,
+        actor_id: user.id,
+        action: 'PERMISSIONS_MODIFIED',
+        details: `Se removieron permisos del rol`,
+        previous_state: { removed_permissions: deletedPerms }
+      });
     }
 
     return NextResponse.json({ success: true });

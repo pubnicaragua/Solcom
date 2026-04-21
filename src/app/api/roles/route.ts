@@ -87,6 +87,16 @@ export async function POST(request: Request) {
 
     if (error) throw error;
 
+    if (user?.id) {
+      await supabase.from('role_audit_logs').insert({
+        role_identifier: name,
+        actor_id: user.id,
+        action: 'CREATED',
+        details: `Rol creado: ${name}`,
+        new_state: { name, description, is_custom }
+      });
+    }
+
     return NextResponse.json(role);
   } catch (error: any) {
     // Manejar específicamente error de constraint duplicada
@@ -119,32 +129,71 @@ export async function DELETE(request: Request) {
       return NextResponse.json({ error: 'ID del rol es requerido' }, { status: 400 });
     }
 
-    // Verificar si el rol tiene usuarios asignados
+    // 1. Obtener la información del rol para tener su nombre (logical role)
+    const { data: roleToDeleted, error: fetchError } = await supabase
+      .from('roles')
+      .select('name')
+      .eq('id', roleId)
+      .single();
+
+    if (fetchError || !roleToDeleted) {
+      // Si no se encuentra por UUID, tal vez se envió el nombre por error (retrocompatibilidad o error de cache)
+      // Intentamos buscar por nombre si el ID no es un UUID válido o no se encontró
+      const { data: roleByName } = await supabase
+        .from('roles')
+        .select('id, name')
+        .eq('name', roleId)
+        .single();
+      
+      if (!roleByName) {
+        return NextResponse.json({ error: 'Rol no encontrado' }, { status: 404 });
+      }
+      
+      // Si se encontró por nombre, actualizamos las variables
+      return NextResponse.json({ error: 'ID de rol inválido (se recibió nombre en lugar de UUID). Por favor refresca la página.' }, { status: 400 });
+    }
+
+    const roleName = roleToDeleted.name;
+
+    // 2. Verificar si el rol tiene usuarios asignados usando el NOMBRE del rol
+    // ya que en user_profiles se guarda el nombre del rol como string
     const { data: usersWithRole } = await supabase
-      .from('users')
+      .from('user_profiles')
       .select('id')
-      .eq('role', roleId)
+      .eq('role', roleName)
       .limit(1);
 
     if (usersWithRole && usersWithRole.length > 0) {
       return NextResponse.json({ error: 'No se puede eliminar un rol con usuarios asignados' }, { status: 400 });
     }
 
-    // Eliminar permisos del rol primero
+    // 3. Eliminar permisos del rol primero usando el NOMBRE del rol
+    // ya que en role_permissions la columna 'role' es el nombre
     const { error: permsError } = await supabase
       .from('role_permissions')
       .delete()
-      .eq('role', roleId);
+      .eq('role', roleName);
 
     if (permsError) throw permsError;
 
-    // Eliminar el rol
+    // 4. Eliminar el rol definitivamente por su ID (UUID)
     const { error } = await supabase
       .from('roles')
       .delete()
       .eq('id', roleId);
 
     if (error) throw error;
+
+    const { data: { user } } = await supabase.auth.getUser();
+    if (user?.id) {
+      await supabase.from('role_audit_logs').insert({
+        role_identifier: roleName,
+        actor_id: user.id,
+        action: 'DELETED',
+        details: `Rol eliminado: ${roleName}`,
+        previous_state: { id: roleId, name: roleName }
+      });
+    }
 
     return NextResponse.json({ success: true });
   } catch (error: any) {

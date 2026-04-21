@@ -8,6 +8,7 @@ import Input from '@/components/ui/Input';
 import Select from '@/components/ui/Select';
 import { Shield, Edit, Trash2, Check, X, Save, XCircle, UserPlus, Loader2, Building2, Blocks, Plus, UserCircle, Star, Briefcase } from 'lucide-react';
 import CreateRoleModal from './components/CreateRoleModal';
+import AuditLogViewer from './components/AuditLogViewer';
 
 interface UserProfile {
   id: string;
@@ -127,6 +128,7 @@ export default function RolesPage() {
   const [moduleOptions, setModuleOptions] = useState<ModulePermissionOption[]>([]);
   const [moduleModes, setModuleModes] = useState<Record<string, 'inherit' | 'allow' | 'deny'>>({});
   const [moduleSearch, setModuleSearch] = useState('');
+  const [activeTab, setActiveTab] = useState<'roles' | 'audit'>('roles');
 
   useEffect(() => {
     loadUsers();
@@ -507,21 +509,27 @@ export default function RolesPage() {
     const modulePerms = permissions.filter((p) => p.module === module);
     if (modulePerms.length === 0) return;
 
+    // Filtrar solo los códigos que realmente necesitan cambiar
+    const codesToUpdate = modulePerms
+      .filter(perm => {
+        const hasPerm = rolePermissions.some((rp) => rp.permission_code === perm.code);
+        return enable ? !hasPerm : hasPerm;
+      })
+      .map(perm => perm.code);
+
+    if (codesToUpdate.length === 0) return;
+
     setSavingPermission(true);
     try {
-      for (const perm of modulePerms) {
-        const hasPerm = rolePermissions.some((rp) => rp.permission_code === perm.code);
-        if ((enable && hasPerm) || (!enable && !hasPerm)) continue;
+      const response = await fetch('/api/role-permissions', {
+        method: enable ? 'POST' : 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ role: selectedRole, permission_codes: codesToUpdate })
+      });
 
-        const response = await fetch('/api/role-permissions', {
-          method: enable ? 'POST' : 'DELETE',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ role: selectedRole, permission_code: perm.code })
-        });
-        if (!response.ok) {
-          const data = await response.json().catch(() => null);
-          throw new Error(data?.error || `No se pudo ${enable ? 'activar' : 'quitar'} ${perm.name}`);
-        }
+      if (!response.ok) {
+        const data = await response.json().catch(() => null);
+        throw new Error(data?.error || `No se pudieron actualizar los permisos del módulo`);
       }
 
       await loadRolePermissions(selectedRole);
@@ -556,6 +564,7 @@ export default function RolesPage() {
     const defaultDef = ROLE_DEFINITIONS[normalized] || {};
     allRoles.push({
       id: roleName,
+      uuid: role.id,
       name: baseRoleKeys.has(normalized) ? (defaultDef.name || roleName) : roleName,
       description: role.description || defaultDef.description || '',
       color: defaultDef.color || CUSTOM_ROLE_COLORS[index % CUSTOM_ROLE_COLORS.length] || '#6366f1',
@@ -611,13 +620,35 @@ export default function RolesPage() {
   return (
     <div style={{ display: 'grid', gap: 14 }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 10 }}>
-        <div className="h-title">Roles y Permisos</div>
-        <Button variant="primary" size="sm" onClick={() => setShowNewUserForm(!showNewUserForm)}>
-          <UserPlus size={16} style={{ marginRight: 6 }} />
-          Nuevo Usuario
-        </Button>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
+          <div className="h-title">Roles y Permisos</div>
+          <div style={{ display: 'flex', gap: 4, background: 'var(--panel)', padding: 4, borderRadius: 8, border: '1px solid var(--border)' }}>
+             <button
+                onClick={() => setActiveTab('roles')}
+                style={{ padding: '6px 12px', borderRadius: 4, fontSize: 13, fontWeight: 500, background: activeTab === 'roles' ? 'var(--background)' : 'transparent', color: activeTab === 'roles' ? 'var(--foreground)' : 'var(--muted)', cursor: 'pointer', border: 'none', transition: 'all 0.2s' }}
+             >
+                Gestión
+             </button>
+             <button
+                onClick={() => setActiveTab('audit')}
+                style={{ padding: '6px 12px', borderRadius: 4, fontSize: 13, fontWeight: 500, background: activeTab === 'audit' ? 'var(--background)' : 'transparent', color: activeTab === 'audit' ? 'var(--foreground)' : 'var(--muted)', cursor: 'pointer', border: 'none', transition: 'all 0.2s' }}
+             >
+                Auditoría
+             </button>
+          </div>
+        </div>
+        {activeTab === 'roles' && (
+          <Button variant="primary" size="sm" onClick={() => setShowNewUserForm(!showNewUserForm)}>
+            <UserPlus size={16} style={{ marginRight: 6 }} />
+            Nuevo Usuario
+          </Button>
+        )}
       </div>
 
+      {activeTab === 'audit' ? (
+        <AuditLogViewer roleIdentifier={selectedRole || undefined} />
+      ) : (
+        <>
       {showNewUserForm && (
         <Card>
           <div style={{ padding: 16 }}>
@@ -737,7 +768,7 @@ export default function RolesPage() {
                             e.stopPropagation();
                             if (role.is_custom) {
                               if (confirm(`¿Estás seguro de eliminar el rol "${role.name}"?`)) {
-                                deleteRole(role.id, role.name);
+                                deleteRole(role.uuid || role.id, role.name);
                               }
                             } else {
                               alert('No se pueden eliminar roles del sistema');
@@ -1476,6 +1507,8 @@ export default function RolesPage() {
           await loadRoles();
         }}
       />
+        </>
+      )}
       <style jsx>{`
         .roles-layout-grid {
           display: grid;
