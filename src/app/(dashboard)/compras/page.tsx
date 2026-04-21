@@ -76,20 +76,25 @@ export default function ComprasRestockPage() {
   }, []);
 
   useEffect(() => {
-    fetch('/api/compras/ventas-hoy')
-      .then((r) => r.json())
-      .then((json) => {
-        if (json.success && json.data) {
-          setTopSales(json.data);
-        }
-      })
-      .catch((e) => {
-        console.error('Error top sales:', e);
-        setNotice({
-          type: 'info',
-          text: 'No se pudo cargar el top de ventas del dia, pero puedes generar el analisis con normalidad.',
+    const fetchTopSales = () => {
+      fetch('/api/compras/ventas-hoy')
+        .then((r) => r.json())
+        .then((json) => {
+          if (json.success && json.data) {
+            setTopSales(json.data);
+          }
+        })
+        .catch((e) => {
+          console.error('Error top sales:', e);
         });
-      });
+    };
+
+    // Cargar inmediatamente al montar
+    fetchTopSales();
+
+    // Auto-refresh cada 60 segundos
+    const interval = setInterval(fetchTopSales, 60_000);
+    return () => clearInterval(interval);
   }, []);
 
   const fetchLiveAnalytics = async () => {
