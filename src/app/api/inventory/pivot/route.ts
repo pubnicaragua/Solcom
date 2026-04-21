@@ -68,8 +68,8 @@ export async function GET(request: Request) {
 
         // 1) Fetch ACTIVE warehouses (columns) and ALL authorized warehouses (for total)
         const [activeWarehouses, allWarehouses] = await Promise.all([
-            listWarehousesForScope(supabase, scope, { activeOnly: true }),
-            listWarehousesForScope(supabase, scope, { activeOnly: false }),
+            listWarehousesForScope(supabase, scope, { activeOnly: true, includeChildrenOfScope: false }),
+            listWarehousesForScope(supabase, scope, { activeOnly: false, includeChildrenOfScope: false }),
         ]);
 
         const selectedWarehouse =
