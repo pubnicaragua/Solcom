@@ -27,6 +27,19 @@ export async function PATCH(
     if (full_name) updates.full_name = full_name;
     if (email) updates.email = email;
 
+    // Obtener rol anterior e información para auditoría
+    let previousRole = null;
+    let userNameForAudit = params.id;
+    if (role) {
+      const { data: prevProfile } = await supabase.from('user_profiles').select('role, full_name, email').eq('id', params.id).single();
+      if (prevProfile) {
+        userNameForAudit = prevProfile.full_name || prevProfile.email || params.id;
+        if (prevProfile.role !== role) {
+          previousRole = prevProfile.role;
+        }
+      }
+    }
+
     if (Object.keys(updates).length > 0) {
       const { error } = await supabase
         .from('user_profiles')
@@ -34,6 +47,30 @@ export async function PATCH(
         .eq('id', params.id);
 
       if (error) throw error;
+
+      if (role && previousRole !== null) {
+        // Log de desvinculación del rol viejo
+        if (previousRole) {
+          await supabase.from('role_audit_logs').insert({
+            role_identifier: previousRole,
+            actor_id: adminCheck.userId,
+            action: 'USER_UNLINKED',
+            details: `Usuario ${updates.full_name || userNameForAudit} desvinculado del rol`,
+            previous_state: { user_id: params.id, role: previousRole },
+            new_state: { user_id: params.id, role: role }
+          });
+        }
+        
+        // Log de vinculación al rol nuevo
+        await supabase.from('role_audit_logs').insert({
+          role_identifier: role,
+          actor_id: adminCheck.userId,
+          action: 'USER_LINKED',
+          details: `Usuario ${updates.full_name || userNameForAudit} vinculado al rol`,
+          previous_state: { user_id: params.id, role: previousRole },
+          new_state: { user_id: params.id, role: role }
+        });
+      }
     }
 
     // Actualizar auth.users: email, contraseña y/o user_metadata (requiere service role)
