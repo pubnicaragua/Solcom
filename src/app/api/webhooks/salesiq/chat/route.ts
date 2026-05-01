@@ -5,10 +5,6 @@ import OpenAI from 'openai';
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
 const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
 
-const openai = new OpenAI({
-  apiKey: process.env.OPENAI_API_KEY,
-});
-
 export const dynamic = 'force-dynamic';
 export const runtime = 'edge';
 
@@ -23,6 +19,16 @@ REGLAS INFLEXIBLES:
 - Si el stock es 0, decile amablemente que no hay disponibilidad en este momento pero que puede consultar pronto.
 - Si el inventario proporcionado dice "No se encontraron productos...", dile al cliente que no tienes exactamente ese modelo y sugiérele opciones o pregúntale por algo más.
 - Respondé siempre en español, de forma muy conversacional.`;
+
+function getOpenAIClient() {
+  const apiKey = process.env.OPENAI_API_KEY;
+
+  if (!apiKey) {
+    throw new Error('OPENAI_API_KEY no está configurada');
+  }
+
+  return new OpenAI({ apiKey });
+}
 
 export async function POST(request: NextRequest) {
   try {
@@ -99,6 +105,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Llamar a OpenAI con el contexto
+    const openai = getOpenAIClient();
     const completion = await openai.chat.completions.create({
       model: 'gpt-4o-mini',
       messages: [

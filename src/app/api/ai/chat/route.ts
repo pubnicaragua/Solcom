@@ -20,9 +20,22 @@ interface ItemRow {
   state: string | null;
 }
 
+async function logUsage(supabase: ReturnType<typeof createServerClient>, question: string, answer: string, requestType: string) {
+  const estimatedTokens = Math.max(50, Math.ceil((question.length + answer.length) * 1.35));
+  const estimatedCost = Number(((estimatedTokens / 1000) * 0.001111).toFixed(6));
+
+  await (supabase as any).from('ai_usage_logs').insert({
+    tokens: estimatedTokens,
+    cost: estimatedCost,
+    request_type: requestType,
+    user_message: question,
+    assistant_response: answer,
+  });
+}
+
 export async function POST(request: Request) {
   try {
-    const { question, agentId = 'customer-service' } = await request.json();
+    const { question, agentId = 'customer-service', context } = await request.json();
 
     if (!question) {
       return NextResponse.json(
@@ -33,6 +46,12 @@ export async function POST(request: Request) {
 
     const supabase = createServerClient();
     const lowerQ = question.toLowerCase();
+
+    if (typeof context === 'string' && context.trim().length > 0) {
+      const answer = generateContextAwareResponse(question, context);
+      await logUsage(supabase, question, answer, 'compras_chat');
+      return NextResponse.json({ answer });
+    }
 
     // Buscar productos relevantes en la tabla items basándose en la pregunta
     let items: ItemRow[] = [];
@@ -84,6 +103,8 @@ export async function POST(request: Request) {
 
     const agentPrompt = AGENT_PROMPTS[agentId] || AGENT_PROMPTS['customer-service'];
     const answer = generateSmartResponse(question, items, agentPrompt, agentId);
+
+    await logUsage(supabase, question, answer, `ai_chat_${agentId}`);
 
     return NextResponse.json({ answer });
   } catch (error) {
@@ -182,4 +203,51 @@ function generateSmartResponse(
 
   // Respuesta genérica
   return `¡Hola! Soy el asistente de **Solis Comercial**. Tengo acceso a **${totalProducts} productos** en tiempo real.\n\nPuedes preguntarme sobre:\n• **Disponibilidad**: "¿Tienen laptops Dell?"\n• **Precios**: "¿Cuánto cuesta el iPhone 15?"\n• **Stock**: "¿Cuántas unidades hay de Apple?"\n• **Marcas**: "¿Qué marcas manejan?"\n• **Categorías**: "¿Qué categorías tienen?"\n\n¿En qué puedo ayudarte?`;
+}
+
+function generateContextAwareResponse(question: string, context: string): string {
+  const q = question.toLowerCase();
+  const totalProductos = context.match(/Total de productos analizados: (\d+)/)?.[1];
+  const necesitanRestock = context.match(/Productos que necesitan restock: (\d+)/)?.[1];
+  const criticos = context.match(/Productos críticos \(stock < 1 semana\): (\d+)/)?.[1];
+  const presupuesto = context.match(/Presupuesto total estimado: C\$ ([\d,]+)/)?.[1];
+
+  const criticalSection = context.match(/Productos CRÍTICOS \(prioridad alta\):\n([\s\S]*?)\n\n/);
+  const topBudgetSection = context.match(/Top 10 productos por presupuesto requerido:\n([\s\S]*)/);
+
+  const criticalLines = criticalSection?.[1]
+    ?.split('\n')
+    .map(line => line.trim())
+    .filter(Boolean)
+    .slice(0, 5) || [];
+
+  const budgetLines = topBudgetSection?.[1]
+    ?.split('\n')
+    .map(line => line.trim())
+    .filter(Boolean)
+    .slice(0, 5) || [];
+
+  if (q.includes('qué comprar') || q.includes('que comprar') || q.includes('prioriza') || q.includes('prioridad')) {
+    if (criticalLines.length > 0) {
+      return `Te recomiendo priorizar estos productos críticos de inmediato:\n\n${criticalLines.join('\n')}\n\nResumen actual:\n- Productos analizados: ${totalProductos || 'N/D'}\n- Necesitan reposición: ${necesitanRestock || 'N/D'}\n- Críticos: ${criticos || 'N/D'}\n- Presupuesto estimado: C$ ${presupuesto || 'N/D'}\n\nSi quieres, también te puedo ordenar la compra por presupuesto o por urgencia.`;
+    }
+
+    return `Según el análisis actual, tienes ${necesitanRestock || 'varios'} productos que requieren reposición y ${criticos || 'varios'} en estado crítico. El presupuesto estimado es C$ ${presupuesto || 'N/D'}.`;
+  }
+
+  if (q.includes('presupuesto') || q.includes('coste') || q.includes('costo')) {
+    if (budgetLines.length > 0) {
+      return `El presupuesto total estimado para reabastecimiento es **C$ ${presupuesto || 'N/D'}**.\n\nLos productos que más presupuesto requieren son:\n\n${budgetLines.join('\n')}`;
+    }
+
+    return `El presupuesto total estimado de compra es **C$ ${presupuesto || 'N/D'}**.`;
+  }
+
+  if (q.includes('crítico') || q.includes('critico') || q.includes('urgente')) {
+    if (criticalLines.length > 0) {
+      return `Estos son los productos más urgentes según el análisis:\n\n${criticalLines.join('\n')}`;
+    }
+  }
+
+  return `Resumen del análisis actual de compras:\n\n- Productos analizados: ${totalProductos || 'N/D'}\n- Necesitan reposición: ${necesitanRestock || 'N/D'}\n- Productos críticos: ${criticos || 'N/D'}\n- Presupuesto estimado: C$ ${presupuesto || 'N/D'}\n\nPuedo ayudarte a responder preguntas como:\n- Qué comprar primero\n- Qué productos están críticos\n- Cuál es el presupuesto estimado\n- Qué productos tienen mayor impacto en compra`;
 }
