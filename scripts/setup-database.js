@@ -1,4 +1,7 @@
-const { Client } = require('pg');
+require('dotenv').config({ path: '.env.local' });
+const { createClient } = require('@supabase/supabase-js');
+const fs = require('fs');
+const path = require('path');
 
 const connectionString = process.env.SUPABASE_DB_URL;
 

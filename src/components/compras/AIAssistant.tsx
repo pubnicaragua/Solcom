@@ -1,13 +1,15 @@
 'use client';
 
 import { useState, useRef, useEffect } from 'react';
-import { Bot, Mic, Send, X, Loader2, Volume2, StopCircle } from 'lucide-react';
+import { Bot, Mic, Send, X, Loader2, Volume2, StopCircle, Image, Link, Paperclip } from 'lucide-react';
 import Button from '@/components/ui/Button';
 
 interface Message {
   role: 'user' | 'assistant';
   content: string;
   timestamp: Date;
+  image?: string;
+  url?: string;
 }
 
 interface AIAssistantProps {
@@ -18,15 +20,16 @@ interface AIAssistantProps {
 
 export default function AIAssistant({ restockData = [], topSales = [], openSignal = 0 }: AIAssistantProps) {
   const [isOpen, setIsOpen] = useState(false);
-  const [messages, setMessages] = useState<Message[]>([
-    {
-      role: 'assistant',
-      content: '¡Hola! Soy Mía, tu asistente de compras de Solcom AI. Puedo ayudarte a analizar qué productos necesitas comprar, revisar el inventario y darte recomendaciones. ¿En qué puedo ayudarte?',
-      timestamp: new Date()
-    }
-  ]);
+  const [messages, setMessages] = useState<Message[]>([]);
+  const [userId, setUserId] = useState<string>('');
+  const [sessionId, setSessionId] = useState<string>('');
+  const [isLoadingHistory, setIsLoadingHistory] = useState(true);
   const [input, setInput] = useState('');
   const [isLoading, setIsLoading] = useState(false);
+  const [uploadedImage, setUploadedImage] = useState<string | null>(null);
+  const [urlToAnalyze, setUrlToAnalyze] = useState('');
+  const [showUrlInput, setShowUrlInput] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
   const [isRecording, setIsRecording] = useState(false);
   const [isSpeaking, setIsSpeaking] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -37,8 +40,91 @@ export default function AIAssistant({ restockData = [], topSales = [], openSigna
   useEffect(() => {
     if (typeof window !== 'undefined') {
       synthRef.current = window.speechSynthesis;
+      
+      // Generar o recuperar userId y sessionId
+      let storedUserId = localStorage.getItem('mia_user_id');
+      let storedSessionId = localStorage.getItem('mia_session_id');
+      
+      if (!storedUserId) {
+        storedUserId = `user_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+        localStorage.setItem('mia_user_id', storedUserId);
+      }
+      
+      if (!storedSessionId) {
+        storedSessionId = `session_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+        localStorage.setItem('mia_session_id', storedSessionId);
+      }
+      
+      setUserId(storedUserId);
+      setSessionId(storedSessionId);
+      
+      // Cargar historial de conversación
+      loadConversationHistory(storedUserId);
     }
   }, []);
+  
+  const loadConversationHistory = async (uid: string) => {
+    try {
+      const response = await fetch('/api/ai/conversation', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: 'load',
+          userId: uid,
+          limit: 200
+        })
+      });
+      
+      const data = await response.json();
+      
+      if (data.success && data.messages && data.messages.length > 0) {
+        setMessages(data.messages);
+      } else {
+        // Mensaje de bienvenida si no hay historial
+        setMessages([{
+          role: 'assistant',
+          content: 'Hola! Soy Mía, tu asistente de compras de Solcom AI. Puedo ayudarte a analizar qué productos necesitas comprar, revisar el inventario y darte recomendaciones. ¿En qué puedo ayudarte?',
+          timestamp: new Date()
+        }]);
+      }
+    } catch (error) {
+      console.error('Error cargando historial:', error);
+      setMessages([{
+        role: 'assistant',
+        content: 'Hola! Soy Mía, tu asistente de compras de Solcom AI. ¿En qué puedo ayudarte?',
+        timestamp: new Date()
+      }]);
+    } finally {
+      setIsLoadingHistory(false);
+    }
+  };
+  
+  const saveMessageToHistory = async (message: Message) => {
+    if (!userId) return;
+    
+    try {
+      await fetch('/api/ai/conversation', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: 'save',
+          userId,
+          sessionId,
+          message: {
+            role: message.role,
+            content: message.content,
+            image: message.image,
+            url: message.url,
+            metadata: {
+              timestamp: message.timestamp.toISOString()
+            }
+          }
+        })
+      });
+    } catch (error) {
+      console.error('Error guardando mensaje:', error);
+    }
+  };
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -52,6 +138,19 @@ export default function AIAssistant({ restockData = [], topSales = [], openSigna
 
   const buildContext = () => {
     let context = 'Contexto del módulo de Compras:\n\n';
+    const hasConversationHistory = messages.length > 1;
+    
+    // Agregar historial COMPLETO de conversación (hasta 200 mensajes)
+    if (hasConversationHistory) {
+      context += 'Historial completo de conversación:\n';
+      const recentMessages = messages.slice(-50); // Últimos 50 para contexto (balance entre memoria y tokens)
+      recentMessages.forEach(msg => {
+        const preview = msg.content.length > 600 ? msg.content.substring(0, 600) + '...' : msg.content;
+        context += `${msg.role === 'user' ? 'Usuario' : 'Asistente'}: ${preview}\n`;
+      });
+      context += '\n';
+    }
+    
     let hasStructuredData = false;
     
     if (restockData && restockData.length > 0) {
@@ -89,20 +188,44 @@ export default function AIAssistant({ restockData = [], topSales = [], openSigna
       });
     }
     
-    return hasStructuredData ? context : '';
+    return (hasStructuredData || hasConversationHistory || (topSales && topSales.length > 0)) ? context : '';
   };
 
-  const sendMessage = async (text: string) => {
-    if (!text.trim()) return;
+  const handleImageUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+
+    if (!file.type.startsWith('image/')) {
+      alert('Por favor selecciona una imagen válida');
+      return;
+    }
+
+    const reader = new FileReader();
+    reader.onloadend = () => {
+      setUploadedImage(reader.result as string);
+    };
+    reader.readAsDataURL(file);
+  };
+
+  const sendMessage = async (text: string, imageData?: string, url?: string) => {
+    if (!text.trim() && !imageData && !url) return;
 
     const userMessage: Message = {
       role: 'user',
-      content: text,
-      timestamp: new Date()
+      content: text || (imageData ? '[Imagen adjunta]' : '') || (url ? `[URL: ${url}]` : ''),
+      timestamp: new Date(),
+      image: imageData,
+      url: url
     };
 
     setMessages(prev => [...prev, userMessage]);
+    
+    // Guardar mensaje del usuario en BD
+    saveMessageToHistory(userMessage);
     setInput('');
+    setUploadedImage(null);
+    setUrlToAnalyze('');
+    setShowUrlInput(false);
     setIsLoading(true);
 
     try {
@@ -114,7 +237,10 @@ export default function AIAssistant({ restockData = [], topSales = [], openSigna
         body: JSON.stringify({
           question: text,
           context,
-          agentId: 'audit'
+          agentId: 'audit',
+          image: imageData,
+          url: url,
+          useAI: !!(imageData || url)
         })
       });
 
@@ -131,6 +257,9 @@ export default function AIAssistant({ restockData = [], topSales = [], openSigna
           timestamp: new Date()
         };
         setMessages(prev => [...prev, assistantMessage]);
+        
+        // Guardar respuesta del asistente en BD
+        saveMessageToHistory(assistantMessage);
         
         speakText(data.answer);
       } else {
@@ -182,38 +311,53 @@ export default function AIAssistant({ restockData = [], topSales = [], openSigna
   };
 
   const transcribeAudio = async (audioBlob: Blob) => {
-    setIsLoading(true);
+    // No usamos Whisper - Web Speech API es suficiente y gratis
+    alert('Usa el botón de micrófono para hablar directamente (reconocimiento de voz en tiempo real)');
+  };
+
+  const startVoiceRecognition = () => {
     try {
-      // Aquí usarías Whisper API o similar para transcribir
-      // Por ahora, simulamos con Web Speech API
       const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
 
       if (!SpeechRecognition) {
-        setIsLoading(false);
-        alert('Tu navegador no soporta reconocimiento de voz. Usa el chat escrito para continuar.');
+        alert('Tu navegador no soporta reconocimiento de voz. Usa Chrome o Edge.');
         return;
       }
 
       const recognition = new SpeechRecognition();
       recognition.lang = 'es-ES';
       recognition.continuous = false;
+      recognition.interimResults = false;
+      
+      recognition.onstart = () => {
+        setIsRecording(true);
+      };
       
       recognition.onresult = (event: any) => {
         const transcript = event.results[0][0].transcript;
-        sendMessage(transcript);
+        setInput(transcript);
+        setIsRecording(false);
       };
       
-      recognition.onerror = () => {
-        setIsLoading(false);
-        alert('Error al transcribir el audio. Intenta escribir tu mensaje.');
+      recognition.onerror = (event: any) => {
+        console.error('Speech recognition error:', event.error);
+        setIsRecording(false);
+        if (event.error === 'no-speech') {
+          alert('No se detectó voz. Intenta de nuevo.');
+        } else {
+          alert('Error al transcribir. Intenta escribir tu mensaje.');
+        }
       };
       
-      // Nota: Web Speech API no acepta Blob directamente
-      // En producción, enviarías el audioBlob a un endpoint de transcripción
+      recognition.onend = () => {
+        setIsRecording(false);
+      };
+      
       recognition.start();
     } catch (error) {
-      console.error('Error transcribing audio:', error);
-      setIsLoading(false);
+      console.error('Error starting voice recognition:', error);
+      setIsRecording(false);
+      alert('Error al iniciar reconocimiento de voz.');
     }
   };
 
@@ -347,6 +491,27 @@ export default function AIAssistant({ restockData = [], topSales = [], openSigna
               fontSize: 14,
               lineHeight: 1.5
             }}>
+              {msg.image && (
+                <img 
+                  src={msg.image} 
+                  alt="Uploaded" 
+                  style={{ 
+                    maxWidth: '100%', 
+                    borderRadius: 8, 
+                    marginBottom: 8 
+                  }} 
+                />
+              )}
+              {msg.url && (
+                <div style={{ 
+                  fontSize: 11, 
+                  opacity: 0.8, 
+                  marginBottom: 8,
+                  wordBreak: 'break-all'
+                }}>
+                  🔗 {msg.url}
+                </div>
+              )}
               {msg.content}
             </div>
           </div>
@@ -369,14 +534,136 @@ export default function AIAssistant({ restockData = [], topSales = [], openSigna
         <div ref={messagesEndRef} />
       </div>
 
+      {/* Preview de imagen o URL */}
+      {(uploadedImage || showUrlInput) && (
+        <div style={{
+          padding: 12,
+          borderTop: '1px solid rgba(255,255,255,0.1)',
+          background: 'rgba(255,255,255,0.02)'
+        }}>
+          {uploadedImage && (
+            <div style={{ position: 'relative' }}>
+              <img 
+                src={uploadedImage} 
+                alt="Preview" 
+                style={{ 
+                  maxWidth: '100%', 
+                  maxHeight: 150, 
+                  borderRadius: 8 
+                }} 
+              />
+              <button
+                onClick={() => setUploadedImage(null)}
+                style={{
+                  position: 'absolute',
+                  top: 8,
+                  right: 8,
+                  background: 'rgba(0,0,0,0.7)',
+                  border: 'none',
+                  borderRadius: '50%',
+                  width: 24,
+                  height: 24,
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  cursor: 'pointer'
+                }}
+              >
+                <X size={14} color="#fff" />
+              </button>
+            </div>
+          )}
+          {showUrlInput && (
+            <div style={{ display: 'flex', gap: 8 }}>
+              <input
+                type="text"
+                value={urlToAnalyze}
+                onChange={(e) => setUrlToAnalyze(e.target.value)}
+                placeholder="Pega la URL aquí..."
+                style={{
+                  flex: 1,
+                  padding: 8,
+                  background: 'rgba(255,255,255,0.05)',
+                  border: '1px solid rgba(255,255,255,0.1)',
+                  borderRadius: 6,
+                  color: '#fff',
+                  fontSize: 12
+                }}
+              />
+              <button
+                onClick={() => {
+                  setShowUrlInput(false);
+                  setUrlToAnalyze('');
+                }}
+                style={{
+                  background: 'rgba(239,68,68,0.2)',
+                  border: '1px solid #ef4444',
+                  borderRadius: 6,
+                  padding: '4px 8px',
+                  cursor: 'pointer',
+                  color: '#ef4444',
+                  fontSize: 11
+                }}
+              >
+                Cancelar
+              </button>
+            </div>
+          )}
+        </div>
+      )}
+
       {/* Input */}
       <div style={{
         padding: 16,
-        borderTop: '1px solid rgba(255,255,255,0.1)',
+        borderTop: uploadedImage || showUrlInput ? 'none' : '1px solid rgba(255,255,255,0.1)',
         display: 'flex',
         gap: 8,
         alignItems: 'center'
       }}>
+        <input
+          ref={fileInputRef}
+          type="file"
+          accept="image/*"
+          onChange={handleImageUpload}
+          style={{ display: 'none' }}
+        />
+        
+        <button
+          onClick={() => fileInputRef.current?.click()}
+          disabled={isLoading || uploadedImage !== null}
+          title="Adjuntar imagen"
+          style={{
+            padding: 10,
+            background: uploadedImage ? 'rgba(34,197,94,0.2)' : 'rgba(255,255,255,0.05)',
+            border: uploadedImage ? '1px solid #22c55e' : '1px solid rgba(255,255,255,0.1)',
+            borderRadius: 8,
+            cursor: isLoading || uploadedImage ? 'not-allowed' : 'pointer',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center'
+          }}
+        >
+          <Image size={18} color={uploadedImage ? '#22c55e' : '#fff'} />
+        </button>
+
+        <button
+          onClick={() => setShowUrlInput(!showUrlInput)}
+          disabled={isLoading}
+          title="Analizar URL"
+          style={{
+            padding: 10,
+            background: showUrlInput ? 'rgba(59,130,246,0.2)' : 'rgba(255,255,255,0.05)',
+            border: showUrlInput ? '1px solid #3b82f6' : '1px solid rgba(255,255,255,0.1)',
+            borderRadius: 8,
+            cursor: isLoading ? 'not-allowed' : 'pointer',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center'
+          }}
+        >
+          <Link size={18} color={showUrlInput ? '#3b82f6' : '#fff'} />
+        </button>
+
         {isSpeaking ? (
           <button
             onClick={stopSpeaking}
@@ -395,7 +682,7 @@ export default function AIAssistant({ restockData = [], topSales = [], openSigna
           </button>
         ) : (
           <button
-            onClick={isRecording ? stopRecording : startRecording}
+            onClick={startVoiceRecognition}
             disabled={isLoading}
             style={{
               padding: 10,
@@ -416,7 +703,15 @@ export default function AIAssistant({ restockData = [], topSales = [], openSigna
           type="text"
           value={input}
           onChange={(e) => setInput(e.target.value)}
-          onKeyPress={(e) => e.key === 'Enter' && sendMessage(input)}
+          onKeyPress={(e) => {
+            if (e.key === 'Enter') {
+              sendMessage(
+                input || (uploadedImage ? 'Analiza esta imagen' : urlToAnalyze ? `Analiza esta URL: ${urlToAnalyze}` : ''),
+                uploadedImage || undefined,
+                urlToAnalyze || undefined
+              );
+            }
+          }}
           placeholder="Escribe tu pregunta..."
           disabled={isLoading || isRecording}
           style={{
@@ -432,16 +727,20 @@ export default function AIAssistant({ restockData = [], topSales = [], openSigna
         />
         
         <button
-          onClick={() => sendMessage(input)}
-          disabled={isLoading || !input.trim() || isRecording}
+          onClick={() => sendMessage(
+            input || (uploadedImage ? 'Analiza esta imagen' : urlToAnalyze ? `Analiza esta URL: ${urlToAnalyze}` : ''),
+            uploadedImage || undefined,
+            urlToAnalyze || undefined
+          )}
+          disabled={isLoading || (!input.trim() && !uploadedImage && !urlToAnalyze) || isRecording}
           style={{
             padding: 10,
-            background: input.trim() && !isLoading && !isRecording
+            background: (input.trim() || uploadedImage || urlToAnalyze) && !isLoading && !isRecording
               ? 'linear-gradient(135deg, #dc2626 0%, #991b1b 100%)'
               : 'rgba(255,255,255,0.05)',
             border: 'none',
             borderRadius: 8,
-            cursor: input.trim() && !isLoading && !isRecording ? 'pointer' : 'not-allowed',
+            cursor: (input.trim() || uploadedImage || urlToAnalyze) && !isLoading && !isRecording ? 'pointer' : 'not-allowed',
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center'

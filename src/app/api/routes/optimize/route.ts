@@ -11,17 +11,19 @@ interface Waypoint {
 }
 
 interface OptimizeRouteRequest {
+  routeId?: string;
   origin: { lat: number; lng: number };
-  destination: { lat: number; lng: number };
+  destination?: { lat: number; lng: number };
   waypoints: Array<{ lat: number; lng: number; address?: string }>;
   vehicleType?: 'car' | 'truck';
   departureTime?: string;
+  returnToOrigin?: boolean;
 }
 
 export async function POST(request: NextRequest) {
   try {
     const body: OptimizeRouteRequest = await request.json();
-    const { origin, destination, waypoints, vehicleType = 'car', departureTime } = body;
+    const { routeId, origin, destination, waypoints, departureTime, vehicleType = 'car', returnToOrigin } = body;
 
     const apiKey = process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY;
     
@@ -31,6 +33,16 @@ export async function POST(request: NextRequest) {
         { status: 500 }
       );
     }
+
+    if (!origin || !waypoints || waypoints.length === 0) {
+      return NextResponse.json(
+        { success: false, error: 'Se requieren origen y al menos un waypoint' },
+        { status: 400 }
+      );
+    }
+
+    // Si returnToOrigin es true, el destino es el mismo que el origen
+    const finalDestination = returnToOrigin ? origin : (destination || waypoints[waypoints.length - 1]);
 
     // Construir waypoints para Google Routes API
     const formattedWaypoints: Waypoint[] = waypoints.map(wp => ({
@@ -62,8 +74,8 @@ export async function POST(request: NextRequest) {
         destination: {
           location: {
             latLng: {
-              latitude: destination.lat,
-              longitude: destination.lng
+              latitude: finalDestination.lat,
+              longitude: finalDestination.lng
             }
           }
         },
@@ -125,6 +137,7 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json({
       success: true,
+      routeId,
       route: optimizedRoute
     });
 

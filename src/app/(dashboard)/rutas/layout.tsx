@@ -8,10 +8,8 @@ export default function RutasLayout({ children }: { children: React.ReactNode })
     const router = useRouter();
 
     const tabs = [
-        { id: '/rutas/bandeja', label: 'Bandeja de Pedidos' },
-        { id: '/rutas/planificador', label: 'Planificador Inteligente' },
-        { id: '/rutas/monitoreo', label: 'Monitoreo en Vivo' },
-        { id: '/rutas/rendimiento', label: 'Rendimiento (KPIs)' }
+        { id: '/rutas/centro', label: 'Centro de Rutas' },
+        { id: '/rutas/monitoreo', label: 'Monitoreo en Vivo' }
     ];
 
     return (

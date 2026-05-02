@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react';
 import Card from '@/components/ui/Card';
 import Button from '@/components/ui/Button';
 import Badge from '@/components/ui/Badge';
+import DashboardCharts from '@/components/solcom-ai/DashboardCharts';
 import { 
   RefreshCw, Key, FileText, Bot, Settings, 
   Copy, Trash2, Plus, Activity, 
@@ -48,6 +49,7 @@ interface UsageLogRow {
   tokens: number | null;
   cost: number | null;
   created_at: string;
+  request_type: string;
 }
 
 type TabType = 'uso' | 'claves' | 'asistentes' | 'ayuda';
@@ -477,6 +479,11 @@ export default function SolcomAIPage() {
               </div>
             </Card>
           </div>
+
+          {/* Gráficos avanzados */}
+          {usageLogs.length > 0 && (
+            <DashboardCharts usageLogs={usageLogs} />
+          )}
 
           {/* Explicación */}
           <Card style={{ padding: 24 }}>
