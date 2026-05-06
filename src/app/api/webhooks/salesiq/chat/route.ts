@@ -87,13 +87,14 @@ export async function POST(request: NextRequest) {
       return zohoReply('¡Hola! 👋 Soy Mía, tu asistente virtual de Solis Comercial. ¿En qué te puedo ayudar? Pregúntame por cualquier producto y te digo precio, disponibilidad y opciones. 🛒');
     }
 
-    // Extraer texto del mensaje - intentar formato Zoho primero, luego formato libre
-    const userMessage =
-      body.request?.message?.text ||  // Formato Zoho Zobot Webhook
-      body.message ||                 // Formato libre (pruebas)
-      body.question ||                // Alternativo
-      body.text ||                    // Alternativo
+    // Extraer texto del mensaje - Zoho puede enviar message como objeto {text, type} o como string
+    const rawMessage =
+      body.request?.message?.text ||  // Formato Zoho Zobot Webhook: request.message.text
+      (typeof body.message === 'string' ? body.message : body.message?.text) ||  // message puede ser string u objeto
+      body.question ||
+      body.text ||
       '';
+    const userMessage = typeof rawMessage === 'string' ? rawMessage : String(rawMessage || '');
 
     if (!userMessage.trim()) {
       return zohoReply('No logré entender tu mensaje. ¿Podrías escribirme qué producto estás buscando? 😊');
