@@ -1,4 +1,4 @@
- import { NextRequest, NextResponse } from 'next/server';
+import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 import OpenAI from 'openai';
 
@@ -49,14 +49,18 @@ function zohoError(text: string, status = 200) {
   }, { status });
 }
 
-function getOpenAIClient() {
-  const apiKey = process.env.OPENAI_API_KEY;
+function getAIClient() {
+  // Usamos DeepSeek (API compatible con OpenAI)
+  const apiKey = process.env.DEEPSEEK_API_KEY;
 
   if (!apiKey) {
-    throw new Error('OPENAI_API_KEY no está configurada');
+    throw new Error('DEEPSEEK_API_KEY no está configurada');
   }
 
-  return new OpenAI({ apiKey });
+  return new OpenAI({
+    apiKey,
+    baseURL: 'https://api.deepseek.com',
+  });
 }
 
 export async function POST(request: NextRequest) {
@@ -162,11 +166,11 @@ export async function POST(request: NextRequest) {
     }
 
     // ============================================================
-    // 6. Llamar a OpenAI
+    // 6. Llamar a DeepSeek AI
     // ============================================================
-    const openai = getOpenAIClient();
-    const completion = await openai.chat.completions.create({
-      model: 'gpt-4o-mini',
+    const ai = getAIClient();
+    const completion = await ai.chat.completions.create({
+      model: 'deepseek-chat',
       messages: [
         { role: 'system', content: SYSTEM_PROMPT + inventoryContext },
         { role: 'user', content: userMessage },
