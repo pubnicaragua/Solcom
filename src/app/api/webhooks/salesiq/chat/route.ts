@@ -189,9 +189,9 @@ export async function POST(request: NextRequest) {
     return zohoReply(reply);
 
   } catch (error) {
-    console.error('SalesIQ Chat error:', error);
     // Siempre devolver 200 con mensaje amigable para que Zoho no muestre "Error contacting webhook"
-    return zohoReply('¡Ups! Tuve un problemita técnico. ¿Podrías intentar de nuevo en unos segundos? 🙏');
+    const errorMsg = error instanceof Error ? error.message : String(error);
+    return zohoReply(`[DEBUG] Error: ${errorMsg.substring(0, 200)}`);
   }
 }
 
