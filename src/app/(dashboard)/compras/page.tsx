@@ -19,6 +19,7 @@ import {
 } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import { processRestockExcel } from '@/lib/restock-calculator';
+import AIAssistant from '@/components/compras/AIAssistant';
 
 interface RestockRow {
   item_id: string;
@@ -64,6 +65,7 @@ export default function ComprasRestockPage() {
   const [notice, setNotice] = useState<PageNotice | null>(null);
   const [isGeneratePressed, setIsGeneratePressed] = useState(false);
   const [hoveredItemId, setHoveredItemId] = useState<string | null>(null);
+  const [aiOpenSignal, setAiOpenSignal] = useState(0);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const formatCurrency = (value: number) => `C$ ${Math.round(value).toLocaleString('es-NI')}`;
@@ -634,7 +636,7 @@ export default function ComprasRestockPage() {
                 <Button variant="secondary" onClick={() => setResults(null)}>
                   Limpiar
                 </Button>
-                <Button variant="primary" style={{ gap: 8 }}>
+                <Button variant="primary" style={{ gap: 8 }} onClick={() => setAiOpenSignal((prev) => prev + 1)}>
                   <Send size={15} /> Enviar al bot
                 </Button>
               </div>
@@ -776,6 +778,9 @@ export default function ComprasRestockPage() {
           </Card>
         )}
       </div>
+
+      {/* AI Assistant Chatbot */}
+      <AIAssistant restockData={results || []} topSales={topSales} openSignal={aiOpenSignal} />
     </div>
   );
 }

@@ -5,10 +5,6 @@ import OpenAI from 'openai';
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
 const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
 
-const openai = new OpenAI({
-  apiKey: process.env.OPENAI_API_KEY,
-});
-
 export const dynamic = 'force-dynamic';
 // NO usar edge runtime - Supabase y OpenAI SDK necesitan Node.js APIs completas
 
@@ -50,6 +46,16 @@ function zohoError(text: string, status = 200) {
       },
     ],
   }, { status });
+}
+
+function getOpenAIClient() {
+  const apiKey = process.env.OPENAI_API_KEY;
+
+  if (!apiKey) {
+    throw new Error('OPENAI_API_KEY no está configurada');
+  }
+
+  return new OpenAI({ apiKey });
 }
 
 export async function POST(request: NextRequest) {
@@ -156,6 +162,7 @@ export async function POST(request: NextRequest) {
     // ============================================================
     // 6. Llamar a OpenAI
     // ============================================================
+    const openai = getOpenAIClient();
     const completion = await openai.chat.completions.create({
       model: 'gpt-4o-mini',
       messages: [

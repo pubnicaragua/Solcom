@@ -1,0 +1,1208 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Cotización Premium | Supervisión WhatsApp 12 Líneas | Solis Comercial</title>
+  <style>
+    :root {
+      --bg: #070707;
+      --panel: #111111;
+      --panel-2: #171717;
+      --card: rgba(255, 255, 255, 0.06);
+      --card-strong: rgba(255, 255, 255, 0.1);
+      --line: rgba(255, 255, 255, 0.12);
+      --text: #f7f7f7;
+      --muted: rgba(255, 255, 255, 0.72);
+      --soft: rgba(255, 255, 255, 0.54);
+      --red: #ff1d0d;
+      --red-2: #ff5a4f;
+      --gold: #ffd38a;
+      --green: #4ade80;
+      --amber: #fbbf24;
+      --blue: #60a5fa;
+      --shadow: 0 24px 80px rgba(0, 0, 0, 0.38);
+      --radius-xl: 28px;
+      --radius-lg: 20px;
+      --radius-md: 16px;
+      --radius-sm: 12px;
+    }
+
+    * {
+      box-sizing: border-box;
+      -webkit-print-color-adjust: exact;
+      print-color-adjust: exact;
+    }
+
+    html {
+      background: radial-gradient(circle at top, #1a1a1a 0%, #070707 42%, #030303 100%);
+      scroll-behavior: smooth;
+    }
+
+    body {
+      margin: 0;
+      font-family: Inter, Segoe UI, Arial, sans-serif;
+      color: var(--text);
+      background: transparent;
+    }
+
+    .shell {
+      max-width: 1180px;
+      margin: 0 auto;
+      padding: 28px 20px 80px;
+    }
+
+    .toolbar {
+      position: sticky;
+      top: 14px;
+      z-index: 50;
+      display: flex;
+      justify-content: flex-end;
+      gap: 12px;
+      margin-bottom: 18px;
+    }
+
+    .btn {
+      border: 1px solid rgba(255,255,255,0.12);
+      background: rgba(17,17,17,0.9);
+      color: white;
+      padding: 12px 18px;
+      border-radius: 999px;
+      cursor: pointer;
+      font-size: 13px;
+      font-weight: 700;
+      letter-spacing: 0.02em;
+      box-shadow: 0 10px 35px rgba(0,0,0,0.25);
+      backdrop-filter: blur(12px);
+    }
+
+    .btn.primary {
+      background: linear-gradient(135deg, var(--red) 0%, var(--red-2) 100%);
+      border-color: transparent;
+    }
+
+    .sheet {
+      overflow: hidden;
+      border-radius: 34px;
+      border: 1px solid rgba(255,255,255,0.08);
+      background: linear-gradient(180deg, rgba(255,255,255,0.03) 0%, rgba(255,255,255,0.015) 100%);
+      box-shadow: var(--shadow);
+      backdrop-filter: blur(18px);
+    }
+
+    .hero {
+      position: relative;
+      padding: 36px;
+      background:
+        radial-gradient(circle at top right, rgba(255, 29, 13, 0.24), transparent 28%),
+        radial-gradient(circle at left center, rgba(255, 90, 79, 0.18), transparent 24%),
+        linear-gradient(135deg, #0f0f10 0%, #0a0a0a 45%, #141414 100%);
+      border-bottom: 1px solid rgba(255,255,255,0.08);
+    }
+
+    .hero-top {
+      display: flex;
+      justify-content: space-between;
+      gap: 24px;
+      align-items: flex-start;
+      margin-bottom: 28px;
+      flex-wrap: wrap;
+    }
+
+    .brand {
+      display: flex;
+      gap: 18px;
+      align-items: center;
+    }
+
+    .brand-logo {
+      width: 120px;
+      height: 120px;
+      border-radius: 26px;
+      padding: 14px;
+      background: linear-gradient(180deg, rgba(255,255,255,0.08) 0%, rgba(255,255,255,0.02) 100%);
+      border: 1px solid rgba(255,255,255,0.08);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      overflow: hidden;
+      box-shadow: inset 0 1px 0 rgba(255,255,255,0.06);
+    }
+
+    .brand-logo img {
+      width: 100%;
+      height: 100%;
+      object-fit: contain;
+      display: block;
+    }
+
+    .brand-copy h1 {
+      margin: 0 0 8px;
+      font-size: 40px;
+      line-height: 1.02;
+      letter-spacing: -0.04em;
+    }
+
+    .brand-copy p {
+      margin: 0;
+      color: var(--muted);
+      max-width: 740px;
+      font-size: 16px;
+      line-height: 1.75;
+    }
+
+    .quote-badge {
+      min-width: 280px;
+      padding: 20px 22px;
+      border-radius: 24px;
+      background: linear-gradient(180deg, rgba(255,255,255,0.08) 0%, rgba(255,255,255,0.04) 100%);
+      border: 1px solid rgba(255,255,255,0.08);
+    }
+
+    .quote-badge .mini {
+      color: var(--soft);
+      font-size: 12px;
+      text-transform: uppercase;
+      letter-spacing: 0.16em;
+      margin-bottom: 8px;
+    }
+
+    .quote-badge .big {
+      font-size: 26px;
+      font-weight: 800;
+      margin-bottom: 6px;
+    }
+
+    .quote-badge .sub {
+      color: var(--muted);
+      font-size: 13px;
+      line-height: 1.65;
+    }
+
+    .hero-grid {
+      display: grid;
+      grid-template-columns: 1.4fr 0.9fr;
+      gap: 20px;
+    }
+
+    .hero-card,
+    .summary-card,
+    .option-card,
+    .matrix,
+    .notes,
+    .footer-card {
+      background: rgba(255,255,255,0.04);
+      border: 1px solid rgba(255,255,255,0.08);
+      border-radius: 24px;
+      padding: 24px;
+    }
+
+    .hero-card h2,
+    .summary-card h2,
+    .section-title,
+    .notes h2,
+    .matrix h2,
+    .footer-card h2 {
+      margin: 0 0 16px;
+      font-size: 22px;
+      letter-spacing: -0.03em;
+    }
+
+    .hero-list,
+    .clean-list {
+      display: grid;
+      gap: 12px;
+    }
+
+    .hero-item,
+    .clean-item {
+      display: flex;
+      gap: 12px;
+      align-items: flex-start;
+      color: var(--muted);
+      font-size: 14px;
+      line-height: 1.6;
+    }
+
+    .dot {
+      width: 10px;
+      height: 10px;
+      border-radius: 999px;
+      margin-top: 7px;
+      flex-shrink: 0;
+      background: linear-gradient(135deg, var(--red), var(--red-2));
+      box-shadow: 0 0 18px rgba(255, 29, 13, 0.5);
+    }
+
+    .summary-stack {
+      display: grid;
+      gap: 14px;
+    }
+
+    .summary-pill {
+      padding: 16px 18px;
+      border-radius: 18px;
+      background: rgba(255,255,255,0.035);
+      border: 1px solid rgba(255,255,255,0.07);
+    }
+
+    .summary-pill .label {
+      color: var(--soft);
+      font-size: 12px;
+      text-transform: uppercase;
+      letter-spacing: 0.12em;
+      margin-bottom: 6px;
+    }
+
+    .summary-pill .value {
+      font-size: 24px;
+      font-weight: 800;
+      margin-bottom: 4px;
+    }
+
+    .summary-pill .help {
+      color: var(--muted);
+      font-size: 13px;
+      line-height: 1.55;
+    }
+
+    .content {
+      padding: 32px 32px 36px;
+      background: linear-gradient(180deg, rgba(10,10,10,0.94) 0%, rgba(13,13,13,0.98) 100%);
+    }
+
+    .intro-strip {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 18px;
+      margin-bottom: 28px;
+    }
+
+    .intro-card {
+      padding: 22px;
+      border-radius: 22px;
+      background: linear-gradient(180deg, rgba(255,255,255,0.055) 0%, rgba(255,255,255,0.02) 100%);
+      border: 1px solid rgba(255,255,255,0.08);
+    }
+
+    .intro-card .eyebrow {
+      color: var(--gold);
+      font-size: 12px;
+      text-transform: uppercase;
+      letter-spacing: 0.16em;
+      margin-bottom: 8px;
+      font-weight: 700;
+    }
+
+    .intro-card .headline {
+      font-size: 28px;
+      font-weight: 800;
+      letter-spacing: -0.04em;
+      margin-bottom: 8px;
+    }
+
+    .intro-card p {
+      color: var(--muted);
+      margin: 0;
+      font-size: 14px;
+      line-height: 1.65;
+    }
+
+    .section {
+      margin-top: 30px;
+    }
+
+    .section-head {
+      display: flex;
+      justify-content: space-between;
+      gap: 16px;
+      align-items: end;
+      margin-bottom: 20px;
+      flex-wrap: wrap;
+    }
+
+    .section-head p {
+      color: var(--muted);
+      margin: 0;
+      max-width: 720px;
+      font-size: 14px;
+      line-height: 1.7;
+    }
+
+    .option-grid {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 18px;
+    }
+
+    .option-card {
+      padding: 24px;
+      border-radius: 28px;
+      background:
+        linear-gradient(180deg, rgba(255,255,255,0.06) 0%, rgba(255,255,255,0.025) 100%),
+        linear-gradient(135deg, rgba(255, 29, 13, 0.06), transparent 55%);
+    }
+
+    .option-top {
+      display: flex;
+      justify-content: space-between;
+      gap: 14px;
+      align-items: flex-start;
+      margin-bottom: 18px;
+    }
+
+    .option-number {
+      width: 42px;
+      height: 42px;
+      border-radius: 14px;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      font-weight: 800;
+      background: linear-gradient(135deg, var(--red), var(--red-2));
+      box-shadow: 0 18px 32px rgba(255, 29, 13, 0.22);
+    }
+
+    .option-headline {
+      flex: 1;
+    }
+
+    .option-headline h3 {
+      margin: 0 0 8px;
+      font-size: 21px;
+      letter-spacing: -0.03em;
+    }
+
+    .option-headline p {
+      margin: 0;
+      color: var(--muted);
+      font-size: 14px;
+      line-height: 1.65;
+    }
+
+    .tag-row {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      margin-top: 14px;
+    }
+
+    .tag {
+      border-radius: 999px;
+      padding: 8px 12px;
+      font-size: 12px;
+      font-weight: 700;
+      border: 1px solid rgba(255,255,255,0.08);
+      background: rgba(255,255,255,0.05);
+      color: white;
+    }
+
+    .tag.green { background: rgba(74, 222, 128, 0.13); color: #9ff2ba; }
+    .tag.red { background: rgba(255, 29, 13, 0.14); color: #ff9f98; }
+    .tag.gold { background: rgba(251, 191, 36, 0.14); color: #ffd77a; }
+    .tag.blue { background: rgba(96, 165, 250, 0.14); color: #b7d7ff; }
+
+    .price-row {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 14px;
+      margin: 20px 0 18px;
+    }
+
+    .price-box {
+      padding: 18px;
+      border-radius: 18px;
+      background: rgba(255,255,255,0.045);
+      border: 1px solid rgba(255,255,255,0.08);
+      min-height: 110px;
+    }
+
+    .price-box .title {
+      color: var(--soft);
+      font-size: 11px;
+      text-transform: uppercase;
+      letter-spacing: 0.14em;
+      margin-bottom: 10px;
+      font-weight: 700;
+    }
+
+    .price-box .amount {
+      font-size: 30px;
+      font-weight: 900;
+      letter-spacing: -0.04em;
+      margin-bottom: 6px;
+    }
+
+    .price-box .desc {
+      color: var(--muted);
+      font-size: 13px;
+      line-height: 1.55;
+    }
+
+    .split {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 16px;
+    }
+
+    .mini-card {
+      padding: 18px;
+      border-radius: 18px;
+      background: rgba(255,255,255,0.035);
+      border: 1px solid rgba(255,255,255,0.07);
+    }
+
+    .mini-card h4 {
+      margin: 0 0 12px;
+      font-size: 14px;
+      letter-spacing: 0.02em;
+    }
+
+    .mini-card ul {
+      list-style: none;
+      margin: 0;
+      padding: 0;
+      display: grid;
+      gap: 9px;
+    }
+
+    .mini-card li {
+      color: var(--muted);
+      font-size: 13px;
+      line-height: 1.55;
+      padding-left: 16px;
+      position: relative;
+    }
+
+    .mini-card li::before {
+      content: "";
+      width: 7px;
+      height: 7px;
+      border-radius: 999px;
+      position: absolute;
+      left: 0;
+      top: 7px;
+      background: var(--red);
+    }
+
+    .matrix {
+      padding: 26px;
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      overflow: hidden;
+      border-radius: 18px;
+      font-size: 13px;
+    }
+
+    th,
+    td {
+      padding: 14px 16px;
+      text-align: left;
+      border-bottom: 1px solid rgba(255,255,255,0.08);
+      vertical-align: top;
+    }
+
+    th {
+      color: rgba(255,255,255,0.82);
+      background: rgba(255,255,255,0.05);
+      font-size: 12px;
+      text-transform: uppercase;
+      letter-spacing: 0.12em;
+    }
+
+    td {
+      color: var(--muted);
+      background: rgba(255,255,255,0.02);
+      line-height: 1.6;
+    }
+
+    .emph {
+      color: white;
+      font-weight: 800;
+    }
+
+    .notes {
+      display: grid;
+      grid-template-columns: 1.1fr 0.9fr;
+      gap: 18px;
+      margin-top: 28px;
+    }
+
+    .notes .panel {
+      padding: 24px;
+      border-radius: 22px;
+      background: rgba(255,255,255,0.035);
+      border: 1px solid rgba(255,255,255,0.07);
+    }
+
+    .notes h3 {
+      margin: 0 0 14px;
+      font-size: 18px;
+      letter-spacing: -0.03em;
+    }
+
+    .notes p,
+    .notes li {
+      color: var(--muted);
+      font-size: 14px;
+      line-height: 1.72;
+    }
+
+    .notes ul {
+      margin: 0;
+      padding-left: 18px;
+      display: grid;
+      gap: 8px;
+    }
+
+    .footer-card {
+      margin-top: 28px;
+      display: grid;
+      grid-template-columns: 1.2fr 0.8fr;
+      gap: 18px;
+    }
+
+    .footer-card p {
+      margin: 0;
+      color: var(--muted);
+      font-size: 14px;
+      line-height: 1.72;
+    }
+
+    .stamp {
+      padding: 22px;
+      border-radius: 22px;
+      background: linear-gradient(135deg, rgba(255,29,13,0.18) 0%, rgba(255,90,79,0.08) 100%);
+      border: 1px solid rgba(255,255,255,0.1);
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+      min-height: 180px;
+    }
+
+    .stamp .tiny {
+      font-size: 12px;
+      color: var(--soft);
+      text-transform: uppercase;
+      letter-spacing: 0.16em;
+    }
+
+    .stamp .main {
+      font-size: 30px;
+      font-weight: 900;
+      line-height: 1.05;
+      letter-spacing: -0.04em;
+    }
+
+    @media print {
+      html {
+        background: #ffffff;
+      }
+
+      body {
+        background: #ffffff;
+        color: #111111;
+      }
+
+      .toolbar {
+        display: none;
+      }
+
+      .shell {
+        max-width: none;
+        padding: 0;
+      }
+
+      .sheet,
+      .hero,
+      .content,
+      .hero-card,
+      .summary-card,
+      .summary-pill,
+      .intro-card,
+      .option-card,
+      .matrix,
+      .notes,
+      .notes .panel,
+      .footer-card,
+      .price-box,
+      .mini-card,
+      .quote-badge,
+      .stamp,
+      .brand-logo {
+        background: #ffffff !important;
+        color: #111111 !important;
+        box-shadow: none !important;
+        border-color: #d9d9d9 !important;
+        backdrop-filter: none !important;
+      }
+
+      .sheet {
+        border-radius: 0;
+        box-shadow: none;
+        border: none;
+      }
+
+      .hero {
+        padding-bottom: 24px;
+        border-bottom: 1px solid #d9d9d9;
+      }
+
+      .content {
+        padding-top: 24px;
+      }
+
+      .brand-copy h1,
+      .brand-copy p,
+      .quote-badge .mini,
+      .quote-badge .big,
+      .quote-badge .sub,
+      .hero-card h2,
+      .summary-card h2,
+      .summary-pill .label,
+      .summary-pill .value,
+      .summary-pill .help,
+      .intro-card .eyebrow,
+      .intro-card .headline,
+      .intro-card p,
+      .section-head p,
+      .option-headline h3,
+      .option-headline p,
+      .price-box .title,
+      .price-box .amount,
+      .price-box .desc,
+      .mini-card h4,
+      .mini-card li,
+      .matrix h2,
+      .notes h3,
+      .notes li,
+      .footer-card h2,
+      .footer-card p,
+      .stamp .tiny,
+      .stamp .main,
+      .muted,
+      .section-title,
+      td,
+      th {
+        color: #111111 !important;
+      }
+
+      .tag {
+        background: #f4f4f4 !important;
+        color: #111111 !important;
+        border-color: #d9d9d9 !important;
+      }
+
+      table,
+      tr,
+      .hero-card,
+      .summary-card,
+      .summary-pill,
+      .intro-card,
+      .option-card,
+      .matrix,
+      .notes .panel,
+      .footer-card,
+      .price-box,
+      .mini-card,
+      .quote-badge,
+      .stamp {
+        break-inside: avoid;
+        page-break-inside: avoid;
+      }
+
+      th {
+        background: #f3f3f3 !important;
+      }
+
+      td {
+        background: #ffffff !important;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="shell">
+    <div class="toolbar">
+      <button class="btn" onclick="window.scrollTo({ top: 0, behavior: 'smooth' })">Ir arriba</button>
+      <button class="btn primary" onclick="window.print()">Guardar como PDF / Imprimir</button>
+    </div>
+
+    <div class="sheet">
+      <section class="hero">
+        <div class="hero-top">
+          <div class="brand">
+            <div class="brand-logo">
+              <img src="public/solcom-logo.png" alt="Solis Comercial" />
+            </div>
+            <div class="brand-copy">
+              <h1>Cotización Premium<br />Supervisión WhatsApp 12 Líneas</h1>
+              <p>
+                Propuesta comercial presentada por <span class="emph">Software Nicaragua</span> para centralizar conversaciones, supervisar agentes, medir tiempos de respuesta y conectar la operación con <span class="emph">NovaERP</span> y <span class="emph">Zoho SalesIQ</span>.
+              </p>
+            </div>
+          </div>
+
+          <div class="quote-badge">
+            <div class="mini">Propuesta presentada por</div>
+            <div class="big">Software Nicaragua</div>
+            <div class="sub">
+              Cliente: Solis Comercial<br />
+              Fecha: Mayo 2026<br />
+              Alcance: 12 números de WhatsApp<br />
+              Estado actual: 1 línea en Meta oficial y 11 por evaluar
+            </div>
+          </div>
+        </div>
+
+        <div class="hero-grid">
+          <div class="hero-card">
+            <h2>Qué desea resolver el cliente</h2>
+            <div class="hero-list">
+              <div class="hero-item"><span class="dot"></span><span>Supervisar todas las conversaciones de múltiples WhatsApp corporativos desde una sola vista.</span></div>
+              <div class="hero-item"><span class="dot"></span><span>Generar reportes de <span class="emph">tiempo laborado</span>, <span class="emph">promedio de tiempo en respuesta</span>, <span class="emph">cantidad de mensajes</span> y gestión comercial.</span></div>
+              <div class="hero-item"><span class="dot"></span><span>Aprovechar Zoho SalesIQ cuando sea conveniente, sin perder de vista que también existe la opción de operar todo desde <span class="emph">NovaERP</span>.</span></div>
+              <div class="hero-item"><span class="dot"></span><span>Evaluar opciones donde el equipo pueda seguir usando su WhatsApp normal en celular, y opciones más oficiales con mayor estabilidad.</span></div>
+            </div>
+          </div>
+
+          <div class="summary-card">
+            <h2>Resumen ejecutivo</h2>
+            <div class="summary-stack">
+              <div class="summary-pill">
+                <div class="label">Entrada más económica</div>
+                <div class="value">C$2,500</div>
+                <div class="help">Si se aprovecha Zoho SalesIQ, el sistema ya está pagado por el cliente y nuestro cobro sería solo la implementación de reportes e indicadores.</div>
+              </div>
+              <div class="summary-pill">
+                <div class="label">Implementación a la medida</div>
+                <div class="value">C$400/h</div>
+                <div class="help">Presencial. O bien <span class="emph">C$280/h</span> remoto con Meet abierto para medir mejor el alcance real.</div>
+              </div>
+              <div class="summary-pill">
+                <div class="label">Sistema NovaERP preferencial</div>
+                <div class="value">US$59/mes</div>
+                <div class="help">Precio preferencial para Solis Comercial sobre una base normal de US$80/mes.</div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section class="content">
+        <div class="intro-strip">
+          <div class="intro-card">
+            <div class="eyebrow">Punto más práctico</div>
+            <div class="headline">Zoho + Reportes</div>
+            <p>Menor costo inicial si el cliente acepta trabajar dentro del ecosistema de Zoho SalesIQ.</p>
+          </div>
+          <div class="intro-card">
+            <div class="eyebrow">Punto más fuerte</div>
+            <div class="headline">NovaERP</div>
+            <p>Ya tenemos aplicación funcional sobre Evolution API. La ventaja es adaptar branding y UI para Solis Comercial.</p>
+          </div>
+          <div class="intro-card">
+            <div class="eyebrow">Punto a decidir</div>
+            <div class="headline">Celular vs Oficial</div>
+            <p>Algunas opciones permiten seguir usando WhatsApp normal. Las oficiales priorizan estabilidad y menor riesgo.</p>
+          </div>
+        </div>
+
+        <div class="section">
+          <div class="section-head">
+            <div>
+              <div class="section-title">Opciones Propuestas</div>
+              <p>Cada opción separa claramente el <span class="emph">costo del sistema o plataforma</span> del <span class="emph">costo de implementación, adaptación o desarrollo</span> prestado por <span class="emph">Software Nicaragua</span>. Los precios externos son referenciales y pueden variar por proveedor o volumen.</p>
+            </div>
+          </div>
+
+          <div class="option-grid">
+            <article class="option-card">
+              <div class="option-top">
+                <div class="option-number">1</div>
+                <div class="option-headline">
+                  <h3>Zoho SalesIQ Nativo</h3>
+                  <p>La opción más simple para aprovechar lo que el cliente ya paga en Zoho. Nosotros entraríamos a implementar y presentar los reportes dentro de su flujo actual.</p>
+                  <div class="tag-row">
+                    <span class="tag green">Oficial</span>
+                    <span class="tag blue">Aprovecha Zoho actual</span>
+                    <span class="tag red">No usa WhatsApp normal</span>
+                  </div>
+                </div>
+              </div>
+              <div class="price-row">
+                <div class="price-box">
+                  <div class="title">Implementación Software Nicaragua</div>
+                  <div class="amount">C$2,500</div>
+                  <div class="desc">Configuración de reportes, indicadores y presentación de la supervisión sobre el entorno actual del cliente.</div>
+                </div>
+                <div class="price-box">
+                  <div class="title">Costo del sistema</div>
+                  <div class="amount">Gratis</div>
+                  <div class="desc">Para esta propuesta se considera sin costo adicional porque Zoho SalesIQ ya está pagado por el cliente. Podrían existir cargos Meta según uso oficial.</div>
+                </div>
+              </div>
+              <div class="split">
+                <div class="mini-card">
+                  <h4>Ideal si</h4>
+                  <ul>
+                    <li>Quieren el camino más rápido y ordenado.</li>
+                    <li>Buscan gastar poco al inicio con Software Nicaragua.</li>
+                    <li>Pueden trabajar desde SalesIQ en vez de WhatsApp normal.</li>
+                  </ul>
+                </div>
+                <div class="mini-card">
+                  <h4>Observaciones</h4>
+                  <ul>
+                    <li>La operación se mueve al entorno Zoho.</li>
+                    <li>Es buena opción para presentar KPI rápido.</li>
+                    <li>Menor esfuerzo técnico de nuestra parte.</li>
+                  </ul>
+                </div>
+              </div>
+            </article>
+
+            <article class="option-card">
+              <div class="option-top">
+                <div class="option-number">2</div>
+                <div class="option-headline">
+                  <h3>Meta Cloud API Directo</h3>
+                  <p>Proyecto a la medida con arquitectura oficial. Se recomienda trabajarlo por horas, idealmente midiendo alcance real en sesiones presenciales o remotas abiertas.</p>
+                  <div class="tag-row">
+                    <span class="tag green">Oficial</span>
+                    <span class="tag gold">Desarrollo a la medida</span>
+                    <span class="tag red">No usa WhatsApp normal</span>
+                  </div>
+                </div>
+              </div>
+              <div class="price-row">
+                <div class="price-box">
+                  <div class="title">Implementación Software Nicaragua</div>
+                  <div class="amount">C$400/h</div>
+                  <div class="desc">Presencial. O <span class="emph">C$280/h</span> remoto con Meet abierto para revisar y construir en tiempo real.</div>
+                </div>
+                <div class="price-box">
+                  <div class="title">Costo del sistema</div>
+                  <div class="amount">Meta</div>
+                  <div class="desc">Consumo oficial y costos operativos de líneas/mensajería según política vigente.</div>
+                </div>
+              </div>
+              <div class="split">
+                <div class="mini-card">
+                  <h4>Ideal si</h4>
+                  <ul>
+                    <li>Quieren solución oficial y robusta.</li>
+                    <li>Desean control técnico total desde NovaERP.</li>
+                    <li>Prefieren construir algo más personalizado.</li>
+                  </ul>
+                </div>
+                <div class="mini-card">
+                  <h4>Observaciones</h4>
+                  <ul>
+                    <li>Mayor inversión en horas de análisis y desarrollo.</li>
+                    <li>Permite reportería y lógica a medida.</li>
+                    <li>Requiere definir mejor el alcance final para cotización cerrada.</li>
+                  </ul>
+                </div>
+              </div>
+            </article>
+
+            <article class="option-card" style="background: linear-gradient(180deg, rgba(255,29,13,0.12) 0%, rgba(255,255,255,0.03) 100%), linear-gradient(135deg, rgba(255,255,255,0.07), rgba(255,255,255,0.02)); border-color: rgba(255, 83, 69, 0.28);">
+              <div class="option-top">
+                <div class="option-number">3</div>
+                <div class="option-headline">
+                  <h3>NovaERP</h3>
+                  <p><span class="emph">NovaERP</span> es nuestro sistema, desarrollado por <span class="emph">Software Nicaragua</span>, y ya utiliza Evolution API con una aplicación funcional. En este escenario, la ruta más eficiente sería adaptarla a la identidad visual y experiencia de Solis Comercial.</p>
+                  <div class="tag-row">
+                    <span class="tag gold">Recomendada</span>
+                    <span class="tag blue">Ya funcional</span>
+                    <span class="tag green">Puede seguir usando celular</span>
+                  </div>
+                </div>
+              </div>
+              <div class="price-row">
+                <div class="price-box">
+                  <div class="title">Costo del sistema</div>
+                  <div class="amount">US$59/mes</div>
+                  <div class="desc">Precio preferencial para Solis Comercial. Precio normal: <span class="emph">US$80/mes</span>.</div>
+                </div>
+                <div class="price-box">
+                  <div class="title">Plan semestral del sistema</div>
+                  <div class="amount">US$310</div>
+                  <div class="desc">Precio semestral preferencial. Precio normal: <span class="emph">US$400</span>. Si se requieren ajustes visuales adicionales o adaptación especial, se cotizan según alcance.</div>
+                </div>
+              </div>
+              <div class="split">
+                <div class="mini-card">
+                  <h4>Ideal si</h4>
+                  <ul>
+                    <li>Quieren algo ya funcional y no empezar desde cero.</li>
+                    <li>Les interesa una app muy similar a WhatsApp.</li>
+                    <li>Buscan costo preferencial y rapidez de salida.</li>
+                  </ul>
+                </div>
+                <div class="mini-card">
+                  <h4>Observaciones</h4>
+                  <ul>
+                    <li>Se adapta UI, branding y reportes a Solis Comercial.</li>
+                    <li>Es la propuesta con mejor balance tiempo/resultado.</li>
+                    <li>Buena opción para centralizar supervisión en NovaERP.</li>
+                  </ul>
+                </div>
+              </div>
+            </article>
+
+            <article class="option-card">
+              <div class="option-top">
+                <div class="option-number">4</div>
+                <div class="option-headline">
+                  <h3>Evolution API Self-Hosted</h3>
+                  <p>Infraestructura propia sobre backend VPS. Excelente para quienes quieren conservar WhatsApp normal y tener supervisión/reportería dentro del ecosistema de <span class="emph">NovaERP</span>.</p>
+                  <div class="tag-row">
+                    <span class="tag green">Usa WhatsApp normal</span>
+                    <span class="tag gold">Servidor propio</span>
+                    <span class="tag red">No oficial</span>
+                  </div>
+                </div>
+              </div>
+              <div class="price-row">
+                <div class="price-box">
+                  <div class="title">Implementación Software Nicaragua</div>
+                  <div class="amount">Por horas</div>
+                  <div class="desc">Implementación, despliegue y reportería bajo esquema de <span class="emph">C$400/h</span> presencial o <span class="emph">C$280/h</span> remoto.</div>
+                </div>
+                <div class="price-box">
+                  <div class="title">Costo de infraestructura</div>
+                  <div class="amount">US$30-40/mes</div>
+                  <div class="desc">Servidor VPS para el backend y operación técnica continua.</div>
+                </div>
+              </div>
+              <div class="split">
+                <div class="mini-card">
+                  <h4>Ideal si</h4>
+                  <ul>
+                    <li>El equipo quiere seguir usando el WhatsApp del celular.</li>
+                    <li>No harán envíos masivos ni automatizaciones agresivas.</li>
+                    <li>Desean costo operativo bajo comparado con SaaS externos.</li>
+                  </ul>
+                </div>
+                <div class="mini-card">
+                  <h4>Observaciones</h4>
+                  <ul>
+                    <li>Existe riesgo operativo por ser tecnología no oficial.</li>
+                    <li>Requiere monitoreo del servidor y sesiones QR.</li>
+                    <li>Muy útil si el enfoque es auditoría y supervisión humana.</li>
+                  </ul>
+                </div>
+              </div>
+            </article>
+
+            <article class="option-card">
+              <div class="option-top">
+                <div class="option-number">5</div>
+                <div class="option-headline">
+                  <h3>Twilio</h3>
+                  <p>Alternativa enterprise con infraestructura estable y documentación sólida, orientada a una integración oficial y de alta confiabilidad.</p>
+                  <div class="tag-row">
+                    <span class="tag green">Oficial</span>
+                    <span class="tag blue">Enterprise</span>
+                    <span class="tag red">No usa WhatsApp normal</span>
+                  </div>
+                </div>
+              </div>
+              <div class="price-row">
+                <div class="price-box">
+                  <div class="title">Implementación Software Nicaragua</div>
+                  <div class="amount">Por horas</div>
+                  <div class="desc">Implementación a medida bajo esquema de <span class="emph">C$400/h</span> presencial o <span class="emph">C$280/h</span> remoto.</div>
+                </div>
+                <div class="price-box">
+                  <div class="title">Costo del sistema</div>
+                  <div class="amount">~US$65/mes</div>
+                  <div class="desc">Referencial para 12 líneas + volumen moderado, más tarifas Meta que apliquen.</div>
+                </div>
+              </div>
+              <div class="split">
+                <div class="mini-card">
+                  <h4>Ideal si</h4>
+                  <ul>
+                    <li>Desean la vía más corporativa y estable.</li>
+                    <li>Quieren soporte y ecosistema reconocido.</li>
+                    <li>El presupuesto no es el factor principal.</li>
+                  </ul>
+                </div>
+                <div class="mini-card">
+                  <h4>Observaciones</h4>
+                  <ul>
+                    <li>Normalmente termina siendo más caro que Meta directo.</li>
+                    <li>No permite que los agentes sigan en WhatsApp normal.</li>
+                    <li>Es referencia fuerte, pero no la más económica.</li>
+                  </ul>
+                </div>
+              </div>
+            </article>
+
+            <article class="option-card">
+              <div class="option-top">
+                <div class="option-number">6</div>
+                <div class="option-headline">
+                  <h3>Wasapo / Wasapi</h3>
+                  <p>Plataforma lista para operar con enfoque multiagente. Conveniente cuando se quiere una solución ya montada y con menos esfuerzo técnico interno.</p>
+                  <div class="tag-row">
+                    <span class="tag blue">Listo para usar</span>
+                    <span class="tag green">Puede usar celular según modalidad</span>
+                    <span class="tag gold">SaaS</span>
+                  </div>
+                </div>
+              </div>
+              <div class="price-row">
+                <div class="price-box">
+                  <div class="title">Implementación Software Nicaragua</div>
+                  <div class="amount">Por horas</div>
+                  <div class="desc">Integración, reportería y adaptación de indicadores bajo el mismo esquema de horas.</div>
+                </div>
+                <div class="price-box">
+                  <div class="title">Costo del sistema</div>
+                  <div class="amount">~US$199/mes</div>
+                  <div class="desc">Valor referencial según la referencia analizada para un plan robusto multiagente.</div>
+                </div>
+              </div>
+              <div class="split">
+                <div class="mini-card">
+                  <h4>Ideal si</h4>
+                  <ul>
+                    <li>Buscan rapidez y poca complejidad técnica interna.</li>
+                    <li>Quieren un panel ya hecho por un proveedor.</li>
+                    <li>Prefieren pagar más mensual a cambio de facilidad.</li>
+                  </ul>
+                </div>
+                <div class="mini-card">
+                  <h4>Observaciones</h4>
+                  <ul>
+                    <li>Su costo mensual suele sentirse alto para 12 líneas.</li>
+                    <li>Menos flexibilidad que NovaERP a largo plazo.</li>
+                    <li>Puede servir como benchmark comercial en la propuesta.</li>
+                  </ul>
+                </div>
+              </div>
+            </article>
+          </div>
+        </div>
+
+        <div class="matrix">
+          <h2>Matriz rápida de decisión</h2>
+          <table>
+            <thead>
+              <tr>
+                <th>Opción</th>
+                <th>¿Usan WhatsApp normal?</th>
+                <th>Costo de implementación / servicio</th>
+                <th>Costo del sistema / operación</th>
+                <th>Perfil ideal</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td><span class="emph">1. Zoho SalesIQ Nativo</span></td>
+                <td>No</td>
+                <td><span class="emph">C$2,500</span> única vez</td>
+                <td>Gratis, porque ya está incluido en Zoho actual</td>
+                <td>Cliente que quiere aprovechar lo ya pagado y salir rápido.</td>
+              </tr>
+              <tr>
+                <td><span class="emph">2. Meta Cloud API Directo</span></td>
+                <td>No</td>
+                <td><span class="emph">C$400/h</span> presencial o <span class="emph">C$280/h</span> remoto</td>
+                <td>Consumo oficial Meta</td>
+                <td>Cliente que quiere arquitectura oficial y solución hecha a medida.</td>
+              </tr>
+              <tr>
+                <td><span class="emph">3. NovaERP</span></td>
+                <td>Sí</td>
+                <td>A definir solo si se requiere adaptación visual adicional</td>
+                <td><span class="emph">US$59/mes</span> preferencial o <span class="emph">US$310</span> semestral</td>
+                <td>Cliente que quiere algo funcional ya, con adaptación visual y mejor relación tiempo/valor.</td>
+              </tr>
+              <tr>
+                <td><span class="emph">4. Evolution API Self-Hosted</span></td>
+                <td>Sí</td>
+                <td>Por horas</td>
+                <td><span class="emph">US$30-40/mes</span></td>
+                <td>Cliente que quiere WhatsApp normal y costo operativo bajo.</td>
+              </tr>
+              <tr>
+                <td><span class="emph">5. Twilio</span></td>
+                <td>No</td>
+                <td>Por horas</td>
+                <td><span class="emph">~US$65/mes</span> + Meta</td>
+                <td>Cliente corporativo que prioriza robustez y soporte.</td>
+              </tr>
+              <tr>
+                <td><span class="emph">6. Wasapo / Wasapi</span></td>
+                <td>Puede variar</td>
+                <td>Por horas</td>
+                <td><span class="emph">~US$199/mes</span></td>
+                <td>Cliente que quiere SaaS listo, aunque con mensualidad alta.</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="notes">
+        <div class="panel">
+          <h3>Qué entregamos nosotros desde Software Nicaragua</h3>
+          <ul>
+            <li>Vista central para supervisión de conversaciones de las 12 líneas.</li>
+            <li>Reporte de tiempo laborado por agente.</li>
+            <li>Reporte de promedio de tiempo de respuesta.</li>
+            <li>Conteo de mensajes por agente, por línea y por período.</li>
+            <li>Indicadores relacionados a gestión comercial y seguimiento de venta.</li>
+            <li>Conexión o sincronización con Zoho SalesIQ cuando aplique.</li>
+          </ul>
+        </div>
+        <div class="panel">
+          <h3>Puntos importantes para decidir</h3>
+          <ul>
+            <li>Si el cliente quiere seguir usando WhatsApp normal, debe inclinarse por <span class="emph">NovaERP</span> o <span class="emph">Evolution API</span>.</li>
+            <li>Si el cliente prioriza una vía oficial y estable, conviene <span class="emph">Zoho SalesIQ Nativo</span>, <span class="emph">Meta Cloud API</span> o <span class="emph">Twilio</span>.</li>
+            <li>Para una propuesta rápida con poco costo inicial para ellos, la entrada natural es <span class="emph">Zoho + C$2,500</span>.</li>
+            <li>Para una solución bonita, funcional y más controlada por nosotros, la mejor apuesta comercial es <span class="emph">NovaERP</span>.</li>
+          </ul>
+        </div>
+      </div>
+
+      <div class="footer-card">
+        <div>
+          <h2>Recomendación comercial</h2>
+          <p>
+            Si la intención es presentar una propuesta fuerte, clara y con ventaja competitiva para Solis Comercial, la opción que más valor transmite es <span class="emph">NovaERP</span>, porque ya existe una base funcional y el precio preferencial del sistema queda claro desde el inicio.
+          </p>
+          <p style="margin-top: 12px;">
+            Como alternativa conservadora, <span class="emph">Zoho SalesIQ Nativo</span> sirve muy bien para entrar con una inversión baja de <span class="emph">C$2,500</span>, ya que el sistema ya está pagado por el cliente y nuestro cobro sería solo por implementación.
+          </p>
+          <p style="margin-top: 12px;">
+            Los valores externos en USD son <span class="emph">referenciales</span>. Las horas de <span class="emph">Software Nicaragua</span> pueden refinarse según el alcance real, especialmente en las opciones más técnicas.
+          </p>
+        </div>
+
+        <div class="stamp">
+          <div>
+            <div class="tiny">Propuesta destacada</div>
+            <div class="main">NovaERP<br />Preferencial</div>
+          </div>
+          <div class="muted">
+            US$59/mes<br />
+            o US$310 semestral<br />
+            Adaptación visual para Solis Comercial
+            </div>
+          </div>
+        </div>
+      </section>
+    </div>
+  </div>
+</body>
+</html>

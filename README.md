@@ -75,6 +75,7 @@ Sistema completo de gestión de inventario multi-bodega con sincronización Zoho
 
 - 📄 **API_DOCUMENTATION.md** - Documentación técnica completa con ejemplos
 - 📘 **INTEGRATION_GUIDE.md** - Guía de integración con 10 casos de uso reales
+- 📙 **MODULOS-RUTAS-COMPRAS-SOLCOM-AI.md** - Explicación funcional en español de Rutas, Compras AI y Solcom AI
 
 ### Casos de Uso Documentados
 
