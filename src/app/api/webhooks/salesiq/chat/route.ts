@@ -12,7 +12,12 @@ export const dynamic = 'force-dynamic';
 const SYSTEM_PROMPT = `🟦 1. IDENTIDAD Y PRESENTACIÓN
 Sos Mía, la asistente virtual de Solís Comercial. Tu estilo es energético, vendedor, amable y directo al punto. No hablás en párrafos largos, no repetís información innecesaria y evitás adornos excesivos.
 Objetivo: Ayudar al cliente rápidamente con precios, disponibilidad, promociones y pasos para comprar. Tu meta es cerrar ventas con agilidad.
-Presentación fija inicial (si el usuario saluda o no es específico): “¡Hola! 👋 Soy Mía de Solís Comercial 💙 ¿Qué equipo te interesa hoy?”
+
+⚠️ REGLA CRÍTICA SOBRE SALUDOS:
+- NUNCA saludes ni te presentes. El sistema ya envió un saludo automático al cliente antes de esta conversación.
+- NO digas "Hola", "Soy Mía", "Bienvenido", ni ninguna variante de presentación o saludo.
+- Ve DIRECTAMENTE al grano con la respuesta a lo que el cliente pregunta.
+- Si el cliente saluda (dice "hola", "buenas", etc.), respondé brevemente "¡Hola! 💙" y luego preguntá qué equipo busca, pero NUNCA te presentes de nuevo.
 
 Reglas clave:
 - Respuestas cortas y claras.
@@ -28,6 +33,22 @@ El inventario disponible se te proporcionará dinámicamente en el contexto (aba
 - Enumera las opciones exactas especificando: NOMBRE COMPLETO, COLOR, PRECIO (en USD) y STOCK.
 - Si el modelo no está en el inventario proporcionado, SIEMPRE responder: "Modelo agotado o no disponible 💙." (Sin inventar alternativas si no están en el inventario).
 - Prohibido inventar o asumir precios.
+
+IMPORTANTE - ABREVIACIONES DE CLIENTES:
+Los clientes frecuentemente usan abreviaciones o nombres cortos para referirse a modelos. Tú DEBES entender estas abreviaciones y buscar el modelo correcto en el inventario. Ejemplos comunes:
+- "s21u", "s21 ultra" = Samsung Galaxy S21 Ultra
+- "s24u", "s24 ultra" = Samsung Galaxy S24 Ultra  
+- "s25u", "s25 ultra" = Samsung Galaxy S25 Ultra
+- "s24fe" = Samsung Galaxy S24 FE
+- "a16", "a56", "a36" = Samsung Galaxy A16, A56, A36
+- "rn15", "redmi note 15" = Xiaomi Redmi Note 15
+- "rn14", "redmi note 14" = Xiaomi Redmi Note 14
+- "rn13", "redmi note 13" = Xiaomi Redmi Note 13
+- "poco x7", "pocox7" = Xiaomi Poco X7
+- "ip16", "iphone 16" = Apple iPhone 16
+- "ip17" = Apple iPhone 17
+- Cualquier patrón similar: interpreta la marca y modelo correctos.
+Si el cliente usa una abreviación, busca el modelo completo en el inventario proporcionado.
 
 🟦 3. MÉTODO CASHBACK
 - El método Cashback aplica únicamente para equipos Samsung y Apple.
@@ -55,6 +76,86 @@ El inventario disponible se te proporcionará dinámicamente en el contexto (aba
 - Si te equivocas: "Disculpá, soy un asistente virtual potenciado con inteligencia artificial y puedo cometer errores. Gracias por tu paciencia 💙."
 - Si hay lenguaje ofensivo: "Estoy aquí para ayudarte con información de productos 💙. Necesito que mantengamos un tono respetuoso para continuar."
 - Consultas que no puedes responder (envíos especiales a departamentos, dudas de promos temporales): Derivar a asesor.`;
+
+// ============================================================
+// Mapa de alias / abreviaciones comunes de modelos de celulares
+// Expande las abreviaciones antes de buscar en la base de datos
+// ============================================================
+const MODEL_ALIASES: Record<string, string[]> = {
+  // Samsung Galaxy S series
+  's21u': ['samsung', 's21', 'ultra'],
+  's21 ultra': ['samsung', 's21', 'ultra'],
+  's22u': ['samsung', 's22', 'ultra'],
+  's22 ultra': ['samsung', 's22', 'ultra'],
+  's23u': ['samsung', 's23', 'ultra'],
+  's23 ultra': ['samsung', 's23', 'ultra'],
+  's24u': ['samsung', 's24', 'ultra'],
+  's24 ultra': ['samsung', 's24', 'ultra'],
+  's25u': ['samsung', 's25', 'ultra'],
+  's25 ultra': ['samsung', 's25', 'ultra'],
+  's24fe': ['samsung', 's24', 'fe'],
+  's24 fe': ['samsung', 's24', 'fe'],
+  's23fe': ['samsung', 's23', 'fe'],
+  's23 fe': ['samsung', 's23', 'fe'],
+  // Samsung Galaxy A series
+  'a16': ['samsung', 'a16'],
+  'a36': ['samsung', 'a36'],
+  'a56': ['samsung', 'a56'],
+  'a15': ['samsung', 'a15'],
+  'a25': ['samsung', 'a25'],
+  'a35': ['samsung', 'a35'],
+  'a55': ['samsung', 'a55'],
+  // Xiaomi Redmi Note
+  'rn15': ['xiaomi', 'redmi', 'note', '15'],
+  'rn14': ['xiaomi', 'redmi', 'note', '14'],
+  'rn13': ['xiaomi', 'redmi', 'note', '13'],
+  'rn12': ['xiaomi', 'redmi', 'note', '12'],
+  'redmi note 15': ['xiaomi', 'redmi', 'note', '15'],
+  'redmi note 14': ['xiaomi', 'redmi', 'note', '14'],
+  'redmi note 13': ['xiaomi', 'redmi', 'note', '13'],
+  'redmi note 12': ['xiaomi', 'redmi', 'note', '12'],
+  'redmi 14c': ['xiaomi', 'redmi', '14c'],
+  'redmi 13c': ['xiaomi', 'redmi', '13c'],
+  // Xiaomi Poco
+  'poco x7': ['xiaomi', 'poco', 'x7'],
+  'pocox7': ['xiaomi', 'poco', 'x7'],
+  'poco x6': ['xiaomi', 'poco', 'x6'],
+  'poco f6': ['xiaomi', 'poco', 'f6'],
+  // iPhone abbreviations
+  'ip16': ['iphone', '16'],
+  'ip17': ['iphone', '17'],
+  'ip15': ['iphone', '15'],
+  'ip14': ['iphone', '14'],
+  'iphone16': ['iphone', '16'],
+  'iphone17': ['iphone', '17'],
+  'iphone15': ['iphone', '15'],
+  // Tecno
+  'spark 30': ['tecno', 'spark', '30'],
+  'camon 30': ['tecno', 'camon', '30'],
+};
+
+/**
+ * Expande abreviaciones de modelos en el mensaje del usuario.
+ * Retorna un array de palabras de búsqueda expandidas.
+ */
+function expandAliases(cleanMessage: string): string[] {
+  // Intentar matchear aliases de mayor a menor longitud (más específicos primero)
+  const sortedAliases = Object.keys(MODEL_ALIASES).sort((a, b) => b.length - a.length);
+  
+  let expanded = cleanMessage;
+  const extraWords: string[] = [];
+  
+  for (const alias of sortedAliases) {
+    if (expanded.includes(alias)) {
+      const replacement = MODEL_ALIASES[alias];
+      extraWords.push(...replacement);
+      // Remover el alias del mensaje para no duplicar
+      expanded = expanded.replace(alias, ' ');
+    }
+  }
+  
+  return extraWords;
+}
 
 // ============================================================
 // Helper: Construir respuesta en formato Zoho SalesIQ Zobot
@@ -147,7 +248,19 @@ export async function POST(request: NextRequest) {
     // ============================================================
     const cleanMsg = userMessage.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[?¿!¡.,:;()"']/g, '');
     const stopWords = ['hay', 'tienen', 'tienes', 'quiero', 'busco', 'necesito', 'para', 'con', 'los', 'las', 'el', 'la', 'un', 'una', 'me', 'puede', 'puedes', 'dar', 'precio', 'de', 'en', 'es', 'que', 'a', 'por', 'favor', 'saber', 'si', 'hola', 'buenas', 'tardes', 'dias', 'noches', 'algun', 'alguna', 'alguno', 'estoy', 'buscando'];
-    const searchWords = cleanMsg.split(/\s+/).filter((w: string) => w.length > 1 && !stopWords.includes(w));
+    
+    // Expandir alias/abreviaciones del cliente (ej: "s21u" → ["samsung", "s21", "ultra"])
+    const aliasWords = expandAliases(cleanMsg);
+    
+    // Palabras normales del mensaje (después de quitar stopwords)
+    const normalWords = cleanMsg.split(/\s+/).filter((w: string) => w.length > 1 && !stopWords.includes(w));
+    
+    // Combinar: si hay alias expandidos, usar esos; si no, usar las palabras normales
+    const searchWords = aliasWords.length > 0
+      ? Array.from(new Set([...aliasWords, ...normalWords]))  // Deduplicar
+      : normalWords;
+
+    console.log(`[SalesIQ] Search words: [${searchWords.join(', ')}] (aliases found: ${aliasWords.length > 0})`);
 
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
     let query = supabase
