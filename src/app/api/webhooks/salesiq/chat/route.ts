@@ -284,7 +284,7 @@ export async function POST(request: NextRequest) {
     const { data: products } = await query.limit(30);
 
     // ============================================================
-    // 4. Obtener precios de venta (lista "barato")
+    // 4. Obtener precios de venta (lista "precio minimo")
     // ============================================================
     if (products && products.length > 0) {
       const itemIds = products.map((p) => p.id);
@@ -292,7 +292,7 @@ export async function POST(request: NextRequest) {
         .from('item_price_profiles')
         .select('item_id, unit_price, profile_code')
         .in('item_id', itemIds)
-        .eq('profile_code', 'barato')
+        .eq('profile_code', 'preciomin')
         .eq('active', true);
 
       if (profiles && profiles.length > 0) {
