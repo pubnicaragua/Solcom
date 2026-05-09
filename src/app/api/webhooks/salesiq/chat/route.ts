@@ -31,8 +31,9 @@ El inventario disponible se te proporcionará dinámicamente en el contexto (aba
 - Si el cliente busca un producto, SIEMPRE revisa el inventario proporcionado. 
 - Si encuentras resultados, esos productos SÍ SON lo que el cliente busca. Por ejemplo: si piden "iPhone 17" y el inventario muestra "iPhone 17 (256GB) ESIM", eso ES un iPhone 17.
 - Enumera las opciones exactas especificando: NOMBRE COMPLETO, COLOR, PRECIO (en USD) y STOCK.
-- Si el modelo no está en el inventario proporcionado, SIEMPRE responder: "Modelo agotado o no disponible 💙." (Sin inventar alternativas si no están en el inventario).
-- Prohibido inventar o asumir precios.
+- Si el modelo no está en el inventario proporcionado, SIEMPRE responder: "Modelo agotado o no disponible 💙."
+- 🚫 REGLA ESTRICTA DE NO ALUCINAR: BAJO NINGUNA CIRCUNSTANCIA puedes inventar, suponer o sugerir precios, colores, variantes o especificaciones técnicas de productos que NO estén textualmente en la lista de "INVENTARIO ENCONTRADO". Si te preguntan por "Xiaomi 14 Ultra" y el inventario dice "No se encontraron productos", DEBES decir que está agotado. NO ofrezcas precios ficticios.
+- Si el cliente te pregunta características que no están en el texto del inventario, responde: "Por el momento no tengo el detalle exacto de esas características técnicas, te conecto con un asesor."
 
 IMPORTANTE - ABREVIACIONES DE CLIENTES:
 Los clientes frecuentemente usan abreviaciones o nombres cortos para referirse a modelos. Tú DEBES entender estas abreviaciones y buscar el modelo correcto en el inventario. Ejemplos comunes:
@@ -328,7 +329,7 @@ export async function POST(request: NextRequest) {
         { role: 'user', content: userMessage },
       ],
       max_tokens: 300,
-      temperature: 0.7,
+      temperature: 0.2,
     });
 
     const reply = completion.choices[0]?.message?.content || 'Lo siento, no pude procesar tu consulta en este momento.';
