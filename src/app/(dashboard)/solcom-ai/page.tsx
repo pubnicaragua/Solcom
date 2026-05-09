@@ -105,7 +105,7 @@ export default function SolcomAIPage() {
 
       const { data: usageData } = await (supabase as any)
         .from('ai_usage_logs')
-        .select('tokens, cost, created_at');
+        .select('tokens, cost, created_at, request_type');
       
       if (usageData) {
         const usageRows = usageData as UsageLogRow[];
@@ -256,6 +256,29 @@ export default function SolcomAIPage() {
         .map((log) => new Date(log.created_at).toISOString().slice(0, 10))
     )
   ).length;
+
+  // Desglose por tipo de solicitud
+  const REQUEST_TYPE_LABELS: Record<string, { label: string; color: string; icon: string }> = {
+    'salesiq_chatbot': { label: 'Chatbot SalesIQ (Mía)', color: '#3b82f6', icon: '🤖' },
+    'ai_chat_customer-service': { label: 'Chat Interno - Atención', color: '#10b981', icon: '💬' },
+    'ai_chat_collections': { label: 'Chat Interno - Cobranza', color: '#f59e0b', icon: '💰' },
+    'ai_chat_quotes': { label: 'Chat Interno - Cotizaciones', color: '#8b5cf6', icon: '📋' },
+    'ai_chat_invoicing': { label: 'Chat Interno - Facturación', color: '#ec4899', icon: '📄' },
+    'ai_chat_audit': { label: 'Chat Interno - Auditoría', color: '#14b8a6', icon: '🔍' },
+    'image_analysis': { label: 'Análisis de Imágenes', color: '#f97316', icon: '📷' },
+    'url_analysis': { label: 'Análisis de URLs', color: '#6366f1', icon: '🔗' },
+  };
+
+  const usageByType = usageLogs.reduce((acc, log) => {
+    const type = log.request_type || 'desconocido';
+    if (!acc[type]) acc[type] = { requests: 0, tokens: 0, cost: 0 };
+    acc[type].requests += 1;
+    acc[type].tokens += (log.tokens || 0);
+    acc[type].cost += (log.cost || 0);
+    return acc;
+  }, {} as Record<string, { requests: number; tokens: number; cost: number }>);
+
+  const sortedUsageTypes = Object.entries(usageByType).sort(([, a], [, b]) => b.cost - a.cost);
   const serviceStatus = activeKeysCount > 0 ? 'Operativo' : 'Sin claves activas';
   const serviceStatusColor = activeKeysCount > 0 ? '#10b981' : '#f59e0b';
 
@@ -479,6 +502,64 @@ export default function SolcomAIPage() {
               </div>
             </Card>
           </div>
+
+          {/* Desglose por origen */}
+          <Card style={{ padding: 24 }}>
+            <h3 style={{ fontSize: 18, fontWeight: 600, marginBottom: 4 }}>Desglose por Origen</h3>
+            <p style={{ fontSize: 13, color: 'rgba(255,255,255,0.5)', marginBottom: 20 }}>
+              Detalle de consumo por cada módulo o integración que usa IA
+            </p>
+            {sortedUsageTypes.length === 0 ? (
+              <div style={{ textAlign: 'center', padding: 32, color: 'rgba(255,255,255,0.4)' }}>
+                <Database size={32} style={{ marginBottom: 8, opacity: 0.3 }} />
+                <p>No hay registros de uso aún</p>
+              </div>
+            ) : (
+              <div style={{ display: 'grid', gap: 8 }}>
+                {/* Header */}
+                <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr 1fr 1fr', gap: 12, padding: '8px 12px', fontSize: 12, color: 'rgba(255,255,255,0.4)', fontWeight: 600, textTransform: 'uppercase' as const, letterSpacing: '0.05em' }}>
+                  <span>Origen</span>
+                  <span style={{ textAlign: 'right' }}>Solicitudes</span>
+                  <span style={{ textAlign: 'right' }}>Tokens</span>
+                  <span style={{ textAlign: 'right' }}>Costo</span>
+                </div>
+                {sortedUsageTypes.map(([type, data]) => {
+                  const info = REQUEST_TYPE_LABELS[type] || { label: type, color: '#6b7280', icon: '⚡' };
+                  const costPercent = usage.total_cost > 0 ? (data.cost / usage.total_cost) * 100 : 0;
+                  return (
+                    <div key={type} style={{
+                      display: 'grid',
+                      gridTemplateColumns: '2fr 1fr 1fr 1fr',
+                      gap: 12,
+                      padding: '12px',
+                      background: 'rgba(255,255,255,0.03)',
+                      borderRadius: 10,
+                      borderLeft: `3px solid ${info.color}`,
+                      alignItems: 'center'
+                    }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                        <span style={{ fontSize: 16 }}>{info.icon}</span>
+                        <div>
+                          <div style={{ fontSize: 14, fontWeight: 500 }}>{info.label}</div>
+                          <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.4)' }}>{costPercent.toFixed(1)}% del total</div>
+                        </div>
+                      </div>
+                      <div style={{ textAlign: 'right', fontSize: 15, fontWeight: 600 }}>{formatNumber(data.requests)}</div>
+                      <div style={{ textAlign: 'right', fontSize: 15, fontWeight: 600 }}>{formatNumber(data.tokens)}</div>
+                      <div style={{ textAlign: 'right', fontSize: 15, fontWeight: 700, color: info.color }}>{formatCurrency(data.cost)}</div>
+                    </div>
+                  );
+                })}
+                {/* Total row */}
+                <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr 1fr 1fr', gap: 12, padding: '12px', borderTop: '1px solid rgba(255,255,255,0.1)', marginTop: 4 }}>
+                  <span style={{ fontSize: 14, fontWeight: 700 }}>Total</span>
+                  <span style={{ textAlign: 'right', fontSize: 15, fontWeight: 700 }}>{formatNumber(usage.total_requests)}</span>
+                  <span style={{ textAlign: 'right', fontSize: 15, fontWeight: 700 }}>{formatNumber(usage.total_tokens)}</span>
+                  <span style={{ textAlign: 'right', fontSize: 15, fontWeight: 700, color: '#10b981' }}>{formatCurrency(usage.total_cost)}</span>
+                </div>
+              </div>
+            )}
+          </Card>
 
           {/* Gráficos avanzados */}
           {usageLogs.length > 0 && (

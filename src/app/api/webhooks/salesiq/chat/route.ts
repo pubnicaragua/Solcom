@@ -333,6 +333,32 @@ export async function POST(request: NextRequest) {
 
     const reply = completion.choices[0]?.message?.content || 'Lo siento, no pude procesar tu consulta en este momento.';
 
+    // ============================================================
+    // 6.5 Registrar uso en ai_usage_logs para Solcom AI dashboard
+    // DeepSeek pricing: $0.27/M input tokens, $1.10/M output tokens (deepseek-chat)
+    // ============================================================
+    try {
+      const inputTokens = completion.usage?.prompt_tokens || 0;
+      const outputTokens = completion.usage?.completion_tokens || 0;
+      const totalTokens = completion.usage?.total_tokens || (inputTokens + outputTokens);
+      
+      // Calcular costo real basado en precios de DeepSeek
+      const inputCost = (inputTokens / 1_000_000) * 0.27;
+      const outputCost = (outputTokens / 1_000_000) * 1.10;
+      const totalCost = Number((inputCost + outputCost).toFixed(6));
+
+      await supabase.from('ai_usage_logs').insert({
+        tokens: totalTokens,
+        cost: totalCost,
+        request_type: 'salesiq_chatbot',
+      });
+
+      console.log(`[SalesIQ] Usage logged: ${totalTokens} tokens, $${totalCost} (in: ${inputTokens}, out: ${outputTokens})`);
+    } catch (logError) {
+      // No fallar la respuesta si el logging falla
+      console.error('[SalesIQ] Error logging usage:', logError);
+    }
+
     console.log(`[SalesIQ] Reply (${products?.length || 0} products found): "${reply.substring(0, 100)}..."`);
 
     // ============================================================
