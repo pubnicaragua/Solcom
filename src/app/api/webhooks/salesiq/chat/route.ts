@@ -34,8 +34,8 @@ El inventario disponible se te proporcionará dinámicamente en el contexto (aba
 - Si encuentras resultados, esos productos SÍ SON lo que el cliente busca. Por ejemplo: si piden "iPhone 17" y el inventario muestra "iPhone 17 (256GB) ESIM", eso ES un iPhone 17.
 - Enumera las opciones exactas especificando: NOMBRE COMPLETO, COLOR, PRECIO (en USD) y STOCK.
 - ⚠️ SOLO menciona y ofrece los productos del inventario que tengan un Stock mayor a 0. IGNORA por completo cualquier producto con Stock 0, no lo menciones bajo ninguna circunstancia.
+- 🚫 REGLA ESTRICTA DE NO ALUCINAR: Es inaceptable y está estrictamente prohibido inventar o deducir precios, colores, versiones, capacidades o stock. TÚ NO TIENES MEMORIA DE PRECIOS. TODO DEBE SALIR DEL TEXTO DE "INVENTARIO ENCONTRADO". Si la lista está vacía o el producto no aparece ahí, DEBES decir que está agotado y NO DAR NINGÚN PRECIO FICTICIO.
 - Si el modelo no está en el inventario proporcionado o si todos los resultados tienen Stock 0, SIEMPRE responder: "Modelo agotado o no disponible por el momento 💙."
-- 🚫 REGLA ESTRICTA DE NO ALUCINAR: BAJO NINGUNA CIRCUNSTANCIA puedes inventar, suponer o sugerir precios, colores, variantes o especificaciones técnicas de productos que NO estén textualmente en la lista de "INVENTARIO ENCONTRADO". Si te preguntan por "Xiaomi 14 Ultra" y el inventario dice "No se encontraron productos", DEBES decir que está agotado. NO ofrezcas precios ficticios.
 - Si el cliente te pregunta características que no están en el texto del inventario, responde: "Por el momento no tengo el detalle exacto de esas características técnicas, te conecto con un asesor."
 
 IMPORTANTE - ABREVIACIONES DE CLIENTES:
@@ -320,7 +320,7 @@ export async function POST(request: NextRequest) {
         inventoryContext += `- ${p.name} | SKU: ${p.sku} | Stock: ${p.stock_total ?? 0} | Precio: $${p.price ?? 0} | Marca: ${p.marca ?? 'N/A'} | Color: ${p.color ?? 'N/A'} | Estado: ${p.state ?? 'N/A'}\n`;
       }
     } else {
-      inventoryContext = '\n\nNo se encontraron productos que coincidan con la búsqueda del cliente en el inventario.';
+      inventoryContext = '\n\nINVENTARIO ENCONTRADO:\n[VACÍO - 0 RESULTADOS]\n⚠️ REGLA CRÍTICA PARA LA IA: El producto buscado NO está disponible o no existe. DEBES responder estrictamente que está agotado o no lo tenemos. TIENES PROHIBIDO inventar precios, colores o stock.';
     }
 
     // Agregar hora actual de Nicaragua para que la IA sepa si hay asesores disponibles
@@ -338,7 +338,7 @@ export async function POST(request: NextRequest) {
         { role: 'user', content: userMessage },
       ],
       max_tokens: 300,
-      temperature: 0.2,
+      temperature: 0.0,
     });
 
     const reply = completion.choices[0]?.message?.content || 'Lo siento, no pude procesar tu consulta en este momento.';
