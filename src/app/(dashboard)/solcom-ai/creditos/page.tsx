@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { createClient } from '@/lib/supabase/client';
+import { supabase } from '@/lib/supabase/client';
 import { CreditCard, DollarSign, Zap, AlertCircle, CheckCircle, XCircle } from 'lucide-react';
 
 interface CreditPackage {
@@ -59,17 +59,15 @@ export default function CreditosPage() {
 
   const loadBalance = async () => {
     try {
-      const supabase = createClient();
-      
-      // Obtener balance actual de créditos
-      const { data, error } = await supabase
+      // Obtener balance actual de créditos (usando casteo flexible por tipos desactualizados)
+      const { data, error } = await (supabase as any)
         .from('ai_credit_balance')
         .select('balance')
         .single();
 
       if (error) {
         // Si no existe, crear con balance 0
-        await supabase.from('ai_credit_balance').insert({ balance: 0 });
+        await (supabase as any).from('ai_credit_balance').insert({ balance: 0 });
         setBalance(0);
       } else {
         setBalance(data?.balance || 0);
