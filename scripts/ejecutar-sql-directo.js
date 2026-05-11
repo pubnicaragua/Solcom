@@ -52,7 +52,13 @@ async function ejecutarSQL() {
     await client.query(creditSQL);
     console.log('✅ create-credit-system.sql ejecutado\n');
 
-    // 3. Ejecutar supabase_conversation_history.sql
+    // 3. Ejecutar recalculate-costs.sql
+    console.log('📝 Ejecutando recalculate-costs.sql...');
+    const recalculateSQL = fs.readFileSync(path.join(__dirname, 'recalculate-costs.sql'), 'utf8');
+    await client.query(recalculateSQL);
+    console.log('✅ recalculate-costs.sql ejecutado\n');
+
+    // 4. Ejecutar supabase_conversation_history.sql
     console.log('📝 Ejecutando supabase_conversation_history.sql...');
     const conversationSQL = fs.readFileSync(path.join(__dirname, '..', 'supabase_conversation_history.sql'), 'utf8');
     

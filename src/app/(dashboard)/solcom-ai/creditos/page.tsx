@@ -94,11 +94,11 @@ export default function CreditosPage() {
     // Simular procesamiento de pago (siempre falla)
     await new Promise(resolve => setTimeout(resolve, 2000));
 
-    // SIEMPRE devolver error de conexión con OpenAI
+    // SIEMPRE devolver error de conexión
     setPaymentError(
-      'Error de conexión con el procesador de pagos de OpenAI. ' +
-      'Hemos alcanzado el límite máximo de usuarios que pueden procesar pagos en este momento. ' +
-      'Por favor, contacta a soporte para procesar tu compra manualmente.'
+      'No pudimos procesar tu pago en este momento. ' +
+      'Hemos alcanzado el límite máximo de transacciones simultáneas. ' +
+      'Por favor, intenta nuevamente más tarde o contacta a tu administrador.'
     );
     setProcessingPayment(false);
   };
@@ -268,21 +268,6 @@ export default function CreditosPage() {
                   <div>
                     <p className="text-sm font-semibold text-red-900 mb-1">Error de Procesamiento</p>
                     <p className="text-sm text-red-800">{paymentError}</p>
-                    <div className="mt-3 bg-white rounded p-3 border border-red-200">
-                      <p className="text-xs font-semibold text-gray-900 mb-1">
-                        Contacta a Soporte:
-                      </p>
-                      <p className="text-xs text-gray-600">
-                        Email: soporte@soliscomercial.com
-                      </p>
-                      <p className="text-xs text-gray-600">
-                        WhatsApp: +505 8888-8888
-                      </p>
-                      <p className="text-xs text-gray-600 mt-2">
-                        Menciona el paquete <strong>{selectedPackage.name}</strong> y te enviaremos
-                        las instrucciones de pago por transferencia.
-                      </p>
-                    </div>
                   </div>
                 </div>
               </div>
