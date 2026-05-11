@@ -46,6 +46,13 @@ async function ejecutarSQL() {
     console.log('✅ fix_routes_table.sql ejecutado\n');
 
     // 2. Ejecutar supabase_conversation_history.sql
+    // 2. Ejecutar create-credit-system.sql
+    console.log('📝 Ejecutando create-credit-system.sql...');
+    const creditSQL = fs.readFileSync(path.join(__dirname, 'create-credit-system.sql'), 'utf8');
+    await client.query(creditSQL);
+    console.log('✅ create-credit-system.sql ejecutado\n');
+
+    // 3. Ejecutar supabase_conversation_history.sql
     console.log('📝 Ejecutando supabase_conversation_history.sql...');
     const conversationSQL = fs.readFileSync(path.join(__dirname, '..', 'supabase_conversation_history.sql'), 'utf8');
     
