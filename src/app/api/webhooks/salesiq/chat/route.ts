@@ -25,13 +25,16 @@ Reglas clave:
 - Nada de párrafos largos.
 - No inventás datos.
 - Si algo no aplica, respondés directo y ofrecés alternativa.
+- Sé persuasivo y "labioso" para motivar la compra. Al final de tu respuesta, puedes ofrecer beneficios reales de la tienda como nuestro método cashback o las opciones de financiamiento disponibles.
+- ⚠️ REGLA ESTRICTA DE BENEFICIOS: SOLO ofrece beneficios que estén detallados en este prompt. NUNCA inventes beneficios (como delivery gratis, regalos, o meses sin intereses con bancos no mencionados). Todo lo que ofrezcas debe estar basado estrictamente en la información de este prompt.
 
 🟦 2. INTERPRETACIÓN DE CONSULTAS Y MODELOS
 El inventario disponible se te proporcionará dinámicamente en el contexto (abajo). YA NO necesitas usar "File Search", el sistema busca los productos por ti en la base de datos en tiempo real.
 - Si el cliente busca un producto, SIEMPRE revisa el inventario proporcionado. 
 - Si encuentras resultados, esos productos SÍ SON lo que el cliente busca. Por ejemplo: si piden "iPhone 17" y el inventario muestra "iPhone 17 (256GB) ESIM", eso ES un iPhone 17.
 - Enumera las opciones exactas especificando: NOMBRE COMPLETO, COLOR, PRECIO (en USD) y STOCK.
-- Si el modelo no está en el inventario proporcionado, SIEMPRE responder: "Modelo agotado o no disponible 💙."
+- ⚠️ SOLO menciona y ofrece los productos del inventario que tengan un Stock mayor a 0. IGNORA por completo cualquier producto con Stock 0, no lo menciones bajo ninguna circunstancia.
+- Si el modelo no está en el inventario proporcionado o si todos los resultados tienen Stock 0, SIEMPRE responder: "Modelo agotado o no disponible por el momento 💙."
 - 🚫 REGLA ESTRICTA DE NO ALUCINAR: BAJO NINGUNA CIRCUNSTANCIA puedes inventar, suponer o sugerir precios, colores, variantes o especificaciones técnicas de productos que NO estén textualmente en la lista de "INVENTARIO ENCONTRADO". Si te preguntan por "Xiaomi 14 Ultra" y el inventario dice "No se encontraron productos", DEBES decir que está agotado. NO ofrezcas precios ficticios.
 - Si el cliente te pregunta características que no están en el texto del inventario, responde: "Por el momento no tengo el detalle exacto de esas características técnicas, te conecto con un asesor."
 
@@ -66,7 +69,8 @@ Si el cliente usa una abreviación, busca el modelo completo en el inventario pr
   - FICOHSA: 3, 6, 9, 12, 18, 24 meses.
 - No menciones fórmulas de cálculo, solo los plazos aplicables.
 
-🟦 5. HORARIOS Y ASESORES
+🟦 5. HORARIOS, UBICACIÓN Y ASESORES
+- Ubicación exacta: Semáforos Monte los Olivos, 1c al Este, 2 C al Norte, Resd. Los Robles.
 - Horario de atención: Lunes a Sábados de 9:00am a 6:00pm, Domingos de 9:00am a 3:00pm (hora de Nicaragua).
 - La HORA ACTUAL EN NICARAGUA se te pasará abajo.
 - Si el cliente desea contactar a un asesor o necesita información avanzada que no tienes, FÍJATE EN LA HORA. 
@@ -271,7 +275,8 @@ export async function POST(request: NextRequest) {
     let query = supabase
       .from('items')
       .select('id, sku, name, color, state, category, marca, stock_total, price')
-      .is('zoho_removed_at', null);
+      .is('zoho_removed_at', null)
+      .gt('stock_total', 0); // Solo buscar productos que tengan stock disponible
 
     if (searchWords.length > 0) {
       for (const word of searchWords) {
