@@ -250,7 +250,39 @@ export async function POST(request: NextRequest) {
       return zohoReply('No logré entender tu mensaje. ¿Podrías escribirme qué producto estás buscando? 😊');
     }
 
+    // Rechazar mensajes que son solo puntuación, puntos, espacios o caracteres sin sentido
+    const sanitizedCheck = userMessage.replace(/[\s.·,;:!?¿¡\-_()"'\[\]{}@#$%^&*+=~`<>\/\\|]+/g, '').trim();
+    if (sanitizedCheck.length < 2) {
+      return zohoReply('No logré entender tu mensaje. ¿Podrías escribirme el nombre del equipo que estás buscando? 😊');
+    }
+
     console.log(`[SalesIQ] Handler: ${handler}, Operation: ${operation}, Message: "${userMessage}"`);
+
+    // ============================================================
+    // 2.5 Detectar si el cliente pide un asesor directamente
+    // ============================================================
+    const cleanMsgForAsesor = userMessage.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").trim();
+    const wantsAdvisor = /^(asesor|asesora|quiero\s+(un\s+)?asesor|necesito\s+(un\s+)?asesor|hablar\s+con\s+(un\s+)?asesor|conectar\s+con\s+(un\s+)?asesor|concretar\s+compra|quiero\s+comprar)$/i.test(cleanMsgForAsesor)
+      || /\b(quiero|necesito|pasame|conectame|comunica)\b.*(asesor|asesora|vendedor|humano|persona)/i.test(cleanMsgForAsesor)
+      || /\b(asesor|asesora)\b/i.test(cleanMsgForAsesor) && cleanMsgForAsesor.split(/\s+/).length <= 3;
+
+    if (wantsAdvisor) {
+      const nowForAdvisor = new Date();
+      const nicTime = new Date(nowForAdvisor.toLocaleString('en-US', { timeZone: 'America/Managua' }));
+      const hour = nicTime.getHours();
+      const day = nicTime.getDay(); // 0=domingo
+      
+      // Horario: Lun-Sab 9am-6pm, Dom 9am-3pm
+      const isWorkday = day >= 1 && day <= 6; // lunes a sábado
+      const isSunday = day === 0;
+      const isInSchedule = (isWorkday && hour >= 9 && hour < 18) || (isSunday && hour >= 9 && hour < 15);
+
+      if (isInSchedule) {
+        return zohoReply('¡Con gusto! 💙 En breve un asesor te atenderá. También podés presionar "Concretar compra" para agilizar la conexión. ¡Gracias por tu paciencia!');
+      } else {
+        return zohoReply('¡Gracias por tu interés! 💙 Por el momento nuestros asesores no están disponibles. Te atenderán a partir de las 9:00 AM en horario laboral (Lunes a Sábado 9am-6pm, Domingos 9am-3pm). ¡Mientras tanto yo puedo ayudarte con info de stock y precios!');
+      }
+    }
 
     // ============================================================
     // 3. Buscar productos en la base de datos
@@ -357,16 +389,20 @@ export async function POST(request: NextRequest) {
       const outputCost = (outputTokens / 1_000_000) * 1.10;
       const totalCost = Number((inputCost + outputCost).toFixed(6));
 
-      await supabase.from('ai_usage_logs').insert({
+      const { error: insertError } = await supabase.from('ai_usage_logs').insert({
         tokens: totalTokens,
         cost: totalCost,
         request_type: 'salesiq_chatbot',
       });
 
-      console.log(`[SalesIQ] Usage logged: ${totalTokens} tokens, $${totalCost} (in: ${inputTokens}, out: ${outputTokens})`);
+      if (insertError) {
+        console.error('[SalesIQ] Error inserting usage log:', JSON.stringify(insertError));
+      } else {
+        console.log(`[SalesIQ] Usage logged: ${totalTokens} tokens, $${totalCost} (in: ${inputTokens}, out: ${outputTokens})`);
+      }
     } catch (logError) {
       // No fallar la respuesta si el logging falla
-      console.error('[SalesIQ] Error logging usage:', logError);
+      console.error('[SalesIQ] Error logging usage (exception):', logError instanceof Error ? logError.message : logError);
     }
 
     console.log(`[SalesIQ] Reply (${products?.length || 0} products found): "${reply.substring(0, 100)}..."`);
