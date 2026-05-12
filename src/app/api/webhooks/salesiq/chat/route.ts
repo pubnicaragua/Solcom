@@ -377,28 +377,54 @@ export async function POST(request: NextRequest) {
 
     // ============================================================
     // 6.5 Registrar uso en ai_usage_logs para Solcom AI dashboard
-    // DeepSeek pricing: $0.27/M input tokens, $1.10/M output tokens (deepseek-chat)
+    // Estrategia de precios: 15% menos que OpenAI GPT-4o
+    // DeepSeek pricing real: $0.27/M input, $1.10/M output
+    // OpenAI GPT-4o pricing real del cliente: $1.41/M tokens promedio
+    // Cliente paga 15% menos: $1.20/M tokens
     // ============================================================
     try {
       const inputTokens = completion.usage?.prompt_tokens || 0;
       const outputTokens = completion.usage?.completion_tokens || 0;
       const totalTokens = completion.usage?.total_tokens || (inputTokens + outputTokens);
       
-      // Calcular costo real basado en precios de DeepSeek
-      const inputCost = (inputTokens / 1_000_000) * 0.27;
-      const outputCost = (outputTokens / 1_000_000) * 1.10;
-      const totalCost = Number((inputCost + outputCost).toFixed(6));
+      // Calcular costo que le cobramos al cliente (15% descuento sobre OpenAI GPT-4o)
+      // Precio real que el cliente paga en OpenAI: $1.41 por 1M tokens
+      const openaiPricePerMillion = 1.41;  // Precio promedio real del cliente
+      const discountRate = 0.15; // 15% de descuento
+      
+      const clientPricePerMillion = openaiPricePerMillion * (1 - discountRate);  // $1.20
+      
+      const clientCost = Number(((totalTokens / 1_000_000) * clientPricePerMillion).toFixed(6));
+      
+      // Calcular nuestro costo real con DeepSeek (promedio simplificado)
+      const realCostPerMillion = 0.50;  // Promedio DeepSeek: ~$0.27 input + ~$1.10 output ≈ $0.50 promedio
+      const realCost = Number(((totalTokens / 1_000_000) * realCostPerMillion).toFixed(6));
+      
+      // Calcular margen de ganancia
+      const profit = Number((clientCost - realCost).toFixed(6));
+      const profitPercent = realCost > 0 ? ((profit / realCost) * 100).toFixed(2) : '0';
 
       const { error: insertError } = await supabase.from('ai_usage_logs').insert({
         tokens: totalTokens,
-        cost: totalCost,
+        cost: clientCost,  // Lo que le cobramos al cliente
         request_type: 'salesiq_chatbot',
+        metadata: {
+          input_tokens: inputTokens,
+          output_tokens: outputTokens,
+          real_cost: realCost,      // Nuestro costo real
+          client_cost: clientCost,   // Lo que cobramos
+          profit: profit,            // Ganancia
+          profit_percent: profitPercent,
+          openai_reference: openaiPricePerMillion,
+          discount_rate: discountRate,
+          model: 'deepseek-chat'
+        }
       });
 
       if (insertError) {
         console.error('[SalesIQ] Error inserting usage log:', JSON.stringify(insertError));
       } else {
-        console.log(`[SalesIQ] Usage logged: ${totalTokens} tokens, $${totalCost} (in: ${inputTokens}, out: ${outputTokens})`);
+        console.log(`[SalesIQ] Usage logged: ${totalTokens} tokens | Cliente: $${clientCost} (15% menos que OpenAI $${openaiPricePerMillion}/M) | Real: $${realCost} | Ganancia: $${profit} (${profitPercent}%)`);
       }
     } catch (logError) {
       // No fallar la respuesta si el logging falla
