@@ -238,13 +238,24 @@ export async function POST(request: NextRequest) {
     }
 
     // Extraer texto del mensaje - Zoho puede enviar message como objeto {text, type} o como string
+    const messageObj = body.request?.message || body.message || {};
+    const messageType = messageObj?.type || body.request?.message_type || '';
     const rawMessage =
-      body.request?.message?.text ||  // Formato Zoho Zobot Webhook: request.message.text
-      (typeof body.message === 'string' ? body.message : body.message?.text) ||  // message puede ser string u objeto
+      messageObj?.text ||  // Formato Zoho Zobot Webhook: request.message.text
+      (typeof body.message === 'string' ? body.message : '') ||
       body.question ||
       body.text ||
       '';
     const userMessage = typeof rawMessage === 'string' ? rawMessage : String(rawMessage || '');
+
+    // Detectar si mandaron imagen, archivo o adjunto (Zoho envía type: "image", "file", "attachment")
+    const isMediaMessage = ['image', 'file', 'attachment', 'photo', 'video', 'audio', 'sticker'].includes(messageType?.toLowerCase?.() || '')
+      || (messageObj?.url && !userMessage.trim())
+      || (messageObj?.file && !userMessage.trim());
+
+    if (isMediaMessage) {
+      return zohoReply('Por el momento no puedo ver imágenes ni archivos 📷. Si necesitás consultar por un equipo, escribime el nombre o modelo y con gusto te ayudo. 💙');
+    }
 
     if (!userMessage.trim()) {
       return zohoReply('No logré entender tu mensaje. ¿Podrías escribirme qué producto estás buscando? 😊');
@@ -254,6 +265,39 @@ export async function POST(request: NextRequest) {
     const sanitizedCheck = userMessage.replace(/[\s.·,;:!?¿¡\-_()"'\[\]{}@#$%^&*+=~`<>\/\\|]+/g, '').trim();
     if (sanitizedCheck.length < 2) {
       return zohoReply('No logré entender tu mensaje. ¿Podrías escribirme el nombre del equipo que estás buscando? 😊');
+    }
+
+    // Detectar si el mensaje contiene un URL y extraer su contenido
+    const urlMatch = userMessage.match(/https?:\/\/[^\s]+/i);
+    let urlContext = '';
+    if (urlMatch) {
+      try {
+        const appUrl = process.env.NEXT_PUBLIC_APP_URL || process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : 'http://localhost:3000';
+        const scrapeRes = await fetch(`${appUrl}/api/ai/scrape`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ url: urlMatch[0] })
+        });
+        const scrapeData = await scrapeRes.json();
+        if (scrapeData.success && scrapeData.content) {
+          urlContext = `\n\nCONTENIDO DEL LINK ENVIADO POR EL CLIENTE (${urlMatch[0]}):\nTítulo: ${scrapeData.content.title}\nDescripción: ${scrapeData.content.description}\nContenido: ${scrapeData.content.bodyText?.substring(0, 800) || 'No disponible'}\n${scrapeData.content.prices?.length > 0 ? `Precios encontrados: ${scrapeData.content.prices.join(', ')}` : ''}`;
+          console.log(`[SalesIQ] URL scraped: ${urlMatch[0]} - Title: "${scrapeData.content.title}"`);
+        }
+      } catch (scrapeErr) {
+        console.error('[SalesIQ] Error scraping URL:', scrapeErr);
+        urlContext = `\n\nEl cliente envió un link (${urlMatch[0]}) pero no se pudo leer su contenido. Indicale que describas el producto con texto.`;
+      }
+
+      // Si el mensaje era SOLO el link sin texto adicional, pedir contexto
+      const messageWithoutUrl = userMessage.replace(/https?:\/\/[^\s]+/gi, '').trim();
+      if (!messageWithoutUrl) {
+        if (urlContext && !urlContext.includes('no se pudo leer')) {
+          // Tenemos contenido del link, mandarlo a la IA con una pregunta genérica
+          // (se procesará más abajo con el flujo normal)
+        } else {
+          return zohoReply('No pude leer ese enlace 🔗. ¿Podrías escribirme el nombre del equipo que estás buscando? 💙');
+        }
+      }
     }
 
     console.log(`[SalesIQ] Handler: ${handler}, Operation: ${operation}, Message: "${userMessage}"`);
@@ -358,6 +402,11 @@ export async function POST(request: NextRequest) {
     // Agregar hora actual de Nicaragua para que la IA sepa si hay asesores disponibles
     const nowNic = new Date().toLocaleString('es-NI', { timeZone: 'America/Managua', weekday: 'long', hour: '2-digit', minute: '2-digit', hour12: true });
     inventoryContext += `\n\nHORA ACTUAL EN NICARAGUA: ${nowNic}`;
+
+    // Si el cliente envió un link, agregar el contenido scrapeado al contexto
+    if (urlContext) {
+      inventoryContext += urlContext;
+    }
 
     // ============================================================
     // 6. Llamar a DeepSeek AI
