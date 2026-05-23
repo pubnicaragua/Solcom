@@ -2,7 +2,8 @@
 
 import { useEffect, useMemo, useRef, useState } from 'react';
 import type { CSSProperties, ReactNode } from 'react';
-import { X, Loader2, Save, Plus, Trash2, Search, User, ChevronDown, RefreshCw, Calendar, Tag, MapPin, Truck, FileText } from 'lucide-react';
+import { X, Loader2, Save, Plus, Trash2, Search, User, ChevronDown, RefreshCw, Calendar, Tag, MapPin, Truck, FileText, UserPlus } from 'lucide-react';
+import CustomerModal from './CustomerModal';
 
 interface CustomerOption {
     id: string;
@@ -10,6 +11,10 @@ interface CustomerOption {
     email?: string | null;
     ruc?: string | null;
     source?: 'supabase' | 'zoho';
+    phone?: string | null;
+    address?: string | null;
+    lat?: number | null;
+    lng?: number | null;
 }
 
 interface WarehouseOption {
@@ -146,6 +151,9 @@ export default function SalesOrderForm({ isOpen, orderId, onClose, onSaved }: Sa
     const [salespersonId, setSalespersonId] = useState('');
     const [notes, setNotes] = useState('');
     const [items, setItems] = useState<OrderLine[]>([]);
+    const [selectedCustomer, setSelectedCustomer] = useState<CustomerOption | null>(null);
+    const [showCustomerModal, setShowCustomerModal] = useState(false);
+    const [editingCustomer, setEditingCustomer] = useState<CustomerOption | null>(null);
 
     const customerRef = useRef<HTMLDivElement | null>(null);
     const customerSearchTimeout = useRef<NodeJS.Timeout | null>(null);
@@ -538,8 +546,9 @@ export default function SalesOrderForm({ isOpen, orderId, onClose, onSaved }: Sa
         setCustomerSearch(value);
         setShowCustomerDropdown(true);
         const currentSelected = customers.find((customer) => customer.id === customerId);
-        if (currentSelected && value.trim() !== currentSelected.name.trim()) {
+        if (!value.trim() || (currentSelected && !equalsIgnoreCase(currentSelected.name, value.trim()))) {
             setCustomerId('');
+            setSelectedCustomer(null);
         }
 
         if (!value.trim()) {
@@ -556,6 +565,7 @@ export default function SalesOrderForm({ isOpen, orderId, onClose, onSaved }: Sa
     function selectCustomer(customer: CustomerOption) {
         setCustomerId(customer.id);
         setCustomerSearch(customer.name);
+        setSelectedCustomer(customer);
         setShowCustomerDropdown(false);
     }
 
@@ -587,6 +597,22 @@ export default function SalesOrderForm({ isOpen, orderId, onClose, onSaved }: Sa
             setOrderNumber(order.order_number || '');
             setCustomerId(order.customer_id || '');
             setCustomerSearch(order.customer?.name || '');
+            if (order.customer) {
+                const fullCust: CustomerOption = {
+                    id: order.customer.id,
+                    name: order.customer.name || '',
+                    email: order.customer.email || null,
+                    ruc: order.customer.ruc || null,
+                    phone: order.customer.phone || null,
+                    address: order.customer.address || null,
+                    lat: order.customer.lat || null,
+                    lng: order.customer.lng || null,
+                    source: 'supabase',
+                };
+                setSelectedCustomer(fullCust);
+            } else {
+                setSelectedCustomer(null);
+            }
             setWarehouseId(order.warehouse_id || '');
             setDate(order.date || '');
             setExpectedDeliveryDate(order.expected_delivery_date || '');
@@ -664,6 +690,11 @@ export default function SalesOrderForm({ isOpen, orderId, onClose, onSaved }: Sa
                     name: order.customer.name || '',
                     email: order.customer.email || null,
                     ruc: order.customer.ruc || null,
+                    phone: order.customer.phone || null,
+                    address: order.customer.address || null,
+                    lat: order.customer.lat || null,
+                    lng: order.customer.lng || null,
+                    source: 'supabase',
                 }
                 : null
             );
@@ -1026,46 +1057,95 @@ export default function SalesOrderForm({ isOpen, orderId, onClose, onSaved }: Sa
                         <FormSection title="Datos principales" accent="#10B981" icon={<User size={13} />}>
                             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: 14 }}>
                                 <Field label="Cliente *">
-                                    <div ref={customerRef} style={{ position: 'relative' }}>
-                                        <Search size={14} style={{ position: 'absolute', left: 10, top: 11, color: 'var(--muted)', pointerEvents: 'none', zIndex: 2 }} />
-                                        <input
-                                            type="text"
-                                            value={customerSearch}
-                                            onChange={(event) => handleCustomerSearchChange(event.target.value)}
-                                            onFocus={() => {
-                                                setShowCustomerDropdown(true);
-                                                if (customers.length === 0) {
-                                                    void fetchCustomers('', customerId ? customers.find((c) => c.id === customerId) || null : null);
-                                                }
-                                            }}
-                                            placeholder="Buscar cliente..."
-                                            style={{ ...inputStyle, paddingLeft: 34 }}
-                                        />
-                                        {showCustomerDropdown && (
-                                            <div style={customerDropdownStyle}>
-                                                {customers.length === 0 ? (
-                                                    <div style={customerEmptyStyle}>Sin resultados</div>
-                                                ) : (
-                                                    customers.map((customer) => {
-                                                        const isActive = customer.id === customerId;
-                                                        return (
-                                                            <button
-                                                                key={customer.id}
-                                                                type="button"
-                                                                onClick={() => selectCustomer(customer)}
-                                                                style={{ ...customerOptionStyle, background: isActive ? 'rgba(59,130,246,0.12)' : 'transparent', borderColor: isActive ? 'rgba(59,130,246,0.28)' : 'transparent' }}
-                                                            >
-                                                                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
-                                                                    <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--text)' }}>{customer.name}</span>
-                                                                    {customer.source === 'zoho' && <span style={customerBadgeStyle}>Zoho</span>}
-                                                                </div>
-                                                                <div style={{ fontSize: 11, color: 'var(--muted)' }}>{customer.ruc || customer.email || 'Sin identificación'}</div>
-                                                            </button>
-                                                        );
-                                                    })
-                                                )}
-                                            </div>
+                                    <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+                                        <div ref={customerRef} style={{ position: 'relative', flex: 1 }}>
+                                            <Search size={14} style={{ position: 'absolute', left: 10, top: 11, color: 'var(--muted)', pointerEvents: 'none', zIndex: 2 }} />
+                                            <input
+                                                type="text"
+                                                value={customerSearch}
+                                                onChange={(event) => handleCustomerSearchChange(event.target.value)}
+                                                onFocus={() => {
+                                                    setShowCustomerDropdown(true);
+                                                    if (customers.length === 0) {
+                                                        void fetchCustomers('', customerId ? customers.find((c) => c.id === customerId) || null : null);
+                                                    }
+                                                }}
+                                                placeholder="Buscar cliente..."
+                                                style={{ ...inputStyle, paddingLeft: 34 }}
+                                            />
+                                            {showCustomerDropdown && (
+                                                <div style={customerDropdownStyle}>
+                                                    {customers.length === 0 ? (
+                                                        <div style={customerEmptyStyle}>Sin resultados</div>
+                                                    ) : (
+                                                        customers.map((customer) => {
+                                                            const isActive = customer.id === customerId;
+                                                            return (
+                                                                <button
+                                                                    key={customer.id}
+                                                                    type="button"
+                                                                    onClick={() => selectCustomer(customer)}
+                                                                    style={{ ...customerOptionStyle, background: isActive ? 'rgba(59,130,246,0.12)' : 'transparent', borderColor: isActive ? 'rgba(59,130,246,0.28)' : 'transparent' }}
+                                                                >
+                                                                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
+                                                                        <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--text)' }}>{customer.name}</span>
+                                                                        {customer.source === 'zoho' && <span style={customerBadgeStyle}>Zoho</span>}
+                                                                    </div>
+                                                                    <div style={{ fontSize: 11, color: 'var(--muted)' }}>{customer.ruc || customer.email || 'Sin identificación'}</div>
+                                                                </button>
+                                                            );
+                                                        })
+                                                    )}
+                                                </div>
+                                            )}
+                                        </div>
+                                        {selectedCustomer && (
+                                            <button 
+                                                type="button"
+                                                onClick={() => {
+                                                    setEditingCustomer(selectedCustomer);
+                                                    setShowCustomerModal(true);
+                                                }} 
+                                                title="Editar Ubicación del Cliente"
+                                                style={{ 
+                                                    padding: '9px', 
+                                                    background: '#1E293B', 
+                                                    color: '#10B981', 
+                                                    border: '1px solid #10B981', 
+                                                    borderRadius: '8px', 
+                                                    cursor: 'pointer', 
+                                                    display: 'flex', 
+                                                    alignItems: 'center', 
+                                                    justifyContent: 'center',
+                                                    transition: 'background 0.2s'
+                                                }}
+                                                onMouseEnter={(e) => e.currentTarget.style.background = 'rgba(16,185,129,0.1)'}
+                                                onMouseLeave={(e) => e.currentTarget.style.background = '#1E293B'}
+                                            >
+                                                <MapPin size={18} />
+                                            </button>
                                         )}
+                                        <button 
+                                            type="button"
+                                            onClick={() => {
+                                                setEditingCustomer(null);
+                                                setShowCustomerModal(true);
+                                            }} 
+                                            title="Nuevo Cliente"
+                                            style={{ 
+                                                padding: '9px', 
+                                                background: 'var(--brand-primary)', 
+                                                color: 'white', 
+                                                border: 'none', 
+                                                borderRadius: '8px', 
+                                                cursor: 'pointer', 
+                                                display: 'flex', 
+                                                alignItems: 'center', 
+                                                justifyContent: 'center' 
+                                            }}
+                                        >
+                                            <UserPlus size={18} />
+                                        </button>
                                     </div>
                                 </Field>
 
@@ -1537,6 +1617,20 @@ export default function SalesOrderForm({ isOpen, orderId, onClose, onSaved }: Sa
                         </div>
                     </div>
                 )}
+            <CustomerModal
+                isOpen={showCustomerModal}
+                editingCustomer={editingCustomer}
+                onClose={() => {
+                    setShowCustomerModal(false);
+                    setEditingCustomer(null);
+                }}
+                onSave={(customer) => {
+                    setShowCustomerModal(false);
+                    selectCustomer(customer);
+                    void fetchCustomers();
+                    setEditingCustomer(null);
+                }}
+            />
             </div>
         </div>
     );

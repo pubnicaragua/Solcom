@@ -1122,6 +1122,86 @@ export class ZohoBooksClient {
             estimate_number: result.estimate?.estimate_number || '',
         };
     }
+
+    async createContact(data: {
+        contact_name: string;
+        company_name?: string;
+        contact_type?: 'customer' | 'vendor';
+        billing_address?: {
+            attention?: string;
+            address?: string;
+            street2?: string;
+            city?: string;
+            state?: string;
+            zip?: string;
+            country?: string;
+            phone?: string;
+        };
+        shipping_address?: {
+            attention?: string;
+            address?: string;
+            street2?: string;
+            city?: string;
+            state?: string;
+            zip?: string;
+            country?: string;
+            phone?: string;
+        };
+        phone?: string;
+        mobile?: string;
+        email?: string;
+        contact_number?: string;
+    }): Promise<{ contact_id: string; contact_name: string }> {
+        const result = await this.request('POST', '/books/v3/contacts', data);
+        if (result.code !== 0) {
+            throw new Error(result.message || 'Error al crear contacto en Zoho');
+        }
+        return {
+            contact_id: result.contact.contact_id,
+            contact_name: result.contact.contact_name,
+        };
+    }
+
+    async updateContact(
+        contactId: string,
+        data: {
+            contact_name?: string;
+            company_name?: string;
+            billing_address?: {
+                attention?: string;
+                address?: string;
+                street2?: string;
+                city?: string;
+                state?: string;
+                zip?: string;
+                country?: string;
+                phone?: string;
+            };
+            shipping_address?: {
+                attention?: string;
+                address?: string;
+                street2?: string;
+                city?: string;
+                state?: string;
+                zip?: string;
+                country?: string;
+                phone?: string;
+            };
+            phone?: string;
+            mobile?: string;
+            email?: string;
+            contact_number?: string;
+        }
+    ): Promise<{ contact_id: string; contact_name: string }> {
+        const result = await this.request('PUT', `/books/v3/contacts/${contactId}`, data);
+        if (result.code !== 0) {
+            throw new Error(result.message || 'Error al actualizar contacto en Zoho');
+        }
+        return {
+            contact_id: result.contact.contact_id,
+            contact_name: result.contact.contact_name,
+        };
+    }
 }
 
 export function createZohoBooksClient(): ZohoBooksClient | null {

@@ -28,6 +28,14 @@ interface DeliveryJob {
   geocoded: boolean;
   geocoding_failed: boolean;
   created_at: string;
+  metadata?: {
+    pick_order_id?: string;
+    sales_order_id?: string;
+    pick_status?: string;
+    pick_priority?: string;
+    delivery_method?: string;
+    sync_source?: string;
+  } | null;
 }
 
 interface Route {
@@ -66,6 +74,7 @@ export default function CentroRutasPage() {
   const [searchTerm, setSearchTerm] = useState('');
   const [zoneFilter, setZoneFilter] = useState('');
   const [priorityFilter, setPriorityFilter] = useState('');
+  const [typeFilter, setTypeFilter] = useState('');
   
   // Estado de rutas
   const [routes, setRoutes] = useState<Route[]>([]);
@@ -182,7 +191,14 @@ export default function CentroRutasPage() {
     const matchesZone = !zoneFilter || job.zone_id === zoneFilter;
     const matchesPriority = !priorityFilter || job.priority === priorityFilter;
     
-    return matchesSearch && matchesZone && matchesPriority;
+    let matchesType = true;
+    if (typeFilter === 'libre') {
+      matchesType = job.metadata?.delivery_method === 'libre';
+    } else if (typeFilter === 'ready_picking') {
+      matchesType = job.metadata?.pick_status === 'ready' || job.metadata?.pick_status === 'completed_floor';
+    }
+    
+    return matchesSearch && matchesZone && matchesPriority && matchesType;
   });
 
   const zones = Array.from(new Set(jobs.map(j => j.zone_id).filter(Boolean)));
@@ -353,12 +369,11 @@ export default function CentroRutasPage() {
             </div>
 
             {/* Filtros */}
-            <div style={{ display: 'flex', gap: 8 }}>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginBottom: 8 }}>
               <select
                 value={zoneFilter}
                 onChange={(e) => setZoneFilter(e.target.value)}
                 style={{
-                  flex: 1,
                   padding: '6px 8px',
                   background: 'rgba(15,23,42,0.6)',
                   border: '1px solid rgba(255,255,255,0.1)',
@@ -378,7 +393,6 @@ export default function CentroRutasPage() {
                 value={priorityFilter}
                 onChange={(e) => setPriorityFilter(e.target.value)}
                 style={{
-                  flex: 1,
                   padding: '6px 8px',
                   background: 'rgba(15,23,42,0.6)',
                   border: '1px solid rgba(255,255,255,0.1)',
@@ -393,6 +407,27 @@ export default function CentroRutasPage() {
                 <option value="high">Alta</option>
                 <option value="normal">Normal</option>
                 <option value="low">Baja</option>
+              </select>
+            </div>
+
+            <div style={{ display: 'flex', gap: 8 }}>
+              <select
+                value={typeFilter}
+                onChange={(e) => setTypeFilter(e.target.value)}
+                style={{
+                  flex: 1,
+                  padding: '6px 8px',
+                  background: 'rgba(15,23,42,0.6)',
+                  border: '1px solid rgba(255,255,255,0.1)',
+                  borderRadius: 6,
+                  color: '#e2e8f0',
+                  fontSize: 11,
+                  outline: 'none'
+                }}
+              >
+                <option value="">Todos los alistamientos</option>
+                <option value="libre">Solo Tipo Libre</option>
+                <option value="ready_picking">Solo Listos en Bodega</option>
               </select>
             </div>
 
@@ -570,6 +605,55 @@ export default function CentroRutasPage() {
                                 color: '#94a3b8'
                               }}>
                                 {job.zone_id}
+                              </span>
+                            )}
+                            
+                            {job.metadata?.pick_status && (
+                              <span style={{
+                                fontSize: 10,
+                                padding: '2px 6px',
+                                background: job.metadata.pick_status === 'ready' || job.metadata.pick_status === 'completed_floor' || job.metadata.pick_status === 'completed_dispatch'
+                                  ? 'rgba(34,197,94,0.15)'
+                                  : job.metadata.pick_status === 'picking' || job.metadata.pick_status === 'claimed'
+                                  ? 'rgba(245,158,11,0.15)'
+                                  : 'rgba(148,163,184,0.15)',
+                                border: `1px solid ${
+                                  job.metadata.pick_status === 'ready' || job.metadata.pick_status === 'completed_floor' || job.metadata.pick_status === 'completed_dispatch'
+                                    ? 'rgba(34,197,94,0.4)'
+                                    : job.metadata.pick_status === 'picking' || job.metadata.pick_status === 'claimed'
+                                    ? 'rgba(245,158,11,0.4)'
+                                    : 'rgba(148,163,184,0.4)'
+                                }`,
+                                borderRadius: 4,
+                                color: job.metadata.pick_status === 'ready' || job.metadata.pick_status === 'completed_floor' || job.metadata.pick_status === 'completed_dispatch'
+                                  ? '#4ade80'
+                                  : job.metadata.pick_status === 'picking' || job.metadata.pick_status === 'claimed'
+                                  ? '#fbbf24'
+                                  : '#94a3b8'
+                              }}>
+                                Alistamiento: {
+                                  job.metadata.pick_status === 'queued' ? 'En Cola' :
+                                  job.metadata.pick_status === 'claimed' ? 'Asignado' :
+                                  job.metadata.pick_status === 'picking' ? 'Preparando' :
+                                  job.metadata.pick_status === 'ready' ? 'Listo' :
+                                  job.metadata.pick_status === 'completed_floor' ? 'Listo en Piso' :
+                                  job.metadata.pick_status === 'completed_dispatch' ? 'Despachado' :
+                                  job.metadata.pick_status === 'cancelled' ? 'Cancelado' : job.metadata.pick_status
+                                }
+                              </span>
+                            )}
+
+                            {job.metadata?.delivery_method === 'libre' && (
+                              <span style={{
+                                fontSize: 10,
+                                padding: '2px 6px',
+                                background: 'rgba(168,85,247,0.15)',
+                                border: '1px solid rgba(168,85,247,0.4)',
+                                borderRadius: 4,
+                                color: '#c084fc',
+                                fontWeight: 600
+                              }}>
+                                Libre
                               </span>
                             )}
                             

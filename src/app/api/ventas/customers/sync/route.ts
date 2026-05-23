@@ -129,6 +129,7 @@ async function fetchZohoContactsPage(
   url.searchParams.set('organization_id', organizationId);
   url.searchParams.set('contact_type', 'customer');
   url.searchParams.set('status', 'active');
+  url.searchParams.set('detailedlist', 'true');
   url.searchParams.set('page', String(page));
   url.searchParams.set('per_page', String(perPage));
 

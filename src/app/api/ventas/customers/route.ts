@@ -1,11 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server';
-
+import { createZohoBooksClient } from '@/lib/zoho/books-client';
 
 export const dynamic = 'force-dynamic';import { createRouteHandlerClient } from '@supabase/auth-helpers-nextjs';
 import { cookies } from 'next/headers';
 
-const CUSTOMER_SEARCH_SELECT = 'id, name, email, phone, ruc, zoho_contact_id';
-const CUSTOMER_SEARCH_FALLBACK_SELECT = 'id, name, email, phone, ruc';
+const CUSTOMER_SEARCH_SELECT = 'id, name, email, phone, ruc, zoho_contact_id, lat, lng';
+const CUSTOMER_SEARCH_FALLBACK_SELECT = 'id, name, email, phone, ruc, lat, lng';
 const DEFAULT_LIMIT = 25;
 const SEARCH_LIMIT = 250;
 
@@ -15,6 +15,8 @@ interface CustomerRow {
     email: string;
     phone: string;
     ruc: string;
+    lat?: number | null;
+    lng?: number | null;
     zoho_contact_id?: string | null;
     _score?: number;
 }
@@ -55,6 +57,8 @@ function sanitizeCustomer(raw: any): CustomerRow {
     const rawName = cleanDisplayText(raw?.name);
     const fallbackName = email || phone || ruc || (zohoContactId ? `Cliente ${zohoContactId}` : `Cliente ${id}`);
     const name = rawName || fallbackName;
+    const lat = raw?.lat ? parseFloat(raw.lat) : null;
+    const lng = raw?.lng ? parseFloat(raw.lng) : null;
 
     return {
         id,
@@ -62,6 +66,8 @@ function sanitizeCustomer(raw: any): CustomerRow {
         email,
         phone,
         ruc,
+        lat,
+        lng,
         zoho_contact_id: zohoContactId,
     };
 }
@@ -179,6 +185,8 @@ function toCustomerResponse(customer: CustomerRow) {
         payment_terms: '',
         zoho_contact_id: customer.zoho_contact_id || null,
         source: customer.zoho_contact_id ? ('zoho' as const) : ('supabase' as const),
+        lat: customer.lat || null,
+        lng: customer.lng || null,
     };
 }
 
@@ -229,10 +237,32 @@ export async function POST(req: NextRequest) {
 
         const body = await req.json();
 
-        const { name, email, phone, ruc, address, notes } = body;
+        const { name, email, phone, ruc, address, notes, lat, lng } = body;
 
         if (!name || name.trim().length === 0) {
             return NextResponse.json({ error: 'El nombre del cliente es requerido' }, { status: 400 });
+        }
+
+        let zohoContactId: string | null = null;
+        try {
+            const zohoClient = createZohoBooksClient();
+            if (zohoClient) {
+                const zohoContact = await zohoClient.createContact({
+                    contact_name: name.trim(),
+                    email: email?.trim() || undefined,
+                    phone: phone?.trim() || undefined,
+                    contact_number: ruc?.trim() || undefined,
+                    billing_address: address?.trim() ? {
+                        address: address.trim(),
+                    } : undefined,
+                    shipping_address: address?.trim() ? {
+                        address: address.trim(),
+                    } : undefined,
+                });
+                zohoContactId = zohoContact.contact_id;
+            }
+        } catch (zohoError) {
+            console.error('Failed to create customer in Zoho Books:', zohoError);
         }
 
         const { data, error } = await supabase
@@ -244,6 +274,9 @@ export async function POST(req: NextRequest) {
                 ruc: ruc?.trim() || null,
                 address: address?.trim() || null,
                 notes: notes?.trim() || null,
+                lat: lat ? parseFloat(lat) : null,
+                lng: lng ? parseFloat(lng) : null,
+                zoho_contact_id: zohoContactId,
             })
             .select()
             .single();
@@ -257,3 +290,100 @@ export async function POST(req: NextRequest) {
         return NextResponse.json({ error: error.message }, { status: 500 });
     }
 }
+
+// PATCH /api/ventas/customers — Update an existing customer in Supabase
+export async function PATCH(req: NextRequest) {
+    try {
+        const supabase = createRouteHandlerClient({ cookies });
+        const { data: { user } } = await supabase.auth.getUser();
+        if (!user) {
+            return NextResponse.json({ error: 'No autorizado' }, { status: 401 });
+        }
+
+        const body = await req.json();
+        const { id, name, email, phone, ruc, address, notes, lat, lng } = body;
+
+        if (!id) {
+            return NextResponse.json({ error: 'El ID del cliente es requerido' }, { status: 400 });
+        }
+
+        const { data: currentCustomer } = await supabase
+            .from('customers')
+            .select('name, zoho_contact_id')
+            .eq('id', id)
+            .single();
+
+        let newZohoContactId: string | null = null;
+
+        if (currentCustomer?.zoho_contact_id) {
+            try {
+                const zohoClient = createZohoBooksClient();
+                if (zohoClient) {
+                    await zohoClient.updateContact(currentCustomer.zoho_contact_id, {
+                        contact_name: name !== undefined ? name?.trim() : undefined,
+                        email: email !== undefined ? (email?.trim() || '') : undefined,
+                        phone: phone !== undefined ? (phone?.trim() || '') : undefined,
+                        contact_number: ruc !== undefined ? (ruc?.trim() || '') : undefined,
+                        billing_address: address !== undefined ? {
+                            address: address?.trim() || '',
+                        } : undefined,
+                        shipping_address: address !== undefined ? {
+                            address: address?.trim() || '',
+                        } : undefined,
+                    });
+                }
+            } catch (zohoError) {
+                console.error('Failed to update customer in Zoho Books:', zohoError);
+            }
+        } else {
+            try {
+                const zohoClient = createZohoBooksClient();
+                if (zohoClient) {
+                    const finalName = name !== undefined ? name?.trim() : (currentCustomer?.name || 'Cliente');
+                    const zohoContact = await zohoClient.createContact({
+                        contact_name: finalName,
+                        email: email !== undefined ? (email?.trim() || undefined) : undefined,
+                        phone: phone !== undefined ? (phone?.trim() || undefined) : undefined,
+                        contact_number: ruc !== undefined ? (ruc?.trim() || undefined) : undefined,
+                        billing_address: address !== undefined && address?.trim() ? {
+                            address: address.trim(),
+                        } : undefined,
+                        shipping_address: address !== undefined && address?.trim() ? {
+                            address: address.trim(),
+                        } : undefined,
+                    });
+                    newZohoContactId = zohoContact.contact_id;
+                }
+            } catch (zohoError) {
+                console.error('Failed to create customer in Zoho Books on update:', zohoError);
+            }
+        }
+
+        const updateData: any = {};
+        if (name !== undefined) updateData.name = name?.trim();
+        if (email !== undefined) updateData.email = email?.trim() || null;
+        if (phone !== undefined) updateData.phone = phone?.trim() || null;
+        if (ruc !== undefined) updateData.ruc = ruc?.trim() || null;
+        if (address !== undefined) updateData.address = address?.trim() || null;
+        if (notes !== undefined) updateData.notes = notes?.trim() || null;
+        if (lat !== undefined) updateData.lat = lat ? parseFloat(lat) : null;
+        if (lng !== undefined) updateData.lng = lng ? parseFloat(lng) : null;
+        if (newZohoContactId) updateData.zoho_contact_id = newZohoContactId;
+
+        const { data, error } = await supabase
+            .from('customers')
+            .update(updateData)
+            .eq('id', id)
+            .select()
+            .single();
+
+        if (error) {
+            return NextResponse.json({ error: error.message }, { status: 500 });
+        }
+
+        return NextResponse.json({ customer: data }, { status: 200 });
+    } catch (error: any) {
+        return NextResponse.json({ error: error.message }, { status: 500 });
+    }
+}
+

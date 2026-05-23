@@ -10,7 +10,7 @@ import { supabase } from '@/lib/supabase/client';
 import Card from '@/components/ui/Card';
 import Button from '@/components/ui/Button';
 import Badge from '@/components/ui/Badge';
-import RouteMapPreview from '@/components/rutas/RouteMapPreview';
+import GoogleMapView from '@/components/rutas/GoogleMapView';
 
 interface ActiveRoute {
   id: string;
@@ -29,6 +29,7 @@ interface ActiveRoute {
   start_time_actual: string;
   total_distance_meters: number;
   total_duration_seconds: number;
+  encoded_polyline?: string;
 }
 
 interface RouteStop {
@@ -40,10 +41,14 @@ interface RouteStop {
   eta_planned: string;
   arrival_time: string;
   departure_time: string;
+  lat?: number;
+  lng?: number;
   delivery_jobs?: {
     customer_name: string;
     address_text: string;
     customer_phone: string;
+    lat?: number;
+    lng?: number;
   };
 }
 
@@ -156,17 +161,40 @@ export default function MonitoreoPage() {
       .on('postgres_changes', {
         event: 'INSERT',
         schema: 'public',
-        table: 'gps_events'
+        table: 'route_tracking_locations'
       }, (payload) => {
-        console.log('GPS Update:', payload);
-        fetchData();
+        console.log('GPS Update (route_tracking_locations):', payload);
+        const { route_id, lat, lng, recorded_at, driver_name } = payload.new;
+        if (!route_id || !lat || !lng) return;
+
+        setActiveRoutes(prev => prev.map(route => {
+          if (route.id === route_id) {
+            return {
+              ...route,
+              vehicles: route.vehicles ? {
+                ...route.vehicles,
+                current_lat: Number(lat),
+                current_lng: Number(lng),
+                last_location_update: recorded_at || new Date().toISOString()
+              } : {
+                plate_number: 'Unidad',
+                driver_name: driver_name || 'Motorizado',
+                driver_phone: '',
+                current_lat: Number(lat),
+                current_lng: Number(lng),
+                last_location_update: recorded_at || new Date().toISOString()
+              }
+            };
+          }
+          return route;
+        }));
       })
       .subscribe();
 
     return () => {
       supabase.removeChannel(channel);
     };
-  }, [fetchData]);
+  }, []);
 
   const markStopCompleted = async (stopId: string) => {
     try {
@@ -261,34 +289,44 @@ export default function MonitoreoPage() {
   };
 
   const highlightedRoute = activeRoutes.find((route) => route.id === selectedRoute) || activeRoutes[0];
-  const previewPoints = highlightedRoute
+  
+  const mapMarkers = highlightedRoute
     ? [
+        // Origen (bodega Solcom)
+        {
+          id: 'origin',
+          lat: 12.136389,
+          lng: -86.251389,
+          label: 'Bodega Solcom',
+          type: 'origin' as const
+        },
+        // Motorizado / Conductor
         ...(highlightedRoute.vehicles && Number.isFinite(highlightedRoute.vehicles.current_lat) && Number.isFinite(highlightedRoute.vehicles.current_lng)
           ? [{
               id: `${highlightedRoute.id}-vehicle`,
               lat: highlightedRoute.vehicles.current_lat,
               lng: highlightedRoute.vehicles.current_lng,
               label: highlightedRoute.vehicles.driver_name || 'Vehículo en ruta',
-              subtitle: `${highlightedRoute.vehicles.plate_number || 'Unidad'} · Posición actual`,
-              type: 'vehicle' as const,
+              type: 'driver' as const
             }]
           : []),
+        // Paradas de la ruta
         ...((highlightedRoute.route_stops || [])
           .sort((a, b) => a.sequence_order - b.sequence_order)
           .map((stop: any, index: number) => {
             const job = stop.delivery_jobs;
-            if (!job || !Number.isFinite(job.lat) || !Number.isFinite(job.lng)) {
+            const lat = stop.lat || job?.lat;
+            const lng = stop.lng || job?.lng;
+            if (!Number.isFinite(lat) || !Number.isFinite(lng)) {
               return null;
             }
-
             return {
               id: stop.id,
-              lat: job.lat,
-              lng: job.lng,
-              label: job.customer_name || `Parada ${index + 1}`,
-              subtitle: job.address_text,
-              type: index === 0 ? 'start' as const : 'stop' as const,
-              status: stop.status,
+              lat: Number(lat),
+              lng: Number(lng),
+              label: job?.customer_name || `Parada ${index + 1}`,
+              type: 'stop' as const,
+              sequence: stop.sequence_order || (index + 1)
             };
           })
           .filter(Boolean) as Array<{
@@ -296,9 +334,8 @@ export default function MonitoreoPage() {
             lat: number;
             lng: number;
             label: string;
-            subtitle?: string;
-            type?: 'vehicle' | 'start' | 'stop' | 'end';
-            status?: string;
+            type: 'origin' | 'stop' | 'driver';
+            sequence?: number;
           }>)
       ]
     : [];
@@ -442,12 +479,36 @@ export default function MonitoreoPage() {
             </div>
           </div>
 
-          <RouteMapPreview
-            points={previewPoints}
-            emptyTitle={previewTitle}
-            emptyDescription={previewDescription}
-            height={320}
-          />
+          {highlightedRoute ? (
+            <div style={{ height: 320, width: '100%', borderRadius: 12, overflow: 'hidden', border: '1px solid rgba(255,255,255,0.08)' }}>
+              <GoogleMapView
+                markers={mapMarkers}
+                polyline={highlightedRoute.encoded_polyline}
+                height="100%"
+              />
+            </div>
+          ) : (
+            <div style={{
+              height: 320,
+              display: 'flex',
+              flexDirection: 'column',
+              alignItems: 'center',
+              justifyContent: 'center',
+              background: 'rgba(15,23,42,0.5)',
+              border: '1px solid rgba(255,255,255,0.08)',
+              borderRadius: 12,
+              padding: 20,
+              textAlign: 'center'
+            }}>
+              <Truck size={40} color="#6b7280" style={{ marginBottom: 12, opacity: 0.5 }} />
+              <div style={{ fontSize: 14, fontWeight: 600, color: 'rgba(255,255,255,0.8)', marginBottom: 4 }}>
+                {previewTitle}
+              </div>
+              <div style={{ fontSize: 12, color: 'rgba(255,255,255,0.5)', maxWidth: 300 }}>
+                {previewDescription}
+              </div>
+            </div>
+          )}
         </div>
       </Card>
 

@@ -41,6 +41,10 @@ import {
     mapZohoInvoiceStatusToLocal,
     normalizeLocalInvoiceStatus,
 } from '@/lib/ventas/zoho-invoice-status';
+import {
+    upsertPickOrderFromSalesOrder,
+    isMissingPickingInfraError,
+} from '@/lib/ventas/picking';
 
 export const dynamic = 'force-dynamic';
 
@@ -117,6 +121,32 @@ async function insertInvoiceItemsWithColumnFallback(supabase: any, rows: any[]):
     }
 
     return { error: new Error('No se pudieron insertar items de factura por columnas faltantes.') };
+}
+
+async function insertSalesOrderItemsWithColumnFallback(supabase: any, rows: any[]): Promise<{ error: any }> {
+    if (!Array.isArray(rows) || rows.length === 0) return { error: null };
+
+    const mutableRows = rows.map((row) => ({ ...row }));
+    let retry = 0;
+    while (retry < 12) {
+        const result = await supabase.from('sales_order_items').insert(mutableRows);
+        if (!result.error) return { error: null };
+
+        const missingColumn = extractMissingColumn(result.error?.message || '');
+        if (!missingColumn) return { error: result.error };
+
+        let removed = false;
+        for (const row of mutableRows) {
+            if (Object.prototype.hasOwnProperty.call(row, missingColumn)) {
+                delete row[missingColumn];
+                removed = true;
+            }
+        }
+        if (!removed) return { error: result.error };
+        retry += 1;
+    }
+
+    return { error: new Error('No se pudieron insertar los items por columnas faltantes') };
 }
 
 function equalsIgnoreCase(a: string, b: string): boolean {
@@ -1369,6 +1399,106 @@ export async function POST(req: NextRequest) {
         // Calculate totals (shipping included)
         const totals = computeFiscalTotals(itemsForInvoice as any, normalizedShippingCharge);
 
+        let shadowSalesOrderId: string | null = null;
+        if (!normalizedSourceSalesOrderId) {
+            const ts = Date.now().toString(36).toUpperCase();
+            const shadowOrderNumber = `SO-DIR-${ts}`;
+
+            const insertShadowOrder = {
+                order_number: shadowOrderNumber,
+                customer_id: customer_id || null,
+                warehouse_id: warehouse_id || null,
+                date: date || new Date().toISOString().slice(0, 10),
+                expected_delivery_date: due_date || null,
+                payment_terms: terms || null,
+                delivery_requested: !!delivery_requested,
+                delivery_method: delivery_requested ? 'delivery' : 'entrega_inmediata',
+                shipping_charge: Math.round(normalizedShippingCharge * 100) / 100,
+                status: 'confirmada',
+                subtotal: totals.subtotal,
+                tax_rate: totals.tax_rate,
+                tax_amount: totals.tax_amount,
+                discount_amount: 0,
+                total: totals.total,
+                notes: notes || null,
+                salesperson_id: normalizedSalespersonId,
+                salesperson_name: normalizeTrimmed(salesperson_name) || null,
+                source: 'factura_directa',
+                sync_status: 'not_requested',
+            };
+
+            let shadowOrder: any = null;
+            let shadowError: any = null;
+            let shadowRetry = 0;
+
+            while (shadowRetry < 12) {
+                const result = await supabase
+                    .from('sales_orders')
+                    .insert(insertShadowOrder)
+                    .select()
+                    .single();
+                shadowOrder = result.data;
+                shadowError = result.error;
+
+                if (!shadowError || shadowOrder) break;
+
+                const missingColumn = extractMissingColumn(shadowError?.message || '');
+                if (missingColumn && Object.prototype.hasOwnProperty.call(insertShadowOrder, missingColumn)) {
+                    delete (insertShadowOrder as any)[missingColumn];
+                    shadowRetry += 1;
+                    continue;
+                }
+                break;
+            }
+
+            if (shadowError || !shadowOrder) {
+                return failWith({ error: `No se pudo crear la Orden de Venta shadow: ${shadowError?.message || 'Error desconocido'}` }, 500);
+            }
+
+            shadowSalesOrderId = shadowOrder.id;
+
+            const shadowOrderItems = itemsForInvoice.map((item: any, index: number) => {
+                const qty = Math.max(0, normalizeNumber(item?.quantity, 0));
+                const price = Math.max(0, normalizeNumber(item?.unit_price, 0));
+                const disc = Math.max(0, Math.min(100, normalizeNumber(item?.discount_percent, 0)));
+                return {
+                    order_id: shadowOrder.id,
+                    item_id: item?.item_id || null,
+                    description: String(item?.description || item?.name || 'Artículo').trim(),
+                    quantity: qty,
+                    unit_price: price,
+                    discount_percent: disc,
+                    tax_id: normalizeTrimmed(item?.tax_id) || null,
+                    tax_name: normalizeTrimmed(item?.tax_name) || null,
+                    tax_percentage: Math.max(0, normalizeNumber(item?.tax_percentage, 0)),
+                    warranty: normalizeWarranty(item?.warranty),
+                    serial_number_value: item?.serial_number_value || null,
+                    line_warehouse_id: normalizeTrimmed(item?.line_warehouse_id) || null,
+                    line_zoho_warehouse_id: normalizeTrimmed(item?.line_zoho_warehouse_id) || null,
+                    price_profile_code: normalizeTrimmed(item?.price_profile_code) || null,
+                    subtotal: Math.round(Math.max(0, normalizeNumber(item?.line_taxable, qty * price * (1 - disc / 100))) * 100) / 100,
+                    sort_order: index,
+                };
+            });
+
+            const { error: shadowItemsError } = await insertSalesOrderItemsWithColumnFallback(supabase, shadowOrderItems);
+            if (shadowItemsError) {
+                await supabase.from('sales_orders').delete().eq('id', shadowOrder.id);
+                return failWith({ error: `No se pudieron crear los items de la Orden de Venta shadow: ${shadowItemsError.message}` }, 500);
+            }
+
+            const pickSync = await upsertPickOrderFromSalesOrder({
+                supabase,
+                salesOrderId: shadowOrder.id,
+                actorUserId: auth.userId || null,
+                reason: 'direct_invoice_shadow_order',
+            });
+
+            if (pickSync.error && !isMissingPickingInfraError(pickSync.error)) {
+                console.warn(`[invoices] Shadow OV ${shadowOrder.id} creada pero alistamiento no sincronizó: ${pickSync.error.message}`);
+            }
+        }
+
         // Insert invoice with all fields
         const insertData: any = {
             invoice_number,
@@ -1394,7 +1524,7 @@ export async function POST(req: NextRequest) {
             credit_detail: credit_detail || null,
             cancellation_reason_id: cancellation_reason_id || null,
             cancellation_comments: cancellation_comments || null,
-            source_sales_order_id: normalizedSourceSalesOrderId,
+            source_sales_order_id: normalizedSourceSalesOrderId || shadowSalesOrderId,
             sync_status: String(status).toLowerCase() === 'enviada' ? 'pending_sync' : 'not_requested',
             sync_error_code: null,
             sync_error_message: null,
@@ -1440,6 +1570,9 @@ export async function POST(req: NextRequest) {
         }
 
         if (invoiceError) {
+            if (shadowSalesOrderId) {
+                await supabase.from('sales_orders').delete().eq('id', shadowSalesOrderId);
+            }
             return failWith({ error: invoiceError.message }, 500);
         }
 
@@ -1466,7 +1599,21 @@ export async function POST(req: NextRequest) {
         if (itemsError) {
             // Rollback: delete the invoice
             await supabase.from('sales_invoices').delete().eq('id', invoice.id);
+            if (shadowSalesOrderId) {
+                await supabase.from('sales_orders').delete().eq('id', shadowSalesOrderId);
+            }
             return failWith({ error: itemsError.message }, 500);
+        }
+
+        if (shadowSalesOrderId) {
+            await supabase
+                .from('sales_orders')
+                .update({
+                    status: 'convertida',
+                    converted_invoice_id: invoice.id,
+                    updated_at: new Date().toISOString(),
+                })
+                .eq('id', shadowSalesOrderId);
         }
 
         let responseInvoice = invoice;

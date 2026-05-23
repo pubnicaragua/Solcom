@@ -25,7 +25,7 @@ interface GoogleMapViewProps {
 }
 
  function ensureGoogleMapsLoaded(apiKey: string): Promise<void> {
-   if (typeof window !== 'undefined' && window.google?.maps) {
+   if (typeof window !== 'undefined' && window.google?.maps?.Map) {
      return Promise.resolve();
    }
 
@@ -34,39 +34,33 @@ interface GoogleMapViewProps {
    }
 
    googleMapsLoaderPromise = new Promise((resolve, reject) => {
-     const existingScript = document.querySelector('script[data-google-maps-loader="true"]') as HTMLScriptElement | null;
-
-     const finishIfReady = () => {
-       if (window.google?.maps) {
-         resolve();
-         return true;
-       }
-       return false;
+     // Usamos el sistema oficial de callbacks de Google Maps
+     const callbackName = 'initGoogleMapsCallback_' + Math.random().toString(36).substring(7);
+     (window as any)[callbackName] = () => {
+       resolve();
+       delete (window as any)[callbackName];
      };
 
-     if (finishIfReady()) {
-       return;
-     }
+     const existingScript = document.querySelector('script[data-google-maps-loader="true"]') as HTMLScriptElement | null;
 
      if (existingScript) {
-       existingScript.addEventListener('load', () => {
-         if (finishIfReady()) return;
-         reject(new Error('Google Maps cargó pero no inicializó correctamente'));
-       }, { once: true });
-       existingScript.addEventListener('error', () => reject(new Error('Error cargando Google Maps')), { once: true });
+       // Si el script ya existe (ej. hot reload de React), verificamos periódicamente
+       const checkInterval = setInterval(() => {
+         if (window.google?.maps?.Map) {
+           clearInterval(checkInterval);
+           resolve();
+         }
+       }, 100);
        return;
      }
 
      const script = document.createElement('script');
-     script.src = `https://maps.googleapis.com/maps/api/js?key=${apiKey}&libraries=geometry&loading=async`;
+     // Agregamos el parámetro callback
+     script.src = `https://maps.googleapis.com/maps/api/js?key=${apiKey}&libraries=geometry&callback=${callbackName}`;
      script.async = true;
      script.defer = true;
      script.dataset.googleMapsLoader = 'true';
-     script.onload = () => {
-       if (finishIfReady()) return;
-       reject(new Error('Google Maps cargó pero no inicializó correctamente'));
-     };
-     script.onerror = () => reject(new Error('Error cargando Google Maps'));
+     script.onerror = () => reject(new Error('Error de red cargando Google Maps'));
      document.head.appendChild(script);
    });
 
@@ -103,8 +97,9 @@ export default function GoogleMapView({
       
       // Validar que Google Maps esté completamente cargado
       if (!maps || !maps.Map) {
-        console.error('Google Maps no está completamente cargado');
-        setError('Google Maps no se cargó correctamente. Recarga la página.');
+        // En lugar de fallar inmediatamente, reintentamos un par de veces
+        console.warn('Google Maps no está completamente cargado aún, esperando...');
+        setTimeout(initMap, 200);
         return;
       }
 
@@ -118,19 +113,77 @@ export default function GoogleMapView({
           zoomControl: true,
           styles: [
             {
-              featureType: 'all',
-              elementType: 'geometry',
-              stylers: [{ color: '#242f3e' }]
-            },
-            {
-              featureType: 'all',
-              elementType: 'labels.text.stroke',
-              stylers: [{ color: '#242f3e' }]
-            },
-            {
-              featureType: 'all',
+              featureType: 'administrative',
               elementType: 'labels.text.fill',
-              stylers: [{ color: '#746855' }]
+              stylers: [{ color: '#5c5c5c' }]
+            },
+            {
+              featureType: 'landscape',
+              elementType: 'geometry.fill',
+              stylers: [{ color: '#edeae2' }]
+            },
+            {
+              featureType: 'poi.park',
+              elementType: 'geometry.fill',
+              stylers: [{ color: '#c4e2af' }]
+            },
+            {
+              featureType: 'road',
+              elementType: 'geometry.fill',
+              stylers: [{ color: '#ffffff' }]
+            },
+            {
+              featureType: 'road',
+              elementType: 'geometry.stroke',
+              stylers: [{ color: '#dcdbd9' }, { weight: 1.5 }]
+            },
+            {
+              featureType: 'road.highway',
+              elementType: 'geometry.fill',
+              stylers: [{ color: '#ffdf87' }]
+            },
+            {
+              featureType: 'road.highway',
+              elementType: 'geometry.stroke',
+              stylers: [{ color: '#d9b455' }, { weight: 1.5 }]
+            },
+            {
+              featureType: 'road.arterial',
+              elementType: 'geometry.fill',
+              stylers: [{ color: '#ffffff' }]
+            },
+            {
+              featureType: 'road.arterial',
+              elementType: 'geometry.stroke',
+              stylers: [{ color: '#dcdbd9' }, { weight: 1.5 }]
+            },
+            {
+              featureType: 'water',
+              elementType: 'geometry.fill',
+              stylers: [{ color: '#a1cfff' }]
+            },
+            {
+              featureType: 'transit',
+              elementType: 'all',
+              stylers: [{ visibility: 'off' }]
+            },
+            {
+              featureType: 'poi',
+              elementType: 'all',
+              stylers: [{ visibility: 'off' }]
+            },
+            {
+              featureType: 'poi.park',
+              elementType: 'labels',
+              stylers: [{ visibility: 'off' }]
+            },
+            {
+              elementType: 'labels.text.stroke',
+              stylers: [{ color: '#ffffff' }, { weight: 4 }]
+            },
+            {
+              elementType: 'labels.text.fill',
+              stylers: [{ color: '#444444' }, { weight: 600 }]
             }
           ]
         });
@@ -171,28 +224,39 @@ export default function GoogleMapView({
         label: markerData.type === 'stop' && markerData.sequence 
           ? { 
               text: markerData.sequence.toString(), 
-              color: 'white',
-              fontWeight: 'bold'
-            }
+              color: '#ffffff',
+              fontWeight: '700',
+              fontFamily: 'Poppins, sans-serif',
+              fontSize: '14px'
+            } as any
           : undefined,
         icon: markerData.type === 'origin'
           ? {
+              // Marcador de origen completamente redondo y cute
               path: maps.SymbolPath.CIRCLE,
-              scale: 10,
-              fillColor: '#22c55e',
+              scale: 14,
+              fillColor: '#4f46e5', // Corporate Indigo
               fillOpacity: 1,
               strokeColor: '#ffffff',
-              strokeWeight: 2
+              strokeWeight: 4
+            }
+          : markerData.type === 'stop'
+          ? {
+              path: maps.SymbolPath.CIRCLE,
+              scale: 12,
+              fillColor: '#ec4899', // Cute Pink
+              fillOpacity: 1,
+              strokeColor: '#ffffff',
+              strokeWeight: 3
             }
           : markerData.type === 'driver'
           ? {
-              path: maps.SymbolPath.FORWARD_CLOSED_ARROW,
-              scale: 6,
-              fillColor: '#3b82f6',
+              path: maps.SymbolPath.CIRCLE,
+              scale: 9,
+              fillColor: '#14b8a6', // Cute Teal
               fillOpacity: 1,
               strokeColor: '#ffffff',
-              strokeWeight: 2,
-              rotation: 0
+              strokeWeight: 3
             }
           : undefined
       });

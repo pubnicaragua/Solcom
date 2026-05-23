@@ -531,7 +531,7 @@ export async function GET(
             .from('sales_orders')
             .select(`
                 *,
-                customer:customers(id, name, email, phone, ruc, address),
+                customer:customers(id, name, email, phone, ruc, address, lat, lng),
                 warehouse:warehouses(id, code, name),
                 items:sales_order_items(*, item:items(id, name, sku, zoho_item_id))
             `)
@@ -559,7 +559,7 @@ export async function GET(
             .from('sales_orders')
             .select(`
                 *,
-                customer:customers(id, name, email, phone, ruc, address),
+                customer:customers(id, name, email, phone, ruc, address, lat, lng),
                 warehouse:warehouses(id, code, name),
                 items:sales_order_items(*)
             `)
@@ -1010,7 +1010,7 @@ export async function PUT(
             const result = await updateQuery
                 .select(`
                     *,
-                    customer:customers(id, name, email, phone, ruc, address),
+                    customer:customers(id, name, email, phone, ruc, address, lat, lng),
                     warehouse:warehouses(id, code, name)
                 `)
                 .maybeSingle();

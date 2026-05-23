@@ -42,6 +42,9 @@ interface Customer {
     phone: string | null;
     ruc: string | null;
     source?: 'supabase' | 'zoho';
+    lat?: number | null;
+    lng?: number | null;
+    address?: string | null;
 }
 
 interface Product {
@@ -123,6 +126,7 @@ export default function InvoiceForm({ isOpen, onClose, onSaved, editInvoice, pre
     const [customerSearch, setCustomerSearch] = useState('');
     const [showCustomerDropdown, setShowCustomerDropdown] = useState(false);
     const [showCustomerModal, setShowCustomerModal] = useState(false);
+    const [editingCustomer, setEditingCustomer] = useState<Customer | null>(null);
 
     // Core fields
     const [invoiceDate, setInvoiceDate] = useState(new Date().toISOString().slice(0, 10));
@@ -1388,7 +1392,39 @@ export default function InvoiceForm({ isOpen, onClose, onSaved, editInvoice, pre
                                             </div>
                                         )}
                                     </div>
-                                    <button onClick={() => setShowCustomerModal(true)} title="Nuevo Cliente"
+                                    {selectedCustomer && (
+                                        <button 
+                                            type="button"
+                                            onClick={() => {
+                                                setEditingCustomer(selectedCustomer);
+                                                setShowCustomerModal(true);
+                                            }} 
+                                            title="Editar Ubicación del Cliente"
+                                            style={{ 
+                                                padding: '9px', 
+                                                background: '#1E293B', 
+                                                color: '#10B981', 
+                                                border: '1px solid #10B981', 
+                                                borderRadius: '8px', 
+                                                cursor: 'pointer', 
+                                                display: 'flex', 
+                                                alignItems: 'center', 
+                                                justifyContent: 'center',
+                                                transition: 'background 0.2s'
+                                            }}
+                                            onMouseEnter={(e) => e.currentTarget.style.background = 'rgba(16,185,129,0.1)'}
+                                            onMouseLeave={(e) => e.currentTarget.style.background = '#1E293B'}
+                                        >
+                                            <MapPin size={18} />
+                                        </button>
+                                    )}
+                                    <button 
+                                        type="button"
+                                        onClick={() => {
+                                            setEditingCustomer(null);
+                                            setShowCustomerModal(true);
+                                        }} 
+                                        title="Nuevo Cliente"
                                         style={{ padding: '9px', background: 'var(--brand-primary)', color: 'white', border: 'none', borderRadius: '8px', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                                         <UserPlus size={18} />
                                     </button>
@@ -1914,8 +1950,17 @@ export default function InvoiceForm({ isOpen, onClose, onSaved, editInvoice, pre
 
             <CustomerModal
                 isOpen={showCustomerModal}
-                onClose={() => setShowCustomerModal(false)}
-                onSave={(customer) => { setShowCustomerModal(false); selectCustomer(customer); fetchCustomers(); }}
+                editingCustomer={editingCustomer}
+                onClose={() => {
+                    setShowCustomerModal(false);
+                    setEditingCustomer(null);
+                }}
+                onSave={(customer) => {
+                    setShowCustomerModal(false);
+                    selectCustomer(customer);
+                    fetchCustomers();
+                    setEditingCustomer(null);
+                }}
             />
         </>
     );
