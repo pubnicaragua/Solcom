@@ -599,7 +599,7 @@ export default function CustomerModal({ isOpen, onClose, onSave, editingCustomer
                                 position: 'relative',
                             }}
                         >
-                            {!(window as any).google?.maps && (
+                            {typeof window !== 'undefined' && !(window as any).google?.maps && (
                                 <div style={{
                                     position: 'absolute', top: 0, left: 0, right: 0, bottom: 0,
                                     background: 'rgba(0,0,0,0.4)', display: 'flex', alignItems: 'center',
