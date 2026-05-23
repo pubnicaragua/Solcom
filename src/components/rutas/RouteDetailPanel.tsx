@@ -3,7 +3,7 @@
 import { useState } from 'react';
 import { 
   Navigation, Clock, MapPin, Zap, Copy, Send, 
-  CheckCircle, AlertCircle, Loader, ExternalLink 
+  CheckCircle, AlertCircle, Loader, ExternalLink, Play 
 } from 'lucide-react';
 import Button from '@/components/ui/Button';
 import { supabase } from '@/lib/supabase/client';
@@ -122,6 +122,24 @@ export default function RouteDetailPanel({ route, onOptimized }: RouteDetailPane
       setError(err instanceof Error ? err.message : 'Error desconocido');
     } finally {
       setOptimizing(false);
+    }
+  };
+
+  const handleStartRoute = async () => {
+    if (!confirm('¿Deseas iniciar esta ruta ahora?')) return;
+    try {
+      const { error: updateError } = await (supabase as any)
+        .from('routes')
+        .update({ 
+          status: 'in_progress',
+          start_time_actual: new Date().toISOString()
+        })
+        .eq('id', route.id);
+      if (updateError) throw updateError;
+      onOptimized();
+    } catch (err) {
+      console.error('Error iniciando ruta:', err);
+      setError(err instanceof Error ? err.message : 'Error desconocido al iniciar ruta');
     }
   };
 
@@ -275,6 +293,16 @@ export default function RouteDetailPanel({ route, onOptimized }: RouteDetailPane
 
           {route.status === 'optimized' && (
             <>
+              <Button
+                variant="primary"
+                size="sm"
+                onClick={handleStartRoute}
+                style={{ width: '100%', gap: 6, background: '#10b981', color: '#fff', borderColor: '#10b981' }}
+              >
+                <Play size={14} />
+                Iniciar Ruta
+              </Button>
+
               <Button
                 variant="secondary"
                 size="sm"

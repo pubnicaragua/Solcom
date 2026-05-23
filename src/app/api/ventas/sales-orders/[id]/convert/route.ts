@@ -954,13 +954,26 @@ export async function POST(
 
         let orderUpdateError: any = null;
         let updateRetry = 0;
+        
+        const { createClient } = require('@supabase/supabase-js');
+        const supabaseAdmin = createClient(
+            process.env.NEXT_PUBLIC_SUPABASE_URL!,
+            process.env.SUPABASE_SERVICE_ROLE_KEY!
+        );
+
         while (updateRetry < 8) {
-            const updateResult = await supabase
+            const updateResult = await supabaseAdmin
                 .from('sales_orders')
                 .update(orderUpdatePayload)
-                .eq('id', params.id);
+                .eq('id', params.id)
+                .select('id');
 
             orderUpdateError = updateResult.error;
+            
+            if (!orderUpdateError && (!updateResult.data || updateResult.data.length === 0)) {
+                orderUpdateError = new Error('No se encontró la orden o no se pudo actualizar el estado.');
+            }
+
             if (!orderUpdateError) break;
 
             const missingColumn = extractMissingColumn(orderUpdateError?.message || '');
