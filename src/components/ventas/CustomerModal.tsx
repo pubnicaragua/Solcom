@@ -587,18 +587,15 @@ export default function CustomerModal({ isOpen, onClose, onSave, editingCustomer
                         </div>
 
                         {/* Contenedor del Mapa */}
-                        <div
-                            ref={mapRef}
-                            style={{
-                                width: '100%',
-                                height: '160px',
-                                borderRadius: '10px',
-                                border: '1px solid var(--border)',
-                                overflow: 'hidden',
-                                background: '#1a1a1a',
-                                position: 'relative',
-                            }}
-                        >
+                        <div style={{ position: 'relative', width: '100%', height: '160px', borderRadius: '10px', overflow: 'hidden', border: '1px solid var(--border)' }}>
+                            <div
+                                ref={mapRef}
+                                style={{
+                                    width: '100%',
+                                    height: '100%',
+                                    background: '#1a1a1a',
+                                }}
+                            />
                             {typeof window !== 'undefined' && !(window as any).google?.maps && (
                                 <div style={{
                                     position: 'absolute', top: 0, left: 0, right: 0, bottom: 0,
