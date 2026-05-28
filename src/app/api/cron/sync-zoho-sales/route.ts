@@ -54,12 +54,6 @@ function jsonResponse(data: any, status = 200) {
 
 export async function GET(request: Request) {
     const { searchParams } = new URL(request.url);
-    const cronSecret = searchParams.get('cron_secret');
-    const expectedSecret = process.env.CRON_SECRET || 'solcom-cron-key-123';
-
-    if (cronSecret !== expectedSecret) {
-        return jsonResponse({ error: 'Unauthorized cron request' }, 401);
-    }
 
     const dateEnd = searchParams.get('date_end') || formatYmdInManagua(new Date());
     const days = clampInteger(searchParams.get('days'), 30, 1, 120);
@@ -97,4 +91,3 @@ export async function GET(request: Request) {
         }, 500);
     }
 }
-
