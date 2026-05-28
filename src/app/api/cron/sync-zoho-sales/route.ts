@@ -17,6 +17,12 @@ function clampInteger(value: string | null, fallback: number, min: number, max: 
     return Math.max(min, Math.min(max, Math.floor(parsed)));
 }
 
+function clampRuntimeMs(value: string | null, fallback: number): number {
+    const parsed = Number(value);
+    if (!Number.isFinite(parsed)) return fallback;
+    return Math.max(5_000, Math.min(170_000, Math.floor(parsed)));
+}
+
 function formatYmdInManagua(date: Date): string {
     const parts = new Intl.DateTimeFormat('en-CA', {
         timeZone: 'America/Managua',
@@ -60,7 +66,9 @@ export async function GET(request: Request) {
     const dateStart = searchParams.get('date_start') || addDaysYmd(dateEnd, -days);
     const maxPages = clampInteger(searchParams.get('max_pages'), 3, 1, 20);
     const perPage = clampInteger(searchParams.get('per_page'), 200, 1, 200);
-    const maxDetails = clampInteger(searchParams.get('max_details'), 80, 1, 1000);
+    // Keep each run short to avoid Vercel function timeouts.
+    const maxDetails = clampInteger(searchParams.get('max_details'), 80, 1, 200);
+    const timeBudgetMs = clampRuntimeMs(searchParams.get('time_budget_ms'), 45_000);
     const force = searchParams.get('force') === '1' || searchParams.get('force') === 'true';
 
     const zohoClient = createZohoBooksClient();
@@ -79,6 +87,7 @@ export async function GET(request: Request) {
             maxPages,
             perPage,
             maxDetails,
+            timeBudgetMs,
             force,
         });
 

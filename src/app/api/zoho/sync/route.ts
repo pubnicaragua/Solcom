@@ -5,6 +5,11 @@ import { syncRequestSchema } from '@/lib/validators/inventory';
 
 export const dynamic = 'force-dynamic';
 
+function normalizeText(value: unknown): string | null {
+  const text = String(value ?? '').trim();
+  return text.length > 0 ? text : null;
+}
+
 export async function POST(request: Request) {
   try {
     const body = await request.json();
@@ -58,14 +63,20 @@ export async function POST(request: Request) {
     if (!defaultWarehouseId) throw new Error('Could not resolve Default Warehouse');
 
     // 3. Prepare Bulk Upserts for Items
-    const itemsToUpsert = zohoItems.map((zItem: any) => ({
-      sku: zItem.sku,
-      name: zItem.name,
-      purchase_rate: zItem.purchase_rate || 0,
-      price: zItem.rate || 0,
-      zoho_item_id: zItem.item_id,
-      updated_at: new Date().toISOString()
-    }));
+    const itemsToUpsert = zohoItems.map((zItem: any) => {
+      const customFields = zItem?.custom_field_hash || {};
+      return {
+        sku: zItem.sku,
+        name: zItem.name,
+        purchase_rate: zItem.purchase_rate || 0,
+        price: zItem.rate || 0,
+        zoho_item_id: zItem.item_id,
+        color: normalizeText(customFields.cf_color ?? zItem.color),
+        marca: normalizeText(customFields.cf_marca ?? customFields.cf_brand ?? zItem.brand),
+        category: normalizeText(customFields.cf_categoria ?? zItem.category_name),
+        updated_at: new Date().toISOString()
+      };
+    });
 
     // Upsert items in batches of 1000
     for (let i = 0; i < itemsToUpsert.length; i += 1000) {

@@ -12,6 +12,7 @@ type SyncOptions = {
     maxPages?: number;
     perPage?: number;
     maxDetails?: number;
+    timeBudgetMs?: number;
     force?: boolean;
 };
 
@@ -43,6 +44,7 @@ export type ZohoSalesSyncResult = {
         item_name: string;
         quantity: number;
     }>;
+    stopped_by_time_budget: boolean;
 };
 
 type LocalItem = {
@@ -353,7 +355,9 @@ export async function syncZohoInvoiceSales(options: SyncOptions): Promise<ZohoSa
     const maxPages = clampInteger(options.maxPages, 3, 1, 20);
     const perPage = clampInteger(options.perPage, 200, 1, 200);
     const maxDetails = clampInteger(options.maxDetails, 60, 1, 1000);
+    const timeBudgetMs = clampInteger(options.timeBudgetMs, 45_000, 5_000, 170_000);
     const force = options.force === true;
+    const startedAt = Date.now();
 
     const result: ZohoSalesSyncResult = {
         date_start: options.dateStart,
@@ -369,6 +373,7 @@ export async function syncZohoInvoiceSales(options: SyncOptions): Promise<ZohoSa
         sample_invoices: [],
         unmapped_lines: 0,
         sample_unmapped_lines: [],
+        stopped_by_time_budget: false,
     };
 
     const localItemCache = new Map<string, LocalItem | null>();
@@ -376,6 +381,11 @@ export async function syncZohoInvoiceSales(options: SyncOptions): Promise<ZohoSa
     let hasMore = true;
 
     while (hasMore && page <= maxPages) {
+        if (Date.now() - startedAt >= timeBudgetMs) {
+            result.stopped_by_time_budget = true;
+            break;
+        }
+
         const query = new URLSearchParams({
             date_start: options.dateStart,
             date_end: options.dateEnd,
@@ -432,6 +442,11 @@ export async function syncZohoInvoiceSales(options: SyncOptions): Promise<ZohoSa
         }
 
         for (const summary of summaries) {
+            if (Date.now() - startedAt >= timeBudgetMs) {
+                result.stopped_by_time_budget = true;
+                break;
+            }
+
             const invoiceId = normalizeText(summary?.invoice_id);
             if (!invoiceId) continue;
 
@@ -489,6 +504,9 @@ export async function syncZohoInvoiceSales(options: SyncOptions): Promise<ZohoSa
         }
 
         hasMore = Boolean(listResponse?.page_context?.has_more_page);
+        if (result.stopped_by_time_budget) {
+            break;
+        }
         page += 1;
     }
 
