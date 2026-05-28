@@ -34,6 +34,11 @@ type LocalItem = {
     zoho_item_id: string | null;
 };
 
+type ItemLookup = {
+    zohoItemId: string;
+    sku: string;
+};
+
 const ACTIVE_INVOICE_STATUSES = new Set([
     'sent',
     'viewed',
@@ -98,15 +103,18 @@ function clampInteger(value: unknown, fallback: number, min: number, max: number
 
 async function resolveLocalItems(
     supabase: SupabaseLike,
-    zohoItemIds: string[],
+    lookups: ItemLookup[],
     cache: Map<string, LocalItem | null>
 ): Promise<Map<string, LocalItem | null>> {
-    const missing = Array.from(new Set(zohoItemIds.filter(Boolean))).filter((id) => !cache.has(id));
-    if (missing.length > 0) {
+    const zohoItemIds = Array.from(new Set(lookups.map((entry) => entry.zohoItemId).filter(Boolean)));
+    const skus = Array.from(new Set(lookups.map((entry) => entry.sku).filter(Boolean)));
+
+    const missingZohoIds = zohoItemIds.filter((id) => !cache.has(`zoho:${id}`));
+    if (missingZohoIds.length > 0) {
         const { data, error } = await supabase
             .from('items')
             .select('id, sku, name, zoho_item_id')
-            .in('zoho_item_id', missing);
+            .in('zoho_item_id', missingZohoIds);
 
         if (error) throw new Error(`No se pudieron resolver items locales: ${error.message}`);
 
@@ -115,11 +123,37 @@ async function resolveLocalItems(
             const zohoItemId = normalizeText((row as LocalItem).zoho_item_id);
             if (!zohoItemId) continue;
             foundIds.add(zohoItemId);
-            cache.set(zohoItemId, row as LocalItem);
+            cache.set(`zoho:${zohoItemId}`, row as LocalItem);
+            const sku = normalizeText((row as LocalItem).sku);
+            if (sku) cache.set(`sku:${sku}`, row as LocalItem);
         }
 
-        for (const id of missing) {
-            if (!foundIds.has(id)) cache.set(id, null);
+        for (const id of missingZohoIds) {
+            if (!foundIds.has(id)) cache.set(`zoho:${id}`, null);
+        }
+    }
+
+    const missingSkus = skus.filter((sku) => !cache.has(`sku:${sku}`));
+    if (missingSkus.length > 0) {
+        const { data, error } = await supabase
+            .from('items')
+            .select('id, sku, name, zoho_item_id')
+            .in('sku', missingSkus);
+
+        if (error) throw new Error(`No se pudieron resolver SKUs locales: ${error.message}`);
+
+        const foundSkus = new Set<string>();
+        for (const row of data || []) {
+            const sku = normalizeText((row as LocalItem).sku);
+            if (!sku) continue;
+            foundSkus.add(sku);
+            cache.set(`sku:${sku}`, row as LocalItem);
+            const zohoItemId = normalizeText((row as LocalItem).zoho_item_id);
+            if (zohoItemId) cache.set(`zoho:${zohoItemId}`, row as LocalItem);
+        }
+
+        for (const sku of missingSkus) {
+            if (!foundSkus.has(sku)) cache.set(`sku:${sku}`, null);
         }
     }
 
@@ -161,11 +195,12 @@ async function replaceInvoiceLines(
     if (!zohoInvoiceId) return 0;
 
     const lineItems = Array.isArray(invoice?.line_items) ? invoice.line_items : [];
-    const zohoItemIds = lineItems
-        .map((line: any) => normalizeText(line?.item_id || line?.product_id))
-        .filter(Boolean);
+    const lookups = lineItems.map((line: any) => ({
+        zohoItemId: normalizeText(line?.item_id || line?.product_id),
+        sku: normalizeText(line?.sku),
+    }));
 
-    await resolveLocalItems(supabase, zohoItemIds, localItemCache);
+    await resolveLocalItems(supabase, lookups, localItemCache);
 
     const deleteResult = await supabase
         .from('zoho_invoice_sales_lines')
@@ -183,10 +218,11 @@ async function replaceInvoiceLines(
     const rows = lineItems
         .map((line: any, index: number) => {
             const zohoItemId = normalizeText(line?.item_id || line?.product_id);
+            const lineSku = normalizeText(line?.sku);
             const quantity = parseNumber(line?.quantity, 0);
             if (!zohoItemId || quantity <= 0) return null;
 
-            const localItem = localItemCache.get(zohoItemId) || null;
+            const localItem = localItemCache.get(`zoho:${zohoItemId}`) || localItemCache.get(`sku:${lineSku}`) || null;
             const lineItemId = normalizeText(line?.line_item_id) || `${zohoItemId}-${index + 1}`;
             const rate = parseNumber(line?.rate, 0);
             const amount = parseNumber(line?.item_total ?? line?.total, quantity * rate);
@@ -197,7 +233,7 @@ async function replaceInvoiceLines(
                 zoho_line_item_id: lineItemId,
                 zoho_item_id: zohoItemId,
                 local_item_id: localItem?.id || null,
-                sku: normalizeText(localItem?.sku || line?.sku) || null,
+                sku: normalizeText(localItem?.sku || lineSku) || null,
                 item_name: normalizeText(line?.name || localItem?.name) || null,
                 invoice_date: invoiceDate,
                 invoice_status: status || null,
