@@ -28,6 +28,7 @@ BEGIN
   LEFT JOIN public.inventory_events e 
     ON e.item_id = i.id 
    AND e.event_type = 'sale'
+   AND e.source = 'webhook_invoice'
    AND e.external_ts >= (now() - (p_weeks || ' weeks')::interval)
   GROUP BY i.id, i.sku, i.name, i.price, i.stock_total
   HAVING COALESCE(SUM(ABS(e.qty_delta)), 0) > 0;

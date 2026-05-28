@@ -360,8 +360,8 @@ export async function POST(request: NextRequest) {
         }
 
         // --- SPECIAL HANDLING: Sales Invoice Registration ---
-        // Registrar salidas para el Análisis de Restock
-        const invoiceNode = payload.invoice || (payload.salesorder?.status === 'invoiced' ? payload.salesorder : null);
+        // Registrar salidas para el Analisis de Restock
+        const invoiceNode = payload.invoice || null;
         if (invoiceNode && invoiceNode.line_items) {
             const zohoIds = invoiceNode.line_items.map((l: any) => normalizeItemId(l.item_id || l.product_id)).filter(Boolean);
             
