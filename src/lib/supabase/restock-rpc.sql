@@ -3,6 +3,9 @@ RETURNS TABLE (
   item_id uuid,
   sku text,
   name text,
+  marca text,
+  category text,
+  color text,
   price numeric,
   stock_total integer,
   sales_sum bigint,
@@ -18,6 +21,9 @@ BEGIN
     i.id,
     i.sku,
     i.name,
+    COALESCE(i.marca, 'Sin marca') AS marca,
+    COALESCE(i.category, 'Sin categoria') AS category,
+    COALESCE(i.color, 'Sin color') AS color,
     COALESCE(i.price, 0) AS price,
     i.stock_total,
     COALESCE(SUM(ABS(e.qty_delta)), 0) AS sales_sum,
@@ -30,7 +36,7 @@ BEGIN
    AND e.event_type = 'sale'
    AND e.source = 'webhook_invoice'
    AND e.external_ts >= (now() - (p_weeks || ' weeks')::interval)
-  GROUP BY i.id, i.sku, i.name, i.price, i.stock_total
+  GROUP BY i.id, i.sku, i.name, i.marca, i.category, i.color, i.price, i.stock_total
   HAVING COALESCE(SUM(ABS(e.qty_delta)), 0) > 0;
 END;
 $$;
@@ -102,6 +108,9 @@ RETURNS TABLE (
   item_id uuid,
   sku text,
   name text,
+  marca text,
+  category text,
+  color text,
   price numeric,
   stock_total integer,
   sales_sum bigint,
@@ -121,6 +130,9 @@ BEGIN
     i.id,
     i.sku,
     i.name,
+    COALESCE(i.marca, 'Sin marca') AS marca,
+    COALESCE(i.category, 'Sin categoria') AS category,
+    COALESCE(i.color, 'Sin color') AS color,
     COALESCE(i.price, 0) AS price,
     i.stock_total,
     ROUND(COALESCE(SUM(z.quantity), 0), 0)::bigint AS sales_sum,
@@ -141,7 +153,7 @@ BEGIN
    AND z.invoice_date >= (v_date_to - v_days)
    AND z.invoice_date <= v_date_to
    AND COALESCE(z.invoice_status, '') NOT IN ('void', 'voided', 'draft', 'cancelled', 'cancelled_void', 'rejected')
-  GROUP BY i.id, i.sku, i.name, i.price, i.stock_total
+  GROUP BY i.id, i.sku, i.name, i.marca, i.category, i.color, i.price, i.stock_total
   HAVING COALESCE(SUM(z.quantity), 0) > 0;
 END;
 $$;

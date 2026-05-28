@@ -26,6 +26,9 @@ interface RestockRow {
   item_id: string;
   sku: string;
   name: string;
+  marca?: string | null;
+  category?: string | null;
+  color?: string | null;
   price: number;
   stock_total: number;
   sales_sum: number;
@@ -45,6 +48,8 @@ export default function ComprasRestockPage() {
   const [totalUnidades, setTotalUnidades] = useState(0);
   const [totalDinero, setTotalDinero] = useState(0);
   const [searchTerm, setSearchTerm] = useState('');
+  const [selectedBrand, setSelectedBrand] = useState('all');
+  const [selectedCategory, setSelectedCategory] = useState('all');
   const [onlyNeedsRestock, setOnlyNeedsRestock] = useState(true);
   const [mobileView, setMobileView] = useState(false);
   const [notice, setNotice] = useState<PageNotice | null>(null);
@@ -140,18 +145,56 @@ export default function ComprasRestockPage() {
     }
   };
 
+  const brandOptions = useMemo(() => {
+    if (!results) return [];
+    const values = new Set<string>();
+    results.forEach((row) => {
+      const value = String(row.marca || '').trim();
+      if (value) values.add(value);
+    });
+    return Array.from(values).sort((a, b) => a.localeCompare(b, 'es'));
+  }, [results]);
+
+  const categoryOptions = useMemo(() => {
+    if (!results) return [];
+    const values = new Set<string>();
+    results.forEach((row) => {
+      const value = String(row.category || '').trim();
+      if (value) values.add(value);
+    });
+    return Array.from(values).sort((a, b) => a.localeCompare(b, 'es'));
+  }, [results]);
+
+  useEffect(() => {
+    if (selectedBrand !== 'all' && !brandOptions.includes(selectedBrand)) {
+      setSelectedBrand('all');
+    }
+  }, [brandOptions, selectedBrand]);
+
+  useEffect(() => {
+    if (selectedCategory !== 'all' && !categoryOptions.includes(selectedCategory)) {
+      setSelectedCategory('all');
+    }
+  }, [categoryOptions, selectedCategory]);
+
   const filteredResults = useMemo(() => {
     if (!results) return [];
 
     return [...results]
       .filter((row) => (onlyNeedsRestock ? row.restock_sugerido > 0 : true))
+      .filter((row) => (selectedBrand === 'all' ? true : String(row.marca || '').trim() === selectedBrand))
+      .filter((row) => (selectedCategory === 'all' ? true : String(row.category || '').trim() === selectedCategory))
       .filter((row) => {
         const term = searchTerm.trim().toLowerCase();
         if (!term) return true;
-        return row.name.toLowerCase().includes(term) || row.sku.toLowerCase().includes(term);
+        return row.name.toLowerCase().includes(term)
+          || row.sku.toLowerCase().includes(term)
+          || String(row.marca || '').toLowerCase().includes(term)
+          || String(row.category || '').toLowerCase().includes(term)
+          || String(row.color || '').toLowerCase().includes(term);
       })
       .sort((a, b) => b.restock_sugerido - a.restock_sugerido);
-  }, [results, onlyNeedsRestock, searchTerm]);
+  }, [results, onlyNeedsRestock, selectedBrand, selectedCategory, searchTerm]);
 
   // Derived metrics for the dashboard
   const kpis = useMemo(() => {
@@ -375,6 +418,42 @@ export default function ComprasRestockPage() {
                   }}
                 />
               </div>
+              <select
+                value={selectedBrand}
+                onChange={(e) => setSelectedBrand(e.target.value)}
+                style={{
+                  background: 'rgba(0,0,0,0.2)',
+                  border: '1px solid rgba(255,255,255,0.1)',
+                  borderRadius: 10,
+                  color: '#e2e8f0',
+                  fontSize: 14,
+                  padding: '8px 12px',
+                  minWidth: 170,
+                }}
+              >
+                <option value="all">Todas las marcas</option>
+                {brandOptions.map((brand) => (
+                  <option key={brand} value={brand}>{brand}</option>
+                ))}
+              </select>
+              <select
+                value={selectedCategory}
+                onChange={(e) => setSelectedCategory(e.target.value)}
+                style={{
+                  background: 'rgba(0,0,0,0.2)',
+                  border: '1px solid rgba(255,255,255,0.1)',
+                  borderRadius: 10,
+                  color: '#e2e8f0',
+                  fontSize: 14,
+                  padding: '8px 12px',
+                  minWidth: 190,
+                }}
+              >
+                <option value="all">Todas las categorias</option>
+                {categoryOptions.map((category) => (
+                  <option key={category} value={category}>{category}</option>
+                ))}
+              </select>
               <label
                 style={{
                   display: 'flex',
@@ -441,7 +520,17 @@ export default function ComprasRestockPage() {
                         >
                           <td style={{ padding: '14px 20px' }}>
                             <div style={{ color: '#f8fafc', fontWeight: 600, marginBottom: 4 }}>{row.name}</div>
-                            <div style={{ color: '#64748b', fontSize: 12 }}>SKU: {row.sku}</div>
+                            <div style={{ color: '#64748b', fontSize: 12, display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                              <span>SKU: {row.sku}</span>
+                              {row.color && row.color !== 'Sin color' && (
+                                <span style={{ border: '1px solid rgba(148,163,184,0.35)', borderRadius: 999, padding: '2px 8px', color: '#cbd5e1' }}>
+                                  Color: {row.color}
+                                </span>
+                              )}
+                            </div>
+                            <div style={{ color: '#94a3b8', fontSize: 11, marginTop: 2 }}>
+                              {row.marca || 'Sin marca'} · {row.category || 'Sin categoria'}
+                            </div>
                           </td>
                           <td style={{ padding: '14px 20px' }}>
                             <span
@@ -499,7 +588,17 @@ export default function ComprasRestockPage() {
                             <StatusIcon size={12} /> {status.label}
                           </span>
                       </div>
-                      <div style={{ color: '#64748b', fontSize: 12, marginBottom: 16 }}>SKU: {row.sku}</div>
+                      <div style={{ color: '#64748b', fontSize: 12, marginBottom: 4, display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                        <span>SKU: {row.sku}</span>
+                        {row.color && row.color !== 'Sin color' && (
+                          <span style={{ border: '1px solid rgba(148,163,184,0.35)', borderRadius: 999, padding: '2px 8px', color: '#cbd5e1' }}>
+                            Color: {row.color}
+                          </span>
+                        )}
+                      </div>
+                      <div style={{ color: '#94a3b8', fontSize: 11, marginBottom: 16 }}>
+                        {row.marca || 'Sin marca'} · {row.category || 'Sin categoria'}
+                      </div>
                       
                       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
                         <div>
