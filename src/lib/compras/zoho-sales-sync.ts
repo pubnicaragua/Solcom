@@ -25,6 +25,7 @@ export type ZohoSalesSyncResult = {
     documents_upserted: number;
     lines_upserted: number;
     max_details_reached: boolean;
+    repaired_missing_lines: number;
 };
 
 type LocalItem = {
@@ -276,6 +277,7 @@ export async function syncZohoInvoiceSales(options: SyncOptions): Promise<ZohoSa
         documents_upserted: 0,
         lines_upserted: 0,
         max_details_reached: false,
+        repaired_missing_lines: 0,
     };
 
     const localItemCache = new Map<string, LocalItem | null>();
@@ -298,6 +300,7 @@ export async function syncZohoInvoiceSales(options: SyncOptions): Promise<ZohoSa
 
         const invoiceIds = summaries.map((invoice: any) => normalizeText(invoice?.invoice_id)).filter(Boolean);
         const existingMap = new Map<string, any>();
+        const linesCountMap = new Map<string, number>();
 
         if (invoiceIds.length > 0) {
             const { data, error } = await options.supabase
@@ -308,6 +311,21 @@ export async function syncZohoInvoiceSales(options: SyncOptions): Promise<ZohoSa
             if (error) throw new Error(`No se pudo leer snapshot Zoho: ${error.message}`);
             for (const row of data || []) {
                 existingMap.set(normalizeText(row.zoho_invoice_id), row);
+            }
+
+            const linesResult = await options.supabase
+                .from('zoho_invoice_sales_lines')
+                .select('zoho_invoice_id')
+                .in('zoho_invoice_id', invoiceIds);
+
+            if (linesResult.error) {
+                throw new Error(`No se pudo leer lineas snapshot Zoho: ${linesResult.error.message}`);
+            }
+
+            for (const line of linesResult.data || []) {
+                const id = normalizeText((line as any).zoho_invoice_id);
+                if (!id) continue;
+                linesCountMap.set(id, (linesCountMap.get(id) || 0) + 1);
             }
         }
 
@@ -323,10 +341,15 @@ export async function syncZohoInvoiceSales(options: SyncOptions): Promise<ZohoSa
                 && sameInstant(existing.zoho_last_modified_at, lastModified)
                 && normalizeStatus(existing.status) === status
                 && normalizeDateYmd(existing.invoice_date) === invoiceDate;
+            const hasStoredLines = (linesCountMap.get(invoiceId) || 0) > 0;
 
-            if (!force && unchanged) {
+            if (!force && unchanged && hasStoredLines) {
                 result.skipped_unchanged += 1;
                 continue;
+            }
+
+            if (!force && unchanged && !hasStoredLines) {
+                result.repaired_missing_lines += 1;
             }
 
             if (!isActiveInvoiceStatus(status)) {
