@@ -26,6 +26,13 @@ export type ZohoSalesSyncResult = {
     lines_upserted: number;
     max_details_reached: boolean;
     repaired_missing_lines: number;
+    sample_invoices: Array<{
+        invoice_id: string;
+        invoice_number: string;
+        date: string;
+        status: string;
+        last_modified_time: string;
+    }>;
 };
 
 type LocalItem = {
@@ -278,6 +285,7 @@ export async function syncZohoInvoiceSales(options: SyncOptions): Promise<ZohoSa
         lines_upserted: 0,
         max_details_reached: false,
         repaired_missing_lines: 0,
+        sample_invoices: [],
     };
 
     const localItemCache = new Map<string, LocalItem | null>();
@@ -297,6 +305,17 @@ export async function syncZohoInvoiceSales(options: SyncOptions): Promise<ZohoSa
         const listResponse = await options.zohoClient.request('GET', `/books/v3/invoices?${query.toString()}`);
         const summaries = Array.isArray(listResponse?.invoices) ? listResponse.invoices : [];
         result.listed_invoices += summaries.length;
+
+        for (const summary of summaries) {
+            if (result.sample_invoices.length >= 10) break;
+            result.sample_invoices.push({
+                invoice_id: normalizeText(summary?.invoice_id),
+                invoice_number: normalizeText(summary?.invoice_number),
+                date: normalizeText(summary?.date),
+                status: normalizeStatus(summary?.status),
+                last_modified_time: normalizeText(summary?.last_modified_time),
+            });
+        }
 
         const invoiceIds = summaries.map((invoice: any) => normalizeText(invoice?.invoice_id)).filter(Boolean);
         const existingMap = new Map<string, any>();
