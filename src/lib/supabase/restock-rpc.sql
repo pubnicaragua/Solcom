@@ -129,10 +129,18 @@ BEGIN
     ROUND(COALESCE(SUM(z.quantity), 0)::numeric / v_weeks * COALESCE(i.price, 0), 2) AS presupuesto
   FROM public.items i
   LEFT JOIN public.zoho_invoice_sales_lines z
-    ON z.local_item_id = i.id
+    ON (
+         z.local_item_id = i.id
+         OR (
+              z.local_item_id IS NULL
+              AND COALESCE(z.sku, '') <> ''
+              AND regexp_replace(upper(COALESCE(z.sku, '')), '[^A-Z0-9]', '', 'g')
+                  = regexp_replace(upper(COALESCE(i.sku, '')), '[^A-Z0-9]', '', 'g')
+         )
+       )
    AND z.invoice_date >= (v_date_to - v_days)
    AND z.invoice_date <= v_date_to
-   AND COALESCE(z.invoice_status, '') NOT IN ('void', 'draft', 'cancelled', 'cancelled_void')
+   AND COALESCE(z.invoice_status, '') NOT IN ('void', 'voided', 'draft', 'cancelled', 'cancelled_void', 'rejected')
   GROUP BY i.id, i.sku, i.name, i.price, i.stock_total
   HAVING COALESCE(SUM(z.quantity), 0) > 0;
 END;

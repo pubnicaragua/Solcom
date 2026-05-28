@@ -33,6 +33,16 @@ export type ZohoSalesSyncResult = {
         status: string;
         last_modified_time: string;
     }>;
+    unmapped_lines: number;
+    sample_unmapped_lines: Array<{
+        invoice_id: string;
+        invoice_number: string;
+        line_item_id: string;
+        zoho_item_id: string;
+        sku: string;
+        item_name: string;
+        quantity: number;
+    }>;
 };
 
 type LocalItem = {
@@ -47,16 +57,19 @@ type ItemLookup = {
     sku: string;
 };
 
-const ACTIVE_INVOICE_STATUSES = new Set([
-    'sent',
-    'viewed',
-    'overdue',
-    'paid',
-    'unpaid',
-    'partially_paid',
-    'partiallypaid',
-    'open',
-    'approved',
+type ReplaceLinesResult = {
+    inserted: number;
+    unmapped: number;
+    unmappedSamples: ZohoSalesSyncResult['sample_unmapped_lines'];
+};
+
+const INACTIVE_INVOICE_STATUSES = new Set([
+    'draft',
+    'void',
+    'voided',
+    'cancelled',
+    'cancelled_void',
+    'rejected',
 ]);
 
 function normalizeText(value: unknown): string {
@@ -98,9 +111,39 @@ function sameInstant(left: unknown, right: unknown): boolean {
     return leftTime === rightTime;
 }
 
-function isActiveInvoiceStatus(status: string): boolean {
-    if (!status) return true;
-    return ACTIVE_INVOICE_STATUSES.has(status);
+function isInactiveInvoiceStatus(status: string): boolean {
+    if (!status) return false;
+    return INACTIVE_INVOICE_STATUSES.has(status);
+}
+
+function normalizeSkuKey(value: unknown): string {
+    return normalizeText(value).toUpperCase().replace(/[^A-Z0-9]/g, '');
+}
+
+async function ensureNormalizedSkuCache(
+    supabase: SupabaseLike,
+    cache: Map<string, LocalItem | null>
+): Promise<void> {
+    if (cache.has('__sku_norm_loaded__')) return;
+
+    const { data, error } = await supabase
+        .from('items')
+        .select('id, sku, name, zoho_item_id')
+        .not('sku', 'is', null);
+
+    if (error) throw new Error(`No se pudo precargar SKUs locales: ${error.message}`);
+
+    for (const row of data || []) {
+        const item = row as LocalItem;
+        const sku = normalizeText(item.sku);
+        const skuKey = normalizeSkuKey(sku);
+        if (sku) cache.set(`sku:${sku}`, item);
+        if (skuKey) cache.set(`sku_norm:${skuKey}`, item);
+        const zohoItemId = normalizeText(item.zoho_item_id);
+        if (zohoItemId) cache.set(`zoho:${zohoItemId}`, item);
+    }
+
+    cache.set('__sku_norm_loaded__', null);
 }
 
 function clampInteger(value: unknown, fallback: number, min: number, max: number): number {
@@ -116,6 +159,7 @@ async function resolveLocalItems(
 ): Promise<Map<string, LocalItem | null>> {
     const zohoItemIds = Array.from(new Set(lookups.map((entry) => entry.zohoItemId).filter(Boolean)));
     const skus = Array.from(new Set(lookups.map((entry) => entry.sku).filter(Boolean)));
+    const skuKeys = Array.from(new Set(skus.map((sku) => normalizeSkuKey(sku)).filter(Boolean)));
 
     const missingZohoIds = zohoItemIds.filter((id) => !cache.has(`zoho:${id}`));
     if (missingZohoIds.length > 0) {
@@ -133,7 +177,9 @@ async function resolveLocalItems(
             foundIds.add(zohoItemId);
             cache.set(`zoho:${zohoItemId}`, row as LocalItem);
             const sku = normalizeText((row as LocalItem).sku);
+            const skuKey = normalizeSkuKey(sku);
             if (sku) cache.set(`sku:${sku}`, row as LocalItem);
+            if (skuKey) cache.set(`sku_norm:${skuKey}`, row as LocalItem);
         }
 
         for (const id of missingZohoIds) {
@@ -156,6 +202,8 @@ async function resolveLocalItems(
             if (!sku) continue;
             foundSkus.add(sku);
             cache.set(`sku:${sku}`, row as LocalItem);
+            const skuKey = normalizeSkuKey(sku);
+            if (skuKey) cache.set(`sku_norm:${skuKey}`, row as LocalItem);
             const zohoItemId = normalizeText((row as LocalItem).zoho_item_id);
             if (zohoItemId) cache.set(`zoho:${zohoItemId}`, row as LocalItem);
         }
@@ -163,6 +211,11 @@ async function resolveLocalItems(
         for (const sku of missingSkus) {
             if (!foundSkus.has(sku)) cache.set(`sku:${sku}`, null);
         }
+    }
+
+    const unresolvedSkuKeys = skuKeys.filter((key) => !cache.has(`sku_norm:${key}`));
+    if (unresolvedSkuKeys.length > 0) {
+        await ensureNormalizedSkuCache(supabase, cache);
     }
 
     return cache;
@@ -198,9 +251,11 @@ async function replaceInvoiceLines(
     supabase: SupabaseLike,
     invoice: any,
     localItemCache: Map<string, LocalItem | null>
-): Promise<number> {
+): Promise<ReplaceLinesResult> {
     const zohoInvoiceId = normalizeText(invoice?.invoice_id);
-    if (!zohoInvoiceId) return 0;
+    if (!zohoInvoiceId) {
+        return { inserted: 0, unmapped: 0, unmappedSamples: [] };
+    }
 
     const lineItems = Array.isArray(invoice?.line_items) ? invoice.line_items : [];
     const lookups = lineItems.map((line: any) => ({
@@ -221,19 +276,43 @@ async function replaceInvoiceLines(
 
     const status = normalizeStatus(invoice?.status);
     const invoiceDate = normalizeDateYmd(invoice?.date);
-    if (!isActiveInvoiceStatus(status) || !invoiceDate || lineItems.length === 0) return 0;
+    if (isInactiveInvoiceStatus(status) || !invoiceDate || lineItems.length === 0) {
+        return { inserted: 0, unmapped: 0, unmappedSamples: [] };
+    }
+
+    const unmappedSamples: ReplaceLinesResult['unmappedSamples'] = [];
+    let unmapped = 0;
 
     const rows = lineItems
         .map((line: any, index: number) => {
             const zohoItemId = normalizeText(line?.item_id || line?.product_id);
             const lineSku = normalizeText(line?.sku);
+            const lineSkuKey = normalizeSkuKey(lineSku);
             const quantity = parseNumber(line?.quantity, 0);
             if (!zohoItemId || quantity <= 0) return null;
 
-            const localItem = localItemCache.get(`zoho:${zohoItemId}`) || localItemCache.get(`sku:${lineSku}`) || null;
+            const localItem = localItemCache.get(`zoho:${zohoItemId}`)
+                || localItemCache.get(`sku:${lineSku}`)
+                || localItemCache.get(`sku_norm:${lineSkuKey}`)
+                || null;
             const lineItemId = normalizeText(line?.line_item_id) || `${zohoItemId}-${index + 1}`;
             const rate = parseNumber(line?.rate, 0);
             const amount = parseNumber(line?.item_total ?? line?.total, quantity * rate);
+
+            if (!localItem) {
+                unmapped += 1;
+                if (unmappedSamples.length < 10) {
+                    unmappedSamples.push({
+                        invoice_id: zohoInvoiceId,
+                        invoice_number: normalizeText(invoice?.invoice_number),
+                        line_item_id: lineItemId,
+                        zoho_item_id: zohoItemId,
+                        sku: lineSku,
+                        item_name: normalizeText(line?.name),
+                        quantity,
+                    });
+                }
+            }
 
             return {
                 zoho_invoice_id: zohoInvoiceId,
@@ -258,14 +337,16 @@ async function replaceInvoiceLines(
         })
         .filter(Boolean);
 
-    if (rows.length === 0) return 0;
+    if (rows.length === 0) {
+        return { inserted: 0, unmapped, unmappedSamples };
+    }
 
     const { error } = await supabase
         .from('zoho_invoice_sales_lines')
         .upsert(rows, { onConflict: 'zoho_invoice_id,zoho_line_item_id' });
 
     if (error) throw new Error(`No se pudieron guardar lineas Zoho: ${error.message}`);
-    return rows.length;
+    return { inserted: rows.length, unmapped, unmappedSamples };
 }
 
 export async function syncZohoInvoiceSales(options: SyncOptions): Promise<ZohoSalesSyncResult> {
@@ -286,6 +367,8 @@ export async function syncZohoInvoiceSales(options: SyncOptions): Promise<ZohoSa
         max_details_reached: false,
         repaired_missing_lines: 0,
         sample_invoices: [],
+        unmapped_lines: 0,
+        sample_unmapped_lines: [],
     };
 
     const localItemCache = new Map<string, LocalItem | null>();
@@ -371,7 +454,7 @@ export async function syncZohoInvoiceSales(options: SyncOptions): Promise<ZohoSa
                 result.repaired_missing_lines += 1;
             }
 
-            if (!isActiveInvoiceStatus(status)) {
+            if (isInactiveInvoiceStatus(status)) {
                 await upsertDocument(options.supabase, summary, summary);
                 const deleteResult = await options.supabase
                     .from('zoho_invoice_sales_lines')
@@ -396,7 +479,13 @@ export async function syncZohoInvoiceSales(options: SyncOptions): Promise<ZohoSa
 
             await upsertDocument(options.supabase, invoice, invoice);
             result.documents_upserted += 1;
-            result.lines_upserted += await replaceInvoiceLines(options.supabase, invoice, localItemCache);
+            const linesResult = await replaceInvoiceLines(options.supabase, invoice, localItemCache);
+            result.lines_upserted += linesResult.inserted;
+            result.unmapped_lines += linesResult.unmapped;
+            for (const sample of linesResult.unmappedSamples) {
+                if (result.sample_unmapped_lines.length >= 20) break;
+                result.sample_unmapped_lines.push(sample);
+            }
         }
 
         hasMore = Boolean(listResponse?.page_context?.has_more_page);
