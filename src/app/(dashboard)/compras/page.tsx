@@ -72,7 +72,7 @@ export default function ComprasRestockPage() {
     setNotice(null);
 
     try {
-      const res = await fetch('/api/compras/restock?weeks=4');
+      const res = await fetch('/api/compras/restock?weeks=4&max_pages=20&per_page=200', { cache: 'no-store' });
       const json = await res.json();
 
       if (json.success && json.data) {

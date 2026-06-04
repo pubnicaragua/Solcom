@@ -113,18 +113,12 @@ function parseNumber(value: unknown): number {
     return Number.isFinite(parsed) ? parsed : 0;
 }
 
-function getRowValue(row: any, aliases: string[]): unknown {
+function getDirectRowValue(row: any, aliases: string[]): unknown {
     if (!row || typeof row !== 'object') return undefined;
 
     const aliasKeys = aliases.map(normalizeKey);
     for (const [key, value] of Object.entries(row)) {
         if (aliasKeys.includes(normalizeKey(key))) return value;
-    }
-
-    const nestedCandidates = [row.values, row.data, row.row, row.item, row.report, row.branch].filter(Boolean);
-    for (const candidate of nestedCandidates) {
-        const value = getRowValue(candidate, aliases);
-        if (value !== undefined && value !== null && normalizeText(value) !== '') return value;
     }
 
     const cells = Array.isArray(row.cells) ? row.cells : Array.isArray(row.columns) ? row.columns : null;
@@ -135,6 +129,21 @@ function getRowValue(row: any, aliases: string[]): unknown {
             if (!aliasKeys.includes(field)) continue;
             return (cell as any).value ?? (cell as any).formatted_value ?? (cell as any).text;
         }
+    }
+
+    return undefined;
+}
+
+function getRowValue(row: any, aliases: string[]): unknown {
+    const direct = getDirectRowValue(row, aliases);
+    if (direct !== undefined && direct !== null && normalizeText(direct) !== '') return direct;
+
+    // Zoho report rows can split values into small namespaced objects. Avoid
+    // generic `data` recursion here because response containers also use it.
+    const nestedCandidates = [row?.values, row?.row, row?.item, row?.report, row?.branch].filter(Boolean);
+    for (const candidate of nestedCandidates) {
+        const value = getDirectRowValue(candidate, aliases);
+        if (value !== undefined && value !== null && normalizeText(value) !== '') return value;
     }
 
     return undefined;
