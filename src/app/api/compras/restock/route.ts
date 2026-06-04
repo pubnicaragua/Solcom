@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 import { createZohoBooksClient } from '@/lib/zoho/books-client';
-import { syncZohoInvoiceSales } from '@/lib/compras/zoho-sales-sync';
+import { fetchSalesByItemRestock } from '@/lib/compras/zoho-salesbyitem-report';
 
 // Usar el Service Key para sobrepasar RLS si estamos en una ruta Server-Side
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
@@ -36,16 +36,6 @@ function addDaysYmd(ymd: string, days: number): string {
   return date.toISOString().slice(0, 10);
 }
 
-function isMissingZohoSnapshot(error: any): boolean {
-  const text = String(error?.message || error || '').toLowerCase();
-  return (
-    text.includes('get_restock_analytics_zoho') ||
-    text.includes('zoho_invoice_sales') ||
-    text.includes('could not find the function') ||
-    text.includes('pgrst202')
-  );
-}
-
 export async function GET(request: Request) {
   try {
     const { searchParams } = new URL(request.url);
@@ -53,73 +43,37 @@ export async function GET(request: Request) {
     const days = clampInteger(searchParams.get('days'), 30, 1, 365);
     const dateEnd = searchParams.get('date_end') || formatYmdInManagua(new Date());
     const dateStart = searchParams.get('date_start') || addDaysYmd(dateEnd, -days);
-    const shouldSync = searchParams.get('sync') !== '0';
-    const maxDetails = clampInteger(searchParams.get('max_details'), 60, 1, 1000);
+    const maxPages = clampInteger(searchParams.get('max_pages'), 10, 1, 50);
+    const perPage = clampInteger(searchParams.get('per_page'), 200, 1, 200);
 
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
-    let syncResult = null;
-    let syncWarning: string | null = null;
+    const zohoClient = createZohoBooksClient();
 
-    if (shouldSync) {
-      const zohoClient = createZohoBooksClient();
-      if (zohoClient) {
-        try {
-          syncResult = await syncZohoInvoiceSales({
-            supabase,
-            zohoClient,
-            dateStart,
-            dateEnd,
-            maxDetails,
-            maxPages: 3,
-            perPage: 200,
-            force: searchParams.get('force_sync') === '1',
-          });
-        } catch (syncError: any) {
-          syncWarning = syncError?.message || 'No se pudo refrescar ventas desde Zoho';
-          console.warn('[API Restock] Zoho sync warning:', syncWarning);
-        }
-      } else {
-        syncWarning = 'ZOHO_BOOKS_* incompleto; usando ultimo snapshot disponible.';
-      }
+    if (!zohoClient) {
+      return NextResponse.json({ error: 'ZOHO_BOOKS_* incompleto.' }, { status: 500 });
     }
 
-    const { data: analyticsRow, error } = await supabase
-      .rpc('get_restock_analytics_zoho', {
-        p_weeks: weeks,
-        p_days: days,
-        p_date_to: dateEnd,
-      });
-
-    if (error) {
-      if (isMissingZohoSnapshot(error)) {
-        const fallback = await supabase.rpc('get_restock_analytics', { p_weeks: weeks });
-        if (fallback.error) {
-          console.error('[API Restock] Error fetching fallback analytics:', fallback.error);
-          return NextResponse.json({ error: fallback.error.message }, { status: 500 });
-        }
-
-        return NextResponse.json({
-          success: true,
-          source: 'inventory_events_fallback',
-          warning: 'Falta aplicar la migracion de ventas Zoho; se uso el calculo anterior.',
-          sync_warning: syncWarning,
-          count: fallback.data?.length || 0,
-          data: fallback.data || [],
-        });
-      }
-
-      console.error('[API Restock] Error fetching analytics:', error);
-      return NextResponse.json({ error: error.message }, { status: 500 });
-    }
+    const report = await fetchSalesByItemRestock({
+      supabase,
+      zohoClient,
+      dateStart,
+      dateEnd,
+      weeks,
+      maxPages,
+      perPage,
+    });
 
     return NextResponse.json({ 
       success: true, 
-      source: 'zoho_invoice_sales_snapshot',
+      source: 'zoho_salesbyitem_report',
       period: { date_start: dateStart, date_end: dateEnd, days, weeks },
-      sync: syncResult,
-      sync_warning: syncWarning,
-      count: analyticsRow?.length || 0,
-      data: analyticsRow || [] 
+      report: {
+        listed_rows: report.listed_rows,
+        pages_read: report.pages_read,
+        has_more_page: report.has_more_page,
+      },
+      count: report.rows.length,
+      data: report.rows,
     });
 
   } catch (error) {
