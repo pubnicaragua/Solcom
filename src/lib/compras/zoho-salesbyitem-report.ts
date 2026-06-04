@@ -113,7 +113,7 @@ function parseNumber(value: unknown): number {
     return Number.isFinite(parsed) ? parsed : 0;
 }
 
-function getNestedValue(row: any, aliases: string[]): unknown {
+function getRowValue(row: any, aliases: string[]): unknown {
     if (!row || typeof row !== 'object') return undefined;
 
     const aliasKeys = aliases.map(normalizeKey);
@@ -123,7 +123,7 @@ function getNestedValue(row: any, aliases: string[]): unknown {
 
     const nestedCandidates = [row.values, row.data, row.row, row.item, row.report, row.branch].filter(Boolean);
     for (const candidate of nestedCandidates) {
-        const value = getNestedValue(candidate, aliases);
+        const value = getRowValue(candidate, aliases);
         if (value !== undefined && value !== null && normalizeText(value) !== '') return value;
     }
 
@@ -140,31 +140,65 @@ function getNestedValue(row: any, aliases: string[]): unknown {
     return undefined;
 }
 
+function parseReportArray(row: any[]): ParsedReportRow | null {
+    if (row.length < SELECT_COLUMNS.length) return null;
+
+    const values = row.map((cell) => {
+        if (!cell || typeof cell !== 'object') return cell;
+        return (cell as any).value ?? (cell as any).formatted_value ?? (cell as any).text ?? (cell as any).display_value;
+    });
+
+    const sku = normalizeText(values[4]);
+    const quantitySold = parseNumber(values[5]);
+    if (!sku || quantitySold <= 0) return null;
+
+    return {
+        category: normalizeText(values[0]),
+        name: normalizeText(values[1]),
+        color: normalizeText(values[2]),
+        marca: normalizeText(values[3]),
+        sku,
+        quantitySold,
+        amount: parseNumber(values[6]),
+        averagePrice: parseNumber(values[7]),
+        locationName: normalizeText(values[8]),
+        state: normalizeText(values[9]),
+        rate: parseNumber(values[10]),
+    };
+}
+
 function parseReportRow(row: any): ParsedReportRow | null {
-    const sku = normalizeText(getNestedValue(row, ['sku', 'SKU', 'SKU (CODIGO DE ARTICULO)', 'SKU (CÓDIGO DE ARTÍCULO)']));
-    const name = normalizeText(getNestedValue(row, ['item_name', 'NOMBRE DEL ARTICULO', 'NOMBRE DEL ARTÍCULO', 'name']));
-    const quantitySold = parseNumber(getNestedValue(row, ['quantity_sold', 'CANTIDAD VENDIDA', 'quantity']));
+    if (Array.isArray(row)) return parseReportArray(row);
+
+    const sku = normalizeText(getRowValue(row, ['sku', 'SKU', 'SKU (CODIGO DE ARTICULO)', 'SKU (CÓDIGO DE ARTÍCULO)']));
+    const name = normalizeText(getRowValue(row, ['item_name', 'NOMBRE DEL ARTICULO', 'NOMBRE DEL ARTÍCULO', 'name']));
+    const quantitySold = parseNumber(getRowValue(row, ['quantity_sold', 'CANTIDAD VENDIDA', 'quantity']));
 
     if (!sku || quantitySold <= 0) return null;
 
     return {
         sku,
         name,
-        category: normalizeText(getNestedValue(row, [CATEGORY_FIELD, 'category', 'categoria', 'CATEGORIA', 'CATEGORÍA'])),
-        color: normalizeText(getNestedValue(row, [COLOR_FIELD, 'color', 'COLOR'])),
-        marca: normalizeText(getNestedValue(row, [BRAND_FIELD, 'marca', 'brand', 'MARCA'])),
-        state: normalizeText(getNestedValue(row, [STATE_FIELD, 'estado', 'state', 'ESTADO'])),
-        locationName: normalizeText(getNestedValue(row, ['location_name', 'ubicacion', 'ubicación', 'UBICACION', 'UBICACIÓN'])),
+        category: normalizeText(getRowValue(row, [CATEGORY_FIELD, 'category', 'categoria', 'CATEGORIA', 'CATEGORÍA'])),
+        color: normalizeText(getRowValue(row, [COLOR_FIELD, 'color', 'COLOR'])),
+        marca: normalizeText(getRowValue(row, [BRAND_FIELD, 'marca', 'brand', 'MARCA'])),
+        state: normalizeText(getRowValue(row, [STATE_FIELD, 'estado', 'state', 'ESTADO'])),
+        locationName: normalizeText(getRowValue(row, ['location_name', 'ubicacion', 'ubicación', 'UBICACION', 'UBICACIÓN'])),
         quantitySold,
-        amount: parseNumber(getNestedValue(row, ['amount', 'importe', 'IMPORTE'])),
-        averagePrice: parseNumber(getNestedValue(row, ['average_price', 'precio_promedio', 'PRECIO PROMEDIO'])),
-        rate: parseNumber(getNestedValue(row, ['rate', 'precio_de_venta', 'PRECIO DE VENTA'])),
+        amount: parseNumber(getRowValue(row, ['amount', 'importe', 'IMPORTE'])),
+        averagePrice: parseNumber(getRowValue(row, ['average_price', 'precio_promedio', 'PRECIO PROMEDIO'])),
+        rate: parseNumber(getRowValue(row, ['rate', 'precio_de_venta', 'PRECIO DE VENTA'])),
     };
 }
 
 function collectReportRows(node: any, output: ParsedReportRow[], seen: WeakSet<object> = new WeakSet()) {
     if (!node) return;
     if (Array.isArray(node)) {
+        const parsed = parseReportArray(node);
+        if (parsed) {
+            output.push(parsed);
+            return;
+        }
         for (const item of node) collectReportRows(item, output, seen);
         return;
     }
@@ -317,4 +351,3 @@ export async function fetchSalesByItemRestock(options: SalesByItemReportOptions)
         },
     };
 }
-
