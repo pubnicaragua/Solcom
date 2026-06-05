@@ -43,10 +43,30 @@ interface PageNotice {
 }
 
 export default function ComprasRestockPage() {
+  const getClosedMonthReportRange = () => {
+    const now = new Date();
+    const dateStart = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+    const dateEnd = new Date(now.getFullYear(), now.getMonth(), 1);
+    const formatYmd = (date: Date) => {
+      const year = date.getFullYear();
+      const month = String(date.getMonth() + 1).padStart(2, '0');
+      const day = String(date.getDate()).padStart(2, '0');
+      return `${year}-${month}-${day}`;
+    };
+
+    return {
+      dateStart: formatYmd(dateStart),
+      dateEnd: formatYmd(dateEnd),
+    };
+  };
+
+  const initialRange = getClosedMonthReportRange();
   const [isProcessing, setIsProcessing] = useState(false);
   const [results, setResults] = useState<RestockRow[] | null>(null);
   const [totalUnidades, setTotalUnidades] = useState(0);
   const [totalDinero, setTotalDinero] = useState(0);
+  const [dateStart, setDateStart] = useState(initialRange.dateStart);
+  const [dateEnd, setDateEnd] = useState(initialRange.dateEnd);
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedBrand, setSelectedBrand] = useState('all');
   const [selectedCategory, setSelectedCategory] = useState('all');
@@ -60,6 +80,13 @@ export default function ComprasRestockPage() {
 
   const formatCurrency = (value: number) => `C$ ${Math.round(value).toLocaleString('es-NI')}`;
 
+  const getRangeDays = (start: string, end: string) => {
+    const startDate = new Date(`${start}T00:00:00`);
+    const endDate = new Date(`${end}T00:00:00`);
+    const diffMs = endDate.getTime() - startDate.getTime();
+    return Math.ceil(diffMs / 86_400_000);
+  };
+
   useEffect(() => {
     const onResize = () => setMobileView(window.innerWidth < 980);
     onResize();
@@ -72,7 +99,28 @@ export default function ComprasRestockPage() {
     setNotice(null);
 
     try {
-      const res = await fetch('/api/compras/restock?weeks=4&max_pages=20&per_page=200', { cache: 'no-store' });
+      const rangeDays = getRangeDays(dateStart, dateEnd);
+      if (!dateStart || !dateEnd || rangeDays <= 0) {
+        setNotice({ type: 'error', text: 'Selecciona un rango de fechas valido.' });
+        setIsProcessing(false);
+        return;
+      }
+
+      if (rangeDays > 42) {
+        setNotice({ type: 'error', text: 'El rango maximo permitido es de 6 semanas.' });
+        setIsProcessing(false);
+        return;
+      }
+
+      const weeks = Math.max(1, Math.ceil(rangeDays / 7));
+      const params = new URLSearchParams({
+        date_start: dateStart,
+        date_end: dateEnd,
+        weeks: String(weeks),
+        max_pages: '20',
+        per_page: '200',
+      });
+      const res = await fetch(`/api/compras/restock?${params.toString()}`, { cache: 'no-store' });
       const json = await res.json();
 
       if (json.success && json.data) {
@@ -296,7 +344,45 @@ export default function ComprasRestockPage() {
             Análisis de cobertura de inventario basado en ventas reales.
           </p>
         </div>
-        <div style={{ display: 'flex', gap: 10 }}>
+        <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', justifyContent: mobileView ? 'stretch' : 'flex-end' }}>
+          <label style={{ display: 'grid', gap: 4, color: '#94a3b8', fontSize: 11 }}>
+            Inicio
+            <input
+              type="date"
+              value={dateStart}
+              onChange={(e) => setDateStart(e.target.value)}
+              max={dateEnd}
+              disabled={isProcessing}
+              style={{
+                height: 46,
+                borderRadius: 10,
+                border: '1px solid rgba(148,163,184,0.24)',
+                background: 'rgba(15,23,42,0.72)',
+                color: '#e2e8f0',
+                padding: '0 12px',
+                minWidth: 150,
+              }}
+            />
+          </label>
+          <label style={{ display: 'grid', gap: 4, color: '#94a3b8', fontSize: 11 }}>
+            Final
+            <input
+              type="date"
+              value={dateEnd}
+              onChange={(e) => setDateEnd(e.target.value)}
+              min={dateStart}
+              disabled={isProcessing}
+              style={{
+                height: 46,
+                borderRadius: 10,
+                border: '1px solid rgba(148,163,184,0.24)',
+                background: 'rgba(15,23,42,0.72)',
+                color: '#e2e8f0',
+                padding: '0 12px',
+                minWidth: 150,
+              }}
+            />
+          </label>
           <Button variant="secondary" onClick={() => fileInputRef.current?.click()} disabled={isProcessing}>
             <UploadCloud size={16} style={{ marginRight: 6 }} /> Subir Historial
           </Button>
