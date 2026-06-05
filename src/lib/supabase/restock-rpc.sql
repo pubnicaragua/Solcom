@@ -1,3 +1,4 @@
+DROP FUNCTION IF EXISTS public.get_restock_analytics(integer);
 CREATE OR REPLACE FUNCTION public.get_restock_analytics(p_weeks integer DEFAULT 4)
 RETURNS TABLE (
   item_id uuid,
@@ -28,8 +29,8 @@ BEGIN
     i.stock_total,
     COALESCE(SUM(ABS(e.qty_delta)), 0) AS sales_sum,
     ROUND(COALESCE(SUM(ABS(e.qty_delta)), 0)::numeric / p_weeks, 2) AS weekly_avg,
-    ROUND(COALESCE(SUM(ABS(e.qty_delta)), 0)::numeric / p_weeks, 2) AS restock_sugerido,
-    ROUND(COALESCE(SUM(ABS(e.qty_delta)), 0)::numeric / p_weeks * COALESCE(i.price, 0), 2) AS presupuesto
+    GREATEST(ROUND(COALESCE(SUM(ABS(e.qty_delta)), 0)::numeric - i.stock_total, 2), 0) AS restock_sugerido,
+    GREATEST(ROUND((COALESCE(SUM(ABS(e.qty_delta)), 0)::numeric - i.stock_total) * COALESCE(i.price, 0), 2), 0) AS presupuesto
   FROM public.items i
   LEFT JOIN public.inventory_events e 
     ON e.item_id = i.id 
@@ -99,6 +100,7 @@ CREATE INDEX IF NOT EXISTS idx_zoho_invoice_sales_lines_zoho_item_date
 CREATE INDEX IF NOT EXISTS idx_zoho_invoice_sales_lines_invoice_date
   ON public.zoho_invoice_sales_lines(invoice_date DESC);
 
+DROP FUNCTION IF EXISTS public.get_restock_analytics_zoho(integer, integer, date);
 CREATE OR REPLACE FUNCTION public.get_restock_analytics_zoho(
   p_weeks integer DEFAULT 4,
   p_days integer DEFAULT 30,
@@ -137,8 +139,8 @@ BEGIN
     i.stock_total,
     ROUND(COALESCE(SUM(z.quantity), 0), 0)::bigint AS sales_sum,
     ROUND(COALESCE(SUM(z.quantity), 0)::numeric / v_weeks, 2) AS weekly_avg,
-    ROUND(COALESCE(SUM(z.quantity), 0)::numeric / v_weeks, 2) AS restock_sugerido,
-    ROUND(COALESCE(SUM(z.quantity), 0)::numeric / v_weeks * COALESCE(i.price, 0), 2) AS presupuesto
+    GREATEST(ROUND(COALESCE(SUM(z.quantity), 0)::numeric - i.stock_total, 2), 0) AS restock_sugerido,
+    GREATEST(ROUND((COALESCE(SUM(z.quantity), 0)::numeric - i.stock_total) * COALESCE(i.price, 0), 2), 0) AS presupuesto
   FROM public.items i
   LEFT JOIN public.zoho_invoice_sales_lines z
     ON (

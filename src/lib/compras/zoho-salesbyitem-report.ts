@@ -326,7 +326,8 @@ export async function fetchSalesByItemRestock(options: SalesByItemReportOptions)
         const salesSum = Math.round(row.quantitySold * 100) / 100;
         const weeklyAvg = Math.round((salesSum / weeks) * 100) / 100;
         const price = row.rate || row.averagePrice || Number(local?.price ?? 0);
-        const restockSugerido = weeklyAvg;
+        // Restock = Ventas del Período - Stock Actual (mínimo 0)
+        const restockSugerido = Math.max(Math.round((salesSum - stockTotal) * 100) / 100, 0);
 
         return {
             item_id: local?.id || `zoho-salesbyitem-${normalizeSkuKey(row.sku)}`,

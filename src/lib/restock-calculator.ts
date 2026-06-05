@@ -83,8 +83,7 @@ export function processRestockExcel(jsonData: any[]): RestockResults {
     const divisor = 5; 
     const ventas_promedio_semanal = sumSalidas / divisor;
 
-    // Lógica avanzada: Restock = (Promedio * 4 semanas de cobertura) - Stock Actual
-    // Si no queremos restar stock aún y solo ver el promedio, usamos el promedio directo
+    // Restock = Ventas Totales del Período - Stock Actual (mínimo 0)
     let stockActual = 0;
     if (stockColName) {
         let sVal = row[stockColName];
@@ -92,8 +91,7 @@ export function processRestockExcel(jsonData: any[]): RestockResults {
         stockActual = Number(sVal);
     }
 
-    // Por ahora sigamos tu fórmula de Python: solo el promedio
-    const restock_promedio_unid = ventas_promedio_semanal;
+    const restock_promedio_unid = Math.max(sumSalidas - stockActual, 0);
 
     // 💰 Obtener precio unitario
     let precio_unitario = 0;
