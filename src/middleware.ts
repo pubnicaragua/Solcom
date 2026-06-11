@@ -19,8 +19,9 @@ function normalizeRole(value: unknown): AppRole {
 
 export async function middleware(request: NextRequest) {
   const path = request.nextUrl.pathname;
-  const publicRoutes = ['/login', '/signup', '/reset-password', '/login-clientes'];
+  const publicRoutes = ['/login', '/signup', '/reset-password', '/login-clientes', '/alistamiento/escanear'];
   const clientRoutes = ['/cliente'];
+  const isScannerRoute = path.startsWith('/alistamiento/escanear');
   const isPublicRoute = publicRoutes.some(route => request.nextUrl.pathname.startsWith(route));
   const isClientRoute = clientRoutes.some(route => request.nextUrl.pathname.startsWith(route));
 
@@ -145,7 +146,7 @@ export async function middleware(request: NextRequest) {
     return NextResponse.redirect(new URL('/login', request.url));
   }
 
-  if (user && isPublicRoute && !path.startsWith('/login-clientes')) {
+  if (user && isPublicRoute && !path.startsWith('/login-clientes') && !isScannerRoute) {
     try {
       const { data: profile } = await supabase
         .from('user_profiles')

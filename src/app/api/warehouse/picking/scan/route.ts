@@ -1,9 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { createRouteHandlerClient } from '@supabase/auth-helpers-nextjs';
-import { cookies } from 'next/headers';
 import { createZohoBooksClient } from '@/lib/zoho/books-client';
-import { getAuthenticatedProfile } from '@/lib/auth/warehouse-permissions';
 import { syncSelectedScansToPickItems } from '@/lib/ventas/picking-serials';
+import { createPickingScanAdminClient, verifyPickingScanToken } from '@/lib/ventas/picking-scan-token';
 
 export const dynamic = 'force-dynamic';
 
@@ -18,31 +16,31 @@ function json(body: any, status = 200) {
     });
 }
 
-async function getContext(supabase: any, token: string, userId: string, role: string) {
+async function getContext(supabase: any, pickOrderId: string, actorUserId: string) {
     const pick = await supabase
         .from('warehouse_pick_orders')
         .select('*')
-        .eq('id', token)
+        .eq('id', pickOrderId)
         .maybeSingle();
     if (pick.error) throw pick.error;
     if (!pick.data) return { error: json({ error: 'Orden de alistamiento no encontrada.' }, 404) };
 
     const assigned = normalizeText(pick.data.assigned_user_id);
-    if (assigned && assigned !== userId && role !== 'admin' && role !== 'manager') {
+    if (!assigned || assigned !== actorUserId) {
         return { error: json({ error: 'Esta orden está asignada a otro usuario de bodega.' }, 403) };
     }
 
     const items = await supabase
         .from('warehouse_pick_order_items')
         .select('*')
-        .eq('pick_order_id', token)
+        .eq('pick_order_id', pickOrderId)
         .order('sort_order', { ascending: true });
     if (items.error) throw items.error;
 
     const scans = await supabase
         .from('warehouse_pick_serial_scans')
         .select('id, pick_order_item_id, serial_code, scanned_at, scanned_by')
-        .eq('pick_order_id', token)
+        .eq('pick_order_id', pickOrderId)
         .order('scanned_at', { ascending: true });
     if (scans.error) throw scans.error;
 
@@ -124,12 +122,12 @@ async function readBody(req: NextRequest) {
 
 export async function GET(req: NextRequest) {
     try {
-        const supabase = createRouteHandlerClient({ cookies });
-        const auth = await getAuthenticatedProfile(supabase);
-        if (!auth.ok) return json({ error: auth.error }, auth.status);
         const token = normalizeText(new URL(req.url).searchParams.get('token'));
         if (!token) return json({ error: 'Falta token de alistamiento.' }, 400);
-        const context = await getContext(supabase, token, auth.userId, auth.role);
+        const access = verifyPickingScanToken(token);
+        if (!access) return json({ error: 'El enlace de escaneo es inválido o expiró.' }, 401);
+        const supabase = createPickingScanAdminClient();
+        const context = await getContext(supabase, access.pick_order_id, access.actor_user_id);
         if ('error' in context) return context.error;
         return json({ pick_order: context.pick, items: context.items });
     } catch (error: any) {
@@ -139,9 +137,6 @@ export async function GET(req: NextRequest) {
 
 export async function POST(req: NextRequest) {
     try {
-        const supabase = createRouteHandlerClient({ cookies });
-        const auth = await getAuthenticatedProfile(supabase);
-        if (!auth.ok) return json({ error: auth.error }, auth.status);
         const body = await readBody(req);
         const token = normalizeText(body?.token);
         const pickOrderItemId = normalizeText(body?.pick_order_item_id);
@@ -149,8 +144,10 @@ export async function POST(req: NextRequest) {
         if (!token || !pickOrderItemId || !serialCode) {
             return json({ error: 'Faltan token, línea o serial.' }, 400);
         }
-
-        const context = await getContext(supabase, token, auth.userId, auth.role);
+        const access = verifyPickingScanToken(token);
+        if (!access) return json({ error: 'El enlace de escaneo es inválido o expiró.' }, 401);
+        const supabase = createPickingScanAdminClient();
+        const context = await getContext(supabase, access.pick_order_id, access.actor_user_id);
         if ('error' in context) return context.error;
         if (!['claimed', 'picking'].includes(normalizeText(context.pick.status))) {
             return json({ error: 'Solo se puede escanear una orden tomada o en proceso.' }, 409);
@@ -168,13 +165,13 @@ export async function POST(req: NextRequest) {
         const inserted = await supabase
             .from('warehouse_pick_serial_scans')
             .insert({
-                pick_order_id: token,
+                pick_order_id: access.pick_order_id,
                 pick_order_item_id: pickOrderItemId,
                 sales_order_id: context.pick.sales_order_id,
                 sales_order_item_id: item.sales_order_item_id || null,
                 item_id: item.item_id,
                 serial_code: serialCode,
-                scanned_by: auth.userId,
+                scanned_by: access.actor_user_id,
             })
             .select()
             .single();
@@ -185,7 +182,7 @@ export async function POST(req: NextRequest) {
                 duplicate ? 409 : 500
             );
         }
-        await syncSelectedScansToPickItems({ supabase, pickOrderId: token });
+        await syncSelectedScansToPickItems({ supabase, pickOrderId: access.pick_order_id });
         return json({ scan: inserted.data }, 201);
     } catch (error: any) {
         return json({ error: error?.message || 'Error interno' }, 500);
@@ -194,15 +191,15 @@ export async function POST(req: NextRequest) {
 
 export async function DELETE(req: NextRequest) {
     try {
-        const supabase = createRouteHandlerClient({ cookies });
-        const auth = await getAuthenticatedProfile(supabase);
-        if (!auth.ok) return json({ error: auth.error }, auth.status);
         const body = await readBody(req);
         const token = normalizeText(body?.token);
         const pickOrderItemId = normalizeText(body?.pick_order_item_id);
         const serialCode = normalizeText(body?.serial_code);
         if (!token || !pickOrderItemId || !serialCode) return json({ error: 'Faltan token, línea o serial.' }, 400);
-        const context = await getContext(supabase, token, auth.userId, auth.role);
+        const access = verifyPickingScanToken(token);
+        if (!access) return json({ error: 'El enlace de escaneo es inválido o expiró.' }, 401);
+        const supabase = createPickingScanAdminClient();
+        const context = await getContext(supabase, access.pick_order_id, access.actor_user_id);
         if ('error' in context) return context.error;
         if (!['claimed', 'picking'].includes(normalizeText(context.pick.status))) {
             return json({ error: 'La orden ya no permite modificar seriales.' }, 409);
@@ -210,11 +207,11 @@ export async function DELETE(req: NextRequest) {
         const removed = await supabase
             .from('warehouse_pick_serial_scans')
             .delete()
-            .eq('pick_order_id', token)
+            .eq('pick_order_id', access.pick_order_id)
             .eq('pick_order_item_id', pickOrderItemId)
             .eq('serial_code', serialCode);
         if (removed.error) throw removed.error;
-        await syncSelectedScansToPickItems({ supabase, pickOrderId: token });
+        await syncSelectedScansToPickItems({ supabase, pickOrderId: access.pick_order_id });
         return json({ ok: true });
     } catch (error: any) {
         return json({ error: error?.message || 'Error interno' }, 500);
