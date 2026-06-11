@@ -1,6 +1,6 @@
 'use client';
 
-import { FormEvent, useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { FormEvent, useEffect, useMemo, useRef, useState } from 'react';
 import {
   AlertCircle,
   ArrowLeft,
@@ -9,6 +9,7 @@ import {
   CameraOff,
   Check,
   CheckCircle2,
+  ExternalLink,
   Loader2,
   PackageCheck,
   RefreshCw,
@@ -46,11 +47,51 @@ type ScanPayload = {
   items: PickItem[];
 };
 
+type MessageState = {
+  type: 'success' | 'error';
+  text: string;
+} | null;
+
+type CameraError = {
+  cause: 'in-app-browser' | 'permission-denied' | 'not-supported' | 'generic';
+  text: string;
+} | null;
+
+function isInAppBrowser(): boolean {
+  if (typeof navigator === 'undefined') return false;
+  const ua = navigator.userAgent || '';
+  // Detects most common in-app browsers / WebViews
+  return /FBAN|FBAV|Instagram|Messenger|WhatsApp|Snapchat|Line\/|Twitter|TikTok|wv|WebView/i.test(ua);
+}
+
+function openInSystemBrowser(): void {
+  const url = window.location.href;
+  // intent:// scheme opens in Chrome on Android
+  const intentUrl = `intent://${url.replace(/^https?:\/\//, '')}#Intent;scheme=https;end`;
+  // Try Android intent first
+  const ua = navigator.userAgent || '';
+  if (/android/i.test(ua)) {
+    window.location.href = intentUrl;
+  } else {
+    // iOS: window.open can sometimes escape WebView, otherwise instruct user
+    window.open(url, '_system') || window.open(url, '_blank');
+  }
+}
+
 type BarcodeDetectorInstance = {
   detect: (source: HTMLVideoElement) => Promise<Array<{ rawValue?: string }>>;
 };
 
 type BarcodeDetectorConstructor = new (options?: { formats?: string[] }) => BarcodeDetectorInstance;
+
+type ZxingReader = {
+  decodeFromVideoDevice: (
+    deviceId: string | undefined,
+    previewElem: HTMLVideoElement,
+    callbackFn: (result: { getText(): string } | null, error: unknown, controls: unknown) => void,
+  ) => Promise<unknown>;
+  reset: () => void;
+};
 
 function record(value: unknown): UnknownRecord {
   return value && typeof value === 'object' ? value as UnknownRecord : {};
@@ -86,7 +127,7 @@ function normalizeResponse(value: unknown): ScanPayload {
   return {
     pickOrder: {
       id: text(rawOrder.id),
-      salesOrderNumber: text(rawOrder.sales_order_number ?? rawOrder.order_number) || 'Orden sin número',
+      salesOrderNumber: text(rawOrder.sales_order_number ?? rawOrder.order_number) || 'Orden sin numero',
       customerName: text(rawOrder.customer_name ?? customer.name) || 'Cliente no indicado',
       warehouseName: text(rawOrder.warehouse_name ?? warehouse.name ?? warehouse.code) || 'Bodega no indicada',
       status: text(rawOrder.status),
@@ -104,7 +145,7 @@ function normalizeResponse(value: unknown): ScanPayload {
       return {
         id: text(rawItem.id ?? rawItem.pick_order_item_id) || `line-${index}`,
         itemId: text(rawItem.item_id),
-        description: text(rawItem.description ?? rawItem.item_name ?? rawItem.name) || `Artículo ${index + 1}`,
+        description: text(rawItem.description ?? rawItem.item_name ?? rawItem.name) || `Articulo ${index + 1}`,
         sku: text(rawItem.sku),
         quantity: Math.max(0, number(rawItem.quantity, 0)),
         serialsRequired: rawItem.serials_required !== false,
@@ -118,7 +159,7 @@ async function parseResponse(response: Response): Promise<UnknownRecord> {
   const payload = await response.json().catch(() => ({}));
   if (!response.ok) {
     const data = record(payload);
-    throw new Error(text(data.error ?? data.message) || 'No se pudo completar la operación.');
+    throw new Error(text(data.error ?? data.message) || 'No se pudo completar la operacion.');
   }
   return record(payload);
 }
@@ -139,11 +180,14 @@ export default function WarehouseSerialScanner({ token }: { token: string }) {
   const [markingReady, setMarkingReady] = useState(false);
   const [cameraOn, setCameraOn] = useState(false);
   const [cameraSupported, setCameraSupported] = useState(false);
-  const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
+  const [cameraError, setCameraError] = useState<CameraError>(null);
+  const [message, setMessage] = useState<MessageState>(null);
+
   const videoRef = useRef<HTMLVideoElement>(null);
   const streamRef = useRef<MediaStream | null>(null);
   const frameRef = useRef<number | null>(null);
   const detectorRef = useRef<BarcodeDetectorInstance | null>(null);
+  const zxingReaderRef = useRef<ZxingReader | null>(null);
   const lastDetectionRef = useRef<{ code: string; at: number }>({ code: '', at: 0 });
   const selectedItemIdRef = useRef('');
   const submittingRef = useRef(false);
@@ -182,7 +226,7 @@ export default function WarehouseSerialScanner({ token }: { token: string }) {
     dataRef.current = data;
   }, [data]);
 
-  const applyPayload = useCallback((payload: ScanPayload) => {
+  function applyPayload(payload: ScanPayload) {
     setData(payload);
     setSelectedItemId((current) => {
       if (payload.items.some((item) => item.id === current)) return current;
@@ -191,15 +235,13 @@ export default function WarehouseSerialScanner({ token }: { token: string }) {
         ?? payload.items[0]?.id
         ?? '';
     });
-  }, []);
+  }
 
-  const loadOrder = useCallback(async (quiet = false) => {
+  async function loadOrder(quiet = false) {
     quiet ? setRefreshing(true) : setLoading(true);
     setMessage(null);
     try {
-      const response = await fetch(`/api/warehouse/picking/scan?token=${encodeURIComponent(token)}`, {
-        cache: 'no-store',
-      });
+      const response = await fetch(`/api/warehouse/picking/scan?token=${encodeURIComponent(token)}`, { cache: 'no-store' });
       applyPayload(normalizeResponse(await parseResponse(response)));
     } catch (error) {
       setMessage({ type: 'error', text: error instanceof Error ? error.message : 'No se pudo cargar la orden.' });
@@ -207,13 +249,13 @@ export default function WarehouseSerialScanner({ token }: { token: string }) {
       setLoading(false);
       setRefreshing(false);
     }
-  }, [applyPayload, token]);
+  }
 
   useEffect(() => {
     void loadOrder();
-  }, [loadOrder]);
+  }, [token]);
 
-  const addSerial = useCallback(async (rawCode: string) => {
+  async function addSerial(rawCode: string) {
     const serialCode = rawCode.trim();
     const itemId = selectedItemIdRef.current;
     if (!serialCode || !itemId || submittingRef.current) return;
@@ -221,11 +263,11 @@ export default function WarehouseSerialScanner({ token }: { token: string }) {
     const currentItem = dataRef.current?.items.find((item) => item.id === itemId);
     if (!currentItem) return;
     if (currentItem.serials.some((serial) => serial.toLowerCase() === serialCode.toLowerCase())) {
-      setMessage({ type: 'error', text: `El serial ${serialCode} ya fue escaneado en esta línea.` });
+      setMessage({ type: 'error', text: `El serial ${serialCode} ya fue escaneado en esta linea.` });
       return;
     }
     if (currentItem.serials.length >= currentItem.quantity) {
-      setMessage({ type: 'error', text: 'Esta línea ya tiene todos los seriales requeridos.' });
+      setMessage({ type: 'error', text: 'Esta linea ya tiene todos los seriales requeridos.' });
       return;
     }
 
@@ -240,9 +282,7 @@ export default function WarehouseSerialScanner({ token }: { token: string }) {
       await parseResponse(response);
       setData((current) => current ? {
         ...current,
-        items: current.items.map((item) => item.id === itemId
-          ? { ...item, serials: [...item.serials, serialCode] }
-          : item),
+        items: current.items.map((item) => item.id === itemId ? { ...item, serials: [...item.serials, serialCode] } : item),
       } : current);
       setManualCode('');
       setMessage({ type: 'success', text: `Serial ${serialCode} agregado.` });
@@ -253,9 +293,9 @@ export default function WarehouseSerialScanner({ token }: { token: string }) {
     } finally {
       setSubmitting(false);
     }
-  }, [token]);
+  }
 
-  const removeSerial = useCallback(async (itemId: string, serialCode: string) => {
+  async function removeSerial(itemId: string, serialCode: string) {
     setDeletingCode(`${itemId}:${serialCode}`);
     setMessage(null);
     try {
@@ -267,9 +307,7 @@ export default function WarehouseSerialScanner({ token }: { token: string }) {
       await parseResponse(response);
       setData((current) => current ? {
         ...current,
-        items: current.items.map((item) => item.id === itemId
-          ? { ...item, serials: item.serials.filter((serial) => serial !== serialCode) }
-          : item),
+        items: current.items.map((item) => item.id === itemId ? { ...item, serials: item.serials.filter((serial) => serial !== serialCode) } : item),
       } : current);
       setMessage({ type: 'success', text: `Serial ${serialCode} eliminado.` });
     } catch (error) {
@@ -277,18 +315,21 @@ export default function WarehouseSerialScanner({ token }: { token: string }) {
     } finally {
       setDeletingCode('');
     }
-  }, [token]);
+  }
 
-  const stopCamera = useCallback(() => {
+  function stopCamera() {
     if (frameRef.current !== null) cancelAnimationFrame(frameRef.current);
     frameRef.current = null;
+    detectorRef.current = null;
+    zxingReaderRef.current?.reset();
+    zxingReaderRef.current = null;
     streamRef.current?.getTracks().forEach((track) => track.stop());
     streamRef.current = null;
     if (videoRef.current) videoRef.current.srcObject = null;
     setCameraOn(false);
-  }, []);
+  }
 
-  const detectFrame = useCallback(async () => {
+  async function detectFrame() {
     const video = videoRef.current;
     const detector = detectorRef.current;
     if (!video || !detector || !streamRef.current) return;
@@ -303,54 +344,148 @@ export default function WarehouseSerialScanner({ token }: { token: string }) {
           await addSerial(code);
         }
       } catch {
-        // Some browsers reject individual frames while the camera is initializing.
+        // Ignore single-frame detection errors while the camera settles.
       }
     }
-    frameRef.current = requestAnimationFrame(() => void detectFrame());
-  }, [addSerial]);
 
-  const startCamera = useCallback(async () => {
+    frameRef.current = requestAnimationFrame(() => void detectFrame());
+  }
+
+  async function startCamera() {
     setMessage(null);
+    setCameraError(null);
     try {
+      // 1. Detect in-app browsers (WebViews) — they block camera access
+      if (isInAppBrowser()) {
+        setCameraError({
+          cause: 'in-app-browser',
+          text: 'Estas usando un navegador integrado (WhatsApp, Instagram, etc.) que no permite acceder a la camara.',
+        });
+        return;
+      }
+
+      // 2. Check if the camera API is available at all
+      if (!navigator.mediaDevices?.getUserMedia) {
+        const isSecure = window.isSecureContext ?? location.protocol === 'https:';
+        setCameraError({
+          cause: 'not-supported',
+          text: isSecure
+            ? 'Este navegador no soporta acceso a la camara. Usa Chrome o Safari actualizado.'
+            : 'La camara requiere una conexion segura (HTTPS). Abre este enlace en un navegador con HTTPS.',
+        });
+        return;
+      }
+
+      // 3. Check permission status before requesting (avoids silent failures)
+      if (navigator.permissions) {
+        try {
+          const status = await navigator.permissions.query({ name: 'camera' as PermissionName });
+          if (status.state === 'denied') {
+            setCameraError({
+              cause: 'permission-denied',
+              text: 'El permiso de camara fue denegado. Ve a la configuracion de tu navegador y permite el acceso a la camara para este sitio.',
+            });
+            return;
+          }
+        } catch {
+          // permissions.query may not support 'camera' in all browsers — continue
+        }
+      }
+
+      // 4. Try to get the camera stream
       const Detector = (window as typeof window & { BarcodeDetector?: BarcodeDetectorConstructor }).BarcodeDetector;
-      if (!Detector || !navigator.mediaDevices?.getUserMedia) {
-        throw new Error('Este navegador no permite escaneo automático. Usa la entrada manual.');
+      if (Detector) {
+        detectorRef.current = new Detector({
+          formats: ['code_128', 'code_39', 'ean_13', 'ean_8', 'qr_code', 'data_matrix'],
+        });
+
+        const stream = await navigator.mediaDevices.getUserMedia({
+          video: { facingMode: { ideal: 'environment' } },
+          audio: false,
+        });
+        streamRef.current = stream;
+        if (videoRef.current) {
+          videoRef.current.srcObject = stream;
+          await videoRef.current.play();
+        }
+        setCameraOn(true);
+        setCameraError(null);
+        frameRef.current = requestAnimationFrame(() => void detectFrame());
+        return;
       }
-      detectorRef.current = new Detector({
-        formats: ['code_128', 'code_39', 'ean_13', 'ean_8', 'qr_code', 'data_matrix'],
-      });
-      const stream = await navigator.mediaDevices.getUserMedia({
-        video: { facingMode: { ideal: 'environment' } },
-        audio: false,
-      });
-      streamRef.current = stream;
-      if (videoRef.current) {
-        videoRef.current.srcObject = stream;
-        await videoRef.current.play();
+
+      const { BrowserMultiFormatReader, BarcodeFormat } = await import('@zxing/browser');
+      const { DecodeHintType, NotFoundException } = await import('@zxing/library');
+      const hints = new Map();
+      hints.set(DecodeHintType.POSSIBLE_FORMATS, [
+        BarcodeFormat.CODE_128,
+        BarcodeFormat.CODE_39,
+        BarcodeFormat.EAN_13,
+        BarcodeFormat.EAN_8,
+        BarcodeFormat.QR_CODE,
+        BarcodeFormat.DATA_MATRIX,
+      ]);
+
+      const reader = new BrowserMultiFormatReader(hints);
+      zxingReaderRef.current = reader as unknown as ZxingReader;
+      if (!videoRef.current) {
+        throw new Error('No se pudo inicializar la vista previa de camara.');
       }
+
+      await reader.decodeFromVideoDevice(undefined, videoRef.current, async (result, error) => {
+        if (result && !submittingRef.current) {
+          const code = text(result.getText());
+          const now = Date.now();
+          if (code && (lastDetectionRef.current.code !== code || now - lastDetectionRef.current.at > 1800)) {
+            lastDetectionRef.current = { code, at: now };
+            await addSerial(code);
+          }
+        }
+
+        if (error && !(error instanceof NotFoundException)) {
+          console.warn('ZXing scan error:', error);
+        }
+      });
       setCameraOn(true);
-      frameRef.current = requestAnimationFrame(() => void detectFrame());
+      setCameraError(null);
     } catch (error) {
       stopCamera();
-      setMessage({ type: 'error', text: error instanceof Error ? error.message : 'No se pudo abrir la cámara.' });
+      // Distinguish permission errors from generic failures
+      const err = error instanceof Error ? error : null;
+      const name = (err as { name?: string })?.name || '';
+      if (name === 'NotAllowedError' || name === 'PermissionDeniedError') {
+        setCameraError({
+          cause: 'permission-denied',
+          text: 'Permiso de camara denegado. Toca el icono de candado en la barra de direcciones y permite el acceso a la camara.',
+        });
+      } else if (name === 'NotFoundError' || name === 'DevicesNotFoundError') {
+        setCameraError({
+          cause: 'not-supported',
+          text: 'No se encontro ninguna camara en este dispositivo.',
+        });
+      } else {
+        setCameraError({
+          cause: 'generic',
+          text: err?.message || 'No se pudo abrir la camara. Intenta desde Chrome o Safari.',
+        });
+      }
     }
-  }, [detectFrame, stopCamera]);
+  }
 
   useEffect(() => {
-    setCameraSupported(Boolean(
-      typeof window !== 'undefined'
-      && (window as typeof window & { BarcodeDetector?: BarcodeDetectorConstructor }).BarcodeDetector
-      && navigator.mediaDevices?.getUserMedia
-    ));
-    return stopCamera;
-  }, [stopCamera]);
+    const hasApi = Boolean(typeof window !== 'undefined' && navigator.mediaDevices?.getUserMedia);
+    setCameraSupported(hasApi);
+    // Auto-detect in-app browser and show warning on mount
+    if (typeof window !== 'undefined' && isInAppBrowser()) {
+      setCameraError({
+        cause: 'in-app-browser',
+        text: 'Estas usando un navegador integrado que no permite acceder a la camara. Abre en Chrome o Safari.',
+      });
+    }
+    return () => stopCamera();
+  }, []);
 
-  const submitManual = (event: FormEvent) => {
-    event.preventDefault();
-    void addSerial(manualCode);
-  };
-
-  const markReady = async () => {
+  async function markReady() {
     if (!totals.complete || markingReady) return;
     setMarkingReady(true);
     setMessage(null);
@@ -370,20 +505,25 @@ export default function WarehouseSerialScanner({ token }: { token: string }) {
           statusLabel: text(payload.status_label) || 'Lista',
         },
       } : current);
-      setMessage({ type: 'success', text: 'Orden marcada como lista para facturación.' });
+      setMessage({ type: 'success', text: 'Orden marcada como lista para facturacion.' });
     } catch (error) {
       setMessage({ type: 'error', text: error instanceof Error ? error.message : 'No se pudo marcar la orden como lista.' });
     } finally {
       setMarkingReady(false);
     }
-  };
+  }
+
+  function submitManual(event: FormEvent) {
+    event.preventDefault();
+    void addSerial(manualCode);
+  }
 
   if (loading) {
     return (
       <div className={styles.centerState}>
         <Loader2 className={styles.spin} size={28} />
         <strong>Cargando orden de alistamiento</strong>
-        <span>Validando el acceso y las líneas del pedido.</span>
+        <span>Validando el acceso y las lineas del pedido.</span>
       </div>
     );
   }
@@ -393,7 +533,7 @@ export default function WarehouseSerialScanner({ token }: { token: string }) {
       <div className={styles.centerState}>
         <AlertCircle size={34} />
         <strong>No se pudo abrir la orden</strong>
-        <span>{message?.text || 'El enlace puede haber expirado o no ser válido.'}</span>
+        <span>{message?.text || 'El enlace puede haber expirado o no ser valido.'}</span>
         <button className={styles.primaryButton} onClick={() => void loadOrder()}>
           <RefreshCw size={18} /> Reintentar
         </button>
@@ -414,12 +554,7 @@ export default function WarehouseSerialScanner({ token }: { token: string }) {
             <span className={styles.eyebrow}>Escaneo de bodega</span>
             <h1>{data.pickOrder.salesOrderNumber}</h1>
           </div>
-          <button
-            className={styles.iconButton}
-            onClick={() => void loadOrder(true)}
-            disabled={refreshing}
-            aria-label="Actualizar orden"
-          >
+          <button className={styles.iconButton} onClick={() => void loadOrder(true)} disabled={refreshing} aria-label="Actualizar orden">
             <RefreshCw size={19} className={refreshing ? styles.spin : undefined} />
           </button>
         </div>
@@ -453,7 +588,7 @@ export default function WarehouseSerialScanner({ token }: { token: string }) {
         <div className={styles.sectionHeading}>
           <div>
             <span className={styles.step}>Paso 1</span>
-            <h2>Selecciona la línea</h2>
+            <h2>Selecciona la linea</h2>
           </div>
           <span className={styles.statusPill}>{data.pickOrder.statusLabel}</span>
         </div>
@@ -497,25 +632,44 @@ export default function WarehouseSerialScanner({ token }: { token: string }) {
           </div>
 
           <div className={`${styles.cameraBox} ${cameraOn ? styles.cameraBoxActive : ''}`}>
-            <video ref={videoRef} muted playsInline aria-label="Vista de cámara para escanear códigos" />
+            <video ref={videoRef} muted playsInline aria-label="Vista de camara para escanear codigos" />
             {!cameraOn && (
               <div className={styles.cameraPlaceholder}>
-                <ScanLine size={42} />
-                <strong>{cameraSupported ? 'Cámara lista para escanear' : 'Escaneo manual disponible'}</strong>
-                <span>{cameraSupported ? 'Apunta al código de barra o QR del equipo.' : 'Tu navegador no soporta detección automática.'}</span>
+                {cameraError?.cause === 'in-app-browser' ? (
+                  <>
+                    <AlertCircle size={42} />
+                    <strong>Navegador no compatible</strong>
+                    <span>{cameraError.text}</span>
+                  </>
+                ) : cameraError ? (
+                  <>
+                    <CameraOff size={42} />
+                    <strong>{cameraError.cause === 'permission-denied' ? 'Permiso denegado' : 'Camara no disponible'}</strong>
+                    <span>{cameraError.text}</span>
+                  </>
+                ) : (
+                  <>
+                    <ScanLine size={42} />
+                    <strong>{cameraSupported ? 'Camara lista para escanear' : 'Escaneo manual disponible'}</strong>
+                    <span>{cameraSupported ? 'Apunta al codigo de barras o QR del equipo.' : 'Tu navegador no permite usar la camara para esta funcion.'}</span>
+                  </>
+                )}
               </div>
             )}
             {cameraOn && <div className={styles.scanTarget}><span /></div>}
           </div>
 
-          <button
-            className={cameraOn ? styles.secondaryButton : styles.cameraButton}
-            onClick={cameraOn ? stopCamera : () => void startCamera()}
-            type="button"
-          >
-            {cameraOn ? <CameraOff size={19} /> : <Camera size={19} />}
-            {cameraOn ? 'Cerrar cámara' : 'Abrir cámara'}
-          </button>
+          {cameraError?.cause === 'in-app-browser' ? (
+            <button className={styles.cameraButton} onClick={openInSystemBrowser} type="button">
+              <ExternalLink size={19} />
+              Abrir en Chrome / Safari
+            </button>
+          ) : (
+            <button className={cameraOn ? styles.secondaryButton : styles.cameraButton} onClick={cameraOn ? stopCamera : () => void startCamera()} type="button">
+              {cameraOn ? <CameraOff size={19} /> : <Camera size={19} />}
+              {cameraOn ? 'Cerrar camara' : cameraError?.cause === 'permission-denied' ? 'Reintentar acceso' : 'Abrir camara'}
+            </button>
+          )}
 
           <div className={styles.divider}><span>o ingresa manualmente</span></div>
 
@@ -526,7 +680,7 @@ export default function WarehouseSerialScanner({ token }: { token: string }) {
                 id="serial-code"
                 value={manualCode}
                 onChange={(event) => setManualCode(event.target.value)}
-                placeholder="Escanea o escribe el código"
+                placeholder="Escanea o escribe el codigo"
                 autoComplete="off"
                 inputMode="numeric"
                 disabled={submitting || isReady}
@@ -549,7 +703,7 @@ export default function WarehouseSerialScanner({ token }: { token: string }) {
             {selectedItem.serials.length === 0 ? (
               <div className={styles.emptySerials}>
                 <Barcode size={24} />
-                <span>Aún no hay seriales en esta línea.</span>
+                <span>Aun no hay seriales en esta linea.</span>
               </div>
             ) : (
               selectedItem.serials.map((serial, index) => {
@@ -564,9 +718,7 @@ export default function WarehouseSerialScanner({ token }: { token: string }) {
                       aria-label={`Eliminar serial ${serial}`}
                       type="button"
                     >
-                      {deletingCode === deleteKey
-                        ? <Loader2 className={styles.spin} size={17} />
-                        : <Trash2 size={17} />}
+                      {deletingCode === deleteKey ? <Loader2 className={styles.spin} size={17} /> : <Trash2 size={17} />}
                     </button>
                   </div>
                 );
@@ -579,17 +731,10 @@ export default function WarehouseSerialScanner({ token }: { token: string }) {
       <footer className={styles.footer}>
         <div>
           <strong>{totals.complete ? 'Pedido completo' : `${totals.required - totals.scanned} seriales pendientes`}</strong>
-          <span>{totals.complete ? 'Ya puede enviarse a facturación.' : 'Completa todas las líneas para continuar.'}</span>
+          <span>{totals.complete ? 'Ya puede enviarse a facturacion.' : 'Completa todas las lineas para continuar.'}</span>
         </div>
-        <button
-          className={styles.readyButton}
-          disabled={!totals.complete || markingReady || isReady}
-          onClick={() => void markReady()}
-          type="button"
-        >
-          {markingReady
-            ? <Loader2 className={styles.spin} size={20} />
-            : <PackageCheck size={20} />}
+        <button className={styles.readyButton} disabled={!totals.complete || markingReady || isReady} onClick={() => void markReady()} type="button">
+          {markingReady ? <Loader2 className={styles.spin} size={20} /> : <PackageCheck size={20} />}
           {isReady ? 'Orden lista' : 'Marcar lista'}
         </button>
       </footer>

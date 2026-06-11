@@ -15,6 +15,20 @@ const nextConfig = {
   compress: true,
   poweredByHeader: false,
   generateEtags: true,
+  async headers() {
+    return [
+      {
+        // Permitir acceso a camara en las paginas del escaner
+        source: '/alistamiento/:path*',
+        headers: [
+          {
+            key: 'Permissions-Policy',
+            value: 'camera=(self), microphone=()',
+          },
+        ],
+      },
+    ];
+  },
 }
 
 module.exports = nextConfig
