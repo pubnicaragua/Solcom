@@ -114,6 +114,9 @@ function serialArray(value: unknown): string[] {
         .filter(Boolean);
 }
 
+// Los seriales se asignan durante el alistamiento de bodega, no al crear la OV.
+const SERIAL_SELECTION_ON_SALES_ORDER = false;
+
 function normalizeSerialInput(value: unknown): string {
     return serialArray(value).join(',');
 }
@@ -532,7 +535,7 @@ export default function SalesOrderForm({ isOpen, orderId, onClose, onSaved }: Sa
 
         const family = await fetchFamilyWarehouses(nextWarehouseId);
         setFamilyWarehouses(family);
-        items.forEach((line, index) => {
+        SERIAL_SELECTION_ON_SALES_ORDER && items.forEach((line, index) => {
             if (line.zoho_item_id) {
                 void fetchLineSerials(index, line.zoho_item_id, line.item_id, family);
             }
@@ -678,7 +681,7 @@ export default function SalesOrderForm({ isOpen, orderId, onClose, onSaved }: Sa
 
             const family = await fetchFamilyWarehouses(order.warehouse_id || '');
             setFamilyWarehouses(family);
-            normalizedLines.forEach((line, index) => {
+            SERIAL_SELECTION_ON_SALES_ORDER && normalizedLines.forEach((line, index) => {
                 if (line.zoho_item_id) {
                     void fetchLineSerials(index, line.zoho_item_id, line.item_id, family);
                 }
@@ -1362,7 +1365,7 @@ export default function SalesOrderForm({ isOpen, orderId, onClose, onSaved }: Sa
                                         </div>
 
                                         {/* Fila 2: Seriales (si aplica) */}
-                                        {line.item_id && line.zoho_item_id && (
+                                        {SERIAL_SELECTION_ON_SALES_ORDER && line.item_id && line.zoho_item_id && (
                                             <div style={{
                                                 padding: '10px 16px',
                                                 borderBottom: '1px solid rgba(255,255,255,0.05)',

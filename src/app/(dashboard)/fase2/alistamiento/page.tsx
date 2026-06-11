@@ -13,6 +13,7 @@ import {
   PackageSearch,
   PlayCircle,
   RefreshCw,
+  ScanLine,
   Timer,
   Truck,
   UserRound,
@@ -902,6 +903,19 @@ export default function PickingBoardPage() {
                   {selectedOrder.priority === 'urgent' ? 'Urgente' : 'Normal'}
                 </span>
               </div>
+
+              {['claimed', 'picking'].includes(selectedOrder.status) && (
+                <button
+                  type="button"
+                  className="pick-cta pick-cta--start"
+                  onClick={() => window.open(`/alistamiento/escanear/${selectedOrder.id}`, '_blank', 'noopener,noreferrer')}
+                  disabled={demoMode || !pickingAccess.can_edit}
+                  style={{ justifyContent: 'center', width: '100%' }}
+                >
+                  <ScanLine size={15} />
+                  Abrir escáner móvil
+                </button>
+              )}
 
               {/* Detail fields */}
               <div className="detail-grid">

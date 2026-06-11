@@ -28,6 +28,7 @@ import {
     normalizeSyncErrorCodeFromError,
 } from '@/lib/ventas/sync-state';
 import { cancelPickOrderForSalesOrder, isMissingPickingInfraError } from '@/lib/ventas/picking';
+import { isSalesPickingFlowEnabled } from '@/lib/ventas/feature-flags';
 
 function normalizeNumber(value: unknown, fallback = 0): number {
     const parsed = Number(value);
@@ -651,6 +652,27 @@ export async function POST(
 
         if (order.status === 'cancelada') {
             return failWith({ error: 'No se puede convertir una orden cancelada' }, 400);
+        }
+
+        if (isSalesPickingFlowEnabled()) {
+            const pickLookup = await supabase
+                .from('warehouse_pick_orders')
+                .select('id, status')
+                .eq('sales_order_id', params.id)
+                .maybeSingle();
+            if (pickLookup.error && !isMissingPickingInfraError(pickLookup.error)) {
+                return failWith({ error: `No se pudo validar alistamiento: ${pickLookup.error.message}` }, 500);
+            }
+            if (pickLookup.data && normalizeText(pickLookup.data.status) !== 'ready') {
+                return failWith(
+                    {
+                        error: 'La orden debe estar marcada como Lista en bodega antes de crear la factura.',
+                        code: 'PICK_NOT_READY',
+                        pick_status: pickLookup.data.status,
+                    },
+                    409
+                );
+            }
         }
 
         const orderItems = Array.isArray(order.items) ? order.items : [];

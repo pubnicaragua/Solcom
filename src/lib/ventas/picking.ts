@@ -295,8 +295,9 @@ async function replacePickOrderItemsSnapshot(params: {
     supabase: any;
     pickOrderId: string;
     items: any[];
+    serialTrackedItemIds?: Set<string>;
 }): Promise<{ error: any }> {
-    const { supabase, pickOrderId, items } = params;
+    const { supabase, pickOrderId, items, serialTrackedItemIds = new Set<string>() } = params;
 
     const deleteResult = await supabase
         .from('warehouse_pick_order_items')
@@ -313,7 +314,8 @@ async function replacePickOrderItemsSnapshot(params: {
         item_id: normalizeText(line?.item_id) || null,
         description: normalizeText(line?.description) || 'Artículo',
         quantity: Math.max(0, normalizeNumber(line?.quantity, 0)),
-        serials_required: hasSerialRequirement(line?.serial_number_value),
+        serials_required: serialTrackedItemIds.has(normalizeText(line?.item_id))
+            || hasSerialRequirement(line?.serial_number_value),
         serial_numbers_requested: normalizeText(line?.serial_number_value) || null,
         serial_numbers_selected: null,
         sort_order: index,
@@ -420,13 +422,22 @@ export async function upsertPickOrderFromSalesOrder(params: {
     }
 
     const pickOrder = upsertResult.data;
-    const itemsError = await replacePickOrderItemsSnapshot({
-        supabase,
-        pickOrderId: pickOrder.id,
-        items: itemsLookup.data || [],
-    });
-    if (itemsError.error) {
-        return { skipped: false, pickOrder, error: itemsError.error };
+    // Once warehouse has started working, preserve the snapshot and scanned serials.
+    if (!existingStatus || existingStatus === 'queued' || existingStatus === 'cancelled') {
+        const { resolveSerialTrackedItemIds } = await import('@/lib/ventas/picking-serials');
+        const serialTrackedItemIds = await resolveSerialTrackedItemIds({
+            supabase,
+            items: itemsLookup.data || [],
+        });
+        const itemsError = await replacePickOrderItemsSnapshot({
+            supabase,
+            pickOrderId: pickOrder.id,
+            items: itemsLookup.data || [],
+            serialTrackedItemIds,
+        });
+        if (itemsError.error) {
+            return { skipped: false, pickOrder, error: itemsError.error };
+        }
     }
 
     const eventType = !existing
@@ -504,6 +515,14 @@ export async function cancelPickOrderForSalesOrder(params: {
 
     if (updateResult.error || !updateResult.data) {
         return { skipped: false, pickOrder: null, error: updateResult.error || new Error('No se pudo cancelar alistamiento.') };
+    }
+
+    const scanCleanup = await supabase
+        .from('warehouse_pick_serial_scans')
+        .delete()
+        .eq('pick_order_id', pickOrder.id);
+    if (scanCleanup.error && !isMissingRelation(scanCleanup.error.message || '', 'warehouse_pick_serial_scans')) {
+        console.warn('[picking] No se pudieron liberar seriales escaneados:', scanCleanup.error.message);
     }
 
     await insertPickEvent({

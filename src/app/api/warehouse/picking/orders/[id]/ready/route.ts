@@ -2,7 +2,8 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createRouteHandlerClient } from '@supabase/auth-helpers-nextjs';
 import { cookies } from 'next/headers';
 import { getExpectedRowVersion } from '@/lib/ventas/version-conflict';
-import { PickTransitionError, transitionPickOrderStatus } from '@/lib/ventas/picking';
+import { PickTransitionError } from '@/lib/ventas/picking';
+import { markPickReadyWithScans } from '@/lib/ventas/picking-serials';
 
 export const dynamic = 'force-dynamic';
 
@@ -34,10 +35,9 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
         }
 
         const expectedRowVersion = getExpectedRowVersion(req, body);
-        const pickOrder = await transitionPickOrderStatus({
+        const pickOrder = await markPickReadyWithScans({
             supabase,
             pickOrderId: params.id,
-            action: 'ready',
             actorUserId: user.id,
             expectedRowVersion,
         });
