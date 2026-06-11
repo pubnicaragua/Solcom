@@ -1,9 +1,51 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createRouteHandlerClient } from '@supabase/auth-helpers-nextjs';
 import { cookies } from 'next/headers';
+import os from 'os';
 import { createPickingScanToken } from '@/lib/ventas/picking-scan-token';
 
 export const dynamic = 'force-dynamic';
+
+function resolveLocalNetworkHost(): string | null {
+    const interfaces = os.networkInterfaces();
+    for (const entries of Object.values(interfaces)) {
+        for (const entry of entries || []) {
+            if (!entry) continue;
+            if (entry.family !== 'IPv4') continue;
+            if (entry.internal) continue;
+            const address = String(entry.address || '').trim();
+            if (!address) continue;
+            if (address.startsWith('169.254.')) continue;
+            return address;
+        }
+    }
+    return null;
+}
+
+function resolveScanOrigin(req: NextRequest): string {
+    const configuredOrigin = String(process.env.NEXT_PUBLIC_APP_URL || process.env.APP_URL || '').trim().replace(/\/+$/, '');
+    if (configuredOrigin) return configuredOrigin;
+
+    const vercelProductionOrigin = String(process.env.VERCEL_PROJECT_PRODUCTION_URL || '').trim().replace(/\/+$/, '');
+    if (vercelProductionOrigin) {
+        const withProtocol = /^https?:\/\//i.test(vercelProductionOrigin)
+            ? vercelProductionOrigin
+            : `https://${vercelProductionOrigin}`;
+        return withProtocol;
+    }
+
+    const url = new URL(req.url);
+    const hostname = url.hostname.toLowerCase();
+    if (hostname === 'localhost' || hostname === '127.0.0.1' || hostname === '::1') {
+        const networkHost = resolveLocalNetworkHost();
+        if (networkHost) {
+            url.hostname = networkHost;
+            return url.origin;
+        }
+    }
+
+    return url.origin;
+}
 
 export async function POST(req: NextRequest, { params }: { params: { id: string } }) {
     const supabase = createRouteHandlerClient({ cookies });
@@ -21,10 +63,7 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
     }
     const actorUserId = String(pick.data.assigned_user_id || '').trim();
     if (!actorUserId) return NextResponse.json({ error: 'La orden no tiene responsable de bodega asignado.' }, { status: 409 });
-    const requestOrigin = new URL(req.url).origin;
-    const configuredOrigin = String(process.env.NEXT_PUBLIC_APP_URL || process.env.APP_URL || '').trim().replace(/\/+$/, '');
-    const vercelOrigin = process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : '';
-    const origin = configuredOrigin || vercelOrigin || requestOrigin;
+    const origin = resolveScanOrigin(req);
     const token = createPickingScanToken({
         pickOrderId: params.id,
         actorUserId,

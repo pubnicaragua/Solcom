@@ -1050,6 +1050,11 @@ export default function PickingBoardPage() {
                 Este enlace usa localhost y no abrirá desde otro dispositivo. Para probar desde el celular usa el dominio desplegado en Vercel.
               </div>
             )}
+            {(scannerLink.includes('192.168.') || scannerLink.includes('10.') || scannerLink.includes('172.16.') || scannerLink.includes('172.17.') || scannerLink.includes('172.18.') || scannerLink.includes('172.19.') || scannerLink.includes('172.2')) && (
+              <div className="scanner-qr-warning">
+                Este enlace usa la IP local. El celular debe estar conectado a la misma red Wi-Fi que esta computadora.
+              </div>
+            )}
             <div className="scanner-qr-actions">
               <button type="button" className="scanner-qr-secondary" onClick={() => void navigator.clipboard.writeText(scannerLink)}>
                 <Copy size={16} /> Copiar enlace
