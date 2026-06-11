@@ -15,7 +15,10 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
         .maybeSingle();
     if (pick.error) return NextResponse.json({ error: pick.error.message }, { status: 500 });
     if (!pick.data) return NextResponse.json({ error: 'Orden de alistamiento no encontrada.' }, { status: 404 });
-    const origin = new URL(req.url).origin;
+    const requestOrigin = new URL(req.url).origin;
+    const configuredOrigin = String(process.env.NEXT_PUBLIC_APP_URL || process.env.APP_URL || '').trim().replace(/\/+$/, '');
+    const vercelOrigin = process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : '';
+    const origin = configuredOrigin || vercelOrigin || requestOrigin;
     return NextResponse.json({
         token: params.id,
         url: `${origin}/alistamiento/escanear/${params.id}`,

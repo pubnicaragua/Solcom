@@ -2,11 +2,13 @@
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
+import QRCode from 'qrcode';
 import {
   Activity,
   AlertTriangle,
   BarChart3,
   CheckCircle2,
+  Copy,
   Clock3,
   Filter,
   Hand,
@@ -14,6 +16,7 @@ import {
   PlayCircle,
   RefreshCw,
   ScanLine,
+  Smartphone,
   Timer,
   Truck,
   UserRound,
@@ -405,6 +408,40 @@ export default function PickingBoardPage() {
   const [actionLoading, setActionLoading] = useState<string | null>(null);
   const [error, setError] = useState('');
   const [demoMode, setDemoMode] = useState(false);
+  const [scannerLink, setScannerLink] = useState('');
+  const [scannerQr, setScannerQr] = useState('');
+  const [scannerLinkLoading, setScannerLinkLoading] = useState(false);
+
+  const openScannerQr = useCallback(async (order: PickOrder) => {
+    setScannerLinkLoading(true);
+    setError('');
+    try {
+      const response = await fetch(`/api/warehouse/picking/orders/${order.id}/scan-link`, {
+        method: 'POST',
+        cache: 'no-store',
+      });
+      const payload = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(payload?.error || 'No se pudo generar el enlace del escáner.');
+      const url = normalizeText(payload?.url);
+      if (!url) throw new Error('El servidor no devolvió un enlace válido.');
+      setScannerLink(url);
+      setScannerQr(await QRCode.toDataURL(url, {
+        width: 320,
+        margin: 2,
+        errorCorrectionLevel: 'M',
+        color: { dark: '#07111f', light: '#ffffff' },
+      }));
+    } catch (linkError: any) {
+      setError(linkError?.message || 'No se pudo generar el QR del escáner.');
+    } finally {
+      setScannerLinkLoading(false);
+    }
+  }, []);
+
+  const closeScannerQr = useCallback(() => {
+    setScannerLink('');
+    setScannerQr('');
+  }, []);
 
   const loadWarehouses = useCallback(async () => {
     try {
@@ -908,12 +945,12 @@ export default function PickingBoardPage() {
                 <button
                   type="button"
                   className="pick-cta pick-cta--start"
-                  onClick={() => window.open(`/alistamiento/escanear/${selectedOrder.id}`, '_blank', 'noopener,noreferrer')}
-                  disabled={demoMode || !pickingAccess.can_edit}
+                  onClick={() => void openScannerQr(selectedOrder)}
+                  disabled={demoMode || !pickingAccess.can_edit || scannerLinkLoading}
                   style={{ justifyContent: 'center', width: '100%' }}
                 >
-                  <ScanLine size={15} />
-                  Abrir escáner móvil
+                  {scannerLinkLoading ? <RefreshCw size={15} className="spin" /> : <ScanLine size={15} />}
+                  Mostrar QR para escáner móvil
                 </button>
               )}
 
@@ -995,7 +1032,50 @@ export default function PickingBoardPage() {
         </Card>
       )}
 
+      {scannerLink && (
+        <div className="scanner-qr-backdrop" role="presentation" onClick={closeScannerQr}>
+          <div className="scanner-qr-modal" role="dialog" aria-modal="true" aria-label="Código QR para escáner móvil" onClick={(event) => event.stopPropagation()}>
+            <button type="button" className="scanner-qr-close" onClick={closeScannerQr} aria-label="Cerrar">×</button>
+            <div className="scanner-qr-icon"><Smartphone size={23} /></div>
+            <div>
+              <div className="scanner-qr-title">Escanear desde el celular</div>
+              <div className="scanner-qr-subtitle">
+                Abre la cámara del celular y apunta a este QR. El teléfono abrirá el escáner de IMEI para esta orden.
+              </div>
+            </div>
+            {scannerQr && <img className="scanner-qr-image" src={scannerQr} alt="Código QR para abrir el escáner móvil" />}
+            <div className="scanner-qr-url">{scannerLink}</div>
+            {scannerLink.includes('localhost') && (
+              <div className="scanner-qr-warning">
+                Este enlace usa localhost y no abrirá desde otro dispositivo. Para probar desde el celular usa el dominio desplegado en Vercel.
+              </div>
+            )}
+            <div className="scanner-qr-actions">
+              <button type="button" className="scanner-qr-secondary" onClick={() => void navigator.clipboard.writeText(scannerLink)}>
+                <Copy size={16} /> Copiar enlace
+              </button>
+              <button type="button" className="scanner-qr-primary" onClick={() => window.open(scannerLink, '_blank', 'noopener,noreferrer')}>
+                <ScanLine size={16} /> Abrir aquí
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       <style jsx>{`
+        .scanner-qr-backdrop { position: fixed; inset: 0; z-index: 1000; background: rgba(2,8,23,.82); backdrop-filter: blur(8px); display: grid; place-items: center; padding: 20px; }
+        .scanner-qr-modal { width: min(100%,430px); position: relative; display: grid; justify-items: center; gap: 15px; padding: 28px; border-radius: 22px; background: #101b2e; border: 1px solid rgba(96,165,250,.28); box-shadow: 0 30px 90px rgba(0,0,0,.55); text-align: center; }
+        .scanner-qr-close { position: absolute; top: 12px; right: 14px; width: 34px; height: 34px; border: 0; border-radius: 50%; background: rgba(255,255,255,.06); color: #cbd5e1; font-size: 23px; cursor: pointer; }
+        .scanner-qr-icon { width: 48px; height: 48px; display: grid; place-items: center; border-radius: 15px; color: #7dd3fc; background: rgba(14,165,233,.12); border: 1px solid rgba(14,165,233,.28); }
+        .scanner-qr-title { color: #f8fafc; font-size: 20px; font-weight: 800; }
+        .scanner-qr-subtitle { margin-top: 6px; color: #94a3b8; font-size: 12px; line-height: 1.6; }
+        .scanner-qr-image { width: min(100%,290px); aspect-ratio: 1; border-radius: 16px; background: white; padding: 8px; }
+        .scanner-qr-url { width: 100%; padding: 10px 12px; overflow-wrap: anywhere; border-radius: 10px; background: rgba(255,255,255,.04); color: #94a3b8; font-size: 10px; }
+        .scanner-qr-warning { padding: 10px 12px; border-radius: 10px; border: 1px solid rgba(245,158,11,.3); background: rgba(245,158,11,.1); color: #fcd34d; font-size: 11px; line-height: 1.5; }
+        .scanner-qr-actions { width: 100%; display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+        .scanner-qr-actions button { display: flex; align-items: center; justify-content: center; gap: 7px; padding: 11px 12px; border-radius: 11px; font-weight: 700; cursor: pointer; }
+        .scanner-qr-secondary { border: 1px solid rgba(255,255,255,.12); background: rgba(255,255,255,.04); color: #cbd5e1; }
+        .scanner-qr-primary { border: 1px solid rgba(59,130,246,.55); background: #2563eb; color: white; }
 
         /* ════════════════════════════════
            FILTERS TOOLBAR
