@@ -1,6 +1,9 @@
 import { NextResponse } from 'next/server';
 import { createServerClient } from '@/lib/supabase/server';
 import { analyzeSales, type SalesAnalysisResult } from '@/lib/compras/sales-analysis';
+import { createClient } from '@supabase/supabase-js';
+import { createZohoBooksClient } from '@/lib/zoho/books-client';
+import { fetchSalesByItemRestock } from '@/lib/compras/zoho-salesbyitem-report';
 
 const AGENT_PROMPTS: Record<string, string> = {
   'customer-service': 'Eres un agente de atención al cliente de Solis Comercial, una distribuidora de tecnología y electrónica en Nicaragua. Ayudas a los clientes con consultas sobre disponibilidad de productos, precios, marcas y entregas. Sé amable y profesional. Siempre responde en español.',
@@ -219,26 +222,34 @@ function extractDateRange(question: string): { dateStart: string; dateEnd: strin
 
 async function fetchSalesAnalysis(dateStart: string, dateEnd: string): Promise<SalesAnalysisResult | null> {
   try {
-    const baseUrl = process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000';
-    const params = new URLSearchParams({
-      date_start: dateStart,
-      date_end: dateEnd,
-      max_pages: '20',
-      per_page: '200',
+    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
+    const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
+    const supabase = createClient(supabaseUrl, supabaseServiceKey);
+    const zohoClient = createZohoBooksClient();
+
+    if (!zohoClient) {
+      console.error('[AI Sales] ZOHO_BOOKS_* incompleto.');
+      return null;
+    }
+
+    // Calcula días exactos para sacar semanas si es necesario
+    const start = new Date(dateStart);
+    const end = new Date(dateEnd);
+    const ms = end.getTime() - start.getTime();
+    const days = Math.max(Math.ceil(ms / (1000 * 60 * 60 * 24)), 1);
+    const weeks = Math.max(0.1, days / 7);
+
+    const report = await fetchSalesByItemRestock({
+      supabase,
+      zohoClient,
+      dateStart,
+      dateEnd,
+      weeks,
+      maxPages: 20,
+      perPage: 200,
     });
 
-    const response = await fetch(`${baseUrl}/api/compras/restock?${params.toString()}`);
-    if (!response.ok) {
-      console.error('[AI Sales] Error fetching restock:', response.status);
-      return null;
-    }
-
-    const data = await response.json();
-    if (!data.success || !data.data || data.data.length === 0) {
-      return null;
-    }
-
-    return analyzeSales(data.data, dateStart, dateEnd);
+    return analyzeSales(report.rows || [], dateStart, dateEnd);
   } catch (error) {
     console.error('[AI Sales] Error en fetchSalesAnalysis:', error);
     return null;
