@@ -39,7 +39,9 @@ function addDaysYmd(ymd: string, days: number): string {
 export async function GET(request: Request) {
   try {
     const { searchParams } = new URL(request.url);
-    const weeks = clampInteger(searchParams.get('weeks'), 4, 1, 52);
+    const weeksParam = searchParams.get('weeks');
+    const parsedWeeks = weeksParam ? parseFloat(weeksParam) : NaN;
+    const weeks = !isNaN(parsedWeeks) && parsedWeeks > 0 ? Math.max(0.1, Math.min(52, parsedWeeks)) : 4;
     const days = clampInteger(searchParams.get('days'), 30, 1, 365);
     const dateEnd = searchParams.get('date_end') || formatYmdInManagua(new Date());
     const dateStart = searchParams.get('date_start') || addDaysYmd(dateEnd, -days);

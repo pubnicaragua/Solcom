@@ -6,7 +6,7 @@ import Button from '@/components/ui/Button';
 import Input from '@/components/ui/Input';
 import Badge from '@/components/ui/Badge';
 import IntegrationCard from '@/components/ai-agents/IntegrationCard';
-import { Bot, MessageSquare, DollarSign, FileText, Phone, Shield, Send, Loader } from 'lucide-react';
+import { Bot, MessageSquare, DollarSign, FileText, Phone, Shield, Send, Loader, TrendingUp } from 'lucide-react';
 
 interface Agent {
   id: string;
@@ -78,6 +78,15 @@ const AGENTS: Agent[] = [
     color: 'var(--brand-primary)',
     status: 'active',
     queries: 312,
+  },
+  {
+    id: 'sales-analyst',
+    name: 'Analista de Ventas',
+    description: 'Analiza ventas, productos más vendidos, cobertura de stock y tendencias por rango de fechas',
+    icon: TrendingUp,
+    color: '#06B6D4',
+    status: 'active',
+    queries: 0,
   },
 ];
 
@@ -333,6 +342,25 @@ export default function AIAgentsPage() {
               </div>
             </div>
           </Card>
+
+          {selectedAgent?.id === 'sales-analyst' && (
+            <Card>
+              <div style={{ padding: 12 }}>
+                <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 8, color: '#06B6D4' }}>
+                  📊 Consultas de Ventas
+                </div>
+                <div style={{ display: 'grid', gap: 6, fontSize: 12, color: 'var(--muted)' }}>
+                  <div>• "¿Cuáles fueron los más vendidos del 1 de mayo al 1 de junio?"</div>
+                  <div>• "Analiza las ventas de las últimas 4 semanas"</div>
+                  <div>• "¿Qué productos están en estado crítico este mes?"</div>
+                  <div>• "¿Cuántas semanas de stock me quedan?"</div>
+                  <div>• "Ventas por marca del mes pasado"</div>
+                  <div>• "¿Qué categoría se vendió más los últimos 30 días?"</div>
+                  <div>• "¿Cuál es el presupuesto de restock este mes?"</div>
+                </div>
+              </div>
+            </Card>
+          )}
         </div>
 
         <Card style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>

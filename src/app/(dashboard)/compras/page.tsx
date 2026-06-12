@@ -112,7 +112,7 @@ export default function ComprasRestockPage() {
         return;
       }
 
-      const weeks = Math.max(1, Math.ceil(rangeDays / 7));
+      const weeks = Math.max(0.1, rangeDays / 7);
       const params = new URLSearchParams({
         date_start: dateStart,
         date_end: dateEnd,
@@ -254,19 +254,25 @@ export default function ComprasRestockPage() {
     let budgetCritical = 0;
 
     results.forEach((row) => {
-      const weeklyAvg = row.weekly_avg > 0 ? row.weekly_avg : 0.1; // avoid div by 0
-      const weeksCoverage = row.stock_total / weeklyAvg;
+      const weeklyAvg = row.weekly_avg;
 
-      if (row.stock_total === 0 && row.weekly_avg > 0) {
-        critical++;
-        budgetCritical += row.presupuesto;
-      } else if (weeksCoverage <= 1.5) {
-        critical++;
-        budgetCritical += row.presupuesto;
-      } else if (weeksCoverage > 1.5 && weeksCoverage <= 4) {
+      if (row.stock_total === 0) {
+        if (weeklyAvg > 0) {
+          critical++;
+          budgetCritical += row.presupuesto;
+        }
+      } else if (weeklyAvg === 0) {
         healthy++;
-      } else if (weeksCoverage > 4) {
-        overstocked++;
+      } else {
+        const coverageWeeks = row.stock_total / weeklyAvg;
+        if (coverageWeeks <= 1.5) {
+          critical++;
+          budgetCritical += row.presupuesto;
+        } else if (coverageWeeks <= 5.0) {
+          healthy++;
+        } else {
+          overstocked++;
+        }
       }
     });
 
@@ -274,19 +280,28 @@ export default function ComprasRestockPage() {
   }, [results]);
 
   const getCoverageStatus = (row: RestockRow) => {
-    const weeklyAvg = row.weekly_avg > 0 ? row.weekly_avg : 0.1;
+    const weeklyAvg = row.weekly_avg;
+
+    if (row.stock_total === 0) {
+      if (weeklyAvg > 0) {
+        return { label: 'Agotado (0 sem)', color: '#ef4444', icon: AlertCircle, bg: 'rgba(239,68,68,0.1)' };
+      }
+      return { label: 'Sin Stock', color: '#64748b', icon: AlertCircle, bg: 'rgba(100,116,139,0.1)' };
+    }
+
+    if (weeklyAvg === 0) {
+      return { label: 'Sano (Sin ventas)', color: '#10b981', icon: CheckCircle2, bg: 'rgba(16,185,129,0.1)' };
+    }
+
     const coverageWeeks = row.stock_total / weeklyAvg;
 
-    if (row.stock_total === 0 && row.weekly_avg > 0) {
-      return { label: 'Agotado', color: '#ef4444', icon: AlertCircle, bg: 'rgba(239,68,68,0.1)' };
-    }
     if (coverageWeeks <= 1.5) {
-      return { label: 'Crítico', color: '#f59e0b', icon: AlertTriangle, bg: 'rgba(245,158,11,0.1)' };
+      return { label: `Crítico (~${coverageWeeks.toFixed(1)} sem)`, color: '#f59e0b', icon: AlertTriangle, bg: 'rgba(245,158,11,0.1)' };
     }
-    if (coverageWeeks <= 4) {
-      return { label: 'Sano', color: '#10b981', icon: CheckCircle2, bg: 'rgba(16,185,129,0.1)' };
+    if (coverageWeeks <= 5.0) {
+      return { label: `Sano (~${coverageWeeks.toFixed(1)} sem)`, color: '#10b981', icon: CheckCircle2, bg: 'rgba(16,185,129,0.1)' };
     }
-    return { label: 'Exceso', color: '#3b82f6', icon: TrendingDown, bg: 'rgba(59,130,246,0.1)' };
+    return { label: `Exceso (~${coverageWeeks.toFixed(1)} sem)`, color: '#3b82f6', icon: TrendingDown, bg: 'rgba(59,130,246,0.1)' };
   };
 
   const noticePalette: Record<PageNotice['type'], { bg: string; color: string; border: string }> = {

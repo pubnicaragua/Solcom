@@ -19,6 +19,33 @@ interface AIAssistantProps {
 }
 
 export default function AIAssistant({ restockData = [], topSales = [], openSignal = 0 }: AIAssistantProps) {
+  // Detección local de intención de ventas para elegir agentId dinámicamente
+  const detectSalesIntent = (text: string): boolean => {
+    const q = text.toLowerCase();
+    const salesKeywords = [
+      'más vendido', 'mas vendido', 'más vendidos', 'mas vendidos',
+      'se vendió más', 'se vendio mas', 'se vende más', 'se vende mas',
+      'top ventas', 'top productos', 'análisis de ventas', 'analisis de ventas',
+      'productos críticos', 'productos criticos', 'stock crítico', 'stock critico',
+      'cobertura de stock', 'semanas de cobertura', 'semanas de stock',
+      'productos sanos', 'productos agotados', 'sin stock',
+      'ventas por categoría', 'ventas por categoria', 'ventas por marca',
+      'velocidad de venta', 'tendencia de ventas',
+      'qué comprar', 'que comprar', 'prioridad de compra',
+      'presupuesto de restock', 'reporte de ventas',
+      'cuánto va a durar', 'cuanto va a durar',
+      'cuántas semanas', 'cuantas semanas',
+    ];
+    if (salesKeywords.some((kw) => q.includes(kw))) return true;
+    // Detección flexible: palabras sueltas que juntas indican ventas
+    const hasVendio = q.includes('vendió') || q.includes('vendio') || q.includes('vende') || q.includes('venta') || q.includes('ventas');
+    const hasMas = q.includes('más') || q.includes('mas');
+    const hasProducto = q.includes('producto') || q.includes('productos');
+    const hasTiempo = q.includes('ayer') || q.includes('semana') || q.includes('mes') || q.includes('hoy') || q.includes('día') || q.includes('dia');
+    if (hasVendio && (hasMas || hasTiempo)) return true;
+    if (hasProducto && hasVendio) return true;
+    return false;
+  };
   const [isOpen, setIsOpen] = useState(false);
   const [messages, setMessages] = useState<Message[]>([]);
   const [userId, setUserId] = useState<string>('');
@@ -237,7 +264,7 @@ export default function AIAssistant({ restockData = [], topSales = [], openSigna
         body: JSON.stringify({
           question: text,
           context,
-          agentId: 'audit',
+          agentId: detectSalesIntent(text) ? 'sales-analyst' : 'audit',
           image: imageData,
           url: url,
           useAI: !!(imageData || url)

@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { createServerClient } from '@/lib/supabase/server';
+import { analyzeSales, type SalesAnalysisResult } from '@/lib/compras/sales-analysis';
 
 const AGENT_PROMPTS: Record<string, string> = {
   'customer-service': 'Eres un agente de atención al cliente de Solis Comercial, una distribuidora de tecnología y electrónica en Nicaragua. Ayudas a los clientes con consultas sobre disponibilidad de productos, precios, marcas y entregas. Sé amable y profesional. Siempre responde en español.',
@@ -7,6 +8,7 @@ const AGENT_PROMPTS: Record<string, string> = {
   'quotes': 'Eres un agente de cotizaciones de Solis Comercial. Generas cotizaciones automáticas basadas en el inventario disponible. Sé preciso con los números y precios.',
   'invoicing': 'Eres un agente de facturación de Solis Comercial. Asistes en la emisión de facturas y documentos fiscales. Sé exacto y formal.',
   'audit': 'Eres un agente de auditoría de Solis Comercial. Detectas inconsistencias y anomalías en el inventario. Sé detallista y analítico.',
+  'sales-analyst': 'Eres un analista de ventas experto de Solis Comercial. Analizas datos de ventas, identificas tendencias, productos más vendidos, productos críticos que necesitan reabastecimiento, y generas insights accionables. Usas los datos reales del sistema para hacer recomendaciones precisas. Siempre responde en español con datos concretos.',
 };
 
 interface ItemRow {
@@ -79,6 +81,170 @@ async function logUsage(supabase: ReturnType<typeof createServerClient>, questio
   });
 }
 
+// ─────────────── Detección de intención de ventas ───────────────
+
+const SALES_INTENT_KEYWORDS = [
+  'más vendidos', 'mas vendidos', 'top ventas', 'top productos',
+  'productos críticos', 'productos criticos', 'stock crítico', 'stock critico',
+  'análisis de ventas', 'analisis de ventas', 'reporte de ventas',
+  'qué se vende más', 'que se vende mas', 'qué se vendió más', 'que se vendio mas',
+  'cobertura de stock', 'semanas de cobertura', 'semanas de stock',
+  'productos sanos', 'stock sano', 'inventario sano',
+  'agotados', 'sin stock', 'productos agotados',
+  'ventas por categoría', 'ventas por categoria', 'ventas por marca',
+  'tendencia de ventas', 'velocidad de venta',
+  'cuánto va a durar', 'cuanto va a durar', 'cuántas semanas', 'cuantas semanas',
+  'necesito reabastecer', 'qué comprar', 'que comprar', 'prioridad de compra',
+  'presupuesto de restock', 'presupuesto de compra',
+  'analiza ventas', 'analiza las ventas', 'dame un análisis', 'dame un analisis',
+];
+
+function isSalesIntent(question: string): boolean {
+  const q = question.toLowerCase();
+  // Coincidencia exacta de frases
+  if (SALES_INTENT_KEYWORDS.some((kw) => q.includes(kw))) return true;
+  // Detección flexible: combinaciones de palabras que indican intención de ventas
+  const hasVendio = q.includes('vendió') || q.includes('vendio') || q.includes('vende') || q.includes('venta') || q.includes('ventas') || q.includes('vendieron');
+  const hasMas = q.includes('más') || q.includes('mas');
+  const hasProducto = q.includes('producto') || q.includes('productos');
+  const hasTiempo = q.includes('ayer') || q.includes('semana') || q.includes('mes') || q.includes('hoy') || q.includes('día') || q.includes('dia');
+  if (hasVendio && (hasMas || hasTiempo)) return true;
+  if (hasProducto && hasVendio) return true;
+  return false;
+}
+
+// Meses en español para parsear fechas
+const MONTH_MAP: Record<string, string> = {
+  enero: '01', febrero: '02', marzo: '03', abril: '04',
+  mayo: '05', junio: '06', julio: '07', agosto: '08',
+  septiembre: '09', octubre: '10', noviembre: '11', diciembre: '12',
+};
+
+function formatYmdManagua(date: Date): string {
+  const parts = new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'America/Managua',
+    year: 'numeric', month: '2-digit', day: '2-digit',
+  }).formatToParts(date);
+  const y = parts.find((p) => p.type === 'year')?.value;
+  const m = parts.find((p) => p.type === 'month')?.value;
+  const d = parts.find((p) => p.type === 'day')?.value;
+  return `${y}-${m}-${d}`;
+}
+
+function extractDateRange(question: string): { dateStart: string; dateEnd: string } | null {
+  const q = question.toLowerCase();
+  const now = new Date();
+  const currentYear = now.getFullYear();
+
+  // "del 1 de mayo al 1 de junio" o "de 1 de mayo a 1 de junio"
+  const rangeRegex = /(?:del?|desde)\s+(\d{1,2})\s+de\s+(\w+)\s+(?:al?|hasta)\s+(\d{1,2})\s+de\s+(\w+)/i;
+  const rangeMatch = q.match(rangeRegex);
+  if (rangeMatch) {
+    const [, dayStart, monthStartStr, dayEnd, monthEndStr] = rangeMatch;
+    const mStart = MONTH_MAP[monthStartStr.toLowerCase()];
+    const mEnd = MONTH_MAP[monthEndStr.toLowerCase()];
+    if (mStart && mEnd) {
+      const dateStart = `${currentYear}-${mStart}-${dayStart.padStart(2, '0')}`;
+      const dateEnd = `${currentYear}-${mEnd}-${dayEnd.padStart(2, '0')}`;
+      return { dateStart, dateEnd };
+    }
+  }
+
+  // "últimas X semanas" o "ultima X semanas"
+  const weeksRegex = /[uú]ltimas?\s+(\d+)\s+semanas?/i;
+  const weeksMatch = q.match(weeksRegex);
+  if (weeksMatch) {
+    const numWeeks = parseInt(weeksMatch[1], 10);
+    const end = new Date(now);
+    const start = new Date(now);
+    start.setDate(start.getDate() - numWeeks * 7);
+    return { dateStart: formatYmdManagua(start), dateEnd: formatYmdManagua(end) };
+  }
+
+  // "último mes" o "este mes" o "mes pasado"
+  if (q.includes('este mes') || q.includes('mes actual')) {
+    const start = new Date(now.getFullYear(), now.getMonth(), 1);
+    return { dateStart: formatYmdManagua(start), dateEnd: formatYmdManagua(now) };
+  }
+  if (q.includes('mes pasado') || q.includes('último mes') || q.includes('ultimo mes')) {
+    const start = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+    const end = new Date(now.getFullYear(), now.getMonth(), 0);
+    return { dateStart: formatYmdManagua(start), dateEnd: formatYmdManagua(end) };
+  }
+
+  // "últimos X días"
+  const daysRegex = /[uú]ltimos?\s+(\d+)\s+d[ií]as?/i;
+  const daysMatch = q.match(daysRegex);
+  if (daysMatch) {
+    const numDays = parseInt(daysMatch[1], 10);
+    const end = new Date(now);
+    const start = new Date(now);
+    start.setDate(start.getDate() - numDays);
+    return { dateStart: formatYmdManagua(start), dateEnd: formatYmdManagua(end) };
+  }
+
+  // "ayer"
+  if (q.includes('ayer')) {
+    const yesterday = new Date(now);
+    yesterday.setDate(yesterday.getDate() - 1);
+    return { dateStart: formatYmdManagua(yesterday), dateEnd: formatYmdManagua(yesterday) };
+  }
+
+  // "hoy"
+  if (q.includes('hoy') || q.includes('el día de hoy') || q.includes('el dia de hoy')) {
+    return { dateStart: formatYmdManagua(now), dateEnd: formatYmdManagua(now) };
+  }
+
+  // "esta semana"
+  if (q.includes('esta semana')) {
+    const start = new Date(now);
+    const dayOfWeek = start.getDay();
+    start.setDate(start.getDate() - (dayOfWeek === 0 ? 6 : dayOfWeek - 1)); // Lunes
+    return { dateStart: formatYmdManagua(start), dateEnd: formatYmdManagua(now) };
+  }
+
+  // "semana pasada"
+  if (q.includes('semana pasada') || q.includes('semana anterior')) {
+    const end = new Date(now);
+    const dayOfWeek = end.getDay();
+    end.setDate(end.getDate() - (dayOfWeek === 0 ? 6 : dayOfWeek - 1) - 1); // Domingo pasado
+    const start = new Date(end);
+    start.setDate(start.getDate() - 6); // Lunes pasado
+    return { dateStart: formatYmdManagua(start), dateEnd: formatYmdManagua(end) };
+  }
+
+  // Default: últimas 4 semanas
+  return null;
+}
+
+async function fetchSalesAnalysis(dateStart: string, dateEnd: string): Promise<SalesAnalysisResult | null> {
+  try {
+    const baseUrl = process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000';
+    const params = new URLSearchParams({
+      date_start: dateStart,
+      date_end: dateEnd,
+      max_pages: '20',
+      per_page: '200',
+    });
+
+    const response = await fetch(`${baseUrl}/api/compras/restock?${params.toString()}`);
+    if (!response.ok) {
+      console.error('[AI Sales] Error fetching restock:', response.status);
+      return null;
+    }
+
+    const data = await response.json();
+    if (!data.success || !data.data || data.data.length === 0) {
+      return null;
+    }
+
+    return analyzeSales(data.data, dateStart, dateEnd);
+  } catch (error) {
+    console.error('[AI Sales] Error en fetchSalesAnalysis:', error);
+    return null;
+  }
+}
+
 export async function POST(request: Request) {
   try {
     const { question, agentId = 'customer-service', context, image, url, useAI = false } = await request.json();
@@ -147,7 +313,73 @@ export async function POST(request: Request) {
       }
     }
 
-    // Buscar productos relevantes en la tabla items basándose en la pregunta
+    // ── Detectar intención de análisis de ventas ──
+    const salesIntent = agentId === 'sales-analyst' || isSalesIntent(lowerQ);
+
+    if (salesIntent && question) {
+      const dateRange = extractDateRange(question);
+      const dateStart = dateRange?.dateStart || (() => {
+        const d = new Date(); d.setDate(d.getDate() - 28);
+        return formatYmdManagua(d);
+      })();
+      const dateEnd = dateRange?.dateEnd || formatYmdManagua(new Date());
+
+      const analysis = await fetchSalesAnalysis(dateStart, dateEnd);
+
+      if (analysis) {
+        const salesAgentPrompt = AGENT_PROMPTS['sales-analyst'];
+        const salesContext = [conversationContext, analysis.bot_summary]
+          .filter((v) => v && v.trim().length > 0)
+          .join('\n\n');
+
+        if (!deepseekKey) {
+          // Sin API key, devolver el resumen directo
+          await logUsage(supabase, question, analysis.bot_summary, 'ai_sales_analysis');
+          return NextResponse.json({ answer: analysis.bot_summary });
+        }
+
+        // Llamar a DeepSeek con el análisis completo como contexto
+        try {
+          const response = await fetch('https://api.deepseek.com/v1/chat/completions', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'Authorization': `Bearer ${deepseekKey}`,
+            },
+            body: JSON.stringify({
+              model: 'deepseek-chat',
+              messages: [
+                {
+                  role: 'system',
+                  content: `${salesAgentPrompt}\n\nTienes acceso a datos reales de ventas de Solis Comercial. Usa los datos proporcionados para responder con precisión. La fórmula de cobertura es: ventaSemanal = (ventas_totales / días_del_rango) * 7, y semanasCobertura = stock_actual / ventaSemanal. Productos con menos de 2 semanas de cobertura son CRÍTICOS, entre 2-4 semanas son BAJOS, y más de 4 semanas son SANOS. Cuando respondas, usa tablas, listas y emojis para que sea fácil de leer. Responde siempre en español.`,
+                },
+                {
+                  role: 'user',
+                  content: `DATOS DE ANÁLISIS DE VENTAS:\n${salesContext}\n\nPREGUNTA DEL USUARIO:\n${question}\n\nResponde basándote EXCLUSIVAMENTE en los datos proporcionados. Sé específico con nombres de productos, cifras y fechas. Si preguntan por más vendidos, usa el ranking. Si preguntan por críticos, lista los productos con cobertura < 2 semanas. Si preguntan cuánto dura el stock, calcula las semanas de cobertura.`,
+                },
+              ],
+              max_tokens: 2000,
+              temperature: 0.3,
+            }),
+          });
+
+          if (response.ok) {
+            const data = await response.json();
+            const answer = data.choices[0]?.message?.content || analysis.bot_summary;
+            await logUsage(supabase, question, answer, 'ai_sales_analysis');
+            return NextResponse.json({ answer });
+          }
+        } catch (err) {
+          console.error('[AI Sales] DeepSeek error:', err);
+        }
+
+        // Fallback: devolver resumen directo
+        await logUsage(supabase, question, analysis.bot_summary, 'ai_sales_analysis');
+        return NextResponse.json({ answer: analysis.bot_summary });
+      }
+    }
+
+    // ── Flujo normal: buscar productos en la tabla items ──
     let items: ItemRow[] = [];
 
     // Extraer palabras clave de búsqueda (quitar palabras comunes)

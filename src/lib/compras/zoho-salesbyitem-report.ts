@@ -397,7 +397,8 @@ async function fetchCurrentStockTotals(
 export async function fetchSalesByItemRestock(options: SalesByItemReportOptions): Promise<SalesByItemReportResult> {
     const maxPages = clampInteger(options.maxPages, 10, 1, 50);
     const perPage = clampInteger(options.perPage, 200, 1, 200);
-    const weeks = clampInteger(options.weeks, 4, 1, 52);
+    const weeksVal = Number(options.weeks);
+    const weeks = Number.isFinite(weeksVal) && weeksVal > 0 ? Math.max(0.1, Math.min(52, weeksVal)) : 4;
 
     const parsedRows: ParsedReportRow[] = [];
     let page = 1;
