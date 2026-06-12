@@ -52,6 +52,8 @@ type LocalItem = {
     color: string | null;
     price: number | null;
     stock_total: number | null;
+    zoho_item_id?: string | null;
+    updated_at?: string | null;
 };
 
 type ParsedReportRow = {
@@ -111,6 +113,19 @@ function parseNumber(value: unknown): number {
     const text = normalizeText(value).replace(/[,$C\s]/g, '');
     const parsed = Number(text);
     return Number.isFinite(parsed) ? parsed : 0;
+}
+
+function scoreLocalItem(item: LocalItem): number {
+    let score = 0;
+    if (normalizeText(item.zoho_item_id)) score += 8;
+    if (normalizeText(item.marca)) score += 4;
+    if (normalizeText(item.category)) score += 4;
+    if (normalizeText(item.color)) score += 4;
+    if (normalizeText(item.name)) score += 2;
+    if (Number.isFinite(Number(item.price))) score += 1;
+    if (Number.isFinite(Number(item.stock_total))) score += 1;
+    if (normalizeText(item.updated_at)) score += 1;
+    return score;
 }
 
 function getDirectRowValue(row: any, aliases: string[]): unknown {
@@ -264,22 +279,119 @@ function mergeRows(rows: ParsedReportRow[]): ParsedReportRow[] {
 }
 
 async function fetchLocalItems(supabase: SupabaseLike, skus: string[]): Promise<Map<string, LocalItem>> {
-    const skuKeys = new Set(skus.map(normalizeSkuKey).filter(Boolean));
+    const uniqueSkus = Array.from(new Set(skus.map(normalizeText).filter(Boolean)));
+    const skuKeys = new Set(uniqueSkus.map(normalizeSkuKey).filter(Boolean));
     const itemMap = new Map<string, LocalItem>();
+    const SKU_CHUNK = 100;
 
-    const { data, error } = await supabase
-        .from('items')
-        .select('id, sku, name, marca, category, color, price, stock_total');
+    const addRows = (rows: LocalItem[]) => {
+        for (const item of rows) {
+            const key = normalizeSkuKey(item.sku);
+            if (!key || !skuKeys.has(key)) continue;
 
-    if (error) throw new Error(`No se pudo leer inventario local: ${error.message}`);
+            const existing = itemMap.get(key);
+            if (!existing) {
+                itemMap.set(key, item);
+                continue;
+            }
 
-    for (const row of data || []) {
-        const item = row as LocalItem;
-        const key = normalizeSkuKey(item.sku);
-        if (key && skuKeys.has(key)) itemMap.set(key, item);
+            const currentScore = scoreLocalItem(existing);
+            const nextScore = scoreLocalItem(item);
+            if (nextScore > currentScore) {
+                itemMap.set(key, item);
+                continue;
+            }
+
+            if (nextScore === currentScore) {
+                const currentUpdated = new Date(existing.updated_at || 0).getTime();
+                const nextUpdated = new Date(item.updated_at || 0).getTime();
+                if (nextUpdated > currentUpdated) {
+                    itemMap.set(key, item);
+                }
+            }
+        }
+    };
+
+    // Query only the report SKUs. A plain unfiltered select is capped by
+    // Supabase/PostgREST and silently omitted items after the first 1000 rows.
+    for (let i = 0; i < uniqueSkus.length; i += SKU_CHUNK) {
+        const skuChunk = uniqueSkus.slice(i, i + SKU_CHUNK);
+        const { data, error } = await supabase
+            .from('items')
+            .select('id, sku, name, marca, category, color, price, stock_total, zoho_item_id, updated_at')
+            .is('zoho_removed_at', null)
+            .in('sku', skuChunk);
+
+        if (error) throw new Error(`No se pudo leer inventario local: ${error.message}`);
+        addRows((data || []) as LocalItem[]);
     }
 
     return itemMap;
+}
+
+async function fetchCurrentStockTotals(
+    supabase: SupabaseLike,
+    itemIds: string[],
+    localItems: Map<string, LocalItem>
+): Promise<Map<string, number>> {
+    const totals = new Map<string, number>();
+    const uniqueItemIds = Array.from(new Set(itemIds.filter(Boolean)));
+    if (uniqueItemIds.length === 0) return totals;
+    const itemsWithBalance = new Set<string>();
+    let snapshotItemIds = uniqueItemIds;
+
+    try {
+        const { data, error } = await (supabase.from as any)('inventory_balance')
+            .select('item_id, qty_on_hand')
+            .in('item_id', uniqueItemIds);
+
+        if (error) throw error;
+
+        for (const row of data || []) {
+            const itemId = normalizeText((row as any).item_id);
+            if (!itemId) continue;
+            itemsWithBalance.add(itemId);
+            totals.set(itemId, Number(totals.get(itemId) || 0) + Number((row as any).qty_on_hand || 0));
+        }
+
+        snapshotItemIds = uniqueItemIds.filter((itemId) => !itemsWithBalance.has(itemId));
+    } catch {
+        snapshotItemIds = uniqueItemIds;
+    }
+
+    if (snapshotItemIds.length > 0) {
+        try {
+            const { data, error } = await supabase
+                .from('stock_snapshots')
+                .select('item_id, warehouse_id, qty, synced_at')
+                .in('item_id', snapshotItemIds)
+                .order('synced_at', { ascending: false });
+
+            if (error) throw error;
+
+            const seen = new Set<string>();
+            for (const row of data || []) {
+                const itemId = normalizeText((row as any).item_id);
+                const warehouseId = normalizeText((row as any).warehouse_id);
+                if (!itemId || !warehouseId) continue;
+
+                const key = `${itemId}__${warehouseId}`;
+                if (seen.has(key)) continue;
+                seen.add(key);
+
+                totals.set(itemId, Number(totals.get(itemId) || 0) + Number((row as any).qty || 0));
+            }
+        } catch {
+            // Last fallback below.
+        }
+    }
+
+    for (const item of Array.from(localItems.values())) {
+        if (!item.id || totals.has(item.id)) continue;
+        totals.set(item.id, Number(item.stock_total ?? 0));
+    }
+
+    return totals;
 }
 
 export async function fetchSalesByItemRestock(options: SalesByItemReportOptions): Promise<SalesByItemReportResult> {
@@ -319,10 +431,15 @@ export async function fetchSalesByItemRestock(options: SalesByItemReportOptions)
 
     const mergedRows = mergeRows(parsedRows);
     const localItems = await fetchLocalItems(options.supabase, mergedRows.map((row) => row.sku));
+    const stockTotals = await fetchCurrentStockTotals(
+        options.supabase,
+        Array.from(new Set(Array.from(localItems.values()).map((item) => item.id).filter(Boolean))),
+        localItems
+    );
 
     const restockRows = mergedRows.map((row) => {
         const local = localItems.get(normalizeSkuKey(row.sku));
-        const stockTotal = Number(local?.stock_total ?? 0);
+        const stockTotal = local?.id ? Number(stockTotals.get(local.id) ?? local.stock_total ?? 0) : 0;
         const salesSum = Math.round(row.quantitySold * 100) / 100;
         const weeklyAvg = Math.round((salesSum / weeks) * 100) / 100;
         const price = row.rate || row.averagePrice || Number(local?.price ?? 0);
