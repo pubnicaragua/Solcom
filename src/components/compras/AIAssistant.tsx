@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useRef, useEffect } from 'react';
-import { Bot, Mic, Send, X, Loader2, Volume2, StopCircle, Image, Link, Paperclip } from 'lucide-react';
+import { Bot, Mic, Send, X, Loader2, Volume2, StopCircle, Image, Link, Paperclip, Maximize2, Minimize2 } from 'lucide-react';
 import Button from '@/components/ui/Button';
 
 interface Message {
@@ -16,6 +16,129 @@ interface AIAssistantProps {
   restockData?: any[];
   topSales?: any[];
   openSignal?: number;
+}
+
+function renderMessageContent(content: string) {
+  if (!content) return null;
+
+  const parseInline = (text: string) => {
+    // Escapar HTML
+    let parsed = text
+      .replace(/&/g, "&amp;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;");
+      
+    // Bold **text**
+    parsed = parsed.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>');
+    // Italic *text*
+    parsed = parsed.replace(/\*(.*?)\*/g, '<em>$1</em>');
+    // Inline code `code`
+    parsed = parsed.replace(/`(.*?)`/g, '<code style="background: rgba(255,255,255,0.15); padding: 2px 6px; borderRadius: 4px; font-family: monospace; font-size: 0.9em;">$1</code>');
+    
+    return parsed;
+  };
+
+  const lines = content.split('\n');
+  const elements: React.ReactNode[] = [];
+  
+  let i = 0;
+  while (i < lines.length) {
+    const line = lines[i].trim();
+    
+    // 1. Detect Table
+    if (line.startsWith('|') && line.endsWith('|')) {
+      const tableRows: string[][] = [];
+      let isHeaderSeparatorDefined = false;
+      
+      while (i < lines.length && lines[i].trim().startsWith('|') && lines[i].trim().endsWith('|')) {
+        const currentLine = lines[i].trim();
+        // Check if separator line
+        if (currentLine.replace(/[\s\-|:|]/g, '') === '') {
+          isHeaderSeparatorDefined = true;
+        } else {
+          const cells = currentLine.split('|').slice(1, -1).map(c => c.trim());
+          tableRows.push(cells);
+        }
+        i++;
+      }
+      
+      elements.push(
+        <div key={`table-container-${i}`} style={{ overflowX: 'auto', margin: '8px 0 16px 0', border: '1px solid rgba(255,255,255,0.15)', borderRadius: 8 }}>
+          <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13, color: '#fff', minWidth: 400 }}>
+            <thead>
+              {tableRows.length > 0 && (
+                <tr style={{ background: 'rgba(255,255,255,0.08)', borderBottom: '1px solid rgba(255,255,255,0.15)' }}>
+                  {tableRows[0].map((cell, idx) => (
+                    <th key={idx} style={{ padding: '8px 12px', textAlign: 'left', fontWeight: 600 }} dangerouslySetInnerHTML={{ __html: parseInline(cell) }} />
+                  ))}
+                </tr>
+              )}
+            </thead>
+            <tbody>
+              {tableRows.slice(1).map((row, rowIdx) => (
+                <tr key={rowIdx} style={{ borderBottom: '1px solid rgba(255,255,255,0.08)', background: rowIdx % 2 === 0 ? 'rgba(255,255,255,0.02)' : 'transparent' }}>
+                  {row.map((cell, idx) => (
+                    <td key={idx} style={{ padding: '8px 12px' }} dangerouslySetInnerHTML={{ __html: parseInline(cell) }} />
+                  ))}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      );
+      continue;
+    }
+    
+    // 2. Detect Lists
+    if (line.startsWith('* ') || line.startsWith('- ') || line.startsWith('• ') || /^\d+\.\s/.test(line)) {
+      const listItems: { text: string; number?: string }[] = [];
+      while (i < lines.length && (
+        lines[i].trim().startsWith('* ') || 
+        lines[i].trim().startsWith('- ') || 
+        lines[i].trim().startsWith('• ') ||
+        /^\d+\.\s/.test(lines[i].trim())
+      )) {
+        const itemLine = lines[i].trim();
+        const numMatch = itemLine.match(/^(\d+\.)\s(.*)/);
+        if (numMatch) {
+          listItems.push({ text: numMatch[2], number: numMatch[1] });
+        } else {
+          listItems.push({ text: itemLine.substring(2) });
+        }
+        i++;
+      }
+      
+      const isOrdered = !!listItems[0].number;
+      elements.push(
+        isOrdered ? (
+          <ol key={`list-${i}`} style={{ margin: '8px 0 12px 20px', padding: 0, listStyleType: 'decimal', color: '#fff' }}>
+            {listItems.map((item, idx) => (
+              <li key={idx} style={{ marginBottom: 6, paddingLeft: 4 }} dangerouslySetInnerHTML={{ __html: parseInline(item.text) }} />
+            ))}
+          </ol>
+        ) : (
+          <ul key={`list-${i}`} style={{ margin: '8px 0 12px 20px', padding: 0, listStyleType: 'disc', color: '#fff' }}>
+            {listItems.map((item, idx) => (
+              <li key={idx} style={{ marginBottom: 6 }} dangerouslySetInnerHTML={{ __html: parseInline(item.text) }} />
+            ))}
+          </ul>
+        )
+      );
+      continue;
+    }
+    
+    // 3. Normal paragraph or line break
+    if (line.length > 0) {
+      elements.push(
+        <p key={`p-${i}`} style={{ margin: '0 0 8px 0', fontSize: 14, lineHeight: 1.5 }} dangerouslySetInnerHTML={{ __html: parseInline(line) }} />
+      );
+    } else {
+      elements.push(<div key={`br-${i}`} style={{ height: 8 }} />);
+    }
+    i++;
+  }
+  
+  return <div style={{ display: 'flex', flexDirection: 'column' }}>{elements}</div>;
 }
 
 export default function AIAssistant({ restockData = [], topSales = [], openSignal = 0 }: AIAssistantProps) {
@@ -35,8 +158,11 @@ export default function AIAssistant({ restockData = [], topSales = [], openSigna
       'presupuesto de restock', 'reporte de ventas',
       'cuánto va a durar', 'cuanto va a durar',
       'cuántas semanas', 'cuantas semanas',
+      'reabastecer', 'reabastecimiento', 'restock', 'restockear', 'reestockear', 'reesctockear',
+      'comprar', 'compra', 'reponer', 'sugier', 'recomiend', 'cuanto', 'cuánto'
     ];
     if (salesKeywords.some((kw) => q.includes(kw))) return true;
+    
     // Detección flexible: palabras sueltas que juntas indican ventas
     const hasVendio = q.includes('vendió') || q.includes('vendio') || q.includes('vende') || q.includes('venta') || q.includes('ventas');
     const hasMas = q.includes('más') || q.includes('mas');
@@ -44,9 +170,15 @@ export default function AIAssistant({ restockData = [], topSales = [], openSigna
     const hasTiempo = q.includes('ayer') || q.includes('semana') || q.includes('mes') || q.includes('hoy') || q.includes('día') || q.includes('dia');
     if (hasVendio && (hasMas || hasTiempo)) return true;
     if (hasProducto && hasVendio) return true;
+
+    // Si contiene raíces de stock/comprar/reabastecer
+    const hasRestock = q.includes('stoc') || q.includes('stok') || q.includes('compr') || q.includes('reabast') || q.includes('repon') || q.includes('sugier');
+    if (hasRestock) return true;
+
     return false;
   };
   const [isOpen, setIsOpen] = useState(false);
+  const [isExpanded, setIsExpanded] = useState(false);
   const [messages, setMessages] = useState<Message[]>([]);
   const [userId, setUserId] = useState<string>('');
   const [sessionId, setSessionId] = useState<string>('');
@@ -167,12 +299,12 @@ export default function AIAssistant({ restockData = [], topSales = [], openSigna
     let context = 'Contexto del módulo de Compras:\n\n';
     const hasConversationHistory = messages.length > 1;
     
-    // Agregar historial COMPLETO de conversación (hasta 200 mensajes)
+    // Historial corto (últimos 8 mensajes) para mantener tokens bajos
     if (hasConversationHistory) {
-      context += 'Historial completo de conversación:\n';
-      const recentMessages = messages.slice(-50); // Últimos 50 para contexto (balance entre memoria y tokens)
+      context += 'Conversación reciente:\n';
+      const recentMessages = messages.slice(-8);
       recentMessages.forEach(msg => {
-        const preview = msg.content.length > 600 ? msg.content.substring(0, 600) + '...' : msg.content;
+        const preview = msg.content.length > 300 ? msg.content.substring(0, 300) + '...' : msg.content;
         context += `${msg.role === 'user' ? 'Usuario' : 'Asistente'}: ${preview}\n`;
       });
       context += '\n';
@@ -183,27 +315,28 @@ export default function AIAssistant({ restockData = [], topSales = [], openSigna
     if (restockData && restockData.length > 0) {
       hasStructuredData = true;
       const needsRestock = restockData.filter(r => r.restock_sugerido > 0);
-      const critical = restockData.filter(r => r.stock_total <= r.weekly_avg && r.restock_sugerido > 0);
+      const criticalCount = restockData.filter(r => r.stock_total <= r.weekly_avg && r.restock_sugerido > 0).length;
       const totalBudget = restockData.reduce((sum, r) => sum + Number(r.presupuesto), 0);
       
       context += `Total de productos analizados: ${restockData.length}\n`;
       context += `Productos que necesitan restock: ${needsRestock.length}\n`;
-      context += `Productos críticos (stock < 1 semana): ${critical.length}\n`;
+      context += `Productos críticos (stock < 1 semana): ${criticalCount}\n`;
       context += `Presupuesto total estimado: C$ ${Math.round(totalBudget).toLocaleString('es-NI')}\n\n`;
       
-      if (critical.length > 0) {
-        context += 'Productos CRÍTICOS (prioridad alta):\n';
-        critical.slice(0, 5).forEach(p => {
-          context += `- ${p.name} (SKU: ${p.sku}): Stock actual ${p.stock_total}, necesita ${p.restock_sugerido} unidades, presupuesto C$ ${Math.round(p.presupuesto).toLocaleString('es-NI')}\n`;
-        });
-        context += '\n';
-      }
-      
       if (needsRestock.length > 0) {
-        context += 'Top 10 productos por presupuesto requerido:\n';
-        const sorted = [...needsRestock].sort((a, b) => b.presupuesto - a.presupuesto);
-        sorted.slice(0, 10).forEach(p => {
-          context += `- ${p.name}: ${p.restock_sugerido} unidades, C$ ${Math.round(p.presupuesto).toLocaleString('es-NI')}\n`;
+        context += 'Productos que requieren reabastecimiento (priorizados):\n';
+        // Priorizar primero los críticos y luego por presupuesto descendente
+        const sorted = [...needsRestock].sort((a, b) => {
+          const aCrit = a.stock_total <= a.weekly_avg ? 1 : 0;
+          const bCrit = b.stock_total <= b.weekly_avg ? 1 : 0;
+          if (aCrit !== bCrit) return bCrit - aCrit;
+          return b.presupuesto - a.presupuesto;
+        });
+
+        // Limitar a los 40 prioritarios para evitar rate limits del plan gratis de Groq (12k tokens)
+        sorted.slice(0, 40).forEach(p => {
+          const isCritical = p.stock_total <= p.weekly_avg;
+          context += `- [${isCritical ? 'CRÍTICO' : 'REQUERIDO'}] ${p.name} (SKU: ${p.sku}): Stock ${p.stock_total}, necesita ${p.restock_sugerido} uds, presupuesto C$ ${Math.round(p.presupuesto).toLocaleString('es-NI')}\n`;
         });
       }
     }
@@ -447,8 +580,10 @@ export default function AIAssistant({ restockData = [], topSales = [], openSigna
       position: 'fixed',
       bottom: 24,
       right: 24,
-      width: 400,
-      height: 600,
+      width: isExpanded ? 750 : 400,
+      height: isExpanded ? 750 : 600,
+      maxWidth: 'calc(100vw - 48px)',
+      maxHeight: 'calc(100vh - 48px)',
       background: '#1a1a2e',
       borderRadius: 16,
       border: '1px solid rgba(255,255,255,0.1)',
@@ -456,7 +591,8 @@ export default function AIAssistant({ restockData = [], topSales = [], openSigna
       display: 'flex',
       flexDirection: 'column',
       zIndex: 1000,
-      overflow: 'hidden'
+      overflow: 'hidden',
+      transition: 'width 0.3s cubic-bezier(0.4, 0, 0.2, 1), height 0.3s cubic-bezier(0.4, 0, 0.2, 1)'
     }}>
       {/* Header */}
       <div style={{
@@ -477,17 +613,45 @@ export default function AIAssistant({ restockData = [], topSales = [], openSigna
             </div>
           </div>
         </div>
-        <button
-          onClick={() => setIsOpen(false)}
-          style={{
-            background: 'transparent',
-            border: 'none',
-            cursor: 'pointer',
-            padding: 4
-          }}
-        >
-          <X size={20} color="#fff" />
-        </button>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          <button
+            onClick={() => setIsExpanded(prev => !prev)}
+            style={{
+              background: 'transparent',
+              border: 'none',
+              cursor: 'pointer',
+              padding: 4,
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              opacity: 0.8,
+              transition: 'opacity 0.2s'
+            }}
+            onMouseEnter={(e) => e.currentTarget.style.opacity = '1'}
+            onMouseLeave={(e) => e.currentTarget.style.opacity = '0.8'}
+            title={isExpanded ? 'Contraer' : 'Expandir'}
+          >
+            {isExpanded ? <Minimize2 size={20} color="#fff" /> : <Maximize2 size={20} color="#fff" />}
+          </button>
+          <button
+            onClick={() => setIsOpen(false)}
+            style={{
+              background: 'transparent',
+              border: 'none',
+              cursor: 'pointer',
+              padding: 4,
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              opacity: 0.8,
+              transition: 'opacity 0.2s'
+            }}
+            onMouseEnter={(e) => e.currentTarget.style.opacity = '1'}
+            onMouseLeave={(e) => e.currentTarget.style.opacity = '0.8'}
+          >
+            <X size={20} color="#fff" />
+          </button>
+        </div>
       </div>
 
       {/* Messages */}
@@ -508,7 +672,7 @@ export default function AIAssistant({ restockData = [], topSales = [], openSigna
             }}
           >
             <div style={{
-              maxWidth: '80%',
+              maxWidth: isExpanded ? '90%' : '80%',
               padding: 12,
               borderRadius: 12,
               background: msg.role === 'user' 
@@ -539,7 +703,7 @@ export default function AIAssistant({ restockData = [], topSales = [], openSigna
                   🔗 {msg.url}
                 </div>
               )}
-              {msg.content}
+              {renderMessageContent(msg.content)}
             </div>
           </div>
         ))}

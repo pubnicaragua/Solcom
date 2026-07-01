@@ -4,6 +4,8 @@ import { analyzeSales, type SalesAnalysisResult } from '@/lib/compras/sales-anal
 import { createClient } from '@supabase/supabase-js';
 import { createZohoBooksClient } from '@/lib/zoho/books-client';
 import { fetchSalesByItemRestock } from '@/lib/compras/zoho-salesbyitem-report';
+import OpenAI from 'openai';
+import Groq from 'groq-sdk';
 
 const AGENT_PROMPTS: Record<string, string> = {
   'customer-service': 'Eres un agente de atención al cliente de Solis Comercial, una distribuidora de tecnología y electrónica en Nicaragua. Ayudas a los clientes con consultas sobre disponibilidad de productos, precios, marcas y entregas. Sé amable y profesional. Siempre responde en español.',
@@ -30,6 +32,84 @@ interface ApiKeyRow {
   key?: string | null;
   full_key?: string | null;
   status?: string | null;
+}
+
+async function getLLMResponse(
+  systemPrompt: string,
+  userPrompt: string,
+  deepseekKey: string | null
+): Promise<string | null> {
+  // 1. Try DeepSeek if key is provided
+  if (deepseekKey) {
+    try {
+      const response = await fetch('https://api.deepseek.com/v1/chat/completions', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${deepseekKey}`,
+        },
+        body: JSON.stringify({
+          model: 'deepseek-chat',
+          messages: [
+            { role: 'system', content: systemPrompt },
+            { role: 'user', content: userPrompt }
+          ],
+          max_tokens: 1500,
+          temperature: 0.3,
+        }),
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        const content = data.choices[0]?.message?.content;
+        if (content) return content;
+      }
+    } catch (err) {
+      console.error('[AI chat] DeepSeek error:', err);
+    }
+  }
+
+  // 2. Try Groq if key is in environment variables
+  if (process.env.GROQ_API_KEY) {
+    try {
+      const groq = new Groq({ apiKey: process.env.GROQ_API_KEY });
+      const completion = await groq.chat.completions.create({
+        model: 'llama-3.3-70b-versatile',
+        messages: [
+          { role: 'system', content: systemPrompt },
+          { role: 'user', content: userPrompt }
+        ],
+        max_tokens: 1500,
+        temperature: 0.3,
+      });
+      const content = completion.choices[0]?.message?.content;
+      if (content) return content;
+    } catch (err) {
+      console.error('[AI chat] Groq error:', err);
+    }
+  }
+
+  // 3. Try OpenAI if key is in environment variables
+  if (process.env.OPENAI_API_KEY) {
+    try {
+      const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+      const completion = await openai.chat.completions.create({
+        model: 'gpt-4o-mini',
+        messages: [
+          { role: 'system', content: systemPrompt },
+          { role: 'user', content: userPrompt }
+        ],
+        max_tokens: 1500,
+        temperature: 0.3,
+      });
+      const content = completion.choices[0]?.message?.content;
+      if (content) return content;
+    } catch (err) {
+      console.error('[AI chat] OpenAI error:', err);
+    }
+  }
+
+  return null;
 }
 
 async function resolveDeepSeekKey(supabase: ReturnType<typeof createServerClient>): Promise<string | null> {
@@ -100,6 +180,10 @@ const SALES_INTENT_KEYWORDS = [
   'necesito reabastecer', 'qué comprar', 'que comprar', 'prioridad de compra',
   'presupuesto de restock', 'presupuesto de compra',
   'analiza ventas', 'analiza las ventas', 'dame un análisis', 'dame un analisis',
+  'reabastecer', 'reabastecimiento', 'restock', 'restockear', 'reestockear', 'reesctockear',
+  'sugieres comprar', 'cuánto comprar', 'cuanto comprar', 'sugerencia de compra',
+  'sugerencia de compras', 'sugerencias de compras', 'qué sugieres', 'que sugieres',
+  'prioridad de reabastecimiento'
 ];
 
 function isSalesIntent(question: string): boolean {
@@ -113,6 +197,11 @@ function isSalesIntent(question: string): boolean {
   const hasTiempo = q.includes('ayer') || q.includes('semana') || q.includes('mes') || q.includes('hoy') || q.includes('día') || q.includes('dia');
   if (hasVendio && (hasMas || hasTiempo)) return true;
   if (hasProducto && hasVendio) return true;
+
+  // Detección flexible para restock y compras
+  const hasRestock = q.includes('stoc') || q.includes('stok') || q.includes('compr') || q.includes('reabast') || q.includes('repon') || q.includes('sugier');
+  if (hasRestock) return true;
+
   return false;
 }
 
@@ -337,57 +426,27 @@ export async function POST(request: Request) {
 
       const analysis = await fetchSalesAnalysis(dateStart, dateEnd);
 
-      if (analysis) {
-        const salesAgentPrompt = AGENT_PROMPTS['sales-analyst'];
-        const salesContext = [conversationContext, analysis.bot_summary]
-          .filter((v) => v && v.trim().length > 0)
-          .join('\n\n');
+      const salesAgentPrompt = AGENT_PROMPTS['sales-analyst'];
+      const salesContext = [conversationContext, analysis?.bot_summary || '']
+        .filter((v) => v && v.trim().length > 0)
+        .join('\n\n');
 
-        if (!deepseekKey) {
-          // Sin API key, devolver el resumen directo
-          await logUsage(supabase, question, analysis.bot_summary, 'ai_sales_analysis');
-          return NextResponse.json({ answer: analysis.bot_summary });
+      if (salesContext.trim().length > 0) {
+        const systemPrompt = `${salesAgentPrompt}\n\nTienes acceso a datos reales de ventas de Solis Comercial. Usa los datos proporcionados para responder con precisión. La fórmula de cobertura es: ventaSemanal = (ventas_totales / días_del_rango) * 7, y semanasCobertura = stock_actual / ventaSemanal. Productos con menos de 2 semanas de cobertura son CRÍTICOS, entre 2-4 semanas son BAJOS, y más de 4 semanas son SANOS. Cuando respondas, usa tablas, listas y emojis para que sea fácil de leer. Responde siempre en español.`;
+        const userPrompt = `DATOS DE ANÁLISIS DE VENTAS:\n${salesContext}\n\nPREGUNTA DEL USUARIO:\n${question}\n\nResponde basándote en los datos proporcionados. Sé específico con nombres de productos, cifras y fechas. Si preguntan por más vendidos, usa el ranking. Si preguntan por críticos, lista los productos con cobertura < 2 semanas. Si preguntan cuánto dura el stock, calcula las semanas de cobertura.`;
+
+        const answer = await getLLMResponse(systemPrompt, userPrompt, deepseekKey);
+
+        if (answer) {
+          await logUsage(supabase, question, answer, 'ai_sales_analysis');
+          return NextResponse.json({ answer });
         }
-
-        // Llamar a DeepSeek con el análisis completo como contexto
-        try {
-          const response = await fetch('https://api.deepseek.com/v1/chat/completions', {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-              'Authorization': `Bearer ${deepseekKey}`,
-            },
-            body: JSON.stringify({
-              model: 'deepseek-chat',
-              messages: [
-                {
-                  role: 'system',
-                  content: `${salesAgentPrompt}\n\nTienes acceso a datos reales de ventas de Solis Comercial. Usa los datos proporcionados para responder con precisión. La fórmula de cobertura es: ventaSemanal = (ventas_totales / días_del_rango) * 7, y semanasCobertura = stock_actual / ventaSemanal. Productos con menos de 2 semanas de cobertura son CRÍTICOS, entre 2-4 semanas son BAJOS, y más de 4 semanas son SANOS. Cuando respondas, usa tablas, listas y emojis para que sea fácil de leer. Responde siempre en español.`,
-                },
-                {
-                  role: 'user',
-                  content: `DATOS DE ANÁLISIS DE VENTAS:\n${salesContext}\n\nPREGUNTA DEL USUARIO:\n${question}\n\nResponde basándote EXCLUSIVAMENTE en los datos proporcionados. Sé específico con nombres de productos, cifras y fechas. Si preguntan por más vendidos, usa el ranking. Si preguntan por críticos, lista los productos con cobertura < 2 semanas. Si preguntan cuánto dura el stock, calcula las semanas de cobertura.`,
-                },
-              ],
-              max_tokens: 2000,
-              temperature: 0.3,
-            }),
-          });
-
-          if (response.ok) {
-            const data = await response.json();
-            const answer = data.choices[0]?.message?.content || analysis.bot_summary;
-            await logUsage(supabase, question, answer, 'ai_sales_analysis');
-            return NextResponse.json({ answer });
-          }
-        } catch (err) {
-          console.error('[AI Sales] DeepSeek error:', err);
-        }
-
-        // Fallback: devolver resumen directo
-        await logUsage(supabase, question, analysis.bot_summary, 'ai_sales_analysis');
-        return NextResponse.json({ answer: analysis.bot_summary });
       }
+
+      // Fallback: devolver resumen directo
+      const fallbackText = analysis?.bot_summary || generarRespuestaFallback(question, [], conversationContext);
+      await logUsage(supabase, question, fallbackText, 'ai_sales_analysis_fallback');
+      return NextResponse.json({ answer: fallbackText });
     }
 
     // ── Flujo normal: buscar productos en la tabla items ──
@@ -499,41 +558,15 @@ ${lowStock.length > 0 ? `\nPRODUCTOS CON STOCK BAJO (menos de 5 unidades):\n${lo
       .filter((value) => value && value.trim().length > 0)
       .join('\n\n');
 
-    if (!deepseekKey) {
-      return generarRespuestaFallback(question, items, conversationContext);
+    const systemPrompt = `${agentPrompt}\n\nCONTEXTO DE OPERACIONES SOLCOM (Muy importante):\n1. Flujo de Alistamiento (Picking Orders):\n   - Estados de alistamiento: 'En Cola' (Creado/pendiente), 'Preparando' (Picking/personal recolectando ítems), 'Listo' (Ready/Listo en Bodega/esperando despacho), y 'Despachado' (Dispatched/entregado al motorizado).\n   - Conexión con Rutas: Las órdenes de alistamiento al crearse se conectan automáticamente con 'delivery_jobs' en el Módulo de Rutas Inteligentes.\n2. Rutas Inteligentes y Monitoreo:\n   - Optimizamos los recorridos de los motorizados usando Google Routes API (cálculo geográfico óptimo y polilíneas dinámicas).\n   - Monitoreamos la ubicación del conductor en vivo en el mapa mediante la tabla 'route_tracking_locations' (GPS updates en tiempo real).\n3. Reajuste de Inventario:\n   - En cuanto se concreta una venta o movimiento, se ejecuta la recalibración del stock disponible en Supabase y Zoho para evitar desfases o quiebres de inventario.\n\nActúas como Mía en el sistema de Solcom. Usa el historial, el análisis de compras y el inventario en tiempo real. No des respuestas genéricas si tienes contexto. Si el producto exacto no aparece, dilo con honestidad y ofrece lo más cercano. Si preguntan qué comprar primero o el presupuesto estimado, usa primero el análisis de restock del contexto. Si preguntan “seguro?”, valida la respuesta anterior con el contexto disponible.`;
+    const userPrompt = `${combinedContext}\n\nPREGUNTA DEL USUARIO:\n${question}\n\nResponde basándote en la información disponible. Si preguntan sobre stock bajo, menciona los productos listados. Si preguntan qué comprar primero, prioriza los productos críticos del análisis. Si preguntan precios, usa solo productos realmente encontrados. Si solicitan reportes de ventas o compras, usa el contexto del módulo si existe y aclara cuando falten datos.`;
+
+    const answer = await getLLMResponse(systemPrompt, userPrompt, deepseekKey);
+    if (answer) {
+      return answer;
     }
 
-    // Llamar a DeepSeek
-    const response = await fetch('https://api.deepseek.com/v1/chat/completions', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${deepseekKey}`
-      },
-      body: JSON.stringify({
-        model: 'deepseek-chat',
-        messages: [
-          {
-            role: 'system',
-            content: `${agentPrompt}\n\nCONTEXTO DE OPERACIONES SOLCOM (Muy importante):\n1. Flujo de Alistamiento (Picking Orders):\n   - Estados de alistamiento: 'En Cola' (Creado/pendiente), 'Preparando' (Picking/personal recolectando ítems), 'Listo' (Ready/Listo en Bodega/esperando despacho), y 'Despachado' (Dispatched/entregado al motorizado).\n   - Conexión con Rutas: Las órdenes de alistamiento al crearse se conectan automáticamente con 'delivery_jobs' en el Módulo de Rutas Inteligentes.\n2. Rutas Inteligentes y Monitoreo:\n   - Optimizamos los recorridos de los motorizados usando Google Routes API (cálculo geográfico óptimo y polilíneas dinámicas).\n   - Monitoreamos la ubicación del conductor en vivo en el mapa mediante la tabla 'route_tracking_locations' (GPS updates en tiempo real).\n3. Reajuste de Inventario:\n   - En cuanto se concreta una venta o movimiento, se ejecuta la recalibración del stock disponible en Supabase y Zoho para evitar desfases o quiebres de inventario.\n\nActúas como Mía en el sistema de Solcom. Usa el historial, el análisis de compras y el inventario en tiempo real. No des respuestas genéricas si tienes contexto. Si el producto exacto no aparece, dilo con honestidad y ofrece lo más cercano. Si preguntan qué comprar primero o el presupuesto estimado, usa primero el análisis de restock del contexto. Si preguntan “seguro?”, valida la respuesta anterior con el contexto disponible.`
-          },
-          {
-            role: 'user',
-            content: `${combinedContext}\n\nPREGUNTA DEL USUARIO:\n${question}\n\nResponde basándote en la información disponible. Si preguntan sobre stock bajo, menciona los productos listados. Si preguntan qué comprar primero, prioriza los productos críticos del análisis. Si preguntan precios, usa solo productos realmente encontrados. Si solicitan reportes de ventas o compras, usa el contexto del módulo si existe y aclara cuando falten datos.`
-          }
-        ],
-        max_tokens: 1000,
-        temperature: 0.3
-      })
-    });
-
-    if (!response.ok) {
-      console.error('Error de DeepSeek:', await response.text());
-      return generarRespuestaFallback(question, items, conversationContext);
-    }
-
-    const data = await response.json();
-    return data.choices[0]?.message?.content || generarRespuestaFallback(question, items, conversationContext);
+    return generarRespuestaFallback(question, items, conversationContext);
 
   } catch (error) {
     console.error('Error en generateSmartResponse:', error);

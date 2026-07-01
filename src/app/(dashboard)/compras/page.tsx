@@ -8,6 +8,7 @@ import {
   AlertTriangle,
   CheckCircle2,
   Database,
+  FileSpreadsheet,
   Loader2,
   RefreshCw,
   Search,
@@ -15,11 +16,10 @@ import {
   ShoppingCart,
   SlidersHorizontal,
   TrendingDown,
-  UploadCloud,
   Wallet
 } from 'lucide-react';
-import * as XLSX from 'xlsx';
-import { processRestockExcel } from '@/lib/restock-calculator';
+import ExcelJS from 'exceljs';
+import { saveAs } from 'file-saver';
 import AIAssistant from '@/components/compras/AIAssistant';
 
 interface RestockRow {
@@ -29,6 +29,7 @@ interface RestockRow {
   marca?: string | null;
   category?: string | null;
   color?: string | null;
+  state?: string | null;
   price: number;
   stock_total: number;
   sales_sum: number;
@@ -74,9 +75,9 @@ export default function ComprasRestockPage() {
   const [mobileView, setMobileView] = useState(false);
   const [notice, setNotice] = useState<PageNotice | null>(null);
   const [isGeneratePressed, setIsGeneratePressed] = useState(false);
+  const [activeView, setActiveView] = useState<'compras' | 'ventas'>('compras');
   const [hoveredItemId, setHoveredItemId] = useState<string | null>(null);
   const [aiOpenSignal, setAiOpenSignal] = useState(0);
-  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const formatCurrency = (value: number) => `C$ ${Math.round(value).toLocaleString('es-NI')}`;
 
@@ -147,51 +148,7 @@ export default function ComprasRestockPage() {
     }
   };
 
-  const handleSeedUpload = async (file: File) => {
-    if (!file) return;
 
-    setIsProcessing(true);
-
-    try {
-      const reader = new FileReader();
-      reader.onload = async (e) => {
-        setNotice(null);
-        const data = e.target?.result;
-        const workbook = XLSX.read(data, { type: 'binary' });
-        const targetSheetName = workbook.SheetNames.includes('Matriz') ? 'Matriz' : workbook.SheetNames[0];
-        const sheet = workbook.Sheets[targetSheetName];
-        const jsonData = XLSX.utils.sheet_to_json(sheet, { defval: '' });
-        const analisisAntiguo = processRestockExcel(jsonData);
-
-        if (analisisAntiguo.rows.length === 0) {
-          setNotice({ type: 'error', text: 'El Excel parece vacío o no coincide con el formato esperado.' });
-          setIsProcessing(false);
-          return;
-        }
-
-        const res = await fetch('/api/compras/restock/seed', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ rows: analisisAntiguo.rows }),
-        });
-
-        const json = await res.json();
-
-        if (json.success) {
-          setNotice({ type: 'success', text: 'Historial inyectado correctamente. Ahora puedes generar el análisis.' });
-        } else {
-          setNotice({ type: 'error', text: `Fallo inyectando historial: ${json.error}` });
-        }
-        setIsProcessing(false);
-      };
-
-      reader.readAsBinaryString(file);
-    } catch (error) {
-      console.error(error);
-      setNotice({ type: 'error', text: 'Hubo un error inyectando el historial.' });
-      setIsProcessing(false);
-    }
-  };
 
   const brandOptions = useMemo(() => {
     if (!results) return [];
@@ -241,8 +198,322 @@ export default function ComprasRestockPage() {
           || String(row.category || '').toLowerCase().includes(term)
           || String(row.color || '').toLowerCase().includes(term);
       })
-      .sort((a, b) => b.restock_sugerido - a.restock_sugerido);
-  }, [results, onlyNeedsRestock, selectedBrand, selectedCategory, searchTerm]);
+      .sort((a, b) => activeView === 'compras' ? b.restock_sugerido - a.restock_sugerido : b.sales_sum - a.sales_sum);
+  }, [results, onlyNeedsRestock, selectedBrand, selectedCategory, searchTerm, activeView]);
+
+  const handleExportExcel = async () => {
+    if (!filteredResults || filteredResults.length === 0) {
+      alert('No hay datos para exportar.');
+      return;
+    }
+
+    try {
+      const workbook = new ExcelJS.Workbook();
+      workbook.creator = 'Solis Comercial ERP';
+      workbook.created = new Date();
+
+      const sheet = workbook.addWorksheet('Estrategia de Compras');
+
+      // Detect standard keys to exclude from dynamic weekly columns
+      const excludeKeys = [
+        'item_id', 'sku', 'name', 'marca', 'category', 'color', 'state',
+        'location_name', 'price', 'stock_total', 'sales_sum', 'weekly_avg',
+        'restock_sugerido', 'presupuesto', 'producto', 'restock_promedio_unid',
+        'restock_promedio_dinero', 'precio_unitario', 'stockActual',
+        'CATEGORIA', 'CATEGORÍA', 'categoria',
+        'Nombre del artículo', 'Nombre del articulo', 'Nombre',
+        'item_CF_COLOR',
+        'Suma de cantidad de existencias finales', 'existencias_finales',
+        'Suma de RE-STOCK EN BASE PROMEDIO'
+      ];
+
+      // Identify dynamic keys (e.g. weekly data from uploaded Excel) present in results
+      const firstRow = filteredResults[0];
+      const dynamicKeys = Object.keys(firstRow).filter(
+        (key) => !excludeKeys.includes(key)
+      );
+
+      // Define header names
+      const headers = [
+        'CATEGORIA',
+        'Nombre del artículo',
+        'item_CF_COLOR',
+        'Suma de RE-STOCK EN BASE PROMEDIO',
+        'Suma de cantidad de existencias finales',
+        'Suma de RE-STOCK EN BASE PROMEDIO',
+        ...dynamicKeys
+      ];
+
+      // Add header row to worksheet
+      const headerRow = sheet.addRow(headers);
+
+      // Style header row: Bold font, thin borders, light gray background
+      headerRow.font = { bold: true, size: 10, name: 'Calibri' };
+      headerRow.eachCell((cell, colNum) => {
+        cell.border = {
+          top: { style: 'thin', color: { argb: 'FFBFBFBF' } },
+          left: { style: 'thin', color: { argb: 'FFBFBFBF' } },
+          bottom: { style: 'thin', color: { argb: 'FFBFBFBF' } },
+          right: { style: 'thin', color: { argb: 'FFBFBFBF' } }
+        };
+        // Check if dynamic column has red or blue text
+        const colHeader = headers[colNum - 1];
+        if (colHeader.toLowerCase().includes('salida')) {
+          cell.font = { bold: true, size: 10, name: 'Calibri', color: { argb: 'FFFF0000' } };
+        } else if (colHeader.toLowerCase().includes('entrada')) {
+          cell.font = { bold: true, size: 10, name: 'Calibri', color: { argb: 'FF0000FF' } };
+        }
+        
+        // Simple fill for headers to make it look clean
+        cell.fill = {
+          type: 'pattern',
+          pattern: 'solid',
+          fgColor: { argb: 'FFF2F2F2' }
+        };
+      });
+
+      // Add data rows
+      filteredResults.forEach((row: any) => {
+        // Map standard fields
+        const categoryVal = row.category || '';
+        const nameVal = row.name || '';
+        const colorVal = row.color && row.color !== 'Sin color' ? row.color : '';
+        const budgetVal = row.presupuesto ?? 0;
+        const stockVal = row.stock_total ?? 0;
+        const suggestVal = row.restock_sugerido ?? 0;
+
+        // Build row data
+        const rowData: any[] = [
+          categoryVal,
+          nameVal,
+          colorVal,
+          budgetVal,
+          stockVal,
+          suggestVal
+        ];
+
+        // Append dynamic weekly data if any
+        dynamicKeys.forEach((key) => {
+          let val = row[key];
+          if (val === '-' || val === '' || val === null || val === undefined) {
+            rowData.push(null);
+          } else {
+            // Parse negative numbers from string format "(10)" to numeric -10
+            if (typeof val === 'string' && val.includes('(')) {
+              val = -Number(val.replace(/[()]/g, ''));
+            }
+            const num = Number(val);
+            rowData.push(isNaN(num) ? val : num);
+          }
+        });
+
+        const newRow = sheet.addRow(rowData);
+
+        // Format and style cells of the row
+        newRow.eachCell((cell, colNum) => {
+          // General cell font and borders
+          cell.font = { size: 10, name: 'Calibri' };
+          cell.border = {
+            top: { style: 'thin', color: { argb: 'FFE0E0E0' } },
+            left: { style: 'thin', color: { argb: 'FFE0E0E0' } },
+            bottom: { style: 'thin', color: { argb: 'FFE0E0E0' } },
+            right: { style: 'thin', color: { argb: 'FFE0E0E0' } }
+          };
+
+          // Alignment based on type
+          if (colNum <= 3) {
+            cell.alignment = { horizontal: 'left', vertical: 'middle' };
+          } else {
+            cell.alignment = { horizontal: 'right', vertical: 'middle' };
+            // Number formatting for numeric columns
+            cell.numFmt = '#,##0.00;(#,##0.00);"-"';
+          }
+
+          // Style and colors for columns
+          const colHeader = headers[colNum - 1];
+
+          // Exits (red) and Entries (blue) for dynamic columns
+          if (colNum > 6) {
+            if (colHeader.toLowerCase().includes('salida')) {
+              cell.font = { size: 10, name: 'Calibri', color: { argb: 'FFFF0000' } };
+            } else if (colHeader.toLowerCase().includes('entrada')) {
+              cell.font = { size: 10, name: 'Calibri', color: { argb: 'FF0000FF' } };
+            }
+          }
+
+          // Yellow highlight for suggested restock columns (D = budget, F = restock quantity)
+          // when restock quantity (suggestVal) is positive (> 0)
+          if ((colNum === 4 || colNum === 6) && suggestVal > 0) {
+            cell.fill = {
+              type: 'pattern',
+              pattern: 'solid',
+              fgColor: { argb: 'FFFFFFA0' } // Bright yellow fill
+            };
+          }
+        });
+      });
+
+      // Adjust column widths automatically
+      sheet.columns.forEach((column) => {
+        let maxLen = 12;
+        if (column && column.values) {
+          column.values.forEach((v) => {
+            if (v) {
+              const strLen = String(v).length;
+              if (strLen > maxLen) maxLen = strLen;
+            }
+          });
+        }
+        // Caps column width to 45 max for name columns
+        column.width = Math.min(45, maxLen + 3);
+      });
+
+      // === SHEET 2: Análisis de Ventas ===
+      const salesSheet = workbook.addWorksheet('Análisis de Ventas');
+      
+      const salesHeaders = [
+        'CATEGORIA',
+        'Nombre del artículo',
+        'item_CF_COLOR',
+        'Precio de Venta',
+        'Stock Actual',
+        'Unidades Vendidas',
+        'Semanas de Cobertura',
+        'Estado de Cobertura',
+        ...dynamicKeys
+      ];
+
+      const salesHeaderRow = salesSheet.addRow(salesHeaders);
+      salesHeaderRow.font = { bold: true, size: 10, name: 'Calibri' };
+      salesHeaderRow.eachCell((cell, colNum) => {
+        cell.border = {
+          top: { style: 'thin', color: { argb: 'FFBFBFBF' } },
+          left: { style: 'thin', color: { argb: 'FFBFBFBF' } },
+          bottom: { style: 'thin', color: { argb: 'FFBFBFBF' } },
+          right: { style: 'thin', color: { argb: 'FFBFBFBF' } }
+        };
+        const colHeader = salesHeaders[colNum - 1];
+        if (colHeader.toLowerCase().includes('salida')) {
+          cell.font = { bold: true, size: 10, name: 'Calibri', color: { argb: 'FFFF0000' } };
+        } else if (colHeader.toLowerCase().includes('entrada')) {
+          cell.font = { bold: true, size: 10, name: 'Calibri', color: { argb: 'FF0000FF' } };
+        }
+        cell.fill = {
+          type: 'pattern',
+          pattern: 'solid',
+          fgColor: { argb: 'FFE8F4F8' } // Light blue accent for sales
+        };
+      });
+
+      // Sort by sales_sum descending for Sheet 2
+      const sortedBySales = [...filteredResults].sort((a, b) => b.sales_sum - a.sales_sum);
+
+      sortedBySales.forEach((row: any) => {
+        const categoryVal = row.category || '';
+        const nameVal = row.name || '';
+        const colorVal = row.color && row.color !== 'Sin color' ? row.color : '';
+        const priceVal = row.price ?? 0;
+        const stockVal = row.stock_total ?? 0;
+        const salesVal = row.sales_sum ?? 0;
+
+        // Calculate coverage weeks
+        const weeklyAvg = row.weekly_avg || 0;
+        let coverageWeeks = 0;
+        let coverageLabel = 'Sin ventas';
+        if (stockVal === 0) {
+          if (weeklyAvg > 0) coverageLabel = 'Agotado';
+        } else if (weeklyAvg > 0) {
+          coverageWeeks = stockVal / weeklyAvg;
+          coverageLabel = `${coverageWeeks.toFixed(1)} sem`;
+        }
+
+        const rowData = [
+          categoryVal,
+          nameVal,
+          colorVal,
+          priceVal,
+          stockVal,
+          salesVal,
+          weeklyAvg > 0 && stockVal > 0 ? coverageWeeks : null,
+          coverageLabel
+        ];
+
+        // Append dynamic weekly data if any
+        dynamicKeys.forEach((key) => {
+          let val = row[key];
+          if (val === '-' || val === '' || val === null || val === undefined) {
+            rowData.push(null);
+          } else {
+            if (typeof val === 'string' && val.includes('(')) {
+              val = -Number(val.replace(/[()]/g, ''));
+            }
+            const num = Number(val);
+            rowData.push(isNaN(num) ? val : num);
+          }
+        });
+
+        const newRow = salesSheet.addRow(rowData);
+
+        newRow.eachCell((cell, colNum) => {
+          cell.font = { size: 10, name: 'Calibri' };
+          cell.border = {
+            top: { style: 'thin', color: { argb: 'FFE0E0E0' } },
+            left: { style: 'thin', color: { argb: 'FFE0E0E0' } },
+            bottom: { style: 'thin', color: { argb: 'FFE0E0E0' } },
+            right: { style: 'thin', color: { argb: 'FFE0E0E0' } }
+          };
+
+          if (colNum <= 3 || colNum === 8) {
+            cell.alignment = { horizontal: 'left', vertical: 'middle' };
+          } else {
+            cell.alignment = { horizontal: 'right', vertical: 'middle' };
+            cell.numFmt = '#,##0.00;(#,##0.00);"-"';
+          }
+
+          // Style and colors for dynamic columns
+          if (colNum > 8) {
+            const colHeader = salesHeaders[colNum - 1];
+            if (colHeader.toLowerCase().includes('salida')) {
+              cell.font = { size: 10, name: 'Calibri', color: { argb: 'FFFF0000' } };
+            } else if (colHeader.toLowerCase().includes('entrada')) {
+              cell.font = { size: 10, name: 'Calibri', color: { argb: 'FF0000FF' } };
+            }
+          }
+
+          // Highlight coverage status
+          if (colNum === 8 && coverageLabel === 'Agotado') {
+            cell.font = { bold: true, color: { argb: 'FFFF0000' } };
+          } else if (colNum === 8 && coverageLabel.includes('sem') && coverageWeeks <= 1.5) {
+            cell.font = { bold: true, color: { argb: 'FFFF8C00' } }; // Orange
+          } else if (colNum === 8 && coverageLabel.includes('sem') && coverageWeeks > 1.5 && coverageWeeks <= 5) {
+            cell.font = { color: { argb: 'FF008000' } }; // Green
+          }
+        });
+      });
+
+      salesSheet.columns.forEach((column) => {
+        let maxLen = 12;
+        if (column && column.values) {
+          column.values.forEach((v) => {
+            if (v) {
+              const strLen = String(v).length;
+              if (strLen > maxLen) maxLen = strLen;
+            }
+          });
+        }
+        column.width = Math.min(45, maxLen + 3);
+      });
+
+      // Write workbook to buffer and trigger download
+      const buffer = await workbook.xlsx.writeBuffer();
+      const fileBlob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+      saveAs(fileBlob, `estrategia_compras_${new Date().toISOString().split('T')[0]}.xlsx`);
+
+    } catch (err: any) {
+      console.error('Error al exportar Excel:', err);
+      alert(`Error al exportar Excel: ${err.message || err}`);
+    }
+  };
 
   // Derived metrics for the dashboard
   const kpis = useMemo(() => {
@@ -317,34 +588,113 @@ export default function ComprasRestockPage() {
     paddingBottom: 40,
   };
 
-  const primaryActionButtonStyle: React.CSSProperties = {
+
+
+  const headerButtonStylePrimary: React.CSSProperties = {
+    height: 40,
+    padding: '0 16px',
+    borderRadius: 8,
+    border: 'none',
+    background: 'var(--brand-primary)', // Solis Red
+    color: '#ffffff',
+    fontSize: 14,
+    fontWeight: 600,
+    display: 'inline-flex',
+    alignItems: 'center',
     justifyContent: 'center',
-    minHeight: 46,
-    borderRadius: 12,
-    fontWeight: 700,
-    border: '1px solid rgba(96,165,250,0.55)',
-    background: isProcessing
-      ? 'linear-gradient(135deg, rgba(37,99,235,0.85), rgba(29,78,216,0.9))'
-      : 'linear-gradient(135deg, #3b82f6, #1d4ed8)',
-    boxShadow: isGeneratePressed
-      ? '0 6px 18px rgba(37,99,235,0.35)'
-      : '0 12px 28px rgba(37,99,235,0.35)',
-    transform: isGeneratePressed ? 'scale(0.98)' : 'scale(1)',
-    transition: 'all 200ms ease',
+    gap: 8,
+    cursor: 'pointer',
+    transition: 'all 150ms ease',
+    whiteSpace: 'nowrap',
+    boxShadow: '0 4px 12px rgba(220, 38, 38, 0.25)',
+  };
+
+  const toolbarButtonStyleExcel: React.CSSProperties = {
+    height: 38,
+    padding: '0 14px',
+    borderRadius: 8,
+    border: '1px solid rgba(16, 185, 129, 0.2)',
+    background: 'rgba(16, 185, 129, 0.06)',
+    color: '#10b981', // Excel Green
+    fontSize: 13,
+    fontWeight: 600,
+    display: 'inline-flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    cursor: 'pointer',
+    transition: 'all 150ms ease',
+    whiteSpace: 'nowrap',
+  };
+
+  const toolbarButtonStyleAI: React.CSSProperties = {
+    height: 38,
+    padding: '0 14px',
+    borderRadius: 8,
+    border: '1px solid rgba(99, 102, 241, 0.2)',
+    background: 'rgba(99, 102, 241, 0.08)',
+    color: '#818cf8', // Indigo/violet tint
+    fontSize: 13,
+    fontWeight: 600,
+    display: 'inline-flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    cursor: 'pointer',
+    transition: 'all 150ms ease',
+    whiteSpace: 'nowrap',
   };
 
   return (
     <div style={shellStyle}>
-      <input
-        ref={fileInputRef}
-        type="file"
-        accept=".xlsx,.xls"
-        style={{ display: 'none' }}
-        onChange={(e) => {
-          const file = e.target.files?.[0];
-          if (file) handleSeedUpload(file);
-        }}
-      />
+      <style>{`
+
+
+        .compras-btn-primary {
+          transition: all 150ms ease-in-out;
+        }
+        .compras-btn-primary:hover:not(:disabled) {
+          background: #b91c1c !important;
+          box-shadow: 0 6px 16px rgba(220, 38, 38, 0.35) !important;
+        }
+        .compras-btn-primary:active:not(:disabled) {
+          transform: scale(0.97);
+        }
+
+        .compras-btn-excel {
+          transition: all 150ms ease-in-out;
+        }
+        .compras-btn-excel:hover:not(:disabled) {
+          background: rgba(16, 185, 129, 0.14) !important;
+          border-color: rgba(16, 185, 129, 0.4) !important;
+          color: #34d399 !important;
+        }
+        .compras-btn-excel:active:not(:disabled) {
+          transform: scale(0.97);
+        }
+
+        .compras-btn-ai {
+          transition: all 150ms ease-in-out;
+        }
+        .compras-btn-ai:hover:not(:disabled) {
+          background: rgba(99, 102, 241, 0.14) !important;
+          border-color: rgba(99, 102, 241, 0.4) !important;
+          color: #a5b4fc !important;
+        }
+        .compras-btn-ai:active:not(:disabled) {
+          transform: scale(0.97);
+        }
+        
+        .compras-date-input {
+          transition: border-color 150ms ease;
+        }
+        .compras-date-input:focus {
+          border-color: rgba(96, 165, 250, 0.4) !important;
+          outline: none;
+        }
+      `}</style>
+
+
 
       {/* HEADER SECTION */}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: 16 }}>
@@ -359,7 +709,7 @@ export default function ComprasRestockPage() {
             Análisis de cobertura de inventario basado en ventas reales.
           </p>
         </div>
-        <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', justifyContent: mobileView ? 'stretch' : 'flex-end' }}>
+        <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'flex-end', justifyContent: mobileView ? 'stretch' : 'flex-end' }}>
           <label style={{ display: 'grid', gap: 4, color: '#94a3b8', fontSize: 11 }}>
             Inicio
             <input
@@ -368,9 +718,10 @@ export default function ComprasRestockPage() {
               onChange={(e) => setDateStart(e.target.value)}
               max={dateEnd}
               disabled={isProcessing}
+              className="compras-date-input"
               style={{
-                height: 46,
-                borderRadius: 10,
+                height: 40,
+                borderRadius: 8,
                 border: '1px solid rgba(148,163,184,0.24)',
                 background: 'rgba(15,23,42,0.72)',
                 color: '#e2e8f0',
@@ -387,9 +738,10 @@ export default function ComprasRestockPage() {
               onChange={(e) => setDateEnd(e.target.value)}
               min={dateStart}
               disabled={isProcessing}
+              className="compras-date-input"
               style={{
-                height: 46,
-                borderRadius: 10,
+                height: 40,
+                borderRadius: 8,
                 border: '1px solid rgba(148,163,184,0.24)',
                 background: 'rgba(15,23,42,0.72)',
                 color: '#e2e8f0',
@@ -398,21 +750,18 @@ export default function ComprasRestockPage() {
               }}
             />
           </label>
-          <Button variant="secondary" onClick={() => fileInputRef.current?.click()} disabled={isProcessing}>
-            <UploadCloud size={16} style={{ marginRight: 6 }} /> Subir Historial
-          </Button>
-          <Button
-            variant="primary"
+          
+
+
+          <button
+            className="compras-btn-primary"
             onClick={fetchLiveAnalytics}
             disabled={isProcessing}
-            style={primaryActionButtonStyle}
-            onMouseDown={() => setIsGeneratePressed(true)}
-            onMouseUp={() => setIsGeneratePressed(false)}
-            onMouseLeave={() => setIsGeneratePressed(false)}
+            style={headerButtonStylePrimary}
           >
             {isProcessing ? <Loader2 size={16} className="animate-spin" /> : <RefreshCw size={16} />}
-            <span style={{ marginLeft: 8 }}>Actualizar Análisis</span>
-          </Button>
+            <span>Actualizar Análisis</span>
+          </button>
         </div>
       </div>
 
@@ -492,6 +841,48 @@ export default function ComprasRestockPage() {
             }}
           >
             <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', flex: 1 }}>
+              {/* Vistas selector */}
+              <div style={{ display: 'flex', background: 'rgba(0,0,0,0.2)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: 10, padding: 2 }}>
+                <button
+                  onClick={() => {
+                    setActiveView('compras');
+                    setOnlyNeedsRestock(true);
+                  }}
+                  style={{
+                    padding: '6px 12px',
+                    borderRadius: 8,
+                    border: 'none',
+                    background: activeView === 'compras' ? 'rgba(255,255,255,0.08)' : 'transparent',
+                    color: activeView === 'compras' ? '#ffffff' : '#94a3b8',
+                    fontSize: 13,
+                    fontWeight: 600,
+                    cursor: 'pointer',
+                    transition: 'all 150ms ease',
+                  }}
+                >
+                  Compras
+                </button>
+                <button
+                  onClick={() => {
+                    setActiveView('ventas');
+                    setOnlyNeedsRestock(false);
+                  }}
+                  style={{
+                    padding: '6px 12px',
+                    borderRadius: 8,
+                    border: 'none',
+                    background: activeView === 'ventas' ? 'rgba(255,255,255,0.08)' : 'transparent',
+                    color: activeView === 'ventas' ? '#ffffff' : '#94a3b8',
+                    fontSize: 13,
+                    fontWeight: 600,
+                    cursor: 'pointer',
+                    transition: 'all 150ms ease',
+                  }}
+                >
+                  Más Vendidos
+                </button>
+              </div>
+
               <div
                 style={{
                   display: 'flex',
@@ -501,7 +892,7 @@ export default function ComprasRestockPage() {
                   border: '1px solid rgba(255,255,255,0.1)',
                   borderRadius: 10,
                   padding: '8px 14px',
-                  flex: mobileView ? 1 : '0 1 300px',
+                  flex: mobileView ? 1 : '0 1 250px',
                 }}
               >
                 <Search size={16} color="#94a3b8" />
@@ -575,10 +966,25 @@ export default function ComprasRestockPage() {
                 Mostrar solo requeridos
               </label>
             </div>
-            
-            <Button variant="primary" style={{ gap: 8, background: '#4f46e5', border: 'none' }} onClick={() => setAiOpenSignal((prev) => prev + 1)}>
-              <Send size={16} /> Compartir con IA
-            </Button>
+            <div style={{ display: 'flex', gap: 10 }}>
+              <button
+                className="compras-btn-excel"
+                onClick={handleExportExcel}
+                style={toolbarButtonStyleExcel}
+              >
+                <FileSpreadsheet size={16} />
+                <span>Exportar Excel</span>
+              </button>
+              
+              <button
+                className="compras-btn-ai"
+                onClick={() => setAiOpenSignal((prev) => prev + 1)}
+                style={toolbarButtonStyleAI}
+              >
+                <Send size={16} />
+                <span>Compartir con IA</span>
+              </button>
+            </div>
           </div>
 
           {/* Table */}
@@ -588,11 +994,18 @@ export default function ComprasRestockPage() {
                 <thead style={{ background: 'rgba(15,23,42,0.9)', position: 'sticky', top: 0, zIndex: 1, backdropFilter: 'blur(8px)' }}>
                   <tr>
                     <th style={{ padding: '16px 20px', color: '#94a3b8', fontWeight: 600, borderBottom: '1px solid rgba(255,255,255,0.05)' }}>Producto</th>
-                    <th style={{ padding: '16px 20px', color: '#94a3b8', fontWeight: 600, borderBottom: '1px solid rgba(255,255,255,0.05)' }}>Estado</th>
+                    <th style={{ padding: '16px 20px', color: '#94a3b8', fontWeight: 600, borderBottom: '1px solid rgba(255,255,255,0.05)' }}>{activeView === 'compras' ? 'Estado' : 'Cobertura'}</th>
                     <th style={{ padding: '16px 20px', color: '#94a3b8', fontWeight: 600, textAlign: 'right', borderBottom: '1px solid rgba(255,255,255,0.05)' }}>Ventas (4 sem)</th>
+                    {activeView === 'ventas' && (
+                      <th style={{ padding: '16px 20px', color: '#94a3b8', fontWeight: 600, textAlign: 'right', borderBottom: '1px solid rgba(255,255,255,0.05)' }}>P. Unitario</th>
+                    )}
                     <th style={{ padding: '16px 20px', color: '#94a3b8', fontWeight: 600, textAlign: 'right', borderBottom: '1px solid rgba(255,255,255,0.05)' }}>Stock Actual</th>
-                    <th style={{ padding: '16px 20px', color: '#94a3b8', fontWeight: 600, textAlign: 'right', borderBottom: '1px solid rgba(255,255,255,0.05)' }}>Sugerido</th>
-                    <th style={{ padding: '16px 20px', color: '#94a3b8', fontWeight: 600, textAlign: 'right', borderBottom: '1px solid rgba(255,255,255,0.05)' }}>Inversión</th>
+                    {activeView === 'compras' && (
+                      <>
+                        <th style={{ padding: '16px 20px', color: '#94a3b8', fontWeight: 600, textAlign: 'right', borderBottom: '1px solid rgba(255,255,255,0.05)' }}>Sugerido</th>
+                        <th style={{ padding: '16px 20px', color: '#94a3b8', fontWeight: 600, textAlign: 'right', borderBottom: '1px solid rgba(255,255,255,0.05)' }}>Inversión</th>
+                      </>
+                    )}
                   </tr>
                 </thead>
                 <tbody>
@@ -628,6 +1041,22 @@ export default function ComprasRestockPage() {
                                   Color: {row.color}
                                 </span>
                               )}
+                              {row.state && (
+                                <span
+                                  style={{
+                                    border: '1px solid ' + (row.state.toLowerCase() === 'nuevo' ? 'rgba(16,185,129,0.3)' : 'rgba(245,158,11,0.3)'),
+                                    background: row.state.toLowerCase() === 'nuevo' ? 'rgba(16,185,129,0.1)' : 'rgba(245,158,11,0.1)',
+                                    borderRadius: 999,
+                                    padding: '2px 8px',
+                                    color: row.state.toLowerCase() === 'nuevo' ? '#34d399' : '#fbbf24',
+                                    fontSize: 11,
+                                    fontWeight: 600,
+                                    textTransform: 'capitalize'
+                                  }}
+                                >
+                                  {row.state}
+                                </span>
+                              )}
                             </div>
                             <div style={{ color: '#94a3b8', fontSize: 11, marginTop: 2 }}>
                               {row.marca || 'Sin marca'} · {row.category || 'Sin categoria'}
@@ -654,21 +1083,30 @@ export default function ComprasRestockPage() {
                           <td style={{ padding: '14px 20px', textAlign: 'right', color: '#cbd5e1' }}>
                             {row.sales_sum} <span style={{ color: '#64748b', fontSize: 12 }}>uds</span>
                           </td>
+                          {activeView === 'ventas' && (
+                            <td style={{ padding: '14px 20px', textAlign: 'right', color: '#cbd5e1' }}>
+                              {formatCurrency(row.price)}
+                            </td>
+                          )}
                           <td style={{ padding: '14px 20px', textAlign: 'right', color: '#cbd5e1' }}>
                             {row.stock_total} <span style={{ color: '#64748b', fontSize: 12 }}>uds</span>
                           </td>
-                          <td style={{ padding: '14px 20px', textAlign: 'right' }}>
-                            {row.restock_sugerido > 0 ? (
-                               <span style={{ color: '#60a5fa', fontWeight: 700, fontSize: 15 }}>
-                                +{Math.round(row.restock_sugerido)}
-                               </span>
-                            ) : (
-                                <span style={{ color: '#64748b' }}>-</span>
-                            )}
-                          </td>
-                          <td style={{ padding: '14px 20px', textAlign: 'right', color: '#10b981', fontWeight: 600 }}>
-                            {row.presupuesto > 0 ? formatCurrency(row.presupuesto) : '-'}
-                          </td>
+                          {activeView === 'compras' && (
+                            <>
+                              <td style={{ padding: '14px 20px', textAlign: 'right' }}>
+                                {row.restock_sugerido > 0 ? (
+                                   <span style={{ color: '#60a5fa', fontWeight: 700, fontSize: 15 }}>
+                                    +{Math.round(row.restock_sugerido)}
+                                   </span>
+                                ) : (
+                                    <span style={{ color: '#64748b' }}>-</span>
+                                )}
+                              </td>
+                              <td style={{ padding: '14px 20px', textAlign: 'right', color: '#10b981', fontWeight: 600 }}>
+                                {row.presupuesto > 0 ? formatCurrency(row.presupuesto) : '-'}
+                              </td>
+                            </>
+                          )}
                         </tr>
                       );
                     })
@@ -689,11 +1127,27 @@ export default function ComprasRestockPage() {
                             <StatusIcon size={12} /> {status.label}
                           </span>
                       </div>
-                      <div style={{ color: '#64748b', fontSize: 12, marginBottom: 4, display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                      <div style={{ color: '#64748b', fontSize: 12, display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', marginBottom: 4 }}>
                         <span>SKU: {row.sku}</span>
                         {row.color && row.color !== 'Sin color' && (
                           <span style={{ border: '1px solid rgba(148,163,184,0.35)', borderRadius: 999, padding: '2px 8px', color: '#cbd5e1' }}>
                             Color: {row.color}
+                          </span>
+                        )}
+                        {row.state && (
+                          <span
+                            style={{
+                              border: '1px solid ' + (row.state.toLowerCase() === 'nuevo' ? 'rgba(16,185,129,0.3)' : 'rgba(245,158,11,0.3)'),
+                              background: row.state.toLowerCase() === 'nuevo' ? 'rgba(16,185,129,0.1)' : 'rgba(245,158,11,0.1)',
+                              borderRadius: 999,
+                              padding: '2px 8px',
+                              color: row.state.toLowerCase() === 'nuevo' ? '#34d399' : '#fbbf24',
+                              fontSize: 11,
+                              fontWeight: 600,
+                              textTransform: 'capitalize'
+                            }}
+                          >
+                            {row.state}
                           </span>
                         )}
                       </div>
@@ -702,22 +1156,41 @@ export default function ComprasRestockPage() {
                       </div>
                       
                       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
-                        <div>
-                           <div style={{ color: '#64748b', fontSize: 11, marginBottom: 2 }}>Stock Actual</div>
-                           <div style={{ color: '#e2e8f0', fontWeight: 600 }}>{row.stock_total} uds</div>
-                        </div>
-                         <div>
-                           <div style={{ color: '#64748b', fontSize: 11, marginBottom: 2 }}>Sugerido Comprar</div>
-                           <div style={{ color: '#60a5fa', fontWeight: 700 }}>+{Math.round(row.restock_sugerido)} uds</div>
-                        </div>
-                         <div>
-                           <div style={{ color: '#64748b', fontSize: 11, marginBottom: 2 }}>Ventas (4 sem)</div>
-                           <div style={{ color: '#cbd5e1', fontWeight: 600 }}>{row.sales_sum} uds</div>
-                        </div>
-                        <div>
-                           <div style={{ color: '#64748b', fontSize: 11, marginBottom: 2 }}>Inversión</div>
-                           <div style={{ color: '#10b981', fontWeight: 600 }}>{formatCurrency(row.presupuesto)}</div>
-                        </div>
+                        {activeView === 'compras' ? (
+                          <>
+                            <div>
+                               <div style={{ color: '#64748b', fontSize: 11, marginBottom: 2 }}>Stock Actual</div>
+                               <div style={{ color: '#e2e8f0', fontWeight: 600 }}>{row.stock_total} uds</div>
+                            </div>
+                             <div>
+                               <div style={{ color: '#64748b', fontSize: 11, marginBottom: 2 }}>Sugerido Comprar</div>
+                               <div style={{ color: '#60a5fa', fontWeight: 700 }}>+{Math.round(row.restock_sugerido)} uds</div>
+                            </div>
+                             <div>
+                               <div style={{ color: '#64748b', fontSize: 11, marginBottom: 2 }}>Ventas (4 sem)</div>
+                               <div style={{ color: '#cbd5e1', fontWeight: 600 }}>{row.sales_sum} uds</div>
+                            </div>
+                            <div>
+                               <div style={{ color: '#64748b', fontSize: 11, marginBottom: 2 }}>Inversión</div>
+                               <div style={{ color: '#10b981', fontWeight: 600 }}>{formatCurrency(row.presupuesto)}</div>
+                            </div>
+                          </>
+                        ) : (
+                          <>
+                            <div>
+                               <div style={{ color: '#64748b', fontSize: 11, marginBottom: 2 }}>Ventas (4 sem)</div>
+                               <div style={{ color: '#e2e8f0', fontWeight: 600 }}>{row.sales_sum} uds</div>
+                            </div>
+                             <div>
+                               <div style={{ color: '#64748b', fontSize: 11, marginBottom: 2 }}>Stock Actual</div>
+                               <div style={{ color: '#cbd5e1', fontWeight: 600 }}>{row.stock_total} uds</div>
+                            </div>
+                             <div>
+                               <div style={{ color: '#64748b', fontSize: 11, marginBottom: 2 }}>P. Unitario</div>
+                               <div style={{ color: '#cbd5e1', fontWeight: 600 }}>{formatCurrency(row.price)}</div>
+                            </div>
+                          </>
+                        )}
                       </div>
                     </div>
                   );
@@ -756,7 +1229,7 @@ export default function ComprasRestockPage() {
       )}
 
       {/* AI Assistant Chatbot */}
-      <AIAssistant restockData={results || []} topSales={[]} openSignal={aiOpenSignal} />
+      <AIAssistant restockData={filteredResults} topSales={[]} openSignal={aiOpenSignal} />
     </div>
   );
 }
