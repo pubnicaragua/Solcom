@@ -1,0 +1,10 @@
+REPORTE COMPLETO DE DISCREPANCIAS DE INVENTARIO (ZOHO VS ERP)
+Fecha: 19/5/2026, 3:44:59 p. m.
+==========================================================================================
+SKU                  | Nombre Producto                                    |  Zoho A Mano | Zoho Disponible | ERP Stock Total
+------------------------------------------------------------------------------------------
+6534                 | SAMSUNG FUNDA S24U - SILICONE CASE                 |            0 |               0 |               1
+SOPORTE-TV           | SOPORTE PARA TV 43-98 PULG                         |            0 |               0 |              -2
+==========================================================================================
+Total de productos analizados: 1871
+Total de discrepancias encontradas: 2

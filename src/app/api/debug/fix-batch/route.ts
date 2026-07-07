@@ -25,7 +25,7 @@ export async function POST(request: Request) {
             throw new Error(`Auth failed: ${JSON.stringify(detail)}`);
         }
 
-        const organizationId = process.env.ZOHO_BOOKS_ORGANIZATION_ID!;
+        const organizationId = (process.env.ZOHO_BOOKS_ORGANIZATION_ID || '').replace(/[^0-9]/g, '');
 
         // Get Warehouses
         const { data: warehouses } = await supabase.from('warehouses').select('id, code, active, zoho_warehouse_id');

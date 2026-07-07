@@ -20,7 +20,8 @@ async function runFix() {
         console.log(`Processing batch ${Math.floor(i / BATCH_SIZE) + 1}/${Math.ceil(skus.length / BATCH_SIZE)}... (${batch.length} items)`);
 
         try {
-            const res = await fetch('http://localhost:3000/api/debug/fix-batch', {
+            const port = process.env.PORT || 3000;
+            const res = await fetch(`http://localhost:${port}/api/debug/fix-batch`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ skus: batch })
