@@ -176,7 +176,7 @@ export async function GET(request: Request) {
                 // Check if syncItemStock actually succeeded (it swallows errors internally)
                 const hasErrors = itemDebug.some(line => line.includes('ERROR'));
 
-                if (hasErrors || (result.snapshotsCreated === 0 && result.stockTotal === 0)) {
+                if (hasErrors) {
                     // syncItemStock failed silently — put back in queue for retry
                     failCount++;
                     const isFinalFailure = queueItem.attempts >= 3;

@@ -15,7 +15,7 @@ const SUPABASE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_P
 const CLIENT_ID = process.env.ZOHO_BOOKS_CLIENT_ID;
 const CLIENT_SECRET = process.env.ZOHO_BOOKS_CLIENT_SECRET;
 const REFRESH_TOKEN = process.env.ZOHO_BOOKS_REFRESH_TOKEN;
-const ORG_ID = process.env.ZOHO_BOOKS_ORGANIZATION_ID;
+const ORG_ID = (process.env.ZOHO_BOOKS_ORGANIZATION_ID || '').replace(/[^0-9]/g, '');
 
 const supabase = createClient(SUPABASE_URL, SUPABASE_KEY);
 

@@ -249,6 +249,7 @@ async function main() {
         // Guardar para que trigger-fix.js lo pueda leer
         const fs = require('fs');
         fs.writeFileSync('mismatches.json', JSON.stringify(stockMismatches.map(m => m.sku), null, 2));
+        fs.writeFileSync('mismatches_full.json', JSON.stringify(stockMismatches, null, 2));
         console.log('\n💾 Se guardaron los ' + stockMismatches.length + ' SKUs en mismatches.json para su corrección.');
     }
 
