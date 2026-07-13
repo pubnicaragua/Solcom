@@ -1,122 +1,44 @@
 #!/usr/bin/env node
-// Process the sync_queue locally (bypasses Vercel entirely)
-require('dotenv').config({ path: '.env.local' });
-const { createClient } = require('@supabase/supabase-js');
+// Emergency wrapper: delegates to the same worker route used in production.
+// It intentionally performs no direct queue writes, so it cannot mark a job
+// completed without executing the real inventory synchronization.
+require('dotenv').config({ path: ['.env.local', '.env'], quiet: true });
 
-const supabase = createClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL,
-    process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
-);
+const cronSecret = String(process.env.CRON_SECRET || '').trim();
+const baseUrl = String(
+    process.env.INVENTORY_SYNC_WORKER_URL ||
+    process.env.NEXT_PUBLIC_APP_URL ||
+    'http://localhost:3000'
+).trim().replace(/\/+$/, '');
 
-const BATCH_SIZE = 15;
+if (!cronSecret) {
+    console.error('Falta CRON_SECRET. No se ejecutó el worker.');
+    process.exit(2);
+}
 
-async function getZohoToken() {
-    const res = await fetch('https://accounts.zoho.com/oauth/v2/token', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-        body: new URLSearchParams({
-            refresh_token: process.env.ZOHO_BOOKS_REFRESH_TOKEN,
-            client_id: process.env.ZOHO_BOOKS_CLIENT_ID,
-            client_secret: process.env.ZOHO_BOOKS_CLIENT_SECRET,
-            grant_type: 'refresh_token',
-        }),
+async function main() {
+    const url = new URL('/api/cron/process-queue', baseUrl);
+    url.searchParams.set('cron_secret', cronSecret);
+
+    const response = await fetch(url, {
+        method: 'GET',
+        headers: { Accept: 'application/json' },
     });
-    const data = await res.json();
-    if (!data.access_token) throw new Error('Token failed: ' + JSON.stringify(data));
-    return { accessToken: data.access_token, apiDomain: data.api_domain || 'https://www.zohoapis.com' };
-}
-
-async function fetchItemFromZoho(accessToken, apiDomain, itemId) {
-    const orgId = process.env.ZOHO_BOOKS_ORGANIZATION_ID;
-    const url = `${apiDomain}/inventory/v1/items/${itemId}?organization_id=${orgId}`;
-    const res = await fetch(url, { headers: { Authorization: `Zoho-oauthtoken ${accessToken}` } });
-    if (!res.ok) throw new Error(`Item fetch error ${res.status}`);
-    const data = await res.json();
-    return data.item;
-}
-
-async function fetchLocations(accessToken, apiDomain, itemId) {
-    const orgId = process.env.ZOHO_BOOKS_ORGANIZATION_ID;
-    const url = `${apiDomain}/inventory/v1/items/${itemId}/locationdetails?organization_id=${orgId}`;
-    const res = await fetch(url, { headers: { Authorization: `Zoho-oauthtoken ${accessToken}` } });
-    if (!res.ok) {
-        if (res.status === 404) return [];
-        throw new Error(`Location fetch error ${res.status}`);
-    }
-    const data = await res.json();
-    return data.item_location_details?.locations || [];
-}
-
-async function processQueue() {
-    // 1. Count
-    const { data: allItems } = await supabase.from('sync_queue').select('status');
-    const counts = {};
-    (allItems || []).forEach(r => { counts[r.status] = (counts[r.status] || 0) + 1; });
-    console.log('📊 Estado actual de la cola:', counts);
-
-    // 2. Fetch pending
-    const { data: pending, error: fetchErr } = await supabase
-        .from('sync_queue')
-        .select('id, zoho_item_id, attempts')
-        .eq('status', 'pending')
-        .order('created_at', { ascending: true })
-        .limit(BATCH_SIZE);
-
-    if (fetchErr) { console.error('❌ Error fetching:', fetchErr); return; }
-    if (!pending || pending.length === 0) { console.log('✅ No hay items pendientes!'); return; }
-
-    console.log(`\n🔒 Procesando lote de ${pending.length} items...`);
-
-    // 3. Lock them
-    const ids = pending.map(p => p.id);
-    await supabase.from('sync_queue').update({ status: 'processing' }).in('id', ids);
-
-    // 4. Get ONE token
-    console.log('🔑 Obteniendo token de Zoho...');
-    const auth = await getZohoToken();
-    console.log('✅ Token obtenido.\n');
-
-    // 5. Load warehouses
-    const { data: warehouses } = await supabase.from('warehouses').select('id, zoho_warehouse_id, active').not('zoho_warehouse_id', 'is', null);
-    const warehouseMap = new Map((warehouses || []).map(w => [String(w.zoho_warehouse_id), { id: w.id, active: w.active }]));
-
-    let success = 0, fail = 0;
-
-    for (const item of pending) {
-        try {
-            // Simplified sync: fetch item + locations, update Supabase
-            const locations = await fetchLocations(auth.accessToken, auth.apiDomain, item.zoho_item_id);
-
-            // Mark completed
-            await supabase.from('sync_queue').update({
-                status: 'completed',
-                updated_at: new Date().toISOString(),
-                attempts: item.attempts + 1
-            }).eq('id', item.id);
-
-            success++;
-            console.log(`  ✅ ${item.zoho_item_id} (${locations.length} locations)`);
-        } catch (err) {
-            fail++;
-            const isFinal = item.attempts >= 3;
-            await supabase.from('sync_queue').update({
-                status: isFinal ? 'failed' : 'pending',
-                error: err.message,
-                updated_at: new Date().toISOString(),
-                attempts: item.attempts + 1
-            }).eq('id', item.id);
-            console.log(`  ❌ ${item.zoho_item_id}: ${err.message}`);
-        }
+    const rawText = await response.text();
+    let payload;
+    try {
+        payload = rawText ? JSON.parse(rawText) : {};
+    } catch {
+        payload = { raw: rawText.slice(0, 500) };
     }
 
-    console.log(`\n📊 Resultado: ${success} exitosos, ${fail} fallidos`);
-
-    // Check remaining
-    const { data: remaining } = await supabase.from('sync_queue').select('status').eq('status', 'pending');
-    console.log(`📋 Pendientes restantes: ${remaining ? remaining.length : 0}`);
-    if (remaining && remaining.length > 0) {
-        console.log('⏳ Ejecuta este script otra vez para procesar la siguiente tanda.');
+    console.log(JSON.stringify({ httpStatus: response.status, ...payload }, null, 2));
+    if (!response.ok || payload?.ok === false || payload?.error) {
+        process.exitCode = 1;
     }
 }
 
-processQueue().catch(console.error);
+main().catch((error) => {
+    console.error('No se pudo invocar el worker:', error.message || error);
+    process.exit(2);
+});

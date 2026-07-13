@@ -10,7 +10,8 @@
     "lint": "next lint",
     "type-check": "tsc --noEmit",
     "check:kpis": "node scripts/diagnose_kpis.js",
-    "check:kpis:local": "node scripts/diagnose_kpis_local.js"
+    "check:kpis:local": "node scripts/diagnose_kpis_local.js",
+    "check:inventory-sync": "node scripts/check-queue.js"
   },
   "dependencies": {
     "@supabase/auth-helpers-nextjs": "^0.8.7",

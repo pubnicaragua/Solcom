@@ -1,5 +1,27 @@
-import { createClient } from '@supabase/supabase-js';
-import { getZohoAccessToken, fetchItemLocations, AuthExpiredError } from '@/lib/zoho/inventory-utils';
+import { getZohoAccessToken, fetchItemLocations } from '@/lib/zoho/inventory-utils';
+import { getZohoOrganizationId } from '@/lib/zoho/config';
+
+export type SyncItemStockResult = {
+    success: boolean;
+    retryable: boolean;
+    snapshotsCreated: number;
+    stockTotal: number;
+    error?: string;
+};
+
+function failedSyncResult(
+    error: string,
+    stockTotal = 0,
+    retryable = true
+): SyncItemStockResult {
+    return {
+        success: false,
+        retryable,
+        snapshotsCreated: 0,
+        stockTotal,
+        error,
+    };
+}
 
 export function toQty(value: unknown): number {
     const n = Number(value);
@@ -40,7 +62,11 @@ export async function fetchZohoItemDetails(
     });
 
     if (!response.ok) {
-        return null;
+        const errorText = await response.text();
+        if (response.status === 404) return null;
+        throw new Error(
+            `Zoho Inventory item detail error: ${response.status} - ${errorText.slice(0, 300)}`
+        );
     }
 
     const rawText = await response.text();
@@ -62,6 +88,14 @@ export function isMissingRelationError(error: any): boolean {
     return code === '42P01' || message.includes('does not exist');
 }
 
+function isMissingRpcError(error: any): boolean {
+    const code = String(error?.code || '');
+    const message = String(error?.message || '').toLowerCase();
+    return code === 'PGRST202'
+        || code === '42883'
+        || message.includes('could not find the function');
+}
+
 export async function replaceInventoryBalanceForItem(
     supabase: any,
     itemId: string,
@@ -69,37 +103,21 @@ export async function replaceInventoryBalanceForItem(
     mappedWarehouseIds: string[],
     source: string,
     debugLog: string[]
-): Promise<void> {
-    if (!itemId || mappedWarehouseIds.length === 0) return;
-
-    const DELETE_CHUNK = 200;
-    for (let i = 0; i < mappedWarehouseIds.length; i += DELETE_CHUNK) {
-        const warehouseBatch = mappedWarehouseIds.slice(i, i + DELETE_CHUNK);
-        const { error: deleteError } = await supabase
-            .from('inventory_balance')
-            .delete()
-            .eq('item_id', itemId)
-            .in('warehouse_id', warehouseBatch);
-
-        if (deleteError) {
-            if (isMissingRelationError(deleteError)) {
-                debugLog.push('[syncItemStock] WARN: inventory_balance table not found; skipping balance write');
-                return;
-            }
-            debugLog.push(`[syncItemStock] ERROR deleting inventory_balance rows: ${deleteError.message}`);
-            return;
-        }
-    }
-
-    if (snapshots.length === 0) {
-        return;
+): Promise<{ success: boolean; error?: string }> {
+    if (!itemId || mappedWarehouseIds.length === 0) {
+        return { success: false, error: 'No hay item o bodegas mapeadas para inventory_balance.' };
     }
 
     const nowIso = new Date().toISOString();
-    const balanceRows = snapshots.map((snapshot) => ({
+    const qtyByWarehouse = new Map(
+        snapshots.map((snapshot) => [snapshot.warehouse_id, snapshot.qty ?? 0])
+    );
+    // Zoho devuelve el estado absoluto. Escribimos también ceros para evitar
+    // que sobreviva stock viejo cuando una ubicación deja de venir en la lista.
+    const balanceRows = mappedWarehouseIds.map((warehouseId) => ({
         item_id: itemId,
-        warehouse_id: snapshot.warehouse_id,
-        qty_on_hand: snapshot.qty ?? 0,
+        warehouse_id: warehouseId,
+        qty_on_hand: qtyByWarehouse.get(warehouseId) ?? 0,
         source,
         source_ts: nowIso,
         updated_at: nowIso,
@@ -110,17 +128,124 @@ export async function replaceInventoryBalanceForItem(
         const batch = balanceRows.slice(i, i + INSERT_CHUNK);
         const { error: insertError } = await supabase
             .from('inventory_balance')
-            .insert(batch);
+            .upsert(batch, { onConflict: 'item_id,warehouse_id' });
 
         if (insertError) {
             if (isMissingRelationError(insertError)) {
-                debugLog.push('[syncItemStock] WARN: inventory_balance table not found; skipping balance write');
-                return;
+                const error = 'inventory_balance table not found';
+                debugLog.push(`[syncItemStock] ERROR: ${error}`);
+                return { success: false, error };
             }
             debugLog.push(`[syncItemStock] ERROR inserting inventory_balance rows: ${insertError.message}`);
-            return;
+            return { success: false, error: insertError.message };
         }
     }
+
+    return { success: true };
+}
+
+async function persistInventoryStockState(params: {
+    supabase: any;
+    itemId: string;
+    stockTotal: number;
+    snapshots: Array<{
+        warehouse_id: string;
+        qty: number;
+        source_ts: string;
+        synced_at: string;
+    }>;
+    mappedWarehouseIds: string[];
+    source: string;
+    debugLog: string[];
+}): Promise<{ success: boolean; snapshotsCreated: number; error?: string }> {
+    const {
+        supabase,
+        itemId,
+        stockTotal,
+        snapshots,
+        mappedWarehouseIds,
+        source,
+        debugLog,
+    } = params;
+    const nowIso = new Date().toISOString();
+    const qtyByWarehouse = new Map(
+        snapshots.map((snapshot) => [snapshot.warehouse_id, snapshot.qty ?? 0])
+    );
+    const balanceRows = mappedWarehouseIds.map((warehouseId) => ({
+        warehouse_id: warehouseId,
+        qty_on_hand: qtyByWarehouse.get(warehouseId) ?? 0,
+        source_ts: nowIso,
+    }));
+
+    const rpcResult = await supabase.rpc('replace_inventory_item_stock', {
+        p_item_id: itemId,
+        p_stock_total: stockTotal,
+        p_snapshots: snapshots.map((snapshot) => ({
+            warehouse_id: snapshot.warehouse_id,
+            qty: snapshot.qty,
+            source_ts: snapshot.source_ts,
+            synced_at: snapshot.synced_at,
+        })),
+        p_balances: balanceRows,
+        p_source: source,
+    });
+
+    if (!rpcResult.error) {
+        return { success: true, snapshotsCreated: snapshots.length };
+    }
+
+    if (!isMissingRpcError(rpcResult.error)) {
+        return {
+            success: false,
+            snapshotsCreated: 0,
+            error: `atomic inventory write failed: ${rpcResult.error.message}`,
+        };
+    }
+
+    // Compatibilidad mientras se aplica la migración. Después de activarla,
+    // este camino deja de ejecutarse y las tres escrituras son transaccionales.
+    debugLog.push('[syncItemStock] WARN: atomic inventory RPC missing; using rollout fallback');
+
+    const itemUpdate = await supabase
+        .from('items')
+        .update({ stock_total: stockTotal, updated_at: nowIso })
+        .eq('id', itemId);
+    if (itemUpdate.error) {
+        return { success: false, snapshotsCreated: 0, error: itemUpdate.error.message };
+    }
+
+    const snapshotDelete = await supabase
+        .from('stock_snapshots')
+        .delete()
+        .eq('item_id', itemId);
+    if (snapshotDelete.error) {
+        return { success: false, snapshotsCreated: 0, error: snapshotDelete.error.message };
+    }
+
+    if (snapshots.length > 0) {
+        const snapshotInsert = await supabase.from('stock_snapshots').insert(snapshots);
+        if (snapshotInsert.error) {
+            return { success: false, snapshotsCreated: 0, error: snapshotInsert.error.message };
+        }
+    }
+
+    const balanceResult = await replaceInventoryBalanceForItem(
+        supabase,
+        itemId,
+        snapshots,
+        mappedWarehouseIds,
+        source,
+        debugLog
+    );
+    if (!balanceResult.success) {
+        return {
+            success: false,
+            snapshotsCreated: snapshots.length,
+            error: balanceResult.error,
+        };
+    }
+
+    return { success: true, snapshotsCreated: snapshots.length };
 }
 
 // Helper: build item metadata payload from Zoho item details
@@ -157,19 +282,29 @@ export async function syncItemStock(
     warehouseMap: Map<string, { id: string; active: boolean }>,
     debugLog: string[],
     existingAuth?: { accessToken: string; apiDomain: string }
-): Promise<{ snapshotsCreated: number; stockTotal: number }> {
-    const organizationId = process.env.ZOHO_BOOKS_ORGANIZATION_ID;
+): Promise<SyncItemStockResult> {
+    let organizationId: string | null = null;
+    try {
+        organizationId = getZohoOrganizationId();
+    } catch (error) {
+        const message = error instanceof Error ? error.message : 'Organización Zoho inválida';
+        debugLog.push(`[syncItemStock] ERROR: ${message}`);
+        return failedSyncResult(message, 0, false);
+    }
+
     if (!organizationId) {
-        debugLog.push(`[syncItemStock] ERROR: No ZOHO_BOOKS_ORGANIZATION_ID`);
-        return { snapshotsCreated: 0, stockTotal: 0 };
+        const message = 'No ZOHO_BOOKS_ORGANIZATION_ID';
+        debugLog.push(`[syncItemStock] ERROR: ${message}`);
+        return failedSyncResult(message, 0, false);
     }
 
     let auth = existingAuth;
     if (!auth) {
         const fetchedAuth = await getZohoAccessToken();
         if (!fetchedAuth || 'error' in fetchedAuth) {
-            debugLog.push(`[syncItemStock] ERROR auth: ${(fetchedAuth as any)?.error || 'Unknown'}`);
-            return { snapshotsCreated: 0, stockTotal: 0 };
+            const message = String((fetchedAuth as any)?.error || 'Unknown auth error');
+            debugLog.push(`[syncItemStock] ERROR auth: ${message}`);
+            return failedSyncResult(message);
         }
         auth = {
             accessToken: fetchedAuth.accessToken as string,
@@ -195,11 +330,17 @@ export async function syncItemStock(
         );
 
         // 3. Find or create item in Supabase
-        const { data: itemRows } = await supabase
+        const { data: itemRows, error: itemLookupError } = await supabase
             .from('items')
             .select('id, stock_total')
             .eq('zoho_item_id', zohoItemId)
             .limit(1);
+
+        if (itemLookupError) {
+            const message = `local item lookup failed: ${itemLookupError.message}`;
+            debugLog.push(`[syncItemStock] ERROR: ${message}`);
+            return failedSyncResult(message);
+        }
 
         let supabaseItemId = itemRows?.[0]?.id as string | undefined;
         let currentStockTotal = Number(itemRows?.[0]?.stock_total ?? 0);
@@ -223,7 +364,9 @@ export async function syncItemStock(
                     .eq('id', supabaseItemId);
 
                 if (updateErr) {
-                    debugLog.push(`[syncItemStock] WARN: metadata update failed: ${updateErr.message}`);
+                    const message = `metadata update failed: ${updateErr.message}`;
+                    debugLog.push(`[syncItemStock] ERROR: ${message}`);
+                    return failedSyncResult(message, currentStockTotal);
                 }
             } else {
                 // Create new item
@@ -242,7 +385,7 @@ export async function syncItemStock(
                         .limit(1);
 
                     if (bySku?.[0]) {
-                        await supabase
+                        const { error: linkError } = await supabase
                             .from('items')
                             .update({
                                 zoho_item_id: zohoItemId,
@@ -255,8 +398,12 @@ export async function syncItemStock(
                                 updated_at: metadata.updated_at,
                             })
                             .eq('id', bySku[0].id);
-                        insertedItem = bySku[0];
-                        insertError = null;
+                        if (!linkError) {
+                            insertedItem = bySku[0];
+                            insertError = null;
+                        } else {
+                            debugLog.push(`[syncItemStock] ERROR linking item by SKU: ${linkError.message}`);
+                        }
                     }
 
                     if (insertError) {
@@ -281,18 +428,21 @@ export async function syncItemStock(
                     currentStockTotal = Number(insertedItem.stock_total ?? 0);
                     debugLog.push(`[syncItemStock] Created local item for Zoho item ${zohoItemId}`);
                 } else {
-                    debugLog.push(`[syncItemStock] WARN: Item ${zohoItemId} could not be created`);
-                    return { snapshotsCreated: 0, stockTotal: 0 };
+                    const message = `Item ${zohoItemId} could not be created`;
+                    debugLog.push(`[syncItemStock] ERROR: ${message}`);
+                    return failedSyncResult(message, 0, false);
                 }
             }
         } else if (!supabaseItemId) {
-            debugLog.push(`[syncItemStock] WARN: Item ${zohoItemId} not in Zoho and not in DB`);
-            return { snapshotsCreated: 0, stockTotal: 0 };
+            const message = `Item ${zohoItemId} not in Zoho and not in DB`;
+            debugLog.push(`[syncItemStock] ERROR: ${message}`);
+            return failedSyncResult(message, 0, false);
         }
 
         if (!supabaseItemId) {
-            debugLog.push(`[syncItemStock] WARN: Item ${zohoItemId} could not be resolved locally`);
-            return { snapshotsCreated: 0, stockTotal: 0 };
+            const message = `Item ${zohoItemId} could not be resolved locally`;
+            debugLog.push(`[syncItemStock] ERROR: ${message}`);
+            return failedSyncResult(message, 0, false);
         }
 
         // 4. Process locations → snapshots
@@ -333,13 +483,15 @@ export async function syncItemStock(
         const snapshots = Array.from(snapshotMap.values());
 
         if (locations.length === 0) {
-            debugLog.push(`[syncItemStock] WARN: ${zohoItemId} returned 0 locations; preserving current snapshots`);
-            return { snapshotsCreated: 0, stockTotal: currentStockTotal };
+            const message = `${zohoItemId} returned 0 locations; preserving current snapshots`;
+            debugLog.push(`[syncItemStock] ERROR: ${message}`);
+            return failedSyncResult(message, currentStockTotal);
         }
 
         if (unmappedCount > 0) {
-            debugLog.push(`[syncItemStock] WARN: ${zohoItemId} has ${unmappedCount} unmapped locations`);
-            return { snapshotsCreated: 0, stockTotal: currentStockTotal };
+            const message = `${zohoItemId} has ${unmappedCount} unmapped locations`;
+            debugLog.push(`[syncItemStock] ERROR: ${message}`);
+            return failedSyncResult(message, currentStockTotal);
         }
 
         if (locations.length > 0 && mappedCount === 0) {
@@ -347,57 +499,48 @@ export async function syncItemStock(
                 (sum: number, loc: any) => sum + toQty(loc.location_stock_on_hand ?? loc.location_available_stock),
                 0
             );
-            await supabase
+            const { error: fallbackUpdateError } = await supabase
                 .from('items')
                 .update({ stock_total: fallbackTotal })
                 .eq('id', supabaseItemId);
-            debugLog.push(`[syncItemStock] WARN: no mapped locations for ${zohoItemId}; updated stock_total=${fallbackTotal}`);
-            return { snapshotsCreated: 0, stockTotal: fallbackTotal };
-        }
-
-        // 5. Update stock_total
-        const { error: updateError } = await supabase
-            .from('items')
-            .update({ stock_total: stockTotal })
-            .eq('id', supabaseItemId);
-        if (updateError) {
-            debugLog.push(`[syncItemStock] ERROR stock_total update: ${updateError.message}`);
-            return { snapshotsCreated: 0, stockTotal };
-        }
-
-        // 6. Replace snapshots
-        const { error: deleteError } = await supabase
-            .from('stock_snapshots')
-            .delete()
-            .eq('item_id', supabaseItemId);
-        if (deleteError) {
-            debugLog.push(`[syncItemStock] ERROR deleting old snapshots: ${deleteError.message}`);
-            return { snapshotsCreated: 0, stockTotal };
-        }
-
-        let snapshotsCreated = 0;
-        if (snapshots.length > 0) {
-            const { error } = await supabase.from('stock_snapshots').insert(snapshots);
-            if (!error) {
-                snapshotsCreated = snapshots.length;
-            } else {
-                debugLog.push(`[syncItemStock] ERROR inserting snapshots: ${error.message}`);
+            if (fallbackUpdateError) {
+                const message = `fallback stock_total update failed: ${fallbackUpdateError.message}`;
+                debugLog.push(`[syncItemStock] ERROR: ${message}`);
+                return failedSyncResult(message, currentStockTotal);
             }
+            const message = `no mapped locations for ${zohoItemId}`;
+            debugLog.push(`[syncItemStock] ERROR: ${message}; stock_total=${fallbackTotal}`);
+            return failedSyncResult(message, fallbackTotal);
         }
 
-        // 7. Replace inventory_balance
-        await replaceInventoryBalanceForItem(
+        // 5. Publicar total, snapshots y balances como una sola transacción.
+        const persistResult = await persistInventoryStockState({
             supabase,
-            supabaseItemId,
+            itemId: supabaseItemId,
+            stockTotal,
             snapshots,
             mappedWarehouseIds,
-            'sync',
-            debugLog
-        );
+            source: 'sync',
+            debugLog,
+        });
 
-        return { snapshotsCreated, stockTotal };
+        if (!persistResult.success) {
+            debugLog.push(`[syncItemStock] ERROR persisting inventory: ${persistResult.error}`);
+            return failedSyncResult(
+                persistResult.error || 'No se pudo publicar el inventario',
+                stockTotal
+            );
+        }
+
+        return {
+            success: true,
+            retryable: false,
+            snapshotsCreated: persistResult.snapshotsCreated,
+            stockTotal,
+        };
     } catch (err) {
-        debugLog.push(`[syncItemStock] ERROR fatal: ${err instanceof Error ? err.message : 'Unknown'}`);
-        return { snapshotsCreated: 0, stockTotal: 0 };
+        const message = err instanceof Error ? err.message : 'Unknown';
+        debugLog.push(`[syncItemStock] ERROR fatal: ${message}`);
+        return failedSyncResult(message);
     }
 }

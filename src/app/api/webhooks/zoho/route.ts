@@ -6,6 +6,7 @@ import {
     syncItemStock,
 } from '@/lib/zoho/sync-logic';
 import { invalidateZohoSerialCacheByItemIds } from '@/lib/zoho/serial-cache';
+import { enqueueInventorySyncItems } from '@/lib/zoho/sync-queue';
 
 // Service Role Client for Webhooks (Bypasses RLS)
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
@@ -411,34 +412,36 @@ export async function POST(request: NextRequest) {
         }
 
         // 4. EXECUTE SYNC for all extracted items (NOW ASYNCHRONOUS USING QUEUE)
-        const queuedCount = 0;
         const queueErrors = [];
+        let queuedCount = 0;
+        let coalescedCount = 0;
 
         if (dedupedItemIds.length > 0) {
-            const queueItems = dedupedItemIds.map(id => ({
-                zoho_item_id: id,
-                status: 'pending'
-            }));
-
-            // Insert into the sync_queue table
-            const { error: queueError } = await supabase
-                .from('sync_queue')
-                .insert(queueItems);
-
-            if (queueError) {
-                debugLog.push(`Queue insertion error: ${queueError.message}`);
-                queueErrors.push(queueError.message);
-            } else {
-                debugLog.push(`Successfully queued ${dedupedItemIds.length} items for background sync.`);
+            try {
+                const queueResult = await enqueueInventorySyncItems(supabase, dedupedItemIds);
+                queuedCount = queueResult.queued;
+                coalescedCount = queueResult.coalesced;
+                debugLog.push(
+                    `Inventory queue: requested=${queueResult.requested}, queued=${queuedCount}, coalesced=${coalescedCount}`
+                );
+                if (queueResult.fallback) {
+                    debugLog.push('Inventory queue WARN: usando fallback; aplicar inventory-sync-queue-hardening.sql');
+                }
+            } catch (queueError: any) {
+                const message = String(queueError?.message || queueError || 'Unknown queue error');
+                debugLog.push(`Queue insertion error: ${message}`);
+                queueErrors.push(message);
             }
         }
 
         return NextResponse.json({
-            success: true,
-            queuedCount: dedupedItemIds.length,
+            success: queueErrors.length === 0,
+            requestedCount: dedupedItemIds.length,
+            queuedCount,
+            coalescedCount,
             errorCount: queueErrors.length,
             debug: debugLog
-        });
+        }, { status: queueErrors.length > 0 ? 503 : 200 });
 
     } catch (error) {
         debugLog.push(`FATAL: ${error instanceof Error ? error.message : 'Unknown'}`);

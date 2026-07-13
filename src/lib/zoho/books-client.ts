@@ -9,6 +9,7 @@ import {
     redisSetJson,
 } from '@/lib/redis/rest';
 import { isSalesZohoRedisGuardsEnabled } from '@/lib/ventas/feature-flags';
+import { getZohoOrganizationId } from '@/lib/zoho/config';
 
 type SharedBooksAuth = {
     accessToken: string | null;
@@ -1208,7 +1209,7 @@ export function createZohoBooksClient(): ZohoBooksClient | null {
     const clientId = process.env.ZOHO_BOOKS_CLIENT_ID;
     const clientSecret = process.env.ZOHO_BOOKS_CLIENT_SECRET;
     const refreshToken = process.env.ZOHO_BOOKS_REFRESH_TOKEN;
-    const organizationId = process.env.ZOHO_BOOKS_ORGANIZATION_ID;
+    const organizationId = getZohoOrganizationId();
 
     if (!clientId || !clientSecret || !refreshToken || !organizationId) {
         return null;

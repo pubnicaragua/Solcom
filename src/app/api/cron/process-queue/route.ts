@@ -1,19 +1,23 @@
-// NextResponse removed — using custom jsonResponse with no-cache headers
+import { randomUUID } from 'crypto';
 import { createClient } from '@supabase/supabase-js';
 import { getZohoAccessToken } from '@/lib/zoho/inventory-utils';
 import { syncItemStock } from '@/lib/zoho/sync-logic';
+import { requireZohoOrganizationId } from '@/lib/zoho/config';
+import {
+    claimInventorySyncJobs,
+    finishInventorySyncJob,
+    type InventorySyncQueueJob,
+} from '@/lib/zoho/sync-queue';
 
-// Service Role Client (Bypasses RLS)
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
-const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
-
-// Force dynamic execution, NEVER cache
 export const dynamic = 'force-dynamic';
 export const revalidate = 0;
 export const fetchCache = 'force-no-store';
-export const maxDuration = 120; // Fluid Compute enabled: up to 300s allowed on Hobby. 120s gives plenty of margin
+export const maxDuration = 120;
 
-// Helper to create response with no-cache headers
+const DEFAULT_BATCH_SIZE = 30;
+const MAX_BATCH_SIZE = 50;
+const WORKER_TIME_BUDGET_MS = 100_000;
+
 function jsonResponse(data: any, status = 200) {
     return new Response(JSON.stringify({ ...data, timestamp: new Date().toISOString() }), {
         status,
@@ -26,215 +30,270 @@ function jsonResponse(data: any, status = 200) {
     });
 }
 
+function configuredBatchSize(): number {
+    const parsed = Number(process.env.INVENTORY_SYNC_BATCH_SIZE || DEFAULT_BATCH_SIZE);
+    if (!Number.isFinite(parsed)) return DEFAULT_BATCH_SIZE;
+    return Math.max(1, Math.min(MAX_BATCH_SIZE, Math.floor(parsed)));
+}
+
+async function queueStatusCounts(supabase: any) {
+    const statuses = ['pending', 'processing', 'completed', 'failed'] as const;
+    const results = await Promise.all(statuses.map(async (status) => {
+        const result = await supabase
+            .from('sync_queue')
+            .select('id', { count: 'exact', head: true })
+            .eq('status', status);
+        if (result.error) {
+            throw new Error(`No se pudo contar sync_queue (${status}): ${result.error.message}`);
+        }
+        return [status, result.count ?? 0] as const;
+    }));
+    return Object.fromEntries(results);
+}
+
+async function finishClaimedJobsAfterFatalError(params: {
+    supabase: any;
+    jobs: InventorySyncQueueJob[];
+    workerId: string;
+    error: unknown;
+}) {
+    await Promise.allSettled(params.jobs.map((job) => finishInventorySyncJob({
+        supabase: params.supabase,
+        job,
+        workerId: params.workerId,
+        success: false,
+        retryable: true,
+        error: params.error,
+    })));
+}
+
 export async function GET(request: Request) {
-    // Optional basic security: Ensure this is only called with a cron job secret
     const { searchParams } = new URL(request.url);
     const cronSecret = searchParams.get('cron_secret');
-    const expectedSecret = process.env.CRON_SECRET || 'solcom-cron-key-123'; // Make sure to set this in Vercel/Env
+    const expectedSecret = String(process.env.CRON_SECRET || '').trim();
+
+    if (!expectedSecret) {
+        return jsonResponse({ error: 'Configuración incompleta: falta CRON_SECRET.' }, 500);
+    }
 
     if (cronSecret !== expectedSecret) {
         return jsonResponse({ error: 'Unauthorized cron request' }, 401);
     }
 
-    const debugLog: string[] = [];
-    const keyType = process.env.SUPABASE_SERVICE_ROLE_KEY ? 'SERVICE_ROLE' : 'ANON';
+    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+    const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+    if (!supabaseUrl || !supabaseServiceKey) {
+        return jsonResponse({
+            error: 'Configuración incompleta: el worker requiere Supabase URL y service role key.',
+        }, 500);
+    }
+
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
-    const BATCH_SIZE = 30; // 30 × ~1.8s = ~54s con vercel fluid component maxDuration=120s
+    const debugLog: string[] = [];
+    const workerId = `inventory-sync-${Date.now()}-${randomUUID().slice(0, 8)}`;
+    const batchSize = configuredBatchSize();
+    const startedAt = Date.now();
+    let claimedJobs: InventorySyncQueueJob[] = [];
 
     try {
-        debugLog.push(`--- Starting Queue Processor (Key: ${keyType}) ---`);
+        const beforeCounts = await queueStatusCounts(supabase);
+        debugLog.push(`Queue before: ${JSON.stringify(beforeCounts)}`);
 
-        // DEBUG: Count all items by status
-        const { data: allItems } = await supabase.from('sync_queue').select('status');
-        const statusCounts: Record<string, number> = {};
-        (allItems || []).forEach((r: any) => { statusCounts[r.status] = (statusCounts[r.status] || 0) + 1; });
-        debugLog.push(`Queue status counts: ${JSON.stringify(statusCounts)}`);
+        const claimResult = await claimInventorySyncJobs({
+            supabase,
+            batchSize,
+            workerId,
+            staleAfterSeconds: 300,
+        });
+        claimedJobs = claimResult.jobs;
 
-        // GHOST RESCUER: Reset items stuck in 'processing' for more than 5 minutes
-        const fiveMinAgo = new Date(Date.now() - 5 * 60 * 1000).toISOString();
-        const { data: stuckItems } = await supabase
-            .from('sync_queue')
-            .update({ status: 'pending', error: 'Rescued from stuck processing (Vercel timeout)', updated_at: new Date().toISOString() })
-            .eq('status', 'processing')
-            .lt('updated_at', fiveMinAgo)
-            .select('id');
-
-        if (stuckItems && stuckItems.length > 0) {
-            debugLog.push(`👻 Rescued ${stuckItems.length} ghost items stuck in 'processing'`);
+        if (claimResult.fallback) {
+            debugLog.push('WARN: Queue RPC no disponible; usando fallback no atómico. Aplicar migración SQL.');
         }
 
-        // 1. Fetch pending items
-        const { data: pendingItems, error: fetchErr } = await supabase
-            .from('sync_queue')
-            .select('id, zoho_item_id, attempts')
-            .eq('status', 'pending')
-            .order('created_at', { ascending: true })
-            .limit(BATCH_SIZE);
-
-        if (fetchErr) {
-            throw new Error(`Failed to fetch from queue: ${fetchErr.message}`);
+        if (claimedJobs.length === 0) {
+            return jsonResponse({
+                message: 'No pending items in queue',
+                processed: 0,
+                workerId,
+                queue: beforeCounts,
+                debug: debugLog,
+            });
         }
 
-        if (!pendingItems || pendingItems.length === 0) {
-            return jsonResponse({ message: 'No pending items in queue', processed: 0, debug: debugLog });
-        }
+        debugLog.push(`Claimed ${claimedJobs.length} jobs as ${workerId}.`);
 
-        const itemIdsToProcess = pendingItems.map(item => item.id);
-
-        // 2. Mark as processing to prevent overlapping cron jobs from taking the same items
-        const { error: lockErr } = await supabase
-            .from('sync_queue')
-            .update({ status: 'processing', updated_at: new Date().toISOString() })
-            .in('id', itemIdsToProcess);
-
-        if (lockErr) {
-            throw new Error(`Failed to lock items for processing: ${lockErr.message}`);
-        }
-
-        debugLog.push(`Locked ${pendingItems.length} items for processing.`);
-
-        // 3. Obtain Zoho Token ONLY ONCE for the entire batch
-        debugLog.push('Requesting global Zoho Token for batch...');
         const auth = await getZohoAccessToken();
         if (!auth || 'error' in auth) {
-            // Revert status since we couldn't even start
-            await supabase.from('sync_queue').update({ status: 'pending', error: 'Zoho token error' }).in('id', itemIdsToProcess);
-            throw new Error(`Global Zoho auth failed: ${(auth as any)?.error || 'Unknown'}`);
+            const error = new Error(`Global Zoho auth failed: ${(auth as any)?.error || 'Unknown'}`);
+            await finishClaimedJobsAfterFatalError({ supabase, jobs: claimedJobs, workerId, error });
+            claimedJobs = [];
+            throw error;
         }
-        debugLog.push('Global Zoho Token obtained.');
 
-        // 3.5 Auto-sync warehouse names & statuses from Zoho
-        // The locationdetails endpoint is the ONLY reliable source for both
-        // correct names AND active/inactive status for all locations.
+        const organizationId = requireZohoOrganizationId();
+        const headers = { Authorization: `Zoho-oauthtoken ${auth.accessToken}` };
+
+        // Mantiene nombres y estados de bodegas alineados. Los errores aquí no
+        // impiden procesar si el mapa local ya está completo.
         try {
-            const orgId = process.env.ZOHO_BOOKS_ORGANIZATION_ID;
-            const hdrs = { Authorization: `Zoho-oauthtoken ${auth.accessToken}` };
-
-            // Grab any one item to get the full location list
             const itemListRes = await fetch(
-                `${auth.apiDomain}/inventory/v1/items?organization_id=${orgId}&page=1&per_page=1`,
-                { headers: hdrs }
+                `${auth.apiDomain}/inventory/v1/items?organization_id=${organizationId}&page=1&per_page=1`,
+                { headers, cache: 'no-store' }
             );
+            if (!itemListRes.ok) {
+                throw new Error(`Zoho warehouse seed failed: ${itemListRes.status}`);
+            }
             const itemListData = await itemListRes.json();
             const sampleItemId = itemListData.items?.[0]?.item_id;
 
             if (sampleItemId) {
-                const locRes = await fetch(
-                    `${auth.apiDomain}/inventory/v1/items/${sampleItemId}/locationdetails?organization_id=${orgId}`,
-                    { headers: hdrs }
+                const locationsRes = await fetch(
+                    `${auth.apiDomain}/inventory/v1/items/${sampleItemId}/locationdetails?organization_id=${organizationId}`,
+                    { headers, cache: 'no-store' }
                 );
-                const locData = await locRes.json();
-                const locations = locData.item_location_details?.locations || [];
-
-                let whUpdated = 0;
-                for (const loc of locations) {
-                    const zohoId = String(loc.location_id);
-                    const isActive = loc.status === 'active';
-                    const locName = String(loc.location_name || '');
-
-                    const { error: whErr } = await supabase
-                        .from('warehouses')
-                        .update({
-                            name: locName,
-                            code: locName.substring(0, 40),
-                            active: isActive,
-                            updated_at: new Date().toISOString(),
-                        })
-                        .eq('zoho_warehouse_id', zohoId);
-
-                    if (!whErr) whUpdated++;
+                if (!locationsRes.ok) {
+                    throw new Error(`Zoho warehouse locations failed: ${locationsRes.status}`);
                 }
-                debugLog.push(`Warehouse sync: ${whUpdated}/${locations.length} updated (names + status)`);
-            } else {
-                debugLog.push('Warehouse sync skipped: no items found to query locations');
+                const locationsData = await locationsRes.json();
+                const locations = locationsData.item_location_details?.locations || [];
+
+                for (const location of locations) {
+                    const zohoId = String(location.location_id || '').trim();
+                    if (!zohoId) continue;
+                    const locationName = String(location.location_name || zohoId);
+                    const status = String(location.status || '').trim().toLowerCase();
+                    const warehouseUpdate: Record<string, unknown> = {
+                        name: locationName,
+                        code: locationName.substring(0, 40),
+                        updated_at: new Date().toISOString(),
+                    };
+                    if (status) {
+                        warehouseUpdate.active = status === 'active';
+                    }
+                    const updateResult = await supabase
+                        .from('warehouses')
+                        .update(warehouseUpdate)
+                        .eq('zoho_warehouse_id', zohoId);
+                    if (updateResult.error) {
+                        throw new Error(`Warehouse ${zohoId}: ${updateResult.error.message}`);
+                    }
+                }
+                debugLog.push(`Warehouse metadata refreshed: ${locations.length}.`);
             }
-        } catch (whSyncErr: any) {
-            debugLog.push(`Warehouse sync skipped: ${whSyncErr.message}`);
+        } catch (warehouseError: any) {
+            debugLog.push(`WARN warehouse refresh: ${warehouseError?.message || warehouseError}`);
         }
 
-        // 4. Load warehouses once
-        const { data: warehouses } = await supabase.from('warehouses').select('id, zoho_warehouse_id, active').not('zoho_warehouse_id', 'is', null);
-        const warehouseMap = new Map((warehouses || []).map((w: any) => [String(w.zoho_warehouse_id), { id: w.id, active: w.active }]));
+        const warehousesResult = await supabase
+            .from('warehouses')
+            .select('id, zoho_warehouse_id, active')
+            .not('zoho_warehouse_id', 'is', null);
+        if (warehousesResult.error) {
+            throw new Error(`No se pudieron cargar bodegas: ${warehousesResult.error.message}`);
+        }
 
-        // Ensure auth object only has the fields syncItemStock expects
+        const warehouseMap = new Map(
+            (warehousesResult.data || []).map((warehouse: any) => [
+                String(warehouse.zoho_warehouse_id),
+                { id: warehouse.id, active: warehouse.active },
+            ])
+        );
+        if (warehouseMap.size === 0) {
+            throw new Error('No hay bodegas con zoho_warehouse_id configurado.');
+        }
+
         const cleanAuth = { accessToken: auth.accessToken, apiDomain: auth.apiDomain };
-
-        // 5. Process each item reusing the token
         let successCount = 0;
         let failCount = 0;
+        let deferredCount = 0;
 
+        for (let index = 0; index < claimedJobs.length; index += 1) {
+            const job = claimedJobs[index];
 
-        for (const queueItem of pendingItems) {
+            if (Date.now() - startedAt >= WORKER_TIME_BUDGET_MS) {
+                const remaining = claimedJobs.slice(index);
+                await finishClaimedJobsAfterFatalError({
+                    supabase,
+                    jobs: remaining,
+                    workerId,
+                    error: new Error('Trabajo diferido para evitar timeout del worker.'),
+                });
+                deferredCount += remaining.length;
+                break;
+            }
+
+            const itemDebug: string[] = [];
             try {
-                const itemDebug: string[] = [];
-                // CRUCIAL: Pass the existingAuth to prevent syncItemStock from requesting a new token!
-                const result = await syncItemStock(queueItem.zoho_item_id, supabase, warehouseMap, itemDebug, cleanAuth);
+                const result = await syncItemStock(
+                    job.zoho_item_id,
+                    supabase,
+                    warehouseMap,
+                    itemDebug,
+                    cleanAuth
+                );
+                itemDebug.forEach((line) => debugLog.push(`[${job.zoho_item_id}] ${line}`));
 
-                // Merge item-level debug logs into global debug log for visibility
-                itemDebug.forEach(line => debugLog.push(`  [${queueItem.zoho_item_id}] ${line}`));
+                await finishInventorySyncJob({
+                    supabase,
+                    job,
+                    workerId,
+                    success: result.success,
+                    retryable: result.retryable,
+                    error: result.error,
+                });
 
-                // Check if syncItemStock actually succeeded (it swallows errors internally)
-                const hasErrors = itemDebug.some(line => line.includes('ERROR'));
-
-                if (hasErrors) {
-                    // syncItemStock failed silently — put back in queue for retry
-                    failCount++;
-                    const isFinalFailure = queueItem.attempts >= 3;
-                    await supabase
-                        .from('sync_queue')
-                        .update({
-                            status: isFinalFailure ? 'failed' : 'pending',
-                            error: itemDebug.filter(l => l.includes('ERROR')).join(' | ') || 'Unknown silent failure',
-                            updated_at: new Date().toISOString(),
-                            attempts: queueItem.attempts + 1
-                        })
-                        .eq('id', queueItem.id);
-                    debugLog.push(`❌ Silent fail ${queueItem.zoho_item_id} (attempt ${queueItem.attempts + 1})`);
+                if (result.success) {
+                    successCount += 1;
+                    debugLog.push(
+                        `OK ${job.zoho_item_id} snapshots=${result.snapshotsCreated} total=${result.stockTotal}`
+                    );
                 } else {
-                    // Mark successful
-                    await supabase
-                        .from('sync_queue')
-                        .update({
-                            status: 'completed',
-                            updated_at: new Date().toISOString(),
-                            attempts: queueItem.attempts + 1
-                        })
-                        .eq('id', queueItem.id);
-
-                    successCount++;
-                    debugLog.push(`✅ Processed ${queueItem.zoho_item_id} (Snaps: ${result.snapshotsCreated}, Total: ${result.stockTotal})`);
+                    failCount += 1;
+                    debugLog.push(`FAIL ${job.zoho_item_id}: ${result.error || 'Unknown'}`);
                 }
-
-            } catch (err: any) {
-                failCount++;
-                const isFinalFailure = queueItem.attempts >= 3;
-                debugLog.push(`❌ Failed ${queueItem.zoho_item_id}: ${err.message}`);
-
-                // Mark failed or return to pending if retries left
-                await supabase
-                    .from('sync_queue')
-                    .update({
-                        status: isFinalFailure ? 'failed' : 'pending',
-                        error: err.message,
-                        updated_at: new Date().toISOString(),
-                        attempts: queueItem.attempts + 1
-                    })
-                    .eq('id', queueItem.id);
+            } catch (error: any) {
+                failCount += 1;
+                await finishInventorySyncJob({
+                    supabase,
+                    job,
+                    workerId,
+                    success: false,
+                    retryable: true,
+                    error,
+                });
+                debugLog.push(`FAIL ${job.zoho_item_id}: ${error?.message || error}`);
             }
         }
 
-        debugLog.push('--- Queue Processor Finished ---');
-
+        const afterCounts = await queueStatusCounts(supabase);
         return jsonResponse({
+            ok: failCount === 0,
             message: 'Batch processing complete',
-            total: pendingItems.length,
+            workerId,
+            total: claimedJobs.length,
             success: successCount,
             failed: failCount,
-            debug: debugLog
+            deferred: deferredCount,
+            durationMs: Date.now() - startedAt,
+            queue: afterCounts,
+            debug: debugLog,
         });
-
     } catch (error: any) {
-        debugLog.push(`FATAL: ${error.message}`);
-        return jsonResponse({ error: error.message, debug: debugLog }, 500);
+        if (claimedJobs.length > 0) {
+            await finishClaimedJobsAfterFatalError({
+                supabase,
+                jobs: claimedJobs,
+                workerId,
+                error,
+            });
+        }
+        debugLog.push(`FATAL: ${error?.message || error}`);
+        return jsonResponse({
+            error: error?.message || 'Error desconocido',
+            workerId,
+            durationMs: Date.now() - startedAt,
+            debug: debugLog,
+        }, 500);
     }
 }

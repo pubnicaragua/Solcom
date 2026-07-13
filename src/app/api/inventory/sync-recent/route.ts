@@ -97,19 +97,35 @@ export async function GET(request: Request) {
                 batch.map(async (item) => {
                     const itemLog: string[] = [];
                     // Pass existing auth to avoid re-fetching
-                    await syncItemStock(item.zoho_item_id, supabase, warehouseMap, itemLog, authData);
-                    return itemLog;
+                    const syncResult = await syncItemStock(
+                        item.zoho_item_id,
+                        supabase,
+                        warehouseMap,
+                        itemLog,
+                        authData
+                    );
+                    return { itemLog, syncResult };
                 })
             );
 
             for (let j = 0; j < results.length; j++) {
                 const result = results[j];
                 if (result.status === 'fulfilled') {
-                    processedCount++;
-                    for (const line of result.value) {
+                    for (const line of result.value.itemLog) {
                         // Only log errors/warnings to keep log size manageable
                         if (line.includes('ERROR') || line.includes('WARN')) {
                             debugLog.push(line);
+                        }
+                    }
+                    if (result.value.syncResult.success) {
+                        processedCount++;
+                    } else {
+                        errorCount++;
+                        const errorMessage = result.value.syncResult.error || 'Unknown';
+                        debugLog.push(`ERROR syncing ${batch[j].sku || batch[j].zoho_item_id}: ${errorMessage}`);
+                        const normalizedError = errorMessage.toLowerCase();
+                        if (normalizedError.includes('expired') || normalizedError.includes('unauthorized')) {
+                            authError = true;
                         }
                     }
                 } else {
@@ -126,7 +142,7 @@ export async function GET(request: Request) {
 
         const durationMs = Date.now() - startTime;
         return NextResponse.json({
-            success: true,
+            success: errorCount === 0,
             itemsProcessed: processedCount,
             totalItems: items.length,
             errors: errorCount,
