@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import type { CSSProperties } from 'react';
 import {
     ClipboardList, Search, RefreshCw, Eye, Trash2,
     CheckCircle, ArrowRightLeft, Pencil,
@@ -266,17 +267,21 @@ export default function SalesOrderList({
                 ].map((kpi) => (
                     <div
                         key={kpi.label}
+                        className="sales-design-kpi"
                         style={{
                             padding: '16px 18px',
                             borderRadius: 12,
-                            background: kpi.bg,
-                            border: `1px solid ${kpi.color}33`,
-                        }}
+                            '--kpi-accent': kpi.color,
+                            '--kpi-glow': `color-mix(in srgb, ${kpi.color} 38%, transparent)`,
+                            background: `radial-gradient(ellipse at 0% 100%, color-mix(in srgb, ${kpi.color} 24%, transparent) 0%, transparent 62%), linear-gradient(135deg, color-mix(in srgb, ${kpi.color} 12%, var(--card)) 0%, var(--card) 56%, color-mix(in srgb, ${kpi.color} 6%, var(--panel)) 100%)`,
+                            border: `1px solid color-mix(in srgb, ${kpi.color} 42%, var(--border))`,
+                            boxShadow: `0 2px 8px var(--shadow), inset 0 1px 0 color-mix(in srgb, ${kpi.color} 16%, transparent)`,
+                        } as CSSProperties}
                     >
                         <div style={{ fontSize: 12, fontWeight: 600, color: kpi.color, marginBottom: 4 }}>
                             {kpi.label}
                         </div>
-                        <div style={{ fontSize: 24, fontWeight: 800, color: 'var(--text, #e2e8f0)' }}>
+                        <div style={{ fontSize: 24, fontWeight: 800, color: kpi.color }}>
                             {kpi.value}
                         </div>
                     </div>
@@ -284,15 +289,15 @@ export default function SalesOrderList({
             </div>
 
             {/* Filters */}
-            <div style={{
+            <div className="sales-design-panel" style={{
                 display: 'flex',
                 flexWrap: 'wrap',
                 gap: 10,
                 alignItems: 'center',
                 padding: '12px 16px',
                 borderRadius: 12,
-                background: 'rgba(255,255,255,0.02)',
-                border: '1px solid rgba(255,255,255,0.06)',
+                background: 'var(--surface-hover)',
+                border: '1px solid var(--border)',
             }}>
                 <div style={{ position: 'relative', flex: '1 1 200px' }}>
                     <Search size={14} style={{
@@ -312,8 +317,8 @@ export default function SalesOrderList({
                             width: '100%',
                             padding: '8px 10px 8px 32px',
                             borderRadius: 8,
-                            border: '1px solid rgba(255,255,255,0.1)',
-                            background: 'rgba(255,255,255,0.04)',
+                            border: '1px solid var(--border)',
+                            background: 'var(--surface-hover)',
                             color: 'var(--text)',
                             fontSize: 13,
                             outline: 'none',
@@ -323,11 +328,11 @@ export default function SalesOrderList({
                 <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
                     <Calendar size={13} style={{ color: 'var(--muted)' }} />
                     <input type="date" value={fromDate} onChange={(e) => { setFromDate(e.target.value); setPage(1); }}
-                        style={{ padding: '7px 8px', borderRadius: 8, border: '1px solid rgba(255,255,255,0.1)', background: 'rgba(255,255,255,0.04)', color: 'var(--text)', fontSize: 12 }}
+                        style={{ padding: '7px 8px', borderRadius: 8, border: '1px solid var(--border)', background: 'var(--surface-hover)', color: 'var(--text)', fontSize: 12 }}
                     />
                     <span style={{ color: 'var(--muted)', fontSize: 12 }}>—</span>
                     <input type="date" value={toDate} onChange={(e) => { setToDate(e.target.value); setPage(1); }}
-                        style={{ padding: '7px 8px', borderRadius: 8, border: '1px solid rgba(255,255,255,0.1)', background: 'rgba(255,255,255,0.04)', color: 'var(--text)', fontSize: 12 }}
+                        style={{ padding: '7px 8px', borderRadius: 8, border: '1px solid var(--border)', background: 'var(--surface-hover)', color: 'var(--text)', fontSize: 12 }}
                     />
                 </div>
                 <button
@@ -335,8 +340,8 @@ export default function SalesOrderList({
                     style={{
                         padding: '8px 12px',
                         borderRadius: 8,
-                        border: '1px solid rgba(255,255,255,0.1)',
-                        background: 'rgba(255,255,255,0.05)',
+                        border: '1px solid var(--border)',
+                        background: 'var(--surface-hover)',
                         color: 'var(--text)',
                         fontSize: 12,
                         fontWeight: 600,
@@ -360,9 +365,9 @@ export default function SalesOrderList({
                         style={{
                             padding: '6px 14px',
                             borderRadius: 8,
-                            border: `1px solid ${activeTab === tab.key ? 'rgba(139,92,246,0.4)' : 'rgba(255,255,255,0.08)'}`,
-                            background: activeTab === tab.key ? 'rgba(139,92,246,0.15)' : 'transparent',
-                            color: activeTab === tab.key ? '#A78BFA' : 'var(--muted)',
+                            border: `1px solid ${activeTab === tab.key ? 'var(--brand-primary)' : 'var(--border)'}`,
+                            background: activeTab === tab.key ? 'var(--brand-surface)' : 'transparent',
+                            color: activeTab === tab.key ? 'var(--brand-primary)' : 'var(--muted)',
                             fontSize: 12,
                             fontWeight: 600,
                             cursor: 'pointer',
@@ -392,9 +397,9 @@ export default function SalesOrderList({
             )}
 
             {/* Table */}
-            <div style={{
+            <div className="sales-design-table-card" style={{
                 borderRadius: 12,
-                border: '1px solid rgba(255,255,255,0.06)',
+                border: '1px solid var(--border)',
                 overflow: 'hidden',
             }}>
                 {loading ? (
@@ -412,7 +417,7 @@ export default function SalesOrderList({
                     <div style={{ overflowX: 'auto' }}>
                         <table style={{ width: '100%', borderCollapse: 'collapse' }}>
                             <thead>
-                                <tr style={{ borderBottom: '1px solid rgba(255,255,255,0.06)' }}>
+                                <tr style={{ borderBottom: '1px solid var(--border)' }}>
                                     {['#', 'Fecha', 'Cliente', 'Estado', 'Total', 'Acciones'].map((h) => (
                                         <th key={h} style={{
                                             padding: '10px 14px',
@@ -433,13 +438,10 @@ export default function SalesOrderList({
                                     const sc = statusConfig[order.status as OrderStatus] || statusConfig.borrador;
                                     const isLoading = actionLoading === order.id;
                                     return (
-                                        <tr key={order.id} style={{
-                                            borderBottom: '1px solid rgba(255,255,255,0.04)',
+                                        <tr key={order.id} className="sales-design-list-row" style={{
+                                            borderBottom: '1px solid var(--border)',
                                             transition: 'background 0.1s',
-                                        }}
-                                            onMouseEnter={(e) => (e.currentTarget.style.background = 'rgba(255,255,255,0.02)')}
-                                            onMouseLeave={(e) => (e.currentTarget.style.background = 'transparent')}
-                                        >
+                                        }}>
                                             <td style={{ padding: '12px 14px' }}>
                                                 <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--text)' }}>
                                                     {order.order_number}
@@ -508,8 +510,8 @@ export default function SalesOrderList({
                                                         style={{
                                                             padding: '5px 8px',
                                                             borderRadius: 6,
-                                                            border: '1px solid rgba(255,255,255,0.08)',
-                                                            background: 'rgba(255,255,255,0.04)',
+                                                            border: '1px solid var(--border)',
+                                                            background: 'var(--surface-hover)',
                                                             color: 'var(--muted)',
                                                             cursor: 'pointer',
                                                             display: 'flex',
@@ -642,9 +644,9 @@ export default function SalesOrderList({
                             style={{
                                 padding: '6px 10px',
                                 borderRadius: 6,
-                                border: '1px solid rgba(255,255,255,0.1)',
-                                background: 'rgba(255,255,255,0.04)',
-                                color: page <= 1 ? 'rgba(255,255,255,0.2)' : 'var(--text)',
+                                border: '1px solid var(--border)',
+                                background: 'var(--surface-hover)',
+                                color: page <= 1 ? 'var(--muted)' : 'var(--text)',
                                 cursor: page <= 1 ? 'default' : 'pointer',
                                 fontSize: 12,
                                 display: 'flex',
@@ -662,9 +664,9 @@ export default function SalesOrderList({
                             style={{
                                 padding: '6px 10px',
                                 borderRadius: 6,
-                                border: '1px solid rgba(255,255,255,0.1)',
-                                background: 'rgba(255,255,255,0.04)',
-                                color: page >= totalPages ? 'rgba(255,255,255,0.2)' : 'var(--text)',
+                                border: '1px solid var(--border)',
+                                background: 'var(--surface-hover)',
+                                color: page >= totalPages ? 'var(--muted)' : 'var(--text)',
                                 cursor: page >= totalPages ? 'default' : 'pointer',
                                 fontSize: 12,
                                 display: 'flex',

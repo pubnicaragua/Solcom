@@ -2,7 +2,6 @@
 
 import { useState, useRef, useEffect } from 'react';
 import { Bell, Check, X, Clock, AlertCircle, Package } from 'lucide-react';
-import Badge from '@/components/ui/Badge';
 import { useNotifications } from '@/components/providers/NotificationsProvider';
 
 interface Notification {
@@ -39,13 +38,13 @@ export default function NotificationsDropdown() {
   function getIcon(type: string) {
     switch (type) {
       case 'low_stock':
-        return <AlertCircle size={16} color="#eab308" />;
+        return <AlertCircle size={16} color="var(--warning)" />;
       case 'sync_error':
-        return <X size={16} color="#ef4444" />;
+        return <X size={16} color="var(--danger)" />;
       case 'new_transfer':
-        return <Package size={16} color="#3b82f6" />;
+        return <Package size={16} color="var(--info)" />;
       default:
-        return <Bell size={16} color="#3b82f6" />;
+        return <Bell size={16} color="var(--info)" />;
     }
   }
 
@@ -59,163 +58,83 @@ export default function NotificationsDropdown() {
   }
 
   return (
-    <div style={{ position: 'relative' }} ref={dropdownRef}>
+    <div className="notifications-dropdown" ref={dropdownRef}>
       <button
         onClick={() => setIsOpen(!isOpen)}
-        style={{
-          position: 'relative',
-          padding: '8px',
-          background: 'transparent',
-          border: 'none',
-          borderRadius: '6px',
-          cursor: 'pointer',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          transition: 'background 0.2s',
-        }}
-        onMouseEnter={(e) => {
-          e.currentTarget.style.background = 'var(--panel)';
-        }}
-        onMouseLeave={(e) => {
-          e.currentTarget.style.background = 'transparent';
-        }}
+        className={`notifications-trigger${isOpen ? ' is-open' : ''}`}
+        type="button"
+        aria-label={unreadCount > 0 ? `Notificaciones, ${unreadCount} sin leer` : 'Notificaciones'}
+        aria-expanded={isOpen}
+        aria-haspopup="dialog"
       >
-        <Bell size={18} color="var(--text)" />
+        <Bell size={18} aria-hidden="true" />
         {unreadCount > 0 && (
-          <div
-            style={{
-              position: 'absolute',
-              top: '4px',
-              right: '4px',
-              width: '16px',
-              height: '16px',
-              borderRadius: '50%',
-              background: '#ef4444',
-              color: '#fff',
-              fontSize: '10px',
-              fontWeight: 600,
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-            }}
-          >
+          <span className="notifications-trigger-count">
             {unreadCount > 9 ? '9+' : unreadCount}
-          </div>
+          </span>
         )}
       </button>
 
       {isOpen && (
         <div
-          className="fixed sm:absolute z-[1000] overflow-hidden flex flex-col bg-[#0f1419] border border-[color:var(--border)] rounded-lg shadow-[0_8px_24px_rgba(0,0,0,0.5)] left-4 right-4 top-[72px] sm:left-auto sm:right-0 sm:top-[calc(100%+8px)] sm:w-[380px] max-h-[80vh] sm:max-h-[500px]"
+          className="notifications-panel"
+          role="dialog"
+          aria-label="Notificaciones"
         >
-          <div
-            className="flex flex-col sm:flex-row sm:justify-between items-start sm:items-center p-4 border-b border-[color:var(--border)] gap-3 sm:gap-0"
-          >
-            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-              <h3 style={{ fontSize: '16px', fontWeight: 600, margin: 0 }}>
-                Notificaciones
-              </h3>
+          <div className="notifications-panel-header">
+            <div className="notifications-panel-heading">
+              <span className="notifications-panel-icon"><Bell size={16} aria-hidden="true" /></span>
+              <h3>Notificaciones</h3>
               {unreadCount > 0 && (
-                <Badge variant="danger" size="sm">
-                  {unreadCount} nuevas
-                </Badge>
+                <span className="notifications-new-count">{unreadCount} nuevas</span>
               )}
             </div>
             {unreadCount > 0 && (
               <button
                 onClick={markAllAsRead}
-                style={{
-                  padding: '4px 8px',
-                  fontSize: '12px',
-                  color: 'var(--brand-primary)',
-                  background: 'transparent',
-                  border: 'none',
-                  cursor: 'pointer',
-                  fontWeight: 500,
-                }}
+                className="notifications-mark-all"
+                type="button"
               >
-                Marcar todas como leídas
+                <Check size={14} aria-hidden="true" />
+                <span>Marcar todas como leídas</span>
               </button>
             )}
           </div>
 
-          <div className="overflow-y-auto max-h-[calc(80vh-80px)] sm:max-h-[400px]">
+          <div className="notifications-list">
             {notifications.length === 0 ? (
-              <div
-                style={{
-                  padding: '40px 20px',
-                  textAlign: 'center',
-                  color: 'var(--muted)',
-                }}
-              >
-                <Bell size={48} style={{ opacity: 0.3, marginBottom: '12px' }} />
-                <p style={{ fontSize: '14px' }}>No tienes notificaciones</p>
+              <div className="notifications-empty">
+                <span className="notifications-empty-icon"><Bell size={22} aria-hidden="true" /></span>
+                <strong>Estás al día</strong>
+                <p>No tienes notificaciones pendientes.</p>
               </div>
             ) : (
               notifications.map((notification: Notification) => (
                 <div
                   key={notification.id}
-                  style={{
-                    padding: '12px 16px',
-                    borderBottom: '1px solid var(--border)',
-                    background: notification.is_read ? 'transparent' : 'rgba(59, 130, 246, 0.05)',
-                    cursor: 'pointer',
-                    transition: 'background 0.2s',
-                  }}
-                  onMouseEnter={(e) => {
-                    e.currentTarget.style.background = 'var(--panel)';
-                  }}
-                  onMouseLeave={(e) => {
-                    e.currentTarget.style.background = notification.is_read
-                      ? 'transparent'
-                      : 'rgba(59, 130, 246, 0.05)';
-                  }}
+                  className={`notification-item${notification.is_read ? ' is-read' : ' is-unread'}`}
                   onClick={() => markAsRead(notification.id)}
+                  role="button"
+                  tabIndex={0}
+                  onKeyDown={(event) => {
+                    if (event.key === 'Enter' || event.key === ' ') {
+                      event.preventDefault();
+                      markAsRead(notification.id);
+                    }
+                  }}
                 >
-                  <div style={{ display: 'flex', gap: '12px' }}>
-                    <div style={{ marginTop: '2px' }}>{getIcon(notification.type)}</div>
-                    <div style={{ flex: 1 }}>
-                      <div
-                        style={{
-                          display: 'flex',
-                          justifyContent: 'space-between',
-                          alignItems: 'start',
-                          marginBottom: '4px',
-                        }}
-                      >
-                        <h4
-                          style={{
-                            fontSize: '14px',
-                            fontWeight: notification.is_read ? 500 : 600,
-                            margin: 0,
-                          }}
-                        >
-                          {notification.title}
-                        </h4>
-                      </div>
-                      <p
-                        style={{
-                          fontSize: '13px',
-                          color: 'var(--muted)',
-                          margin: '0 0 8px 0',
-                          lineHeight: 1.4,
-                        }}
-                      >
-                        {notification.message}
-                      </p>
-                      <div
-                        style={{
-                          display: 'flex',
-                          alignItems: 'center',
-                          gap: '4px',
-                          fontSize: '11px',
-                          color: 'var(--muted)',
-                        }}
-                      >
-                        <Clock size={11} />
-                        {getTimeAgo(notification.created_at)}
-                      </div>
+                  <span className="notification-icon" data-type={notification.type} aria-hidden="true">
+                    {getIcon(notification.type)}
+                  </span>
+                  <div className="notification-content">
+                    <div className="notification-title-row">
+                      <h4>{notification.title}</h4>
+                      {!notification.is_read && <span className="notification-unread-dot" aria-label="Sin leer" />}
+                    </div>
+                    <p className="notification-message">{notification.message}</p>
+                    <div className="notification-time">
+                      <Clock size={12} aria-hidden="true" />
+                      <span>{getTimeAgo(notification.created_at)}</span>
                     </div>
                   </div>
                 </div>

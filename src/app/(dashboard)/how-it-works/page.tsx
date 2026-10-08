@@ -68,7 +68,7 @@ export default function HowItWorksPage() {
                       width: 48,
                       height: 48,
                       borderRadius: 8,
-                      background: `${step.color}15`,
+                      background: `color-mix(in srgb, ${step.color} 8%, transparent)`,
                       border: `2px solid ${step.color}`,
                       display: 'flex',
                       alignItems: 'center',

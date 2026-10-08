@@ -124,7 +124,7 @@ export default function WarehouseColorModal({ isOpen, onClose, onSave }: Warehou
       left: 0,
       right: 0,
       bottom: 0,
-      background: 'rgba(0, 0, 0, 0.7)',
+      background: 'var(--overlay)',
       display: 'flex',
       alignItems: 'center',
       justifyContent: 'center',
@@ -217,11 +217,11 @@ export default function WarehouseColorModal({ isOpen, onClose, onSave }: Warehou
                       </div>
                     </div>
                     <div style={{ display: 'grid', gap: 12 }}>
-                      <div style={{
+                <div style={{
                         padding: 10,
                         borderRadius: 8,
-                        border: '1px solid rgba(255,255,255,0.08)',
-                        background: 'rgba(15, 23, 42, 0.35)',
+                        border: '1px solid var(--border)',
+                        background: 'var(--panel-2)',
                       }}>
                         <label style={{ fontSize: 12, color: 'var(--muted)', marginBottom: 8, display: 'block', fontWeight: 600 }}>
                           Color de Fondo
@@ -319,8 +319,8 @@ export default function WarehouseColorModal({ isOpen, onClose, onSave }: Warehou
                       <div style={{
                         padding: 10,
                         borderRadius: 8,
-                        border: '1px solid rgba(255,255,255,0.08)',
-                        background: 'rgba(15, 23, 42, 0.35)',
+                        border: '1px solid var(--border)',
+                        background: 'var(--panel-2)',
                       }}>
                         <label style={{ fontSize: 12, color: 'var(--muted)', marginBottom: 8, display: 'block', fontWeight: 600 }}>
                           Color de Texto
@@ -388,8 +388,8 @@ export default function WarehouseColorModal({ isOpen, onClose, onSave }: Warehou
                                   minWidth: 84,
                                   height: 30,
                                   borderRadius: 8,
-                                  background: selected ? 'rgba(59,130,246,0.2)' : 'rgba(255,255,255,0.04)',
-                                  border: selected ? '1px solid rgba(96,165,250,0.9)' : '1px solid rgba(255,255,255,0.15)',
+                                  background: selected ? 'var(--info-surface)' : 'var(--surface-hover)',
+                                  border: selected ? '1px solid var(--info)' : '1px solid var(--border)',
                                   color: 'var(--text)',
                                   fontSize: 12,
                                   fontWeight: 600,

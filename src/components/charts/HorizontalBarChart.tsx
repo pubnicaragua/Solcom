@@ -94,7 +94,7 @@ export default function HorizontalBarChart({ data, height = 300, showValues = tr
           display: 'flex',
           justifyContent: 'space-between',
           alignItems: 'center',
-          boxShadow: '0 -4px 6px -1px rgba(0,0,0,0.05)',
+          boxShadow: '0 -4px 6px -1px var(--shadow)',
           zIndex: 10,
           marginTop: 'auto'
         }}>

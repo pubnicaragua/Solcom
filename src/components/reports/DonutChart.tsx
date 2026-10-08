@@ -77,7 +77,7 @@ export default function DonutChart({ data, size = 200 }: DonutChartProps) {
               borderRadius: '6px',
               fontSize: '12px',
               fontWeight: 600,
-              boxShadow: '0 4px 12px rgba(0, 0, 0, 0.3)',
+              boxShadow: '0 4px 12px var(--shadow)',
               zIndex: 10,
               whiteSpace: 'nowrap',
             }}

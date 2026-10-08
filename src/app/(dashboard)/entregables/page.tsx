@@ -138,17 +138,17 @@ export default function EntregablesPage() {
   return (
     <div style={{ 
       minHeight: '100vh', 
-      background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+      background: 'var(--page-surface-gradient)',
       padding: '40px 24px'
     }}>
       <div style={{ maxWidth: 1400, margin: '0 auto' }}>
         {/* Header Ejecutivo */}
         <Card style={{ 
           marginBottom: 32, 
-          background: 'white',
+          background: 'var(--panel)',
           padding: 40,
           borderRadius: 16,
-          boxShadow: '0 20px 60px rgba(0, 0, 0, 0.3)'
+          boxShadow: '0 20px 60px var(--shadow)'
         }}>
           <div style={{ textAlign: 'center', marginBottom: 32 }}>
             <h1 style={{ 
@@ -156,13 +156,13 @@ export default function EntregablesPage() {
               fontWeight: 800, 
               margin: 0, 
               marginBottom: 12,
-              background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+              background: 'var(--brand-button-gradient)',
               WebkitBackgroundClip: 'text',
               WebkitTextFillColor: 'transparent'
             }}>
               Reporte Ejecutivo de Avances
             </h1>
-            <p style={{ fontSize: 18, color: '#6b7280', margin: 0 }}>
+            <p style={{ fontSize: 18, color: 'var(--muted)', margin: 0 }}>
               Sistema ERP Solis Comercial - Luis Solis
             </p>
           </div>
@@ -171,13 +171,13 @@ export default function EntregablesPage() {
           <div style={{ 
             marginBottom: 32, 
             padding: 24, 
-            background: '#fff9e6', 
+            background: 'var(--warning-surface)',
             borderRadius: 12,
-            border: '3px solid #fbbf24'
+            border: '3px solid var(--warning)'
           }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 20 }}>
               <Clock size={28} color="#d97706" />
-              <h2 style={{ fontSize: 24, fontWeight: 700, margin: 0, color: '#92400e' }}>
+              <h2 style={{ fontSize: 24, fontWeight: 700, margin: 0, color: 'var(--warning)' }}>
                 📋 Minuta de Reunión - 7 de Febrero 2026
               </h2>
             </div>
@@ -188,23 +188,23 @@ export default function EntregablesPage() {
               gap: 8, 
               marginBottom: 20,
               padding: 12,
-              background: '#fef3c7',
+              background: 'var(--warning-surface)',
               borderRadius: 8,
-              border: '1px solid #fbbf24'
+              border: '1px solid var(--warning)'
             }}>
               <Calendar size={20} color="#d97706" />
-              <span style={{ fontSize: 16, fontWeight: 600, color: '#92400e' }}>
+              <span style={{ fontSize: 16, fontWeight: 600, color: 'var(--warning)' }}>
                 Hora: 11:10 AM
               </span>
             </div>
 
-            <div style={{ fontSize: 15, lineHeight: 1.8, color: '#451a03' }}>
-              <h3 style={{ fontSize: 18, fontWeight: 700, marginBottom: 16, color: '#92400e' }}>
+            <div style={{ fontSize: 15, lineHeight: 1.8, color: 'var(--text-secondary)' }}>
+              <h3 style={{ fontSize: 18, fontWeight: 700, marginBottom: 16, color: 'var(--warning)' }}>
                 🎯 Agenda de la Reunión
               </h3>
 
               <div style={{ marginBottom: 20 }}>
-                <h4 style={{ fontSize: 16, fontWeight: 600, marginBottom: 12, color: '#b45309' }}>
+                <h4 style={{ fontSize: 16, fontWeight: 600, marginBottom: 12, color: 'var(--warning)' }}>
                   1. Filtros y Búsqueda (Prioridad Alta)
                 </h4>
                 <ul style={{ margin: 0, paddingLeft: 24, lineHeight: 2 }}>
@@ -216,7 +216,7 @@ export default function EntregablesPage() {
               </div>
 
               <div style={{ marginBottom: 20 }}>
-                <h4 style={{ fontSize: 16, fontWeight: 600, marginBottom: 12, color: '#b45309' }}>
+                <h4 style={{ fontSize: 16, fontWeight: 600, marginBottom: 12, color: 'var(--warning)' }}>
                   2. Verificación de Data en Tiempo Real
                 </h4>
                 <ul style={{ margin: 0, paddingLeft: 24, lineHeight: 2 }}>
@@ -228,7 +228,7 @@ export default function EntregablesPage() {
               </div>
 
               <div style={{ marginBottom: 20 }}>
-                <h4 style={{ fontSize: 16, fontWeight: 600, marginBottom: 12, color: '#b45309' }}>
+                <h4 style={{ fontSize: 16, fontWeight: 600, marginBottom: 12, color: 'var(--warning)' }}>
                   3. Movimiento Entre Bodegas
                 </h4>
                 <ul style={{ margin: 0, paddingLeft: 24, lineHeight: 2 }}>
@@ -241,7 +241,7 @@ export default function EntregablesPage() {
               </div>
 
               <div style={{ marginBottom: 20 }}>
-                <h4 style={{ fontSize: 16, fontWeight: 600, marginBottom: 12, color: '#b45309' }}>
+                <h4 style={{ fontSize: 16, fontWeight: 600, marginBottom: 12, color: 'var(--warning)' }}>
                   4. Módulo de Reportes
                 </h4>
                 <ul style={{ margin: 0, paddingLeft: 24, lineHeight: 2 }}>
@@ -252,7 +252,7 @@ export default function EntregablesPage() {
               </div>
 
               <div style={{ marginBottom: 20 }}>
-                <h4 style={{ fontSize: 16, fontWeight: 600, marginBottom: 12, color: '#b45309' }}>
+                <h4 style={{ fontSize: 16, fontWeight: 600, marginBottom: 12, color: 'var(--warning)' }}>
                   5. Panel para Clientes
                 </h4>
                 <ul style={{ margin: 0, paddingLeft: 24, lineHeight: 2 }}>
@@ -266,14 +266,14 @@ export default function EntregablesPage() {
               <div style={{ 
                 marginTop: 24,
                 padding: 16,
-                background: '#dcfce7',
+                background: 'var(--success-surface)',
                 borderRadius: 8,
-                border: '2px solid #86efac'
+                border: '2px solid var(--success)'
               }}>
-                <h4 style={{ fontSize: 16, fontWeight: 700, marginBottom: 12, color: '#166534' }}>
+                <h4 style={{ fontSize: 16, fontWeight: 700, marginBottom: 12, color: 'var(--success)' }}>
                   ✅ Entregables Completados HOY (7 de Febrero)
                 </h4>
-                <ul style={{ margin: 0, paddingLeft: 24, lineHeight: 2, color: '#166534' }}>
+                <ul style={{ margin: 0, paddingLeft: 24, lineHeight: 2, color: 'var(--success)' }}>
                   <li>✅ Filtros avanzados: COLOR, ESTADO FÍSICO, MARCA</li>
                   <li>✅ Filtro de stock corregido y funcionando</li>
                   <li>✅ Data verificada desde stock_snapshots de Supabase</li>
@@ -295,13 +295,13 @@ export default function EntregablesPage() {
               alignItems: 'center',
               marginBottom: 12
             }}>
-              <span style={{ fontSize: 16, fontWeight: 600, color: '#1f2937' }}>
+              <span style={{ fontSize: 16, fontWeight: 600, color: 'var(--text)' }}>
                 Progreso Total del Proyecto
               </span>
               <span style={{ 
                 fontSize: 32, 
                 fontWeight: 800, 
-                color: '#667eea'
+                color: 'var(--brand-primary)'
               }}>
                 {avanceTotal}%
               </span>
@@ -309,7 +309,7 @@ export default function EntregablesPage() {
             <div style={{ 
               width: '100%', 
               height: 24, 
-              background: '#e5e7eb', 
+              background: 'var(--surface-hover)',
               borderRadius: 12,
               overflow: 'hidden',
               position: 'relative'
@@ -317,7 +317,7 @@ export default function EntregablesPage() {
               <div style={{ 
                 width: `${avanceTotal}%`, 
                 height: '100%', 
-                background: 'linear-gradient(90deg, #667eea 0%, #764ba2 100%)',
+                background: 'var(--brand-button-gradient)',
                 transition: 'width 1s ease',
                 display: 'flex',
                 alignItems: 'center',
@@ -327,7 +327,7 @@ export default function EntregablesPage() {
                 <TrendingUp size={16} color="white" />
               </div>
             </div>
-            <p style={{ fontSize: 14, color: '#6b7280', marginTop: 8, textAlign: 'center' }}>
+            <p style={{ fontSize: 14, color: 'var(--muted)', marginTop: 8, textAlign: 'center' }}>
               {tareasCompletadasCount} de {tareasTotal} tareas completadas
             </p>
           </div>
@@ -411,14 +411,14 @@ export default function EntregablesPage() {
         {/* Tareas Completadas */}
         <Card style={{ 
           marginBottom: 32, 
-          background: 'white',
+          background: 'var(--panel)',
           padding: 32,
           borderRadius: 16,
-          boxShadow: '0 10px 30px rgba(0, 0, 0, 0.2)'
+          boxShadow: '0 10px 30px var(--shadow)'
         }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 24 }}>
             <CheckCircle size={28} color="#16a34a" />
-            <h2 style={{ fontSize: 24, fontWeight: 700, margin: 0, color: '#1f2937' }}>
+            <h2 style={{ fontSize: 24, fontWeight: 700, margin: 0, color: 'var(--text)' }}>
               Tareas Completadas ({tareasCompletadasCount})
             </h2>
           </div>
@@ -429,9 +429,9 @@ export default function EntregablesPage() {
                 key={idx}
                 style={{ 
                   padding: 20,
-                  background: '#f9fafb',
+                  background: 'var(--panel-2)',
                   borderRadius: 12,
-                  border: '1px solid #e5e7eb',
+                  border: '1px solid var(--border)',
                   transition: 'all 0.3s'
                 }}
               >
@@ -440,7 +440,7 @@ export default function EntregablesPage() {
                     width: 40, 
                     height: 40, 
                     borderRadius: 10,
-                    background: '#dcfce7',
+                    background: 'var(--success-surface)',
                     display: 'flex',
                     alignItems: 'center',
                     justifyContent: 'center',
@@ -449,19 +449,19 @@ export default function EntregablesPage() {
                     <CheckCircle size={24} color="#16a34a" />
                   </div>
                   <div style={{ flex: 1 }}>
-                    <h3 style={{ fontSize: 16, fontWeight: 600, margin: 0, marginBottom: 6, color: '#1f2937' }}>
+                    <h3 style={{ fontSize: 16, fontWeight: 600, margin: 0, marginBottom: 6, color: 'var(--text)' }}>
                       {tarea.titulo}
                     </h3>
-                    <p style={{ fontSize: 14, color: '#6b7280', margin: 0, marginBottom: 8 }}>
+                    <p style={{ fontSize: 14, color: 'var(--muted)', margin: 0, marginBottom: 8 }}>
                       {tarea.descripcion}
                     </p>
                     <div style={{ 
                       padding: '8px 12px',
-                      background: '#f0fdf4',
+                      background: 'var(--success-surface)',
                       borderRadius: 8,
                       fontSize: 13,
-                      color: '#166534',
-                      border: '1px solid #bbf7d0'
+                      color: 'var(--success)',
+                      border: '1px solid var(--success)'
                     }}>
                       <Zap size={14} style={{ display: 'inline', marginRight: 6 }} />
                       {tarea.detalles}
@@ -479,14 +479,14 @@ export default function EntregablesPage() {
         {/* Tareas Pendientes */}
         <Card style={{ 
           marginBottom: 32, 
-          background: 'white',
+          background: 'var(--panel)',
           padding: 32,
           borderRadius: 16,
-          boxShadow: '0 10px 30px rgba(0, 0, 0, 0.2)'
+          boxShadow: '0 10px 30px var(--shadow)'
         }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 24 }}>
             <AlertCircle size={28} color="#d97706" />
-            <h2 style={{ fontSize: 24, fontWeight: 700, margin: 0, color: '#1f2937' }}>
+            <h2 style={{ fontSize: 24, fontWeight: 700, margin: 0, color: 'var(--text)' }}>
               Tareas Pendientes ({tareasPendientes.length})
             </h2>
           </div>
@@ -497,9 +497,9 @@ export default function EntregablesPage() {
                 key={idx}
                 style={{ 
                   padding: 20,
-                  background: '#fffbeb',
+                  background: 'var(--warning-surface)',
                   borderRadius: 12,
-                  border: '1px solid #fde68a',
+                  border: '1px solid var(--warning)',
                   transition: 'all 0.3s'
                 }}
               >
@@ -508,7 +508,7 @@ export default function EntregablesPage() {
                     width: 40, 
                     height: 40, 
                     borderRadius: 10,
-                    background: '#fef3c7',
+                    background: 'var(--warning-surface)',
                     display: 'flex',
                     alignItems: 'center',
                     justifyContent: 'center',
@@ -517,10 +517,10 @@ export default function EntregablesPage() {
                     <Circle size={24} color="#d97706" />
                   </div>
                   <div style={{ flex: 1 }}>
-                    <h3 style={{ fontSize: 16, fontWeight: 600, margin: 0, marginBottom: 6, color: '#1f2937' }}>
+                    <h3 style={{ fontSize: 16, fontWeight: 600, margin: 0, marginBottom: 6, color: 'var(--text)' }}>
                       {tarea.titulo}
                     </h3>
-                    <p style={{ fontSize: 14, color: '#6b7280', margin: 0 }}>
+                    <p style={{ fontSize: 14, color: 'var(--muted)', margin: 0 }}>
                       {tarea.descripcion}
                     </p>
                   </div>
@@ -538,28 +538,28 @@ export default function EntregablesPage() {
 
         {/* Cálculo del 68% */}
         <Card style={{ 
-          background: 'white',
+          background: 'var(--panel)',
           padding: 32,
           borderRadius: 16,
-          boxShadow: '0 10px 30px rgba(0, 0, 0, 0.2)'
+          boxShadow: '0 10px 30px var(--shadow)'
         }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 24 }}>
             <FileText size={28} color="#667eea" />
-            <h2 style={{ fontSize: 24, fontWeight: 700, margin: 0, color: '#1f2937' }}>
+            <h2 style={{ fontSize: 24, fontWeight: 700, margin: 0, color: 'var(--text)' }}>
               Cálculo del Avance (68%)
             </h2>
           </div>
 
           <div style={{ 
             padding: 24,
-            background: '#f8f9ff',
+            background: 'var(--panel-2)',
             borderRadius: 12,
-            border: '2px solid #e0e7ff'
+            border: '2px solid var(--border)'
           }}>
-            <h3 style={{ fontSize: 18, fontWeight: 600, marginBottom: 16, color: '#4338ca' }}>
+            <h3 style={{ fontSize: 18, fontWeight: 600, marginBottom: 16, color: 'var(--brand-primary)' }}>
               Metodología de Cálculo
             </h3>
-            <div style={{ fontSize: 15, lineHeight: 1.8, color: '#374151' }}>
+            <div style={{ fontSize: 15, lineHeight: 1.8, color: 'var(--text-secondary)' }}>
               <p style={{ marginBottom: 12 }}>
                 <strong>Total de tareas planificadas:</strong> {tareasTotal}
               </p>
@@ -571,13 +571,13 @@ export default function EntregablesPage() {
               </p>
               <div style={{ 
                 padding: 16,
-                background: 'white',
+                background: 'var(--panel)',
                 borderRadius: 8,
                 marginTop: 16,
-                border: '1px solid #c7d2fe'
+                border: '1px solid var(--border)'
               }}>
-                <p style={{ margin: 0, fontSize: 16, fontWeight: 600, color: '#4338ca' }}>
-                  Fórmula: ({tareasCompletadasCount} / {tareasTotal}) × 100 = <span style={{ fontSize: 20, color: '#667eea' }}>{avanceTotal}%</span>
+                <p style={{ margin: 0, fontSize: 16, fontWeight: 600, color: 'var(--brand-primary)' }}>
+                  Fórmula: ({tareasCompletadasCount} / {tareasTotal}) × 100 = <span style={{ fontSize: 20, color: 'var(--brand-primary)' }}>{avanceTotal}%</span>
                 </p>
               </div>
             </div>
@@ -586,14 +586,14 @@ export default function EntregablesPage() {
           <div style={{ 
             marginTop: 24,
             padding: 20,
-            background: '#ecfdf5',
+            background: 'var(--success-surface)',
             borderRadius: 12,
-            border: '2px solid #86efac'
+            border: '2px solid var(--success)'
           }}>
-            <h3 style={{ fontSize: 16, fontWeight: 600, marginBottom: 12, color: '#166534' }}>
+            <h3 style={{ fontSize: 16, fontWeight: 600, marginBottom: 12, color: 'var(--success)' }}>
               ✅ Entregables Principales Completados
             </h3>
-            <ul style={{ margin: 0, paddingLeft: 20, color: '#166534', fontSize: 14, lineHeight: 2 }}>
+            <ul style={{ margin: 0, paddingLeft: 20, color: 'var(--success)', fontSize: 14, lineHeight: 2 }}>
               <li>Sistema de inventario con precios reales de Zoho</li>
               <li>Filtros avanzados combinados funcionando</li>
               <li>API de transferencias entre bodegas</li>

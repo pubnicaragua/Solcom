@@ -1,27 +1,23 @@
 import React from 'react';
 
-interface CardProps {
+interface CardProps extends React.HTMLAttributes<HTMLDivElement> {
   children: React.ReactNode;
-  className?: string;
   padding?: number;
-  style?: React.CSSProperties;
-  onMouseEnter?: (e: React.MouseEvent<HTMLDivElement>) => void;
-  onMouseLeave?: (e: React.MouseEvent<HTMLDivElement>) => void;
 }
 
-export default function Card({ children, className = '', padding = 18, style, onMouseEnter, onMouseLeave }: CardProps) {
+export default function Card({ children, className = '', padding = 18, style, ...props }: CardProps) {
   return (
     <div
       className={className}
       style={{
-        background: 'var(--panel)',
+        background: 'var(--card-surface-gradient)',
         border: '1px solid var(--border)',
-        borderRadius: 8,
+        borderRadius: 12,
         padding,
+        boxShadow: '0 4px 14px var(--shadow), inset 0 1px 0 rgba(255, 255, 255, 0.025)',
         ...style,
       }}
-      onMouseEnter={onMouseEnter}
-      onMouseLeave={onMouseLeave}
+      {...props}
     >
       {children}
     </div>

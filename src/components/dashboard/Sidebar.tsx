@@ -79,7 +79,7 @@ export default function Sidebar() {
             left: 0,
             right: 0,
             bottom: 0,
-            background: 'rgba(0, 0, 0, 0.5)',
+            background: 'var(--overlay)',
             zIndex: 999,
             display: 'none',
           }}
@@ -90,19 +90,22 @@ export default function Sidebar() {
       <aside
         className={`sidebar ${isOpen ? 'open' : ''}`}
         style={{
-          background: '#1F2937',
-          borderRight: '1px solid #374151',
+          background: 'var(--sidebar-gradient)',
+          borderRight: '1px solid var(--sidebar-border)',
           display: 'flex',
           flexDirection: 'column',
+          height: '100vh',
+          minHeight: 0,
           padding: isCollapsed ? '18px 10px' : 18,
           gap: 24,
           width: isCollapsed ? 80 : 260,
           transition: 'width 0.3s ease',
           overflowX: 'hidden',
+          overflowY: 'hidden',
           whiteSpace: 'nowrap',
         }}
       >
-        <div style={{ paddingBottom: 18, borderBottom: '1px solid #374151', display: 'flex', justifyContent: isCollapsed ? 'center' : 'flex-start' }}>
+        <div style={{ paddingBottom: 18, borderBottom: '1px solid var(--sidebar-border)', display: 'flex', flexShrink: 0, justifyContent: isCollapsed ? 'center' : 'flex-start' }}>
           {isCollapsed ? (
             <div style={{
               background: '#FFFFFF',
@@ -148,12 +151,25 @@ export default function Sidebar() {
           )}
         </div>
 
-        <nav style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+        <nav
+          className="sidebar-navigation"
+          style={{
+            display: 'flex',
+            flex: '1 1 0%',
+            flexDirection: 'column',
+            gap: 6,
+            minHeight: 0,
+            overflowX: 'hidden',
+            overflowY: 'auto',
+            overscrollBehavior: 'contain',
+          }}
+        >
           {menuItems.map((item) => {
             const Icon = item.icon;
             const isBilling = item.href === '/ventas';
             const isSolcomAI = item.href === '/solcom-ai';
-            const isActive = pathname === item.href || 
+            const isActive = pathname === item.href ||
+                            pathname.startsWith(`${item.href}/`) ||
                             (isBilling && pathname.startsWith('/ventas/')) ||
                             (isSolcomAI && pathname.startsWith('/solcom-ai/'));
 
@@ -196,25 +212,32 @@ export default function Sidebar() {
                     padding: isCollapsed ? '10px 0' : '10px 14px',
                     justifyContent: isCollapsed ? 'center' : 'flex-start',
                     borderRadius: 8,
+                    position: 'relative',
+                    overflow: 'hidden',
                     fontSize: 14,
                     fontWeight: 500,
-                    color: isActive ? '#FFFFFF' : '#D1D5DB',
-                    background: isActive ? '#DC2626' : 'transparent',
-                    border: isActive ? '1px solid #DC2626' : '1px solid transparent',
+                    color: isActive ? '#FFFFFF' : 'var(--sidebar-muted)',
+                    background: isActive
+                      ? 'linear-gradient(105deg, rgba(255,255,255,0.16) 0%, transparent 48%), var(--sidebar-active-gradient)'
+                      : 'transparent',
+                    border: isActive ? '1px solid color-mix(in srgb, var(--brand-primary) 70%, #ffffff)' : '1px solid transparent',
+                    boxShadow: isActive
+                      ? '0 5px 16px var(--sidebar-active-glow), inset 0 1px 0 rgba(255,255,255,0.22), inset 0 -1px 0 rgba(80,0,12,0.18)'
+                      : 'none',
                     cursor: 'pointer',
                     transition: 'all 0.2s',
                     textDecoration: 'none',
                   }}
                   onMouseEnter={(e) => {
                     if (!isActive) {
-                      e.currentTarget.style.background = '#374151';
-                      e.currentTarget.style.color = '#FFFFFF';
+                      e.currentTarget.style.background = 'var(--sidebar-hover)';
+                      e.currentTarget.style.color = 'var(--text)';
                     }
                   }}
                   onMouseLeave={(e) => {
                     if (!isActive) {
                       e.currentTarget.style.background = 'transparent';
-                      e.currentTarget.style.color = '#D1D5DB';
+                      e.currentTarget.style.color = 'var(--sidebar-muted)';
                     }
                   }}
                 >
@@ -240,7 +263,7 @@ export default function Sidebar() {
                       bottom: 16,
                       left: 0,
                       width: 1,
-                      backgroundColor: '#4B5563'
+                      backgroundColor: 'var(--sidebar-border)'
                     }} />
 
                     {billingSubItems.map((sub) => {
@@ -257,9 +280,9 @@ export default function Sidebar() {
                             textDecoration: 'none',
                             transition: 'all 0.2s',
                             display: 'block',
-                            color: isSubActive ? '#FFFFFF' : '#9CA3AF',
-                            background: isSubActive ? 'rgba(220,38,38,0.5)' : 'transparent',
-                            border: isSubActive ? '1px solid rgba(220,38,38,0.8)' : '1px solid transparent',
+                            color: isSubActive ? 'var(--brand-primary)' : 'var(--sidebar-muted)',
+                            background: isSubActive ? 'var(--brand-surface)' : 'transparent',
+                            border: isSubActive ? '1px solid var(--brand-primary)' : '1px solid transparent',
                           }}
                         >
                           {/* Conexión horizontal con la linea principal */}
@@ -269,7 +292,7 @@ export default function Sidebar() {
                             left: -14,
                             width: 14,
                             height: 1,
-                            backgroundColor: '#4B5563'
+                            backgroundColor: 'var(--sidebar-border)'
                           }} />
                           {sub.label}
                         </Link>
@@ -296,7 +319,7 @@ export default function Sidebar() {
                       bottom: 16,
                       left: 0,
                       width: 1,
-                      backgroundColor: '#4B5563'
+                      backgroundColor: 'var(--sidebar-border)'
                     }} />
 
                     {solcomAISubItems.map((sub) => {
@@ -313,9 +336,9 @@ export default function Sidebar() {
                             textDecoration: 'none',
                             transition: 'all 0.2s',
                             display: 'block',
-                            color: isSubActive ? '#FFFFFF' : '#9CA3AF',
-                            background: isSubActive ? 'rgba(220,38,38,0.5)' : 'transparent',
-                            border: isSubActive ? '1px solid rgba(220,38,38,0.8)' : '1px solid transparent',
+                            color: isSubActive ? 'var(--brand-primary)' : 'var(--sidebar-muted)',
+                            background: isSubActive ? 'var(--brand-surface)' : 'transparent',
+                            border: isSubActive ? '1px solid var(--brand-primary)' : '1px solid transparent',
                           }}
                         >
                           {/* Conexión horizontal con la linea principal */}
@@ -325,7 +348,7 @@ export default function Sidebar() {
                             left: -14,
                             width: 14,
                             height: 1,
-                            backgroundColor: '#4B5563'
+                            backgroundColor: 'var(--sidebar-border)'
                           }} />
                           {sub.label}
                         </Link>
@@ -339,13 +362,13 @@ export default function Sidebar() {
         </nav>
 
         {/* Footer with Toggle Button */}
-        <div style={{ borderTop: '1px solid #374151', paddingTop: 18, marginTop: 'auto', marginBottom: 50 }}>
+        <div style={{ borderTop: '1px solid var(--sidebar-border)', paddingTop: 18, marginTop: 'auto', flexShrink: 0 }}>
           <button
             onClick={toggleCollapse}
             style={{
               background: 'transparent',
               border: 'none',
-              color: '#9CA3AF',
+              color: 'var(--sidebar-muted)',
               cursor: 'pointer',
               padding: isCollapsed ? '10px 0' : '10px 14px',
               borderRadius: 8,
@@ -357,12 +380,12 @@ export default function Sidebar() {
               transition: 'all 0.2s',
             }}
             onMouseEnter={(e) => {
-              e.currentTarget.style.background = '#374151';
-              e.currentTarget.style.color = '#FFFFFF';
+              e.currentTarget.style.background = 'var(--sidebar-hover)';
+              e.currentTarget.style.color = 'var(--text)';
             }}
             onMouseLeave={(e) => {
               e.currentTarget.style.background = 'transparent';
-              e.currentTarget.style.color = '#9CA3AF';
+              e.currentTarget.style.color = 'var(--sidebar-muted)';
             }}
             title={isCollapsed ? "Expandir menú" : "Contraer menú"}
           >
@@ -379,6 +402,18 @@ export default function Sidebar() {
       </aside>
 
       <style jsx global>{`
+      .sidebar-navigation {
+        scrollbar-width: none;
+        -ms-overflow-style: none;
+        -webkit-overflow-scrolling: touch;
+      }
+
+      .sidebar-navigation::-webkit-scrollbar {
+        display: none;
+        width: 0;
+        height: 0;
+      }
+
       /* Responsive Styles */
       @media (max-width: 1024px) {
         .mobile-menu-btn {
@@ -397,8 +432,8 @@ export default function Sidebar() {
           width: 280px;
           z-index: 1000;
           transition: left 0.3s ease;
-          background: #1F2937 !important;
-          box-shadow: 2px 0 8px rgba(0, 0, 0, 0.3);
+          background: var(--sidebar-gradient) !important;
+          box-shadow: 2px 0 8px var(--shadow);
         }
         
         .sidebar.open {
@@ -409,7 +444,7 @@ export default function Sidebar() {
       @media (max-width: 768px) {
         .sidebar {
           width: 260px;
-          background: #1F2937 !important;
+          background: var(--sidebar-gradient) !important;
           left: -260px;
         }
       }

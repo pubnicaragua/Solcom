@@ -17,13 +17,14 @@ export default function Input({ label, error, className = '', style, ...props }:
       <input
         className={className}
         style={{
-          background: 'var(--background)',
+          background: 'var(--control-bg)',
           border: `1px solid ${error ? 'var(--danger)' : 'var(--border)'}`,
           borderRadius: 8,
           padding: '8px 12px',
           fontSize: 14,
           color: 'var(--text)',
-          transition: 'border-color 0.2s',
+          transition: 'border-color 0.2s, box-shadow 0.2s',
+          boxShadow: '0 1px 2px var(--shadow)',
           ...style,
           fontWeight: 500,
         }}

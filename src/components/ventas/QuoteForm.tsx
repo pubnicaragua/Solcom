@@ -464,7 +464,7 @@ export default function QuoteForm({ isOpen, onClose, onSaved, editQuote }: Quote
             right: 0,
             bottom: 0,
             zIndex: 2200,
-            background: 'rgba(0, 0, 0, 0.6)',
+            background: 'var(--overlay)',
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
@@ -477,7 +477,7 @@ export default function QuoteForm({ isOpen, onClose, onSaved, editQuote }: Quote
                 borderRadius: 14,
                 border: '1px solid var(--border)',
                 background: 'var(--card)',
-                boxShadow: '0 24px 70px rgba(0,0,0,0.5)',
+                boxShadow: '0 24px 70px var(--shadow)',
             }}>
                 <div style={{
                     display: 'flex',
@@ -553,7 +553,7 @@ export default function QuoteForm({ isOpen, onClose, onSaved, editQuote }: Quote
                                         borderRadius: 8,
                                         border: '1px solid var(--border)',
                                         background: 'var(--panel)',
-                                        boxShadow: '0 12px 35px rgba(0,0,0,0.35)',
+                                        boxShadow: '0 12px 35px var(--shadow)',
                                     }}>
                                         {customers.length === 0 ? (
                                             <div style={{ padding: '10px 12px', fontSize: 13, color: 'var(--muted)' }}>
@@ -701,7 +701,7 @@ export default function QuoteForm({ isOpen, onClose, onSaved, editQuote }: Quote
                             gridTemplateColumns: '1.1fr 1.5fr 80px 110px 90px 120px 50px',
                             gap: 8,
                             padding: '10px 12px',
-                            background: 'rgba(255,255,255,0.04)',
+                            background: 'var(--surface-hover)',
                             fontSize: 11,
                             fontWeight: 700,
                             textTransform: 'uppercase',
@@ -960,7 +960,7 @@ export default function QuoteForm({ isOpen, onClose, onSaved, editQuote }: Quote
                             border: '1px solid var(--border)',
                             borderRadius: 12,
                             padding: 14,
-                            background: 'rgba(255,255,255,0.02)',
+                            background: 'var(--surface-hover)',
                         }}>
                             <div style={{ display: 'grid', gap: 10 }}>
                                 <div style={{ display: 'flex', justifyContent: 'space-between', color: 'var(--muted)', fontSize: 13 }}>

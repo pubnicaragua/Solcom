@@ -22,9 +22,12 @@ export default function SettingsPage() {
   }
 
   return (
-    <div style={{ display: 'grid', gap: 14 }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-        <div className="h-title">Configuración del Sistema</div>
+    <div className="settings-module-view" style={{ display: 'grid', gap: 14 }}>
+      <div className="settings-module-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+          <div className="system-title-mark"><Settings size={21} /></div>
+          <div className="h-title inventory-title">Configuración del Sistema</div>
+        </div>
         <Button variant="primary" size="sm" onClick={handleSave} disabled={saving}>
           {saving ? (
             <>
@@ -40,15 +43,15 @@ export default function SettingsPage() {
         </Button>
       </div>
 
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 }}>
-        <Card>
+      <div className="settings-card-grid" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 }}>
+        <Card className="settings-section-card">
           <div style={{ padding: 16 }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 16 }}>
               <div style={{ 
                 width: 40, 
                 height: 40, 
                 borderRadius: 8, 
-                background: 'var(--brand-primary)15', 
+                background: 'var(--brand-surface)',
                 display: 'flex', 
                 alignItems: 'center', 
                 justifyContent: 'center' 
@@ -80,14 +83,14 @@ export default function SettingsPage() {
           </div>
         </Card>
 
-        <Card>
+        <Card className="settings-section-card">
           <div style={{ padding: 16 }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 16 }}>
               <div style={{ 
                 width: 40, 
                 height: 40, 
                 borderRadius: 8, 
-                background: 'var(--success)15', 
+                background: 'var(--success-surface)',
                 display: 'flex', 
                 alignItems: 'center', 
                 justifyContent: 'center' 
@@ -117,14 +120,14 @@ export default function SettingsPage() {
           </div>
         </Card>
 
-        <Card>
+        <Card className="settings-section-card">
           <div style={{ padding: 16 }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 16 }}>
               <div style={{ 
                 width: 40, 
                 height: 40, 
                 borderRadius: 8, 
-                background: 'var(--warning)15', 
+                background: 'var(--warning-surface)',
                 display: 'flex', 
                 alignItems: 'center', 
                 justifyContent: 'center' 
@@ -139,7 +142,7 @@ export default function SettingsPage() {
                   <div style={{ fontSize: 14, fontWeight: 500 }}>Stock Bajo</div>
                   <div style={{ fontSize: 12, color: 'var(--muted)' }}>Alertas cuando el inventario es bajo</div>
                 </div>
-                <label style={{ position: 'relative', display: 'inline-block', width: 44, height: 24 }}>
+                <label className="settings-toggle" style={{ position: 'relative', display: 'inline-block', width: 44, height: 24 }}>
                   <input
                     type="checkbox"
                     checked={notifications}
@@ -177,7 +180,7 @@ export default function SettingsPage() {
                   <div style={{ fontSize: 14, fontWeight: 500 }}>Sincronización Completada</div>
                   <div style={{ fontSize: 12, color: 'var(--muted)' }}>Notificar cuando se complete la sync</div>
                 </div>
-                <label style={{ position: 'relative', display: 'inline-block', width: 44, height: 24 }}>
+                <label className="settings-toggle" style={{ position: 'relative', display: 'inline-block', width: 44, height: 24 }}>
                   <input type="checkbox" defaultChecked style={{ opacity: 0, width: 0, height: 0 }} />
                   <span style={{
                     position: 'absolute',
@@ -209,19 +212,19 @@ export default function SettingsPage() {
           </div>
         </Card>
 
-        <Card>
+        <Card className="settings-section-card">
           <div style={{ padding: 16 }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 16 }}>
               <div style={{ 
                 width: 40, 
                 height: 40, 
                 borderRadius: 8, 
-                background: '#3B82F615', 
+              background: 'var(--info-surface)',
                 display: 'flex', 
                 alignItems: 'center', 
                 justifyContent: 'center' 
               }}>
-                <Globe size={20} color="#3B82F6" />
+              <Globe size={20} color="var(--info)" />
               </div>
               <div className="h-subtitle">Preferencias Generales</div>
             </div>
@@ -246,32 +249,32 @@ export default function SettingsPage() {
         </Card>
       </div>
 
-      <Card>
+      <Card className="settings-section-card">
         <div style={{ padding: 16 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 16 }}>
             <div style={{ 
               width: 40, 
               height: 40, 
               borderRadius: 8, 
-              background: '#8B5CF615', 
+              background: 'var(--violet-surface)',
               display: 'flex', 
               alignItems: 'center', 
               justifyContent: 'center' 
             }}>
-              <Settings size={20} color="#8B5CF6" />
+              <Settings size={20} color="var(--kpi-violet)" />
             </div>
             <div className="h-subtitle">Configuración Avanzada</div>
           </div>
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 12 }}>
-            <div style={{ padding: 12, background: 'var(--panel)', borderRadius: 6 }}>
+          <div className="settings-system-summary" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 12 }}>
+            <div className="settings-value-card" style={{ padding: 12, background: 'var(--panel)', borderRadius: 6 }}>
               <div style={{ fontSize: 12, color: 'var(--muted)', marginBottom: 4 }}>Versión del Sistema</div>
               <div style={{ fontSize: 16, fontWeight: 600 }}>1.0.0</div>
             </div>
-            <div style={{ padding: 12, background: 'var(--panel)', borderRadius: 6 }}>
+            <div className="settings-value-card" style={{ padding: 12, background: 'var(--panel)', borderRadius: 6 }}>
               <div style={{ fontSize: 12, color: 'var(--muted)', marginBottom: 4 }}>Última Actualización</div>
               <div style={{ fontSize: 16, fontWeight: 600 }}>1 Mar 2026</div>
             </div>
-            <div style={{ padding: 12, background: 'var(--panel)', borderRadius: 6 }}>
+            <div className="settings-value-card" style={{ padding: 12, background: 'var(--panel)', borderRadius: 6 }}>
               <div style={{ fontSize: 12, color: 'var(--muted)', marginBottom: 4 }}>Entorno</div>
               <Badge variant="success" size="sm">Producción</Badge>
             </div>
@@ -279,7 +282,7 @@ export default function SettingsPage() {
         </div>
       </Card>
 
-      <Card>
+      <Card className="settings-section-card">
         <div style={{ padding: 16 }}>
           <div className="h-subtitle" style={{ marginBottom: 12 }}>Endpoints API Públicos</div>
           <div style={{ fontSize: 13, color: 'var(--muted)', marginBottom: 16 }}>
@@ -294,7 +297,7 @@ export default function SettingsPage() {
               { method: 'POST', path: '/api/ai/chat', desc: 'Consultar agentes IA' },
               { method: 'GET', path: '/api/inventory/export', desc: 'Exportar inventario a CSV' },
             ].map((endpoint, i) => (
-              <div key={i} style={{ 
+              <div key={i} className="settings-endpoint-row" style={{
                 display: 'flex', 
                 alignItems: 'center', 
                 gap: 12, 
@@ -322,8 +325,8 @@ export default function SettingsPage() {
               </div>
             ))}
           </div>
-          <div style={{ marginTop: 12, padding: 12, background: '#3B82F610', borderRadius: 6, border: '1px solid #3B82F6' }}>
-            <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 4, color: '#3B82F6' }}>📚 Documentación Completa</div>
+          <div className="settings-doc-callout" style={{ marginTop: 12, padding: 12, background: 'var(--info-surface)', borderRadius: 8, border: '1px solid color-mix(in srgb, var(--info) 35%, var(--border))' }}>
+            <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 4, color: 'var(--info)' }}>📚 Documentación Completa</div>
             <div style={{ fontSize: 12, color: 'var(--muted)' }}>
               Ver documentación detallada en <code style={{ background: 'var(--panel)', padding: '2px 6px', borderRadius: 3 }}>/api-docs</code>
             </div>

@@ -95,7 +95,7 @@ function todayPlusDays(days: number): string {
 const CART_TYPE_CONFIG: Record<CartType, { label: string; color: string; bg: string; border: string; icon: any; successLabel: string; successLink: string; successLinkLabel: string }> = {
     cotizacion: {
         label: 'Cotización',
-        color: '#60A5FA',
+        color: 'var(--info)',
         bg: 'rgba(59,130,246,0.15)',
         border: 'rgba(59,130,246,0.4)',
         icon: FileText,
@@ -105,7 +105,7 @@ const CART_TYPE_CONFIG: Record<CartType, { label: string; color: string; bg: str
     },
     factura: {
         label: 'Factura',
-        color: '#34D399',
+        color: 'var(--success)',
         bg: 'rgba(16,185,129,0.15)',
         border: 'rgba(16,185,129,0.4)',
         icon: Receipt,
@@ -130,9 +130,9 @@ const inputStyle: React.CSSProperties = {
     width: '100%',
     padding: '8px 10px',
     borderRadius: 8,
-    border: '1px solid rgba(255,255,255,0.12)',
-    background: 'rgba(255,255,255,0.04)',
-    color: 'var(--text, #e2e8f0)',
+    border: '1px solid var(--border)',
+    background: 'var(--surface-hover)',
+    color: 'var(--text)',
     fontSize: 13,
     outline: 'none',
     transition: 'border-color 0.15s',
@@ -141,7 +141,7 @@ const inputStyle: React.CSSProperties = {
 const labelStyle: React.CSSProperties = {
     fontSize: 11,
     fontWeight: 700,
-    color: 'var(--muted, #94a3b8)',
+    color: 'var(--muted)',
     marginBottom: 4,
     display: 'flex',
     alignItems: 'center',
@@ -155,7 +155,7 @@ const fieldGroupStyle: React.CSSProperties = {
 
 const validationErrorStyle: React.CSSProperties = {
     fontSize: 11,
-    color: '#f87171',
+    color: 'var(--danger)',
     marginTop: 2,
 };
 
@@ -718,7 +718,7 @@ export default function InventoryCart({
                     position: 'fixed',
                     inset: 0,
                     zIndex: 1999,
-                    background: 'rgba(0, 0, 0, 0.45)',
+                    background: 'var(--overlay)',
                     transition: 'opacity 0.25s',
                 }}
             />
@@ -732,9 +732,9 @@ export default function InventoryCart({
                     bottom: 0,
                     width: 'min(420px, 92vw)',
                     zIndex: 2000,
-                    background: 'var(--card, #0f172a)',
-                    borderLeft: '1px solid rgba(255,255,255,0.1)',
-                    boxShadow: '-8px 0 40px rgba(0,0,0,0.5)',
+                    background: 'var(--card)',
+                    borderLeft: '1px solid var(--border)',
+                    boxShadow: '-8px 0 40px var(--shadow)',
                     display: 'flex',
                     flexDirection: 'column',
                     animation: 'slideInRight 0.25s ease-out',
@@ -744,8 +744,8 @@ export default function InventoryCart({
                 <div
                     style={{
                         padding: '16px 18px',
-                        borderBottom: '1px solid rgba(255,255,255,0.08)',
-                        background: 'linear-gradient(135deg, rgba(15,27,45,0.9) 0%, rgba(17,31,54,0.7) 100%)',
+                        borderBottom: '1px solid var(--pivot-grid-border)',
+                        background: 'var(--pivot-toolbar-bg)',
                         display: 'flex',
                         justifyContent: 'space-between',
                         alignItems: 'center',
@@ -766,10 +766,10 @@ export default function InventoryCart({
                             <ShoppingCart size={18} style={{ color: config.color }} />
                         </div>
                         <div>
-                            <div style={{ fontSize: 16, fontWeight: 800, color: 'var(--text, #e2e8f0)' }}>
+                            <div style={{ fontSize: 16, fontWeight: 800, color: 'var(--text)' }}>
                                 Carrito
                             </div>
-                            <div style={{ fontSize: 12, color: 'var(--muted, #64748b)' }}>
+                            <div style={{ fontSize: 12, color: 'var(--muted)' }}>
                                 {totalItems} producto{totalItems !== 1 ? 's' : ''} · {totalUnits} unidad{totalUnits !== 1 ? 'es' : ''}
                             </div>
                         </div>
@@ -777,12 +777,12 @@ export default function InventoryCart({
                     <button
                         onClick={onClose}
                         style={{
-                            background: 'rgba(255,255,255,0.05)',
-                            border: '1px solid rgba(255,255,255,0.1)',
+                            background: 'var(--surface-hover)',
+                            border: '1px solid var(--border)',
                             borderRadius: 8,
                             width: 34,
                             height: 34,
-                            color: 'var(--muted, #94a3b8)',
+                            color: 'var(--muted)',
                             cursor: 'pointer',
                             display: 'flex',
                             alignItems: 'center',
@@ -796,7 +796,7 @@ export default function InventoryCart({
                 {/* Cart Type Toggle */}
                 <div style={{
                     padding: '10px 18px',
-                    borderBottom: '1px solid rgba(255,255,255,0.06)',
+                    borderBottom: '1px solid var(--pivot-grid-soft-border)',
                     display: 'flex',
                     gap: 6,
                 }}>
@@ -825,9 +825,9 @@ export default function InventoryCart({
                                     flex: 1,
                                     padding: '7px 8px',
                                     borderRadius: 8,
-                                    border: `1px solid ${isActive ? tc.border : 'rgba(255,255,255,0.08)'}`,
+                                    border: `1px solid ${isActive ? tc.border : 'var(--pivot-grid-border)'}`,
                                     background: isActive ? tc.bg : 'transparent',
-                                    color: isActive ? tc.color : 'var(--muted, #64748b)',
+                                    color: isActive ? tc.color : 'var(--muted)',
                                     fontSize: 11,
                                     fontWeight: 700,
                                     cursor: disabled ? 'not-allowed' : 'pointer',
@@ -910,7 +910,7 @@ export default function InventoryCart({
                                 style={{
                                     background: 'transparent',
                                     border: 'none',
-                                    color: 'var(--muted, #64748b)',
+                                    color: 'var(--muted)',
                                     fontSize: 12,
                                     cursor: 'pointer',
                                     textDecoration: 'underline',
@@ -929,8 +929,8 @@ export default function InventoryCart({
                             padding: '10px 12px',
                             borderRadius: 8,
                             border: '1px solid rgba(251,191,36,0.35)',
-                            background: 'rgba(120,53,15,0.3)',
-                            color: '#FCD34D',
+                            background: 'var(--warning-surface)',
+                            color: 'var(--warning)',
                             fontSize: 12,
                             fontWeight: 700,
                         }}
@@ -947,8 +947,8 @@ export default function InventoryCart({
                             padding: '10px 12px',
                             borderRadius: 8,
                             border: '1px solid rgba(239,68,68,0.4)',
-                            background: 'rgba(127,29,29,0.3)',
-                            color: '#FCA5A5',
+                            background: 'var(--danger-surface)',
+                            color: 'var(--danger)',
                             fontSize: 13,
                             fontWeight: 600,
                         }}
@@ -966,8 +966,8 @@ export default function InventoryCart({
                                 style={{
                                     marginBottom: 12,
                                     borderRadius: 10,
-                                    border: '1px solid rgba(255,255,255,0.08)',
-                                    background: 'rgba(255,255,255,0.02)',
+                                    border: '1px solid var(--pivot-grid-border)',
+                                    background: 'var(--surface-hover)',
                                     overflow: 'hidden',
                                 }}
                             >
@@ -980,10 +980,10 @@ export default function InventoryCart({
                                         display: 'flex',
                                         alignItems: 'center',
                                         justifyContent: 'space-between',
-                                        background: 'rgba(255,255,255,0.03)',
+                                        background: 'var(--surface-hover)',
                                         border: 'none',
-                                        borderBottom: formExpanded ? '1px solid rgba(255,255,255,0.06)' : 'none',
-                                        color: 'var(--text, #e2e8f0)',
+                                        borderBottom: formExpanded ? '1px solid var(--pivot-grid-soft-border)' : 'none',
+                                        color: 'var(--text)',
                                         cursor: 'pointer',
                                         fontSize: 13,
                                         fontWeight: 700,
@@ -1028,7 +1028,7 @@ export default function InventoryCart({
                                                             right: 10,
                                                             top: '50%',
                                                             transform: 'translateY(-50%)',
-                                                            color: 'var(--muted, #64748b)',
+                                                            color: 'var(--muted)',
                                                             pointerEvents: 'none',
                                                         }}
                                                     />
@@ -1047,10 +1047,10 @@ export default function InventoryCart({
                                                             right: 0,
                                                             maxHeight: 200,
                                                             overflowY: 'auto',
-                                                            background: 'var(--card, #1e293b)',
-                                                            border: '1px solid rgba(255,255,255,0.12)',
+                                                            background: 'var(--card)',
+                                                            border: '1px solid var(--border)',
                                                             borderRadius: 8,
-                                                            boxShadow: '0 8px 24px rgba(0,0,0,0.4)',
+                                                            boxShadow: '0 8px 24px var(--shadow)',
                                                             zIndex: 50,
                                                         }}
                                                     >
@@ -1075,7 +1075,7 @@ export default function InventoryCart({
                                                                         background: selectedCustomerId === c.id
                                                                             ? 'rgba(59,130,246,0.15)'
                                                                             : 'transparent',
-                                                                        color: 'var(--text, #e2e8f0)',
+                                                                        color: 'var(--text)',
                                                                         cursor: 'pointer',
                                                                         textAlign: 'left',
                                                                         display: 'flex',
@@ -1085,7 +1085,7 @@ export default function InventoryCart({
                                                                     }}
                                                                     onMouseEnter={(e) => {
                                                                         if (selectedCustomerId !== c.id) {
-                                                                            (e.currentTarget as HTMLElement).style.background = 'rgba(255,255,255,0.05)';
+                                                                            (e.currentTarget as HTMLElement).style.background = 'var(--surface-hover)';
                                                                         }
                                                                     }}
                                                                     onMouseLeave={(e) => {
@@ -1095,7 +1095,7 @@ export default function InventoryCart({
                                                                     }}
                                                                 >
                                                                     <span style={{ fontSize: 13, fontWeight: 600 }}>{c.name}</span>
-                                                                    <span style={{ fontSize: 11, color: 'var(--muted, #64748b)' }}>
+                                                                    <span style={{ fontSize: 11, color: 'var(--muted)' }}>
                                                                         {c.ruc || c.email || c.phone || ''}
                                                                         {c.source === 'zoho' && (
                                                                             <span style={{
@@ -1104,7 +1104,7 @@ export default function InventoryCart({
                                                                                 padding: '1px 5px',
                                                                                 borderRadius: 4,
                                                                                 background: 'rgba(16,185,129,0.15)',
-                                                                                color: '#34d399',
+                                                                                color: 'var(--success)',
                                                                             }}>
                                                                                 Zoho
                                                                             </span>
@@ -1149,7 +1149,7 @@ export default function InventoryCart({
                                                         padding: '7px 8px',
                                                         borderRadius: 8,
                                                         border: '1px solid rgba(16,185,129,0.2)',
-                                                        background: 'rgba(16,185,129,0.05)',
+                                                        background: 'var(--success-surface)',
                                                         display: 'flex',
                                                         flexWrap: 'wrap',
                                                         gap: 5,
@@ -1172,7 +1172,7 @@ export default function InventoryCart({
                                                                         background: isParent
                                                                             ? 'rgba(16,185,129,0.15)'
                                                                             : 'rgba(59,130,246,0.12)',
-                                                                        color: isParent ? '#34d399' : '#93C5FD',
+                                                                        color: isParent ? 'var(--success)' : 'var(--info)',
                                                                     }}
                                                                 >
                                                                     {w.code} {isParent ? '(Padre)' : '(Hijo)'}
@@ -1297,9 +1297,9 @@ export default function InventoryCart({
                                                                 onClick={syncSalespeople}
                                                                 disabled={syncingSalespeople}
                                                                 style={{
-                                                                    border: '1px solid var(--border, rgba(148,163,184,0.25))',
+                                                                    border: '1px solid var(--border)',
                                                                     background: 'transparent',
-                                                                    color: 'var(--muted, #9ca3af)',
+                                                                    color: 'var(--muted)',
                                                                     borderRadius: 6,
                                                                     padding: '3px 7px',
                                                                     fontSize: 10,
@@ -1386,9 +1386,9 @@ export default function InventoryCart({
                                                                 onClick={syncSalespeople}
                                                                 disabled={syncingSalespeople}
                                                                 style={{
-                                                                    border: '1px solid var(--border, rgba(148,163,184,0.25))',
+                                                                    border: '1px solid var(--border)',
                                                                     background: 'transparent',
-                                                                    color: 'var(--muted, #9ca3af)',
+                                                                    color: 'var(--muted)',
                                                                     borderRadius: 6,
                                                                     padding: '3px 7px',
                                                                     fontSize: 10,
@@ -1445,7 +1445,7 @@ export default function InventoryCart({
                                 style={{
                                     textAlign: 'center',
                                     padding: '48px 20px',
-                                    color: 'var(--muted, #64748b)',
+                                    color: 'var(--muted)',
                                 }}
                             >
                                 <Package size={40} style={{ opacity: 0.3, marginBottom: 12 }} />
@@ -1467,8 +1467,8 @@ export default function InventoryCart({
                                             style={{
                                                 padding: '12px 14px',
                                                 borderRadius: 10,
-                                                border: '1px solid rgba(255,255,255,0.06)',
-                                                background: 'rgba(255,255,255,0.02)',
+                                                border: '1px solid var(--pivot-grid-soft-border)',
+                                                background: 'var(--surface-hover)',
                                                 transition: 'background 0.15s',
                                             }}
                                         >
@@ -1485,7 +1485,7 @@ export default function InventoryCart({
                                                     style={{
                                                         fontSize: 13,
                                                         fontWeight: 700,
-                                                        color: 'var(--text, #e2e8f0)',
+                                                        color: 'var(--text)',
                                                         whiteSpace: 'nowrap',
                                                         overflow: 'hidden',
                                                         textOverflow: 'ellipsis',
@@ -1496,7 +1496,7 @@ export default function InventoryCart({
                                                 <div
                                                     style={{
                                                         fontSize: 11,
-                                                        color: 'var(--muted, #64748b)',
+                                                        color: 'var(--muted)',
                                                         marginTop: 2,
                                                         display: 'flex',
                                                         gap: 8,
@@ -1506,7 +1506,7 @@ export default function InventoryCart({
                                                     <span
                                                         style={{
                                                             fontFamily: 'monospace',
-                                                            background: 'rgba(255,255,255,0.05)',
+                                                            background: 'var(--surface-hover)',
                                                             padding: '1px 6px',
                                                             borderRadius: 4,
                                                         }}
@@ -1522,7 +1522,7 @@ export default function InventoryCart({
                                                 style={{
                                                     background: 'rgba(239,68,68,0.1)',
                                                     border: '1px solid rgba(239,68,68,0.25)',
-                                                    color: '#f87171',
+                                                    color: 'var(--danger)',
                                                     width: 28,
                                                     height: 28,
                                                     borderRadius: 7,
@@ -1540,14 +1540,14 @@ export default function InventoryCart({
 
                                         {/* Quantity Controls */}
                                         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                                            <span style={{ fontSize: 11, color: 'var(--muted, #64748b)', fontWeight: 600 }}>
+                                            <span style={{ fontSize: 11, color: 'var(--muted)', fontWeight: 600 }}>
                                                 Cant:
                                             </span>
                                             <div
                                                 style={{
                                                     display: 'inline-flex',
                                                     alignItems: 'center',
-                                                    border: '1px solid rgba(255,255,255,0.1)',
+                                                    border: '1px solid var(--border)',
                                                     borderRadius: 8,
                                                     overflow: 'hidden',
                                                 }}
@@ -1558,8 +1558,8 @@ export default function InventoryCart({
                                                         width: 30,
                                                         height: 30,
                                                         border: 'none',
-                                                        background: 'rgba(255,255,255,0.05)',
-                                                        color: 'var(--muted, #94a3b8)',
+                                                        background: 'var(--surface-hover)',
+                                                        color: 'var(--muted)',
                                                         cursor: 'pointer',
                                                         display: 'flex',
                                                         alignItems: 'center',
@@ -1582,10 +1582,10 @@ export default function InventoryCart({
                                                         width: 50,
                                                         height: 30,
                                                         border: 'none',
-                                                        borderLeft: '1px solid rgba(255,255,255,0.1)',
-                                                        borderRight: '1px solid rgba(255,255,255,0.1)',
-                                                        background: 'rgba(255,255,255,0.03)',
-                                                        color: 'var(--text, #e2e8f0)',
+                                                        borderLeft: '1px solid var(--border)',
+                                                        borderRight: '1px solid var(--border)',
+                                                        background: 'var(--surface-hover)',
+                                                        color: 'var(--text)',
                                                         textAlign: 'center',
                                                         fontSize: 13,
                                                         fontWeight: 700,
@@ -1598,8 +1598,8 @@ export default function InventoryCart({
                                                         width: 30,
                                                         height: 30,
                                                         border: 'none',
-                                                        background: 'rgba(255,255,255,0.05)',
-                                                        color: 'var(--muted, #94a3b8)',
+                                                        background: 'var(--surface-hover)',
+                                                        color: 'var(--muted)',
                                                         cursor: atMaxQty ? 'not-allowed' : 'pointer',
                                                         opacity: atMaxQty ? 0.5 : 1,
                                                         display: 'flex',
@@ -1611,7 +1611,7 @@ export default function InventoryCart({
                                                 </button>
                                             </div>
                                             {maxQty != null && (
-                                                <span style={{ fontSize: 10, color: atMaxQty ? '#fbbf24' : 'var(--muted, #64748b)' }}>
+                                                <span style={{ fontSize: 10, color: atMaxQty ? 'var(--warning)' : 'var(--muted)' }}>
                                                     Máx: {maxQty}
                                                 </span>
                                             )}
@@ -1673,8 +1673,8 @@ export default function InventoryCart({
                     <div
                         style={{
                             padding: '14px 16px',
-                            borderTop: '1px solid rgba(255,255,255,0.08)',
-                            background: 'linear-gradient(180deg, rgba(15,27,45,0.5) 0%, rgba(15,27,45,0.9) 100%)',
+                            borderTop: '1px solid var(--pivot-grid-border)',
+                            background: 'var(--panel-2)',
                             display: 'flex',
                             flexDirection: 'column',
                             gap: 10,
@@ -1686,7 +1686,7 @@ export default function InventoryCart({
                                 display: 'flex',
                                 justifyContent: 'space-between',
                                 fontSize: 13,
-                                color: 'var(--muted, #94a3b8)',
+                                color: 'var(--muted)',
                                 fontWeight: 600,
                             }}
                         >
@@ -1704,7 +1704,7 @@ export default function InventoryCart({
                                     borderRadius: 10,
                                     border: '1px solid rgba(239,68,68,0.3)',
                                     background: 'rgba(239,68,68,0.1)',
-                                    color: '#f87171',
+                                    color: 'var(--danger)',
                                     fontSize: 13,
                                     fontWeight: 700,
                                     cursor: 'pointer',
@@ -1739,7 +1739,7 @@ export default function InventoryCart({
                                     alignItems: 'center',
                                     justifyContent: 'center',
                                     gap: 8,
-                                    boxShadow: creating || !canSubmitCurrentType ? 'none' : `0 4px 16px ${config.color}44`,
+                                    boxShadow: creating || !canSubmitCurrentType ? 'none' : `0 4px 16px color-mix(in srgb, ${config.color} 27%, transparent)`,
                                     transition: 'all 0.2s',
                                 }}
                             >
@@ -1761,7 +1761,7 @@ export default function InventoryCart({
                             </button>
                         </div>
 
-                        <div style={{ fontSize: 11, color: 'var(--muted, #64748b)', textAlign: 'center', lineHeight: 1.4 }}>
+                        <div style={{ fontSize: 11, color: 'var(--muted)', textAlign: 'center', lineHeight: 1.4 }}>
                             {cartType === 'factura'
                                 ? 'Se abrirá Facturación con estos datos para completar seriales y campos finales.'
                                 : 'Se creará en Supabase y se sincronizará con Zoho Books.'}

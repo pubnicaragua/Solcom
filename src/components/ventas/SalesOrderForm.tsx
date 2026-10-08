@@ -960,7 +960,7 @@ export default function SalesOrderForm({ isOpen, orderId, onClose, onSaved }: Sa
             position: 'fixed',
             inset: 0,
             zIndex: 2200,
-            background: 'rgba(0,0,0,0.65)',
+            background: 'var(--overlay)',
             backdropFilter: 'blur(6px)',
             padding: '24px 16px',
             overflowY: 'auto',
@@ -969,7 +969,7 @@ export default function SalesOrderForm({ isOpen, orderId, onClose, onSaved }: Sa
                 maxWidth: 1080,
                 margin: '0 auto',
                 borderRadius: 16,
-                border: '1px solid rgba(255,255,255,0.08)',
+                border: '1px solid var(--border)',
                 background: 'var(--card)',
                 overflow: 'hidden',
                 boxShadow: '0 32px 64px rgba(0,0,0,0.55), 0 0 0 1px rgba(255,255,255,0.04)',
@@ -980,7 +980,7 @@ export default function SalesOrderForm({ isOpen, orderId, onClose, onSaved }: Sa
                     alignItems: 'center',
                     gap: 12,
                     padding: '18px 24px',
-                    borderBottom: '1px solid rgba(255,255,255,0.06)',
+                    borderBottom: '1px solid var(--border)',
                     background: 'linear-gradient(135deg, rgba(16,185,129,0.06) 0%, rgba(59,130,246,0.04) 100%)',
                 }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
@@ -1006,7 +1006,7 @@ export default function SalesOrderForm({ isOpen, orderId, onClose, onSaved }: Sa
                                 color: 'var(--muted)',
                                 marginTop: 2,
                                 fontFamily: 'monospace',
-                                background: 'rgba(255,255,255,0.04)',
+                                background: 'var(--surface-hover)',
                                 padding: '2px 8px',
                                 borderRadius: 4,
                                 display: 'inline-block',
@@ -1019,8 +1019,8 @@ export default function SalesOrderForm({ isOpen, orderId, onClose, onSaved }: Sa
                         type="button"
                         onClick={onClose}
                         style={{
-                            background: 'rgba(255,255,255,0.04)',
-                            border: '1px solid rgba(255,255,255,0.08)',
+                            background: 'var(--surface-hover)',
+                            border: '1px solid var(--border)',
                             borderRadius: 8,
                             color: 'var(--muted)',
                             cursor: 'pointer',
@@ -1112,7 +1112,7 @@ export default function SalesOrderForm({ isOpen, orderId, onClose, onSaved }: Sa
                                                 title="Editar Ubicación del Cliente"
                                                 style={{ 
                                                     padding: '9px', 
-                                                    background: '#1E293B', 
+                                                    background: 'var(--panel)',
                                                     color: '#10B981', 
                                                     border: '1px solid #10B981', 
                                                     borderRadius: '8px', 
@@ -1290,9 +1290,9 @@ export default function SalesOrderForm({ isOpen, orderId, onClose, onSaved }: Sa
                                     <div
                                         key={`${line.id || 'new'}-${index}`}
                                         style={{
-                                            border: '1px solid rgba(255,255,255,0.08)',
+                                            border: '1px solid var(--border)',
                                             borderRadius: 12,
-                                            background: 'rgba(255,255,255,0.015)',
+                                            background: 'var(--surface-hover)',
                                             overflow: 'hidden',
                                             transition: 'border-color 0.2s ease',
                                         }}
@@ -1303,8 +1303,8 @@ export default function SalesOrderForm({ isOpen, orderId, onClose, onSaved }: Sa
                                             alignItems: 'center',
                                             gap: 10,
                                             padding: '12px 14px',
-                                            borderBottom: '1px solid rgba(255,255,255,0.05)',
-                                            background: 'rgba(255,255,255,0.025)',
+                                            borderBottom: '1px solid var(--border)',
+                                            background: 'var(--surface-hover)',
                                         }}>
                                             <span style={{
                                                 flexShrink: 0,
@@ -1368,7 +1368,7 @@ export default function SalesOrderForm({ isOpen, orderId, onClose, onSaved }: Sa
                                         {SERIAL_SELECTION_ON_SALES_ORDER && line.item_id && line.zoho_item_id && (
                                             <div style={{
                                                 padding: '10px 16px',
-                                                borderBottom: '1px solid rgba(255,255,255,0.05)',
+                                                borderBottom: '1px solid var(--border)',
                                             }}>
                                                 {line.loading_serials ? (
                                                     <div style={serialInfoStyle}>Buscando seriales...</div>
@@ -1397,9 +1397,9 @@ export default function SalesOrderForm({ isOpen, orderId, onClose, onSaved }: Sa
                                                                                 onClick={() => toggleLineSerial(index, serial.serial_code)}
                                                                                 style={{
                                                                                     ...serialChipStyle,
-                                                                                    borderColor: isSelected ? 'rgba(16,185,129,0.55)' : 'rgba(255,255,255,0.1)',
-                                                                                    background: isSelected ? 'rgba(16,185,129,0.15)' : 'rgba(255,255,255,0.03)',
-                                                                                    color: isSelected ? '#6EE7B7' : 'var(--muted)',
+                                                                                    borderColor: isSelected ? 'var(--success)' : 'var(--border)',
+                                                                                    background: isSelected ? 'var(--success-surface)' : 'var(--surface-hover)',
+                                                                                    color: isSelected ? 'var(--success)' : 'var(--muted)',
                                                                                     boxShadow: isSelected ? '0 0 8px rgba(16,185,129,0.12)' : 'none',
                                                                                 }}
                                                                                 title={`${serial.serial_code} · ${serial.warehouse_code}`}
@@ -1541,7 +1541,7 @@ export default function SalesOrderForm({ isOpen, orderId, onClose, onSaved }: Sa
                                 borderRadius: 14,
                                 overflow: 'hidden',
                             }}>
-                                <div style={{ padding: '10px 16px', borderBottom: '1px solid rgba(255,255,255,0.05)', display: 'flex', alignItems: 'center', gap: 6 }}>
+                                <div style={{ padding: '10px 16px', borderBottom: '1px solid var(--border)', display: 'flex', alignItems: 'center', gap: 6 }}>
                                     <div style={{ width: 3, height: 12, borderRadius: 2, background: '#10B981' }} />
                                     <span style={{ fontSize: 10, fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.06em', color: 'var(--muted)' }}>Resumen de orden</span>
                                 </div>
@@ -1574,7 +1574,7 @@ export default function SalesOrderForm({ isOpen, orderId, onClose, onSaved }: Sa
                             display: 'flex',
                             justifyContent: 'flex-end',
                             gap: 10,
-                            borderTop: '1px solid rgba(255,255,255,0.06)',
+                            borderTop: '1px solid var(--border)',
                             paddingTop: 16,
                         }}>
                             <button
@@ -1583,8 +1583,8 @@ export default function SalesOrderForm({ isOpen, orderId, onClose, onSaved }: Sa
                                 style={{
                                     padding: '10px 20px',
                                     borderRadius: 10,
-                                    border: '1px solid rgba(255,255,255,0.1)',
-                                    background: 'rgba(255,255,255,0.04)',
+                                    border: '1px solid var(--border)',
+                                    background: 'var(--surface-hover)',
                                     color: 'var(--muted)',
                                     fontSize: 13,
                                     fontWeight: 700,
@@ -1642,18 +1642,18 @@ export default function SalesOrderForm({ isOpen, orderId, onClose, onSaved }: Sa
 function FormSection({ title, accent, icon, children }: { title: string; accent: string; icon?: ReactNode; children: ReactNode }) {
     return (
         <div style={{
-            border: '1px solid rgba(255,255,255,0.07)',
+            border: '1px solid var(--border)',
             borderRadius: 14,
             overflow: 'hidden',
-            background: 'rgba(255,255,255,0.012)',
+            background: 'var(--surface-hover)',
         }}>
             <div style={{
                 display: 'flex',
                 alignItems: 'center',
                 gap: 8,
                 padding: '10px 16px',
-                borderBottom: '1px solid rgba(255,255,255,0.06)',
-                background: 'rgba(255,255,255,0.02)',
+                borderBottom: '1px solid var(--border)',
+                background: 'var(--surface-hover)',
             }}>
                 <div style={{ width: 3, height: 14, borderRadius: 2, background: accent, flexShrink: 0 }} />
                 {icon && <span style={{ color: accent, display: 'flex', alignItems: 'center', opacity: 0.9 }}>{icon}</span>}
@@ -1685,8 +1685,8 @@ const inputStyle: CSSProperties = {
     width: '100%',
     padding: '9px 12px',
     borderRadius: 9,
-    border: '1px solid rgba(255,255,255,0.1)',
-    background: 'rgba(255,255,255,0.05)',
+    border: '1px solid var(--border)',
+    background: 'var(--surface-hover)',
     color: 'var(--text)',
     fontSize: 13,
     outline: 'none',
@@ -1698,15 +1698,15 @@ const serialInfoStyle: CSSProperties = {
     padding: '6px 8px',
     borderRadius: 8,
     border: '1px solid var(--border)',
-    background: 'rgba(255,255,255,0.03)',
+    background: 'var(--surface-hover)',
     color: 'var(--muted)',
     fontSize: 11,
 };
 
 const serialPanelStyle: CSSProperties = {
-    border: '1px solid rgba(255,255,255,0.08)',
+    border: '1px solid var(--border)',
     borderRadius: 10,
-    background: 'rgba(255,255,255,0.02)',
+    background: 'var(--surface-hover)',
     padding: '8px 10px',
 };
 
@@ -1731,7 +1731,7 @@ const serialGridStyle: CSSProperties = {
 };
 
 const serialChipStyle: CSSProperties = {
-    border: '1px solid rgba(255,255,255,0.1)',
+    border: '1px solid var(--border)',
     borderRadius: 8,
     padding: '6px 8px',
     fontSize: 10,
@@ -1750,10 +1750,10 @@ const customerDropdownStyle: CSSProperties = {
     maxHeight: 220,
     overflowY: 'auto',
     borderRadius: 12,
-    border: '1px solid rgba(255,255,255,0.1)',
+    border: '1px solid var(--border)',
     background: 'var(--card)',
     zIndex: 20,
-    boxShadow: '0 16px 32px rgba(0,0,0,0.4)',
+    boxShadow: '0 16px 32px var(--shadow)',
     padding: 6,
 };
 

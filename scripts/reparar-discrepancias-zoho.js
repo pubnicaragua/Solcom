@@ -21,6 +21,7 @@ async function runFix() {
 
         try {
             const port = process.env.PORT || 3000;
+            console.log(`  SKUs en este lote: ${batch.join(', ')}`);
             const res = await fetch(`http://localhost:${port}/api/debug/fix-batch`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
@@ -34,7 +35,7 @@ async function runFix() {
                 console.error('  Batch Error Response:', JSON.stringify(data, null, 2));
             }
         } catch (err) {
-            console.error('  Batch failed:', err.message);
+            console.error('  Batch failed:', err.cause ? err.cause.message : err.message);
         }
 
         // Wait 1s to respect rate limits

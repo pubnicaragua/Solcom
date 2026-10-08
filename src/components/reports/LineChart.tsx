@@ -41,7 +41,7 @@ export default function LineChart({ data, height = 250, color = 'var(--brand-pri
             borderRadius: '6px',
             fontSize: '13px',
             fontWeight: 600,
-            boxShadow: '0 4px 12px rgba(0, 0, 0, 0.3)',
+            boxShadow: '0 4px 12px var(--shadow)',
             zIndex: 10,
             pointerEvents: 'none',
           }}
@@ -73,7 +73,7 @@ export default function LineChart({ data, height = 250, color = 'var(--brand-pri
         {/* Area under line */}
         <path
           d={`${pathData} L 100 100 L 0 100 Z`}
-          fill={`${color}15`}
+          fill={`color-mix(in srgb, ${color} 8%, transparent)`}
         />
 
         {/* Line */}

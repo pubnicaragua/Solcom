@@ -32,22 +32,22 @@ export default function IntegrationCard({
   const getStatusColor = () => {
     switch (status) {
       case 'available':
-        return 'rgba(34, 197, 94, 0.1)';
+        return 'radial-gradient(ellipse at 100% 0%, color-mix(in srgb, var(--success) 14%, transparent), transparent 48%), var(--card-surface-gradient)';
       case 'development':
-        return 'rgba(234, 179, 8, 0.1)';
+        return 'radial-gradient(ellipse at 100% 0%, color-mix(in srgb, var(--warning) 14%, transparent), transparent 48%), var(--card-surface-gradient)';
       case 'planned':
-        return 'rgba(148, 163, 184, 0.1)';
+        return 'radial-gradient(ellipse at 100% 0%, color-mix(in srgb, var(--muted) 12%, transparent), transparent 48%), var(--card-surface-gradient)';
     }
   };
 
   const getStatusBorder = () => {
     switch (status) {
       case 'available':
-        return '1px solid rgba(34, 197, 94, 0.3)';
+        return '1px solid color-mix(in srgb, var(--success) 42%, var(--border))';
       case 'development':
-        return '1px solid rgba(234, 179, 8, 0.3)';
+        return '1px solid color-mix(in srgb, var(--warning) 42%, var(--border))';
       case 'planned':
-        return '1px solid rgba(148, 163, 184, 0.3)';
+        return '1px solid color-mix(in srgb, var(--muted) 42%, var(--border))';
     }
   };
 
@@ -65,22 +65,24 @@ export default function IntegrationCard({
   const getStatusTextColor = () => {
     switch (status) {
       case 'available':
-        return '#22c55e';
+        return 'var(--success)';
       case 'development':
-        return '#eab308';
+        return 'var(--warning)';
       case 'planned':
-        return '#94a3b8';
+        return 'var(--muted)';
     }
   };
 
   return (
     <div
+      className={`ai-agent-integration-card${status === 'available' && docs ? ' is-expandable' : ''}`}
       style={{
         padding: '1rem',
         background: getStatusColor(),
-        borderRadius: '8px',
+        borderRadius: '12px',
         border: getStatusBorder(),
         transition: 'all 0.2s',
+        boxShadow: '0 4px 12px var(--shadow), inset 0 1px 0 rgba(255, 255, 255, 0.04)',
         cursor: status === 'available' && docs ? 'pointer' : 'default',
       }}
       onClick={() => {
@@ -126,7 +128,7 @@ export default function IntegrationCard({
           style={{
             marginTop: '1rem',
             paddingTop: '1rem',
-            borderTop: '1px solid rgba(255, 255, 255, 0.1)',
+            borderTop: '1px solid var(--border)',
           }}
         >
           <h4 style={{ fontSize: '0.875rem', fontWeight: 600, marginBottom: '0.75rem' }}>
@@ -160,11 +162,11 @@ export default function IntegrationCard({
               style={{
                 marginTop: '1rem',
                 padding: '0.75rem',
-                background: 'rgba(0, 0, 0, 0.3)',
+                background: 'var(--overlay)',
                 borderRadius: '4px',
                 fontSize: '0.75rem',
                 fontFamily: 'monospace',
-                color: '#22c55e',
+                color: 'var(--success)',
               }}
             >
               {docs.apiEndpoint}
@@ -180,7 +182,7 @@ export default function IntegrationCard({
                 style={{
                   fontSize: '0.75rem',
                   padding: '0.75rem',
-                  background: 'rgba(0, 0, 0, 0.3)',
+                  background: 'var(--overlay)',
                   borderRadius: '4px',
                   overflow: 'auto',
                   margin: 0,

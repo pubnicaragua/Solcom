@@ -182,7 +182,7 @@ export default function QuotePreview({ isOpen, quoteId, onClose }: QuotePreviewP
     return (
         <div style={{
             position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
-            background: 'rgba(0,0,0,0.6)', display: 'flex', alignItems: 'flex-start',
+            background: 'var(--overlay)', display: 'flex', alignItems: 'flex-start',
             justifyContent: 'center', zIndex: 2000, padding: '30px 20px',
             overflowY: 'auto', backdropFilter: 'blur(4px)',
         }}>
@@ -190,7 +190,7 @@ export default function QuotePreview({ isOpen, quoteId, onClose }: QuotePreviewP
                 className="quote-preview-card"
                 style={{
                     background: 'var(--card)', borderRadius: '16px', maxWidth: '800px',
-                    width: '100%', boxShadow: '0 25px 60px rgba(0,0,0,0.5)',
+                    width: '100%', boxShadow: '0 25px 60px var(--shadow)',
                     border: '1px solid var(--border)',
                 }}
             >
@@ -229,7 +229,7 @@ export default function QuotePreview({ isOpen, quoteId, onClose }: QuotePreviewP
                                     onClick={handlePrint}
                                     style={{
                                         display: 'flex', alignItems: 'center', gap: '6px',
-                                        padding: '8px 16px', background: 'rgba(255,255,255,0.06)',
+                                        padding: '8px 16px', background: 'var(--surface-hover)',
                                         color: 'var(--text)', border: '1px solid var(--border)',
                                         borderRadius: '8px', fontSize: '13px',
                                         fontWeight: 600, cursor: 'pointer',
@@ -331,7 +331,7 @@ export default function QuotePreview({ isOpen, quoteId, onClose }: QuotePreviewP
                             <div style={{
                                 display: 'grid',
                                 gridTemplateColumns: '40px 2fr 70px 110px 70px 110px',
-                                padding: '12px 16px', background: 'rgba(255,255,255,0.03)',
+                                padding: '12px 16px', background: 'var(--surface-hover)',
                                 borderBottom: '1px solid var(--border)',
                             }}>
                                 {['#', 'Descripción', 'Cant.', 'P. Unit.', 'Desc.', 'Subtotal'].map((h, i) => (

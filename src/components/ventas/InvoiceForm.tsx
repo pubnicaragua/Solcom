@@ -1308,13 +1308,13 @@ export default function InvoiceForm({ isOpen, onClose, onSaved, editInvoice, pre
         <>
             <div style={{
                 position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
-                background: 'rgba(0,0,0,0.6)', display: 'flex', alignItems: 'flex-start',
+                background: 'var(--overlay)', display: 'flex', alignItems: 'flex-start',
                 justifyContent: 'center', zIndex: 2000, padding: '20px',
                 overflowY: 'auto', backdropFilter: 'blur(4px)',
             }}>
                 <div style={{
                     background: 'var(--card)', borderRadius: '16px', maxWidth: '960px',
-                    width: '100%', boxShadow: '0 25px 60px rgba(0,0,0,0.5)',
+                    width: '100%', boxShadow: '0 25px 60px var(--shadow)',
                     border: '1px solid var(--border)',
                 }}>
                     {/* Header */}
@@ -1370,7 +1370,7 @@ export default function InvoiceForm({ isOpen, onClose, onSaved, editInvoice, pre
                                                 position: 'absolute', top: '100%', left: 0, right: 0,
                                                 background: 'var(--card)', border: '1px solid var(--border)',
                                                 borderRadius: '8px', marginTop: '4px', maxHeight: '200px',
-                                                overflowY: 'auto', zIndex: 100, boxShadow: '0 8px 24px rgba(0,0,0,0.3)',
+                                                overflowY: 'auto', zIndex: 100, boxShadow: '0 8px 24px var(--shadow)',
                                             }}>
                                                 {filteredCustomers.length === 0 ? (
                                                     <div style={{ padding: '12px', fontSize: '13px', color: 'var(--muted)', textAlign: 'center' }}>Sin resultados</div>
@@ -1378,7 +1378,7 @@ export default function InvoiceForm({ isOpen, onClose, onSaved, editInvoice, pre
                                                     filteredCustomers.map(c => (
                                                         <div key={c.id} onClick={() => selectCustomer(c)}
                                                             style={{ padding: '10px 14px', cursor: 'pointer', fontSize: '13px', color: 'var(--text)', borderBottom: '1px solid var(--border)', transition: 'background 0.15s' }}
-                                                            onMouseEnter={(e) => e.currentTarget.style.background = 'rgba(255,255,255,0.05)'}
+                                                            onMouseEnter={(e) => e.currentTarget.style.background = 'var(--surface-hover)'}
                                                             onMouseLeave={(e) => e.currentTarget.style.background = 'transparent'}
                                                         >
                                                             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
@@ -1402,7 +1402,7 @@ export default function InvoiceForm({ isOpen, onClose, onSaved, editInvoice, pre
                                             title="Editar Ubicación del Cliente"
                                             style={{ 
                                                 padding: '9px', 
-                                                background: '#1E293B', 
+                                                background: 'var(--panel)',
                                                 color: '#10B981', 
                                                 border: '1px solid #10B981', 
                                                 borderRadius: '8px', 
@@ -1542,8 +1542,8 @@ export default function InvoiceForm({ isOpen, onClose, onSaved, editInvoice, pre
                                                 flex: 1, padding: '7px 16px', border: 'none', borderRadius: '6px',
                                                 fontSize: '13px', fontWeight: 600, cursor: 'pointer',
                                                 transition: 'all 0.2s',
-                                                background: deliveryRequested === opt.val ? (opt.val ? '#059669' : '#374151') : 'transparent',
-                                                color: deliveryRequested === opt.val ? 'white' : 'var(--muted)',
+                                                background: deliveryRequested === opt.val ? (opt.val ? 'var(--success)' : 'var(--panel-2)') : 'transparent',
+                                                color: deliveryRequested === opt.val ? (opt.val ? 'white' : 'var(--text)') : 'var(--muted)',
                                             }}
                                         >
                                             {opt.val && <Truck size={13} style={{ marginRight: '4px', display: 'inline', verticalAlign: 'middle' }} />}
@@ -1601,7 +1601,7 @@ export default function InvoiceForm({ isOpen, onClose, onSaved, editInvoice, pre
                         }}>
                             <div style={{
                                 display: 'grid', gridTemplateColumns: '2fr 80px 120px 80px 120px 40px',
-                                gap: '1px', background: 'rgba(255,255,255,0.03)', padding: '12px 16px',
+                                gap: '1px', background: 'var(--surface-hover)', padding: '12px 16px',
                                 borderBottom: '1px solid var(--border)',
                             }}>
                                 {['Artículo', 'Cant.', 'Precio Unit.', 'Desc. %', 'Subtotal', ''].map((h, i) => (
@@ -1639,12 +1639,12 @@ export default function InvoiceForm({ isOpen, onClose, onSaved, editInvoice, pre
                                                 position: 'absolute', top: '100%', left: 0, right: 0,
                                                 background: 'var(--card)', border: '1px solid var(--border)',
                                                 borderRadius: '8px', marginTop: '4px', maxHeight: '180px',
-                                                overflowY: 'auto', zIndex: 100, boxShadow: '0 8px 24px rgba(0,0,0,0.3)',
+                                                overflowY: 'auto', zIndex: 100, boxShadow: '0 8px 24px var(--shadow)',
                                             }}>
                                                 {filteredProducts.slice(0, 10).map(p => (
                                                     <div key={`${p.item_id}-${p.warehouse_name}`} onClick={() => selectProduct(p, index)}
                                                         style={{ padding: '10px 14px', cursor: 'pointer', fontSize: '13px', color: 'var(--text)', borderBottom: '1px solid var(--border)', transition: 'background 0.15s' }}
-                                                        onMouseEnter={(e) => e.currentTarget.style.background = 'rgba(255,255,255,0.05)'}
+                                                        onMouseEnter={(e) => e.currentTarget.style.background = 'var(--surface-hover)'}
                                                         onMouseLeave={(e) => e.currentTarget.style.background = 'transparent'}
                                                     >
                                                         <div style={{ fontWeight: 600 }}>{p.name}</div>
@@ -1665,7 +1665,7 @@ export default function InvoiceForm({ isOpen, onClose, onSaved, editInvoice, pre
                                                 padding: '6px 8px',
                                                 borderRadius: '6px',
                                                 border: '1px solid var(--border)',
-                                                background: 'rgba(255,255,255,0.03)',
+                                                background: 'var(--surface-hover)',
                                                 fontSize: '11px',
                                                 color: 'var(--muted)',
                                             }}>
@@ -1679,7 +1679,7 @@ export default function InvoiceForm({ isOpen, onClose, onSaved, editInvoice, pre
                                                 border: '1px solid var(--border)',
                                                 borderRadius: '8px',
                                                 padding: '8px',
-                                                background: 'rgba(255,255,255,0.02)',
+                                                background: 'var(--surface-hover)',
                                             }}>
                                                 <div style={{
                                                     display: 'flex',
@@ -1713,8 +1713,8 @@ export default function InvoiceForm({ isOpen, onClose, onSaved, editInvoice, pre
                                                                     fontSize: '10px',
                                                                     fontFamily: 'monospace',
                                                                     cursor: 'pointer',
-                                                                    background: isSelected ? 'rgba(220,38,38,0.16)' : 'rgba(255,255,255,0.02)',
-                                                                    color: isSelected ? '#FCA5A5' : 'var(--muted)',
+                                                                    background: isSelected ? 'var(--brand-surface)' : 'var(--surface-hover)',
+                                                                    color: isSelected ? 'var(--brand-primary)' : 'var(--muted)',
                                                                 }}
                                                                 title={serial.warehouse_code ? `${serial.serial_code} · ${serial.warehouse_code}` : serial.serial_code}
                                                             >
@@ -1936,7 +1936,7 @@ export default function InvoiceForm({ isOpen, onClose, onSaved, editInvoice, pre
                                 Cancelar
                             </button>
                             <button onClick={() => handleSave('borrador')} disabled={saving}
-                                style={{ padding: '12px 24px', background: '#374151', color: 'white', border: 'none', borderRadius: '8px', fontSize: '14px', fontWeight: 600, cursor: saving ? 'not-allowed' : 'pointer', opacity: saving ? 0.6 : 1 }}>
+                                style={{ padding: '12px 24px', background: 'var(--panel-2)', color: 'var(--text)', border: 'none', borderRadius: '8px', fontSize: '14px', fontWeight: 600, cursor: saving ? 'not-allowed' : 'pointer', opacity: saving ? 0.6 : 1 }}>
                                 {isEditing ? 'Guardar Cambios' : 'Guardar Borrador'}
                             </button>
                             <button onClick={() => handleSave('enviada')} disabled={saving}

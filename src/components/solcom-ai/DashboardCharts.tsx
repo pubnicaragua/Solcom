@@ -63,27 +63,27 @@ export default function DashboardCharts({ usageLogs }: DashboardChartsProps) {
       {/* Gráfico de uso diario */}
       <div style={{
         padding: 20,
-        background: 'rgba(15,23,42,0.5)',
-        border: '1px solid rgba(255,255,255,0.1)',
+        background: 'var(--panel-elevated)',
+        border: '1px solid var(--border)',
         borderRadius: 12
       }}>
-        <h3 style={{ fontSize: 16, fontWeight: 700, color: '#f8fafc', marginBottom: 16 }}>
+        <h3 style={{ fontSize: 16, fontWeight: 700, color: 'var(--text)', marginBottom: 16 }}>
           Uso Diario (Últimos 7 días)
         </h3>
         <ResponsiveContainer width="100%" height={250}>
           <LineChart data={dailyData}>
-            <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.1)" />
-            <XAxis dataKey="date" stroke="#94a3b8" style={{ fontSize: 11 }} />
-            <YAxis stroke="#94a3b8" style={{ fontSize: 11 }} />
+            <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
+            <XAxis dataKey="date" stroke="var(--muted)" style={{ fontSize: 11 }} />
+            <YAxis stroke="var(--muted)" style={{ fontSize: 11 }} />
             <Tooltip 
               contentStyle={{ 
-                background: '#1e293b', 
-                border: '1px solid rgba(255,255,255,0.1)',
+                background: 'var(--panel)',
+                border: '1px solid var(--border)',
                 borderRadius: 8,
-                color: '#f8fafc'
+                color: 'var(--text)'
               }} 
             />
-            <Legend wrapperStyle={{ fontSize: 12, color: '#94a3b8' }} />
+            <Legend wrapperStyle={{ fontSize: 12, color: 'var(--muted)' }} />
             <Line type="monotone" dataKey="requests" stroke="#3b82f6" strokeWidth={2} name="Requests" />
             <Line type="monotone" dataKey="tokens" stroke="#22c55e" strokeWidth={2} name="Tokens" />
           </LineChart>
@@ -93,11 +93,11 @@ export default function DashboardCharts({ usageLogs }: DashboardChartsProps) {
       {/* Gráfico de uso por tipo */}
       <div style={{
         padding: 20,
-        background: 'rgba(15,23,42,0.5)',
-        border: '1px solid rgba(255,255,255,0.1)',
+        background: 'var(--panel-elevated)',
+        border: '1px solid var(--border)',
         borderRadius: 12
       }}>
-        <h3 style={{ fontSize: 16, fontWeight: 700, color: '#f8fafc', marginBottom: 16 }}>
+        <h3 style={{ fontSize: 16, fontWeight: 700, color: 'var(--text)', marginBottom: 16 }}>
           Uso por Tipo de Request
         </h3>
         <ResponsiveContainer width="100%" height={250}>
@@ -118,10 +118,10 @@ export default function DashboardCharts({ usageLogs }: DashboardChartsProps) {
             </Pie>
             <Tooltip 
               contentStyle={{ 
-                background: '#1e293b', 
-                border: '1px solid rgba(255,255,255,0.1)',
+                background: 'var(--panel)',
+                border: '1px solid var(--border)',
                 borderRadius: 8,
-                color: '#f8fafc'
+                color: 'var(--text)'
               }} 
             />
           </PieChart>
@@ -131,28 +131,28 @@ export default function DashboardCharts({ usageLogs }: DashboardChartsProps) {
       {/* Gráfico de uso por hora */}
       <div style={{
         padding: 20,
-        background: 'rgba(15,23,42,0.5)',
-        border: '1px solid rgba(255,255,255,0.1)',
+        background: 'var(--panel-elevated)',
+        border: '1px solid var(--border)',
         borderRadius: 12,
         gridColumn: 'span 2'
       }}>
-        <h3 style={{ fontSize: 16, fontWeight: 700, color: '#f8fafc', marginBottom: 16 }}>
+        <h3 style={{ fontSize: 16, fontWeight: 700, color: 'var(--text)', marginBottom: 16 }}>
           Distribución por Hora del Día
         </h3>
         <ResponsiveContainer width="100%" height={250}>
           <BarChart data={hourlyData}>
-            <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.1)" />
-            <XAxis dataKey="hour" stroke="#94a3b8" style={{ fontSize: 11 }} />
-            <YAxis stroke="#94a3b8" style={{ fontSize: 11 }} />
+            <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
+            <XAxis dataKey="hour" stroke="var(--muted)" style={{ fontSize: 11 }} />
+            <YAxis stroke="var(--muted)" style={{ fontSize: 11 }} />
             <Tooltip 
               contentStyle={{ 
-                background: '#1e293b', 
-                border: '1px solid rgba(255,255,255,0.1)',
+                background: 'var(--panel)',
+                border: '1px solid var(--border)',
                 borderRadius: 8,
-                color: '#f8fafc'
+                color: 'var(--text)'
               }} 
             />
-            <Legend wrapperStyle={{ fontSize: 12, color: '#94a3b8' }} />
+            <Legend wrapperStyle={{ fontSize: 12, color: 'var(--muted)' }} />
             <Bar dataKey="requests" fill="#dc2626" name="Requests" />
             <Bar dataKey="tokens" fill="#f59e0b" name="Tokens" />
           </BarChart>
@@ -162,12 +162,12 @@ export default function DashboardCharts({ usageLogs }: DashboardChartsProps) {
       {/* Métricas adicionales */}
       <div style={{
         padding: 20,
-        background: 'rgba(15,23,42,0.5)',
-        border: '1px solid rgba(255,255,255,0.1)',
+        background: 'var(--panel-elevated)',
+        border: '1px solid var(--border)',
         borderRadius: 12,
         gridColumn: 'span 2'
       }}>
-        <h3 style={{ fontSize: 16, fontWeight: 700, color: '#f8fafc', marginBottom: 16 }}>
+        <h3 style={{ fontSize: 16, fontWeight: 700, color: 'var(--text)', marginBottom: 16 }}>
           Top 5 Tipos de Request por Costo
         </h3>
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: 12 }}>
@@ -179,8 +179,8 @@ export default function DashboardCharts({ usageLogs }: DashboardChartsProps) {
                 key={type.name}
                 style={{
                   padding: 16,
-                  background: 'rgba(255,255,255,0.02)',
-                  border: '1px solid rgba(255,255,255,0.05)',
+                  background: 'var(--surface-hover)',
+                  border: '1px solid var(--border)',
                   borderRadius: 8,
                   textAlign: 'center'
                 }}
@@ -200,10 +200,10 @@ export default function DashboardCharts({ usageLogs }: DashboardChartsProps) {
                 }}>
                   {index + 1}
                 </div>
-                <div style={{ fontSize: 11, color: '#94a3b8', marginBottom: 4 }}>
+                <div style={{ fontSize: 11, color: 'var(--muted)', marginBottom: 4 }}>
                   {type.name}
                 </div>
-                <div style={{ fontSize: 14, fontWeight: 700, color: '#f8fafc', marginBottom: 2 }}>
+                <div style={{ fontSize: 14, fontWeight: 700, color: 'var(--text)', marginBottom: 2 }}>
                   {type.value} requests
                 </div>
                 <div style={{ fontSize: 12, color: '#22c55e' }}>

@@ -71,8 +71,8 @@ export default function TransferHistory() {
       width: '26%',
       render: (row: TransferRow) => (
         <div>
-          <div style={{ fontWeight: 600, fontSize: 13, color: '#F1F5F9' }}>{row.item_name}</div>
-          <div style={{ fontSize: 11, color: '#CBD5E1', fontFamily: 'monospace' }}>{row.sku}</div>
+          <div style={{ fontWeight: 600, fontSize: 13, color: 'var(--text)' }}>{row.item_name}</div>
+          <div style={{ fontSize: 11, color: 'var(--text-secondary)', fontFamily: 'monospace' }}>{row.sku}</div>
         </div>
       ),
     },

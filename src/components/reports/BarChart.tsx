@@ -49,7 +49,7 @@ export default function BarChart({ data, height = 300, showValues = true }: BarC
                   borderRadius: '6px',
                   fontSize: '12px',
                   fontWeight: 600,
-                  boxShadow: '0 4px 12px rgba(0, 0, 0, 0.3)',
+                  boxShadow: '0 4px 12px var(--shadow)',
                   zIndex: 10,
                   whiteSpace: 'nowrap',
                 }}
@@ -66,7 +66,7 @@ export default function BarChart({ data, height = 300, showValues = true }: BarC
               style={{
                 width: '100%',
                 height: barHeight,
-                background: hoveredBar === index ? `${color}40` : `${color}20`,
+                background: `color-mix(in srgb, ${color} ${hoveredBar === index ? 25 : 12}%, transparent)`,
                 border: `2px solid ${color}`,
                 borderRadius: '6px 6px 0 0',
                 transition: 'all 0.3s ease',

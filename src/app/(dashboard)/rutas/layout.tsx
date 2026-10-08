@@ -13,20 +13,20 @@ export default function RutasLayout({ children }: { children: React.ReactNode })
     ];
 
     return (
-        <div style={{
+        <div className="routes-module-shell" style={{
             display: 'flex',
             flexDirection: 'column',
-            background: '#080f1d', // Force dark background here to override ERP gray
+            background: 'var(--page-surface-gradient)',
             minHeight: 'calc(100vh - 80px)', // Adjust based on Topbar height
             margin: '-24px', // Negate the padding from dashboard-main
             borderRadius: '12px',
             overflow: 'hidden',
-            border: '1px solid rgba(255,255,255,0.05)'
+            border: '1px solid var(--border)'
         }}>
             {/* Header / Tabs Niveles */}
-            <div style={{
-                background: '#0f172a',
-                borderBottom: '1px solid rgba(255,255,255,0.08)',
+            <div className="routes-module-header" style={{
+                background: 'var(--card-surface-gradient)',
+                borderBottom: '1px solid var(--border)',
                 padding: '0 24px',
                 display: 'flex',
                 alignItems: 'center',
@@ -37,16 +37,16 @@ export default function RutasLayout({ children }: { children: React.ReactNode })
                     <h1 style={{
                         fontSize: 18,
                         fontWeight: 800,
-                        color: '#f8fafc',
+                        color: 'var(--text)',
                         margin: 0,
                         display: 'flex',
                         alignItems: 'center',
                         gap: 10
                     }}>
-                        <div style={{ padding: 6, background: 'rgba(56,189,248,0.1)', borderRadius: 8 }}>
-                            <Truck size={18} color="#38bdf8" />
+                        <div className="system-title-mark">
+                            <Truck size={20} />
                         </div>
-                        Operaciones
+                        Rutas
                     </h1>
 
                     <nav style={{ display: 'flex', height: '100%', gap: 8 }}>
@@ -59,8 +59,8 @@ export default function RutasLayout({ children }: { children: React.ReactNode })
                                     style={{
                                         background: 'transparent',
                                         border: 'none',
-                                        borderBottom: active ? '3px solid #38bdf8' : '3px solid transparent',
-                                        color: active ? '#f8fafc' : '#64748b',
+                                        borderBottom: active ? '3px solid var(--brand-primary)' : '3px solid transparent',
+                                        color: active ? 'var(--brand-primary)' : 'var(--muted)',
                                         fontWeight: active ? 700 : 600,
                                         fontSize: 13,
                                         padding: '0 16px',
@@ -71,10 +71,10 @@ export default function RutasLayout({ children }: { children: React.ReactNode })
                                         alignItems: 'center'
                                     }}
                                     onMouseEnter={(e) => {
-                                        if (!active) e.currentTarget.style.color = '#cbd5e1';
+                                        if (!active) e.currentTarget.style.color = 'var(--text-secondary)';
                                     }}
                                     onMouseLeave={(e) => {
-                                        if (!active) e.currentTarget.style.color = '#64748b';
+                                        if (!active) e.currentTarget.style.color = 'var(--muted)';
                                     }}
                                 >
                                     {tab.label}
@@ -84,14 +84,14 @@ export default function RutasLayout({ children }: { children: React.ReactNode })
                     </nav>
                 </div>
 
-                <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, color: '#e2e8f0', fontWeight: 600 }}>
-                    <div style={{ width: 8, height: 8, borderRadius: '50%', background: '#22c55e', boxShadow: '0 0 10px rgba(34,197,94,0.6)' }} />
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, color: 'var(--text)', fontWeight: 600 }}>
+                    <div style={{ width: 8, height: 8, borderRadius: '50%', background: 'var(--success)', boxShadow: '0 0 10px color-mix(in srgb, var(--success) 55%, transparent)' }} />
                     Sistema Activo
                 </div>
             </div>
 
             {/* Content Area */}
-            <div style={{ flex: 1, padding: 24, overflowY: 'auto' }}>
+            <div className="routes-module-content" style={{ flex: 1, padding: 24, overflowY: 'auto' }}>
                 {children}
             </div>
         </div>

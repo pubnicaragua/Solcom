@@ -33,7 +33,7 @@ function renderMessageContent(content: string) {
     // Italic *text*
     parsed = parsed.replace(/\*(.*?)\*/g, '<em>$1</em>');
     // Inline code `code`
-    parsed = parsed.replace(/`(.*?)`/g, '<code style="background: rgba(255,255,255,0.15); padding: 2px 6px; borderRadius: 4px; font-family: monospace; font-size: 0.9em;">$1</code>');
+    parsed = parsed.replace(/`(.*?)`/g, '<code style="background: var(--surface-hover); padding: 2px 6px; borderRadius: 4px; font-family: monospace; font-size: 0.9em;">$1</code>');
     
     return parsed;
   };
@@ -63,20 +63,20 @@ function renderMessageContent(content: string) {
       }
       
       elements.push(
-        <div key={`table-container-${i}`} style={{ overflowX: 'auto', margin: '8px 0 16px 0', border: '1px solid rgba(255,255,255,0.15)', borderRadius: 8 }}>
-          <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13, color: '#fff', minWidth: 400 }}>
+        <div key={`table-container-${i}`} style={{ overflowX: 'auto', margin: '8px 0 16px 0', border: '1px solid var(--border)', borderRadius: 8 }}>
+          <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13, color: 'var(--text)', minWidth: 400 }}>
             <thead>
               {tableRows.length > 0 && (
-                <tr style={{ background: 'rgba(255,255,255,0.08)', borderBottom: '1px solid rgba(255,255,255,0.15)' }}>
+                <tr style={{ background: 'var(--table-header-bg)', borderBottom: '1px solid var(--table-header-rule)' }}>
                   {tableRows[0].map((cell, idx) => (
-                    <th key={idx} style={{ padding: '8px 12px', textAlign: 'left', fontWeight: 600 }} dangerouslySetInnerHTML={{ __html: parseInline(cell) }} />
+                    <th key={idx} style={{ padding: '8px 12px', textAlign: 'left', fontWeight: 600, color: 'var(--table-header-text)' }} dangerouslySetInnerHTML={{ __html: parseInline(cell) }} />
                   ))}
                 </tr>
               )}
             </thead>
             <tbody>
               {tableRows.slice(1).map((row, rowIdx) => (
-                <tr key={rowIdx} style={{ borderBottom: '1px solid rgba(255,255,255,0.08)', background: rowIdx % 2 === 0 ? 'rgba(255,255,255,0.02)' : 'transparent' }}>
+                <tr key={rowIdx} style={{ borderBottom: '1px solid var(--table-grid-border)', background: rowIdx % 2 === 0 ? 'var(--table-row-alt-bg)' : 'var(--table-row-bg)' }}>
                   {row.map((cell, idx) => (
                     <td key={idx} style={{ padding: '8px 12px' }} dangerouslySetInnerHTML={{ __html: parseInline(cell) }} />
                   ))}
@@ -111,13 +111,13 @@ function renderMessageContent(content: string) {
       const isOrdered = !!listItems[0].number;
       elements.push(
         isOrdered ? (
-          <ol key={`list-${i}`} style={{ margin: '8px 0 12px 20px', padding: 0, listStyleType: 'decimal', color: '#fff' }}>
+          <ol key={`list-${i}`} style={{ margin: '8px 0 12px 20px', padding: 0, listStyleType: 'decimal', color: 'var(--text)' }}>
             {listItems.map((item, idx) => (
               <li key={idx} style={{ marginBottom: 6, paddingLeft: 4 }} dangerouslySetInnerHTML={{ __html: parseInline(item.text) }} />
             ))}
           </ol>
         ) : (
-          <ul key={`list-${i}`} style={{ margin: '8px 0 12px 20px', padding: 0, listStyleType: 'disc', color: '#fff' }}>
+          <ul key={`list-${i}`} style={{ margin: '8px 0 12px 20px', padding: 0, listStyleType: 'disc', color: 'var(--text)' }}>
             {listItems.map((item, idx) => (
               <li key={idx} style={{ marginBottom: 6 }} dangerouslySetInnerHTML={{ __html: parseInline(item.text) }} />
             ))}
@@ -557,9 +557,9 @@ export default function AIAssistant({ restockData = [], topSales = [], openSigna
           width: 60,
           height: 60,
           borderRadius: '50%',
-          background: 'linear-gradient(135deg, #dc2626 0%, #991b1b 100%)',
+          background: 'var(--brand-button-gradient)',
           border: 'none',
-          boxShadow: '0 4px 20px rgba(220, 38, 38, 0.4)',
+          boxShadow: '0 4px 20px var(--sidebar-active-glow)',
           cursor: 'pointer',
           display: 'flex',
           alignItems: 'center',
@@ -584,10 +584,10 @@ export default function AIAssistant({ restockData = [], topSales = [], openSigna
       height: isExpanded ? 750 : 600,
       maxWidth: 'calc(100vw - 48px)',
       maxHeight: 'calc(100vh - 48px)',
-      background: '#1a1a2e',
+      background: 'var(--panel-elevated)',
       borderRadius: 16,
-      border: '1px solid rgba(255,255,255,0.1)',
-      boxShadow: '0 10px 40px rgba(0,0,0,0.5)',
+      border: '1px solid var(--border)',
+      boxShadow: '0 10px 40px var(--shadow)',
       display: 'flex',
       flexDirection: 'column',
       zIndex: 1000,
@@ -597,7 +597,7 @@ export default function AIAssistant({ restockData = [], topSales = [], openSigna
       {/* Header */}
       <div style={{
         padding: 16,
-        background: 'linear-gradient(135deg, #dc2626 0%, #991b1b 100%)',
+        background: 'var(--brand-button-gradient)',
         display: 'flex',
         justifyContent: 'space-between',
         alignItems: 'center'
@@ -676,9 +676,9 @@ export default function AIAssistant({ restockData = [], topSales = [], openSigna
               padding: 12,
               borderRadius: 12,
               background: msg.role === 'user' 
-                ? 'linear-gradient(135deg, #dc2626 0%, #991b1b 100%)'
-                : 'rgba(255,255,255,0.05)',
-              color: '#fff',
+                ? 'var(--brand-button-gradient)'
+                : 'var(--surface-hover)',
+              color: msg.role === 'user' ? '#fff' : 'var(--text)',
               fontSize: 14,
               lineHeight: 1.5
             }}>
@@ -712,13 +712,13 @@ export default function AIAssistant({ restockData = [], topSales = [], openSigna
             <div style={{
               padding: 12,
               borderRadius: 12,
-              background: 'rgba(255,255,255,0.05)',
+              background: 'var(--surface-hover)',
               display: 'flex',
               gap: 8,
               alignItems: 'center'
             }}>
-              <Loader2 size={16} className="animate-spin" color="#fff" />
-              <span style={{ fontSize: 14, color: '#fff' }}>Pensando...</span>
+              <Loader2 size={16} className="animate-spin" color="var(--muted)" />
+              <span style={{ fontSize: 14, color: 'var(--text)' }}>Pensando...</span>
             </div>
           </div>
         )}
@@ -729,8 +729,8 @@ export default function AIAssistant({ restockData = [], topSales = [], openSigna
       {(uploadedImage || showUrlInput) && (
         <div style={{
           padding: 12,
-          borderTop: '1px solid rgba(255,255,255,0.1)',
-          background: 'rgba(255,255,255,0.02)'
+          borderTop: '1px solid var(--border)',
+          background: 'var(--surface-hover)'
         }}>
           {uploadedImage && (
             <div style={{ position: 'relative' }}>
@@ -749,7 +749,7 @@ export default function AIAssistant({ restockData = [], topSales = [], openSigna
                   position: 'absolute',
                   top: 8,
                   right: 8,
-                  background: 'rgba(0,0,0,0.7)',
+                  background: 'var(--overlay)',
                   border: 'none',
                   borderRadius: '50%',
                   width: 24,
@@ -774,10 +774,10 @@ export default function AIAssistant({ restockData = [], topSales = [], openSigna
                 style={{
                   flex: 1,
                   padding: 8,
-                  background: 'rgba(255,255,255,0.05)',
-                  border: '1px solid rgba(255,255,255,0.1)',
+                  background: 'var(--surface-hover)',
+                  border: '1px solid var(--border)',
                   borderRadius: 6,
-                  color: '#fff',
+                  color: 'var(--text)',
                   fontSize: 12
                 }}
               />
@@ -787,12 +787,12 @@ export default function AIAssistant({ restockData = [], topSales = [], openSigna
                   setUrlToAnalyze('');
                 }}
                 style={{
-                  background: 'rgba(239,68,68,0.2)',
-                  border: '1px solid #ef4444',
+                  background: 'var(--danger-surface)',
+                  border: '1px solid var(--danger)',
                   borderRadius: 6,
                   padding: '4px 8px',
                   cursor: 'pointer',
-                  color: '#ef4444',
+                  color: 'var(--danger)',
                   fontSize: 11
                 }}
               >
@@ -806,7 +806,7 @@ export default function AIAssistant({ restockData = [], topSales = [], openSigna
       {/* Input */}
       <div style={{
         padding: 16,
-        borderTop: uploadedImage || showUrlInput ? 'none' : '1px solid rgba(255,255,255,0.1)',
+        borderTop: uploadedImage || showUrlInput ? 'none' : '1px solid var(--border)',
         display: 'flex',
         gap: 8,
         alignItems: 'center'
@@ -825,8 +825,8 @@ export default function AIAssistant({ restockData = [], topSales = [], openSigna
           title="Adjuntar imagen"
           style={{
             padding: 10,
-            background: uploadedImage ? 'rgba(34,197,94,0.2)' : 'rgba(255,255,255,0.05)',
-            border: uploadedImage ? '1px solid #22c55e' : '1px solid rgba(255,255,255,0.1)',
+            background: uploadedImage ? 'var(--success-surface)' : 'var(--surface-hover)',
+            border: uploadedImage ? '1px solid var(--success)' : '1px solid var(--border)',
             borderRadius: 8,
             cursor: isLoading || uploadedImage ? 'not-allowed' : 'pointer',
             display: 'flex',
@@ -834,7 +834,7 @@ export default function AIAssistant({ restockData = [], topSales = [], openSigna
             justifyContent: 'center'
           }}
         >
-          <Image size={18} color={uploadedImage ? '#22c55e' : '#fff'} />
+          <Image size={18} color={uploadedImage ? 'var(--success)' : 'var(--text-secondary)'} />
         </button>
 
         <button
@@ -843,8 +843,8 @@ export default function AIAssistant({ restockData = [], topSales = [], openSigna
           title="Analizar URL"
           style={{
             padding: 10,
-            background: showUrlInput ? 'rgba(59,130,246,0.2)' : 'rgba(255,255,255,0.05)',
-            border: showUrlInput ? '1px solid #3b82f6' : '1px solid rgba(255,255,255,0.1)',
+            background: showUrlInput ? 'var(--info-surface)' : 'var(--surface-hover)',
+            border: showUrlInput ? '1px solid var(--info)' : '1px solid var(--border)',
             borderRadius: 8,
             cursor: isLoading ? 'not-allowed' : 'pointer',
             display: 'flex',
@@ -852,7 +852,7 @@ export default function AIAssistant({ restockData = [], topSales = [], openSigna
             justifyContent: 'center'
           }}
         >
-          <Link size={18} color={showUrlInput ? '#3b82f6' : '#fff'} />
+          <Link size={18} color={showUrlInput ? 'var(--info)' : 'var(--text-secondary)'} />
         </button>
 
         {isSpeaking ? (
@@ -860,8 +860,8 @@ export default function AIAssistant({ restockData = [], topSales = [], openSigna
             onClick={stopSpeaking}
             style={{
               padding: 10,
-              background: 'rgba(239, 68, 68, 0.2)',
-              border: '1px solid #ef4444',
+              background: 'var(--danger-surface)',
+              border: '1px solid var(--danger)',
               borderRadius: 8,
               cursor: 'pointer',
               display: 'flex',
@@ -869,7 +869,7 @@ export default function AIAssistant({ restockData = [], topSales = [], openSigna
               justifyContent: 'center'
             }}
           >
-            <StopCircle size={20} color="#ef4444" />
+            <StopCircle size={20} color="var(--danger)" />
           </button>
         ) : (
           <button
@@ -877,8 +877,8 @@ export default function AIAssistant({ restockData = [], topSales = [], openSigna
             disabled={isLoading}
             style={{
               padding: 10,
-              background: isRecording ? 'rgba(239, 68, 68, 0.2)' : 'rgba(255,255,255,0.05)',
-              border: isRecording ? '1px solid #ef4444' : '1px solid rgba(255,255,255,0.1)',
+              background: isRecording ? 'var(--danger-surface)' : 'var(--surface-hover)',
+              border: isRecording ? '1px solid var(--danger)' : '1px solid var(--border)',
               borderRadius: 8,
               cursor: isLoading ? 'not-allowed' : 'pointer',
               display: 'flex',
@@ -886,7 +886,7 @@ export default function AIAssistant({ restockData = [], topSales = [], openSigna
               justifyContent: 'center'
             }}
           >
-            <Mic size={20} color={isRecording ? '#ef4444' : '#fff'} />
+            <Mic size={20} color={isRecording ? 'var(--danger)' : 'var(--text-secondary)'} />
           </button>
         )}
         
@@ -908,10 +908,10 @@ export default function AIAssistant({ restockData = [], topSales = [], openSigna
           style={{
             flex: 1,
             padding: '10px 12px',
-            background: 'rgba(255,255,255,0.05)',
-            border: '1px solid rgba(255,255,255,0.1)',
+            background: 'var(--surface-hover)',
+            border: '1px solid var(--border)',
             borderRadius: 8,
-            color: '#fff',
+            color: 'var(--text)',
             fontSize: 14,
             outline: 'none'
           }}
@@ -927,8 +927,8 @@ export default function AIAssistant({ restockData = [], topSales = [], openSigna
           style={{
             padding: 10,
             background: (input.trim() || uploadedImage || urlToAnalyze) && !isLoading && !isRecording
-              ? 'linear-gradient(135deg, #dc2626 0%, #991b1b 100%)'
-              : 'rgba(255,255,255,0.05)',
+              ? 'var(--brand-button-gradient)'
+              : 'var(--surface-hover)',
             border: 'none',
             borderRadius: 8,
             cursor: (input.trim() || uploadedImage || urlToAnalyze) && !isLoading && !isRecording ? 'pointer' : 'not-allowed',

@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import type { CSSProperties } from 'react';
 import Card from '@/components/ui/Card';
 import { Package, Boxes, Warehouse, Clock, DollarSign } from 'lucide-react';
 
@@ -101,31 +102,36 @@ export default function KPIGrid() {
       label: 'Total SKUs',
       value: !mounted || loading ? '...' : kpis.totalSKUs.toLocaleString('es-NI'),
       color: 'var(--brand-primary)',
+      tooltip: 'Códigos SKU únicos dentro de las bodegas permitidas para tu perfil.',
     },
     {
       icon: Package,
       label: 'Total Productos',
       value: !mounted || loading ? '...' : kpis.totalProducts.toLocaleString('es-NI'),
       color: 'var(--success)',
+      tooltip: 'Productos incluidos en el inventario visible para tu alcance.',
     },
 
     {
       icon: Warehouse,
       label: 'Bodegas Activas',
       value: !mounted || loading ? '...' : kpis.activeWarehouses.toString(),
-      color: 'var(--brand-accent)',
+      color: 'var(--kpi-violet)',
+      tooltip: 'Bodegas activas incluidas dentro del alcance asignado a tu perfil.',
     },
     {
       icon: Boxes,
       label: 'Total Stock',
       value: !mounted || loading ? '...' : kpis.totalStock.toLocaleString('es-NI'),
-      color: '#f59e0b',
+      color: 'var(--warning)',
+      tooltip: 'Unidades sumadas en las bodegas incluidas en tu alcance.',
     },
     {
       icon: Clock,
       label: 'Última Sincronización',
       value: !mounted || loading ? '...' : kpis.lastSync,
-      color: 'var(--warning)',
+      color: 'var(--info)',
+      tooltip: undefined,
     },
   ];
 
@@ -137,20 +143,20 @@ export default function KPIGrid() {
         return (
           <Card
             key={item.label}
+            className={`inventory-kpi-card${item.tooltip ? ' has-tooltip' : ''}`}
             padding={16}
+            tabIndex={item.tooltip ? 0 : undefined}
+            aria-describedby={item.tooltip ? `inventory-kpi-tooltip-${index}` : undefined}
             style={{
-              transition: 'all 0.3s ease',
-              cursor: 'pointer',
+              position: 'relative',
+              cursor: item.tooltip ? 'help' : 'default',
+              borderColor: `color-mix(in srgb, ${item.color} 42%, var(--border))`,
+              background: `radial-gradient(ellipse at 0% 100%, color-mix(in srgb, ${item.color} 24%, transparent) 0%, transparent 62%), linear-gradient(135deg, color-mix(in srgb, ${item.color} 12%, var(--card)) 0%, var(--card) 56%, color-mix(in srgb, ${item.color} 6%, var(--panel)) 100%)`,
+              boxShadow: `0 2px 8px var(--shadow), inset 0 1px 0 color-mix(in srgb, ${item.color} 16%, transparent)`,
+              '--kpi-accent': item.color,
+              '--kpi-glow': `color-mix(in srgb, ${item.color} 38%, transparent)`,
               animation: `fadeInUp 0.5s ease ${index * 0.1}s both`,
-            }}
-            onMouseEnter={(e) => {
-              e.currentTarget.style.transform = 'translateY(-4px)';
-              e.currentTarget.style.boxShadow = '0 8px 16px rgba(0, 0, 0, 0.2)';
-            }}
-            onMouseLeave={(e) => {
-              e.currentTarget.style.transform = 'translateY(0)';
-              e.currentTarget.style.boxShadow = 'none';
-            }}
+            } as CSSProperties}
           >
             <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
               <div
@@ -159,8 +165,9 @@ export default function KPIGrid() {
                   width: 48,
                   height: 48,
                   borderRadius: 8,
-                  background: `${item.color}15`,
-                  border: `2px solid ${item.color}`,
+                  background: `linear-gradient(135deg, color-mix(in srgb, ${item.color} 24%, transparent), color-mix(in srgb, ${item.color} 8%, transparent))`,
+                  border: `1px solid color-mix(in srgb, ${item.color} 78%, transparent)`,
+                  boxShadow: `inset 0 0 12px color-mix(in srgb, ${item.color} 12%, transparent), 0 0 16px color-mix(in srgb, ${item.color} 16%, transparent)`,
                   display: 'flex',
                   alignItems: 'center',
                   justifyContent: 'center',
@@ -179,6 +186,15 @@ export default function KPIGrid() {
                 </div>
               </div>
             </div>
+            {item.tooltip && (
+              <span
+                id={`inventory-kpi-tooltip-${index}`}
+                className="inventory-kpi-tooltip"
+                role="tooltip"
+              >
+                {item.tooltip}
+              </span>
+            )}
           </Card>
         );
       })}
@@ -211,6 +227,7 @@ export default function KPIGrid() {
             font-size: 16px !important;
           }
         }
+
       `}</style>
     </div>
   );

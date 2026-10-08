@@ -172,7 +172,7 @@ export default function CancellationReasonSelector({ value, onChange, disabled }
                     position: 'absolute', top: '100%', left: 0, right: 0,
                     background: 'var(--card)', border: '1px solid var(--border)',
                     borderRadius: '10px', marginTop: '4px', zIndex: 200,
-                    boxShadow: '0 12px 32px rgba(0,0,0,0.4)', overflow: 'hidden',
+                    boxShadow: '0 12px 32px var(--shadow)', overflow: 'hidden',
                 }}>
                     {/* Search */}
                     <div style={{ padding: '10px 12px', borderBottom: '1px solid var(--border)' }}>
@@ -199,11 +199,11 @@ export default function CancellationReasonSelector({ value, onChange, disabled }
                                 style={{
                                     padding: '10px 14px', cursor: 'pointer', fontSize: '13px',
                                     color: 'var(--text)', borderBottom: '1px solid var(--border)',
-                                    background: highlightIndex === idx ? 'rgba(255,255,255,0.05)' : 'transparent',
+                                    background: highlightIndex === idx ? 'var(--surface-hover)' : 'transparent',
                                     transition: 'background 0.1s',
                                     overflow: 'hidden', textOverflow: 'ellipsis',
                                 }}
-                                onMouseEnter={(e) => { e.currentTarget.style.background = 'rgba(255,255,255,0.05)'; setHighlightIndex(idx); }}
+                                onMouseEnter={(e) => { e.currentTarget.style.background = 'var(--surface-hover)'; setHighlightIndex(idx); }}
                                 onMouseLeave={(e) => { if (highlightIndex !== idx) e.currentTarget.style.background = 'transparent'; }}
                             >
                                 {r.label}
@@ -233,7 +233,7 @@ export default function CancellationReasonSelector({ value, onChange, disabled }
                             Agregar Motivo
                         </div>
                     ) : (
-                        <div style={{ padding: '14px', borderTop: '1px solid var(--border)', background: 'rgba(255,255,255,0.02)' }}>
+                        <div style={{ padding: '14px', borderTop: '1px solid var(--border)', background: 'var(--surface-hover)' }}>
                             <div style={{ fontSize: '12px', fontWeight: 700, color: 'var(--muted)', marginBottom: '8px', textTransform: 'uppercase' }}>
                                 Nuevo Motivo
                             </div>

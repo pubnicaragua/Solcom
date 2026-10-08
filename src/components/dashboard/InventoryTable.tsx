@@ -209,17 +209,17 @@ export default function InventoryTable({ filters, onSelectionChange, onTransfer,
           style={{ cursor: onViewDetails ? 'pointer' : 'default' }}
           onClick={() => onViewDetails?.(row)}
         >
-          <div style={{ fontWeight: 600, marginBottom: 4, fontSize: 14, color: '#F1F5F9', display: 'flex', alignItems: 'center', gap: 6 }}>
+          <div style={{ fontWeight: 600, marginBottom: 4, fontSize: 14, color: 'var(--text)', display: 'flex', alignItems: 'center', gap: 6 }}>
             {row.item_name}
-            {onViewDetails && <Info size={14} color="#94A3B8" />}
+            {onViewDetails && <Info size={14} color="var(--muted)" />}
           </div>
           {row.color && (
-            <div style={{ fontSize: 11, color: '#F1F5F9', marginBottom: 2 }}>
+            <div style={{ fontSize: 11, color: 'var(--text)', marginBottom: 2 }}>
               Color: {row.color}
             </div>
           )}
           {row.barcode && (
-            <div style={{ fontSize: 10, color: '#CBD5E1', fontFamily: 'monospace', marginTop: 2 }}>
+            <div style={{ fontSize: 10, color: 'var(--text-secondary)', fontFamily: 'monospace', marginTop: 2 }}>
               {row.barcode}
             </div>
           )}
@@ -231,7 +231,7 @@ export default function InventoryTable({ filters, onSelectionChange, onTransfer,
       header: 'SKU',
       width: '9%',
       render: (row: InventoryItem) => (
-        <span style={{ fontFamily: 'monospace', fontSize: 13, fontWeight: 600, color: '#F1F5F9' }}>{row.sku}</span>
+        <span style={{ fontFamily: 'monospace', fontSize: 13, fontWeight: 600, color: 'var(--text)' }}>{row.sku}</span>
       ),
     },
     {
@@ -245,7 +245,7 @@ export default function InventoryTable({ filters, onSelectionChange, onTransfer,
           <div style={{
             fontSize: 13,
             fontWeight: 600,
-            color: '#F1F5F9'
+            color: 'var(--text)'
           }}>
             {category}
           </div>
@@ -257,7 +257,7 @@ export default function InventoryTable({ filters, onSelectionChange, onTransfer,
       header: 'Marca',
       width: '10%',
       render: (row: InventoryItem) => (
-        <div style={{ fontSize: 13, fontWeight: 600, color: '#F1F5F9' }}>
+        <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text)' }}>
           {row.brand || '—'}
         </div>
       ),
@@ -281,13 +281,13 @@ export default function InventoryTable({ filters, onSelectionChange, onTransfer,
             }}
             title="Ver stock en todas las bodegas"
           >
-            <div style={{ fontWeight: 600, fontSize: 13, color: '#F1F5F9', marginBottom: 2, display: 'flex', alignItems: 'center', gap: 4 }}>
+            <div style={{ fontWeight: 600, fontSize: 13, color: 'var(--text)', marginBottom: 2, display: 'flex', alignItems: 'center', gap: 4 }}>
               <Warehouse size={14} />
               {isGrouped ? 'Ver bodegas' : row.warehouse_code}
               <ChevronDown size={12} style={{ opacity: 0.7 }} />
             </div>
             {!isGrouped && row.warehouse_name && (
-              <div style={{ fontSize: 11, color: '#CBD5E1' }}>{row.warehouse_name}</div>
+              <div style={{ fontSize: 11, color: 'var(--text-secondary)' }}>{row.warehouse_name}</div>
             )}
           </button>
         );
@@ -312,10 +312,10 @@ export default function InventoryTable({ filters, onSelectionChange, onTransfer,
             qty <= 20 ? 'low' :
               qty <= 50 ? 'medium' : 'high';
 
-        const color = stockLevel === 'out' ? '#DC2626' :
-          stockLevel === 'critical' ? '#EA580C' :
-            stockLevel === 'low' ? '#D97706' :
-              stockLevel === 'medium' ? '#059669' : '#2563EB';
+        const color = stockLevel === 'out' ? 'var(--danger)' :
+          stockLevel === 'critical' ? 'var(--warning)' :
+            stockLevel === 'low' ? 'var(--warning)' :
+              stockLevel === 'medium' ? 'var(--success)' : 'var(--info)';
 
         return (
           <div>
@@ -341,7 +341,7 @@ export default function InventoryTable({ filters, onSelectionChange, onTransfer,
       render: (row: InventoryItem) => (
         <div style={{
           fontWeight: 600,
-          color: (row.stock_total || 0) > 0 ? '#F1F5F9' : '#DC2626',
+          color: (row.stock_total || 0) > 0 ? 'var(--text)' : 'var(--danger)',
           fontSize: 14
         }}>
           {row.stock_total || 0}
@@ -356,7 +356,7 @@ export default function InventoryTable({ filters, onSelectionChange, onTransfer,
         <div style={{
           fontWeight: 600,
           fontSize: 14,
-          color: '#059669'
+          color: 'var(--success)'
         }}>
           ${row.price?.toLocaleString('es-NI', { minimumFractionDigits: 2 }) || '0.00'}
         </div>
@@ -373,7 +373,7 @@ export default function InventoryTable({ filters, onSelectionChange, onTransfer,
           <div style={{
             fontSize: 13,
             fontWeight: 500,
-            color: isNew ? '#059669' : '#D97706'
+            color: isNew ? 'var(--success)' : 'var(--warning)'
           }}>
             {isNew ? 'Nuevo' : state === 'usado' ? 'Usado' : 'N/A'}
           </div>
@@ -488,7 +488,7 @@ export default function InventoryTable({ filters, onSelectionChange, onTransfer,
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
-              background: 'rgba(0,0,0,0.4)',
+              background: 'var(--overlay)',
             }}
             onClick={() => setWarehousePopover(null)}
           >
@@ -501,7 +501,7 @@ export default function InventoryTable({ filters, onSelectionChange, onTransfer,
                 width: '90%',
                 maxHeight: '80vh',
                 overflow: 'auto',
-                boxShadow: '0 20px 40px rgba(0,0,0,0.3)',
+                boxShadow: '0 20px 40px var(--shadow)',
               }}
               onClick={(e) => e.stopPropagation()}
             >
@@ -535,7 +535,7 @@ export default function InventoryTable({ filters, onSelectionChange, onTransfer,
                         alignItems: 'center',
                         justifyContent: 'space-between',
                         padding: '12px 0',
-                        borderBottom: '1px solid white',
+                        borderBottom: '1px solid var(--border)',
                         gap: 12,
                       }}
                     >
@@ -547,8 +547,8 @@ export default function InventoryTable({ filters, onSelectionChange, onTransfer,
                             {!w.active && w.active !== undefined && (
                               <span style={{
                                 fontSize: 10,
-                                background: '#FCA5A5',
-                                color: '#7F1D1D',
+                                background: 'var(--danger-surface)',
+                                color: 'var(--danger)',
                                 padding: '2px 6px',
                                 borderRadius: 4,
                                 fontWeight: 700
@@ -566,7 +566,7 @@ export default function InventoryTable({ filters, onSelectionChange, onTransfer,
                         <span style={{
                           fontWeight: 600,
                           fontSize: 15,
-                          color: w.qty < 0 ? '#DC2626' : 'var(--text)'
+                          color: w.qty < 0 ? 'var(--danger)' : 'var(--text)'
                         }}>
                           {w.qty} un.
                         </span>
@@ -621,23 +621,23 @@ function MobileInventoryCard({ item, onTransfer, onTransferFromWarehouse, openWa
       flexDirection: 'column'
     }}>
       {/* Header */}
-      <div style={{ padding: '12px 16px', background: 'rgba(255,255,255,0.02)', borderBottom: '1px solid var(--border)' }}>
+      <div style={{ padding: '12px 16px', background: 'var(--surface-hover)', borderBottom: '1px solid var(--border)' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 12 }}>
           <div>
-            <div style={{ fontSize: 15, fontWeight: 600, color: '#fff', marginBottom: 4 }}>{item.item_name}</div>
+            <div style={{ fontSize: 15, fontWeight: 600, color: 'var(--text)', marginBottom: 4 }}>{item.item_name}</div>
             <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
               <Badge variant={isNew ? 'success' : 'warning'} size="sm">
                 {isNew ? 'Nuevo' : (item.state || 'N/A')}
               </Badge>
               {item.color && (
                 <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                  <span style={{ fontSize: 12, color: '#94a3b8' }}>{item.color}</span>
+                  <span style={{ fontSize: 12, color: 'var(--muted)' }}>{item.color}</span>
                 </div>
               )}
             </div>
           </div>
           <div style={{ textAlign: 'right' }}>
-            <div style={{ fontSize: 16, fontWeight: 700, color: '#10b981' }}>
+            <div style={{ fontSize: 16, fontWeight: 700, color: 'var(--success)' }}>
               ${item.price?.toLocaleString() || '0.00'}
             </div>
           </div>
@@ -648,20 +648,20 @@ function MobileInventoryCard({ item, onTransfer, onTransferFromWarehouse, openWa
       <div style={{ padding: '12px 16px' }}>
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 16 }}>
           <div>
-            <div style={{ fontSize: 11, color: '#64748b', marginBottom: 2 }}>SKU</div>
-            <div style={{ fontSize: 13, color: '#e2e8f0', fontFamily: 'monospace' }}>{item.sku}</div>
+            <div style={{ fontSize: 11, color: 'var(--muted)', marginBottom: 2 }}>SKU</div>
+            <div style={{ fontSize: 13, color: 'var(--text)', fontFamily: 'monospace' }}>{item.sku}</div>
           </div>
           <div>
-            <div style={{ fontSize: 11, color: '#64748b', marginBottom: 2 }}>MARCA</div>
-            <div style={{ fontSize: 13, color: '#e2e8f0' }}>{item.brand || '—'}</div>
+            <div style={{ fontSize: 11, color: 'var(--muted)', marginBottom: 2 }}>MARCA</div>
+            <div style={{ fontSize: 13, color: 'var(--text)' }}>{item.brand || '—'}</div>
           </div>
           <div>
-            <div style={{ fontSize: 11, color: '#64748b', marginBottom: 2 }}>CATEGORÍA</div>
-            <div style={{ fontSize: 13, color: '#e2e8f0' }}>{item.category || '—'}</div>
+            <div style={{ fontSize: 11, color: 'var(--muted)', marginBottom: 2 }}>CATEGORÍA</div>
+            <div style={{ fontSize: 13, color: 'var(--text)' }}>{item.category || '—'}</div>
           </div>
           <div>
-            <div style={{ fontSize: 11, color: '#64748b', marginBottom: 2 }}>TOTAL STOCK</div>
-            <div style={{ fontSize: 13, fontWeight: 700, color: hasTotal ? '#f1f5f9' : '#ef4444' }}>
+            <div style={{ fontSize: 11, color: 'var(--muted)', marginBottom: 2 }}>TOTAL STOCK</div>
+            <div style={{ fontSize: 13, fontWeight: 700, color: hasTotal ? 'var(--text)' : 'var(--danger)' }}>
               {item.stock_total || 0}
             </div>
           </div>
@@ -669,14 +669,14 @@ function MobileInventoryCard({ item, onTransfer, onTransferFromWarehouse, openWa
 
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
           <div style={{ flex: 1 }}>
-            <div style={{ fontSize: 11, color: '#64748b', marginBottom: 4 }}>DISPONIBILIDAD</div>
+            <div style={{ fontSize: 11, color: 'var(--muted)', marginBottom: 4 }}>DISPONIBILIDAD</div>
             {isGrouped ? (
               <button
                 onClick={() => openWarehousePopover(item)}
                 style={{
-                  background: 'rgba(59,130,246,0.1)',
-                  color: '#60a5fa',
-                  border: '1px solid rgba(59,130,246,0.2)',
+                  background: 'var(--info-surface)',
+                  color: 'var(--info)',
+                  border: '1px solid var(--info)',
                   borderRadius: 6,
                   padding: '4px 8px',
                   fontSize: 12,
@@ -693,7 +693,7 @@ function MobileInventoryCard({ item, onTransfer, onTransferFromWarehouse, openWa
               </button>
             ) : (
               <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                <div style={{ fontSize: 13, color: '#e2e8f0' }}>{item.warehouse_code}</div>
+                <div style={{ fontSize: 13, color: 'var(--text)' }}>{item.warehouse_code}</div>
                 <Badge variant="neutral" size="sm">{item.qty}</Badge>
               </div>
             )}

@@ -2,6 +2,8 @@ import '@/styles/globals.css';
 import type { Metadata } from 'next';
 import ModernAlertBridge from '@/components/ui/ModernAlertBridge';
 import NotificationsProvider from '@/components/providers/NotificationsProvider';
+import Script from 'next/script';
+import { ThemeProvider } from '@/contexts/ThemeContext';
 
 export const metadata: Metadata = {
   title: {
@@ -81,20 +83,29 @@ export const metadata: Metadata = {
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="es">
+    <html lang="es" data-theme="dark" suppressHydrationWarning>
       <head>
         <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=5" />
-        <meta name="theme-color" content="#FF0000" />
+        <meta name="theme-color" content="#0b1424" />
+        <Script
+          id="solcom-theme-bootstrap"
+          strategy="beforeInteractive"
+          dangerouslySetInnerHTML={{
+            __html: `try { var storedTheme = localStorage.getItem('solcom-theme'); var activeTheme = storedTheme === 'light' ? 'light' : 'dark'; document.documentElement.dataset.theme = activeTheme; document.documentElement.style.colorScheme = activeTheme; var themeMeta = document.querySelector('meta[name="theme-color"]'); if (themeMeta) themeMeta.setAttribute('content', activeTheme === 'light' ? '#f3f6fb' : '#0b1424'); } catch (_) { document.documentElement.dataset.theme = 'dark'; document.documentElement.style.colorScheme = 'dark'; }`,
+          }}
+        />
         <link rel="icon" type="image/png" href="https://www.soliscomercialni.com/Solis%20Comercial%20Logo.png" />
         <link rel="apple-touch-icon" href="https://www.soliscomercialni.com/Solis%20Comercial%20Logo.png" />
         <link rel="preconnect" href="https://fonts.googleapis.com" />
         <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
       </head>
       <body>
-        <NotificationsProvider>
-          <ModernAlertBridge />
-          {children}
-        </NotificationsProvider>
+        <ThemeProvider>
+          <NotificationsProvider>
+            <ModernAlertBridge />
+            {children}
+          </NotificationsProvider>
+        </ThemeProvider>
       </body>
     </html>
   );

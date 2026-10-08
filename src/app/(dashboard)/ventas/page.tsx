@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect, useRef, Suspense } from 'react';
+import type { CSSProperties } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import {
@@ -567,29 +568,29 @@ function FacturacionPageContent() {
       label: 'Facturado Total',
       value: `$${kpis.total.toLocaleString('en-US', { minimumFractionDigits: 2 })}`,
       icon: DollarSign,
-      color: '#DC2626',
-      bg: 'rgba(220,38,38,0.08)',
+      color: 'var(--brand-primary)',
+      bg: 'var(--brand-surface)',
     },
     {
       label: 'Cobrado',
       value: `$${kpis.pagadas.toLocaleString('en-US', { minimumFractionDigits: 2 })}`,
       icon: CheckCircle,
-      color: '#10B981',
-      bg: 'rgba(16,185,129,0.08)',
+      color: 'var(--success)',
+      bg: 'var(--success-surface)',
     },
     {
       label: 'Pendiente Cobro',
       value: `$${kpis.pendientes.toLocaleString('en-US', { minimumFractionDigits: 2 })}`,
       icon: Clock,
-      color: '#3B82F6',
-      bg: 'rgba(59,130,246,0.08)',
+      color: 'var(--info)',
+      bg: 'var(--info-surface)',
     },
     {
       label: 'Vencidas',
       value: String(kpis.vencidas),
       icon: AlertTriangle,
-      color: '#F59E0B',
-      bg: 'rgba(245,158,11,0.08)',
+      color: 'var(--warning)',
+      bg: 'var(--warning-surface)',
     },
   ];
 
@@ -603,12 +604,12 @@ function FacturacionPageContent() {
   );
 
   return (
-    <div style={{ color: 'var(--text)' }}>
+    <div className="sales-design-page" style={{ color: 'var(--text)' }}>
       {/* Header */}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '28px', flexWrap: 'wrap', gap: '16px' }}>
         <div>
           <h1 className="h-title" style={{ fontWeight: 700, marginBottom: '4px', display: 'flex', alignItems: 'center', gap: '10px' }}>
-            <FileText size={24} style={{ color: 'var(--brand-primary)' }} />
+          <span className="inventory-title-mark"><FileText size={21} /></span>
             Ventas
           </h1>
           <p style={{ fontSize: '14px', color: 'var(--muted)' }}>
@@ -622,8 +623,8 @@ function FacturacionPageContent() {
             href="/ventas/cotizaciones"
             style={{
               display: 'inline-flex', alignItems: 'center', gap: '8px',
-              padding: '12px 20px', background: 'rgba(59,130,246,0.18)', color: '#93C5FD',
-              border: '1px solid rgba(59,130,246,0.4)', borderRadius: '10px', fontSize: '14px', fontWeight: 700,
+              padding: '12px 20px', background: 'var(--info-surface)', color: 'var(--info)',
+              border: '1px solid color-mix(in srgb, var(--info) 38%, var(--border))', borderRadius: '10px', fontSize: '14px', fontWeight: 700,
               textDecoration: 'none',
             }}
           >
@@ -634,8 +635,8 @@ function FacturacionPageContent() {
             href="/ventas/sync"
             style={{
               display: 'inline-flex', alignItems: 'center', gap: '8px',
-              padding: '12px 20px', background: 'rgba(245,158,11,0.18)', color: '#FCD34D',
-              border: '1px solid rgba(245,158,11,0.4)', borderRadius: '10px', fontSize: '14px', fontWeight: 700,
+              padding: '12px 20px', background: 'var(--warning-surface)', color: 'var(--warning)',
+              border: '1px solid color-mix(in srgb, var(--warning) 38%, var(--border))', borderRadius: '10px', fontSize: '14px', fontWeight: 700,
               textDecoration: 'none',
             }}
           >
@@ -675,6 +676,7 @@ function FacturacionPageContent() {
 
       {/* Ventas Tabs */}
       <div
+        className="sales-design-panel sales-design-tabs"
         style={{
           display: 'inline-flex',
           gap: 4,
@@ -730,37 +732,34 @@ function FacturacionPageContent() {
             {kpiCards.map((kpi, i) => {
               const Icon = kpi.icon;
               return (
-                <div key={i} style={{
-                  background: 'var(--card)', padding: '20px', borderRadius: '12px',
-                  border: '1px solid var(--border)', boxShadow: '0 2px 8px rgba(0,0,0,0.1)',
-                  transition: 'transform 0.2s, box-shadow 0.2s',
-                }}
-                  onMouseEnter={(e) => {
-                    e.currentTarget.style.transform = 'translateY(-2px)';
-                    e.currentTarget.style.boxShadow = '0 8px 20px rgba(0,0,0,0.2)';
-                  }}
-                  onMouseLeave={(e) => {
-                    e.currentTarget.style.transform = 'translateY(0)';
-                    e.currentTarget.style.boxShadow = '0 2px 8px rgba(0,0,0,0.1)';
-                  }}
-                >
+                <div key={i} className="sales-design-kpi" style={{
+                  padding: '20px', borderRadius: '12px',
+                  '--kpi-accent': kpi.color,
+                  '--kpi-glow': `color-mix(in srgb, ${kpi.color} 38%, transparent)`,
+                  background: `radial-gradient(ellipse at 0% 100%, color-mix(in srgb, ${kpi.color} 24%, transparent) 0%, transparent 62%), linear-gradient(135deg, color-mix(in srgb, ${kpi.color} 12%, var(--card)) 0%, var(--card) 56%, color-mix(in srgb, ${kpi.color} 6%, var(--panel)) 100%)`,
+                  border: `1px solid color-mix(in srgb, ${kpi.color} 42%, var(--border))`,
+                  boxShadow: `0 2px 8px var(--shadow), inset 0 1px 0 color-mix(in srgb, ${kpi.color} 16%, transparent)`,
+                } as CSSProperties}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '12px' }}>
                     <div style={{
                       width: '36px', height: '36px', borderRadius: '10px',
-                      background: kpi.bg, display: 'flex', alignItems: 'center', justifyContent: 'center',
+                      background: `linear-gradient(135deg, color-mix(in srgb, ${kpi.color} 24%, transparent), color-mix(in srgb, ${kpi.color} 8%, transparent))`,
+                      border: `1px solid color-mix(in srgb, ${kpi.color} 78%, transparent)`,
+                      boxShadow: `inset 0 0 12px color-mix(in srgb, ${kpi.color} 12%, transparent), 0 0 16px color-mix(in srgb, ${kpi.color} 16%, transparent)`,
+                      display: 'flex', alignItems: 'center', justifyContent: 'center',
                     }}>
                       <Icon size={18} style={{ color: kpi.color }} />
                     </div>
                     <span style={{ fontSize: '13px', color: 'var(--muted)', fontWeight: 500 }}>{kpi.label}</span>
                   </div>
-                  <div style={{ fontSize: '26px', fontWeight: 800, color: 'var(--text)' }}>{kpi.value}</div>
+                  <div style={{ fontSize: '26px', fontWeight: 800, color: kpi.color }}>{kpi.value}</div>
                 </div>
               );
             })}
           </div>
 
           {/* Preparador de factura */}
-          <div style={{
+          <div className="sales-design-panel" style={{
             background: 'var(--card)', borderRadius: '12px', border: '1px solid var(--border)',
             marginBottom: '20px', padding: '16px',
           }}>
@@ -844,32 +843,32 @@ function FacturacionPageContent() {
             </div>
 
             {!draftWarehouseId ? (
-              <div style={{ padding: '12px', borderRadius: '8px', background: 'rgba(59,130,246,0.08)', color: '#93C5FD', fontSize: '12px' }}>
+              <div style={{ padding: '12px', borderRadius: '8px', background: 'var(--info-surface)', color: 'var(--info)', fontSize: '12px' }}>
                 Selecciona una bodega para cargar la tabla pivot de productos.
               </div>
             ) : draftError ? (
-              <div style={{ padding: '12px', borderRadius: '8px', background: 'rgba(239,68,68,0.1)', color: '#FCA5A5', fontSize: '12px' }}>
+              <div style={{ padding: '12px', borderRadius: '8px', background: 'var(--danger-surface)', color: 'var(--danger)', fontSize: '12px' }}>
                 {draftError}
               </div>
             ) : draftLoading ? (
-              <div style={{ padding: '12px', borderRadius: '8px', background: 'rgba(255,255,255,0.04)', color: 'var(--muted)', fontSize: '12px' }}>
+              <div style={{ padding: '12px', borderRadius: '8px', background: 'var(--surface-hover)', color: 'var(--muted)', fontSize: '12px' }}>
                 Cargando productos...
               </div>
             ) : draftPivotItems.length === 0 ? (
-              <div style={{ padding: '12px', borderRadius: '8px', background: 'rgba(255,255,255,0.04)', color: 'var(--muted)', fontSize: '12px' }}>
+              <div style={{ padding: '12px', borderRadius: '8px', background: 'var(--surface-hover)', color: 'var(--muted)', fontSize: '12px' }}>
                 Sin resultados para esa bodega/filtro.
               </div>
             ) : (
-              <div style={{ border: '1px solid var(--border)', borderRadius: '10px', overflow: 'hidden' }}>
+              <div className="sales-design-table-card" style={{ border: '1px solid var(--border)', borderRadius: '10px', overflow: 'hidden' }}>
                 <div style={{ maxHeight: '520px', overflow: 'auto' }}>
                   <table style={{ width: '100%', minWidth: '760px', borderCollapse: 'collapse' }}>
                     <thead>
-                      <tr style={{ background: 'rgba(255,255,255,0.03)' }}>
+                      <tr className="sales-design-table-head" style={{ background: 'var(--table-header-bg)' }}>
                         <th style={{ padding: '8px', borderBottom: '1px solid var(--border)', fontSize: '11px', color: 'var(--muted)', textAlign: 'center', width: '48px' }}>Sel.</th>
                         <th style={{ padding: '8px', borderBottom: '1px solid var(--border)', fontSize: '11px', color: 'var(--muted)', textAlign: 'left', minWidth: '260px' }}>Producto</th>
                         <th style={{ padding: '8px', borderBottom: '1px solid var(--border)', fontSize: '11px', color: 'var(--muted)', textAlign: 'left', minWidth: '120px' }}>SKU</th>
                         <th style={{ padding: '8px', borderBottom: '1px solid var(--border)', fontSize: '11px', color: 'var(--muted)', textAlign: 'right', minWidth: '100px' }}>Precio</th>
-                        <th style={{ padding: '8px', borderBottom: '1px solid var(--border)', fontSize: '11px', color: '#93C5FD', textAlign: 'right', minWidth: '88px' }}>
+                        <th style={{ padding: '8px', borderBottom: '1px solid var(--table-header-rule)', fontSize: '11px', color: 'var(--table-header-text)', textAlign: 'right', minWidth: '88px' }}>
                           Existencia ({selectedDraftWarehouseCode || 'Bodega'})
                         </th>
                         <th style={{ padding: '8px', borderBottom: '1px solid var(--border)', fontSize: '11px', color: 'var(--muted)', textAlign: 'center', minWidth: '130px' }}>Cantidad</th>
@@ -939,7 +938,7 @@ function FacturacionPageContent() {
                                     fontSize: '12px',
                                     fontWeight: 700,
                                     color: 'var(--text)',
-                                    background: 'rgba(255,255,255,0.02)',
+                                    background: 'var(--surface-hover)',
                                   }}>
                                     {selectedQty}
                                   </div>
@@ -976,7 +975,7 @@ function FacturacionPageContent() {
                   gap: '12px',
                   padding: '10px 12px',
                   borderTop: '1px solid var(--border)',
-                  background: 'rgba(255,255,255,0.02)',
+                  background: 'var(--surface-hover)',
                 }}>
                   <div style={{ fontSize: '12px', color: 'var(--muted)' }}>
                     Mostrando {draftVisibleItems.length === 0 ? 0 : ((draftPageSafe - 1) * DRAFT_PAGE_SIZE) + 1}
@@ -1034,7 +1033,7 @@ function FacturacionPageContent() {
           </div>
 
           {/* Status Tabs */}
-          <div style={{
+          <div className="sales-design-panel sales-design-tabs" style={{
             display: 'flex', gap: '4px', marginBottom: '20px',
             background: 'var(--card)', padding: '4px', borderRadius: '12px',
             border: '1px solid var(--border)', overflowX: 'auto',
@@ -1063,7 +1062,7 @@ function FacturacionPageContent() {
           </div>
 
           {/* Filters Bar */}
-          <div style={{
+          <div className="sales-design-panel" style={{
             background: 'var(--card)', padding: '16px 20px', borderRadius: '12px',
             marginBottom: '20px', border: '1px solid var(--border)',
             display: 'flex', gap: '12px', alignItems: 'flex-end', flexWrap: 'wrap',
@@ -1129,7 +1128,7 @@ function FacturacionPageContent() {
           </div>
 
           {/* Invoices Table */}
-          <div style={{
+          <div className="sales-design-panel" style={{
             background: 'var(--card)', borderRadius: '12px', border: '1px solid var(--border)',
             overflow: 'hidden',
           }}>
@@ -1138,11 +1137,12 @@ function FacturacionPageContent() {
               display: 'grid',
               gridTemplateColumns: '100px minmax(200px,1.2fr) 140px 110px 120px 130px',
               padding: '14px 20px', borderBottom: '1px solid var(--border)',
-              background: 'rgba(255,255,255,0.02)',
+              background: 'var(--table-header-bg)',
+              borderBottomColor: 'var(--table-header-rule)',
             }}>
               {['Fecha', 'Cliente', 'Número', 'Estado', 'Total', ''].map((h, i) => (
                 <div key={i} style={{
-                  fontSize: '11px', fontWeight: 700, color: 'var(--muted)',
+                  fontSize: '11px', fontWeight: 700, color: 'var(--table-header-text)',
                   textTransform: 'uppercase', letterSpacing: '0.5px',
                   textAlign: i === 4 ? 'right' : 'left',
                 }}>
@@ -1189,6 +1189,7 @@ function FacturacionPageContent() {
                 return (
                   <div
                     key={inv.id}
+                    className="sales-design-list-row"
                     onClick={() => { setPreviewInvoiceId(inv.id); setShowPreview(true); }}
                     style={{
                       display: 'grid',
@@ -1199,8 +1200,6 @@ function FacturacionPageContent() {
                       transition: 'background 0.15s',
                       alignItems: 'center',
                     }}
-                    onMouseEnter={(e) => e.currentTarget.style.background = 'rgba(255,255,255,0.03)'}
-                    onMouseLeave={(e) => e.currentTarget.style.background = 'transparent'}
                   >
                     <div style={{ fontSize: '13px', color: 'var(--muted)' }}>
                       {formatInvoiceListDate(inv.date)}
@@ -1233,7 +1232,7 @@ function FacturacionPageContent() {
                         onClick={(e) => { e.stopPropagation(); setPreviewInvoiceId(inv.id); setShowPreview(true); }}
                         title="Ver"
                         style={{
-                          padding: '6px', background: 'rgba(255,255,255,0.05)', border: '1px solid var(--border)',
+                          padding: '6px', background: 'var(--surface-hover)', border: '1px solid var(--border)',
                           borderRadius: '6px', cursor: 'pointer', color: 'var(--muted)',
                           display: 'flex', alignItems: 'center', justifyContent: 'center',
                         }}
@@ -1247,11 +1246,11 @@ function FacturacionPageContent() {
                           disabled={loadingEditInvoiceId === inv.id}
                           style={{
                             padding: '6px',
-                            background: 'rgba(59,130,246,0.08)',
-                            border: '1px solid rgba(59,130,246,0.22)',
+                            background: 'var(--info-surface)',
+                            border: '1px solid color-mix(in srgb, var(--info) 30%, var(--border))',
                             borderRadius: '6px',
                             cursor: loadingEditInvoiceId === inv.id ? 'wait' : 'pointer',
-                            color: '#93C5FD',
+                            color: 'var(--info)',
                             display: 'flex',
                             alignItems: 'center',
                             justifyContent: 'center',
@@ -1270,8 +1269,8 @@ function FacturacionPageContent() {
                           onClick={(e) => { e.stopPropagation(); handleDeleteInvoice(inv.id); }}
                           title="Eliminar"
                           style={{
-                            padding: '6px', background: 'rgba(239,68,68,0.08)', border: '1px solid rgba(239,68,68,0.2)',
-                            borderRadius: '6px', cursor: 'pointer', color: '#F87171',
+                            padding: '6px', background: 'var(--danger-surface)', border: '1px solid color-mix(in srgb, var(--danger) 28%, var(--border))',
+                            borderRadius: '6px', cursor: 'pointer', color: 'var(--danger)',
                             display: 'flex', alignItems: 'center', justifyContent: 'center',
                           }}
                         >

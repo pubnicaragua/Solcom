@@ -200,10 +200,13 @@ export default function PriceProfilesPage() {
     };
 
     return (
-        <div style={{ display: 'grid', gap: 14 }}>
+        <div className="sales-design-page price-profiles-page" style={{ display: 'grid', gap: 14 }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 10 }}>
                 <div>
-                    <div className="h-title">Listas de precios</div>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                        <span className="inventory-title-mark"><FileSpreadsheet size={20} /></span>
+                        <div className="h-title">Listas de precios</div>
+                    </div>
                     <div style={{ fontSize: 13, color: 'var(--muted)' }}>
                         Importa y administra tarifas para Facturas y Órdenes de Venta.
                     </div>
@@ -231,18 +234,18 @@ export default function PriceProfilesPage() {
             </div>
 
             {error ? (
-                <div style={{ border: '1px solid rgba(239,68,68,0.35)', background: 'rgba(127,29,29,0.25)', color: '#FCA5A5', borderRadius: 8, padding: '10px 12px', fontSize: 13 }}>
+                <div style={{ border: '1px solid color-mix(in srgb, var(--danger) 38%, var(--border))', background: 'var(--danger-surface)', color: 'var(--danger)', borderRadius: 8, padding: '10px 12px', fontSize: 13 }}>
                     {error}
                 </div>
             ) : null}
             {success ? (
-                <div style={{ border: '1px solid rgba(16,185,129,0.35)', background: 'rgba(6,78,59,0.25)', color: '#6EE7B7', borderRadius: 8, padding: '10px 12px', fontSize: 13 }}>
+                <div style={{ border: '1px solid color-mix(in srgb, var(--success) 38%, var(--border))', background: 'var(--success-surface)', color: 'var(--success)', borderRadius: 8, padding: '10px 12px', fontSize: 13 }}>
                     {success}
                 </div>
             ) : null}
 
             <div style={{ display: 'grid', gap: 14, gridTemplateColumns: '340px 1fr' }}>
-                <div style={{ border: '1px solid var(--border)', borderRadius: 12, background: 'var(--card)', padding: 14, display: 'grid', gap: 10 }}>
+                <div className="sales-design-panel" style={{ border: '1px solid var(--border)', borderRadius: 12, background: 'var(--card)', padding: 14, display: 'grid', gap: 10 }}>
                     <div style={{ fontSize: 14, fontWeight: 700, color: 'var(--text)' }}>Crear / Editar lista</div>
                     <label style={{ fontSize: 12, color: 'var(--muted)' }}>
                         Código
@@ -329,7 +332,7 @@ export default function PriceProfilesPage() {
                     </div>
                 </div>
 
-                <div style={{ border: '1px solid var(--border)', borderRadius: 12, background: 'var(--card)', padding: 14, display: 'grid', gap: 10 }}>
+                <div className="sales-design-panel" style={{ border: '1px solid var(--border)', borderRadius: 12, background: 'var(--card)', padding: 14, display: 'grid', gap: 10 }}>
                     <div style={{ fontSize: 14, fontWeight: 700, color: 'var(--text)' }}>Importar archivo Excel</div>
                     <div style={{ fontSize: 12, color: 'var(--muted)' }}>
                         Soporta dos formatos:
@@ -394,8 +397,8 @@ export default function PriceProfilesPage() {
                 </div>
             </div>
 
-            <div style={{ border: '1px solid var(--border)', borderRadius: 12, background: 'var(--card)', overflow: 'hidden' }}>
-                <div style={{ display: 'grid', gridTemplateColumns: '1.2fr 1fr 1fr 0.8fr 1fr 0.8fr', gap: 8, padding: '12px 14px', borderBottom: '1px solid var(--border)', fontSize: 12, color: 'var(--muted)', fontWeight: 700 }}>
+            <div className="sales-design-table-card" style={{ border: '1px solid var(--border)', borderRadius: 12, background: 'var(--card)', overflow: 'hidden' }}>
+                <div className="sales-design-table-head" style={{ display: 'grid', gridTemplateColumns: '1.2fr 1fr 1fr 0.8fr 1fr 0.8fr', gap: 8, padding: '12px 14px', borderBottom: '1px solid var(--border)', fontSize: 12, color: 'var(--muted)', fontWeight: 700 }}>
                     <span>Lista</span>
                     <span>Código</span>
                     <span>Moneda</span>
@@ -411,23 +414,24 @@ export default function PriceProfilesPage() {
                     sortedProfiles.map((profile) => (
                         <div
                             key={profile.code}
+                            className="sales-design-list-row"
                             style={{
                                 display: 'grid',
                                 gridTemplateColumns: '1.2fr 1fr 1fr 0.8fr 1fr 0.8fr',
                                 gap: 8,
                                 padding: '11px 14px',
-                                borderTop: '1px solid rgba(255,255,255,0.04)',
+                                borderTop: '1px solid var(--border)',
                                 alignItems: 'center',
                                 fontSize: 13,
                             }}
                         >
                             <div style={{ display: 'inline-flex', alignItems: 'center', gap: 8, color: 'var(--text)', fontWeight: 600 }}>
-                                <FileSpreadsheet size={14} style={{ color: profile.active ? '#60A5FA' : '#6B7280' }} />
+                                <FileSpreadsheet size={14} style={{ color: profile.active ? 'var(--info)' : 'var(--muted)' }} />
                                 {profile.name}
                             </div>
                             <code style={{ color: 'var(--muted)' }}>{profile.code}</code>
                             <span style={{ color: 'var(--muted)' }}>{profile.currency_code || 'USD'}</span>
-                            <span style={{ color: '#34D399', fontWeight: 700 }}>{Number(profile.item_count || 0)}</span>
+                            <span style={{ color: 'var(--success)', fontWeight: 700 }}>{Number(profile.item_count || 0)}</span>
                             <span style={{ color: 'var(--muted)' }}>{formatDate(profile.updated_at)}</span>
                             <div style={{ display: 'flex', gap: 6 }}>
                                 <button
@@ -449,9 +453,9 @@ export default function PriceProfilesPage() {
                                     type="button"
                                     onClick={() => void deleteProfile(profile.code)}
                                     style={{
-                                        border: '1px solid rgba(239,68,68,0.35)',
-                                        background: 'rgba(127,29,29,0.22)',
-                                        color: '#FCA5A5',
+                                        border: '1px solid color-mix(in srgb, var(--danger) 35%, var(--border))',
+                                        background: 'var(--danger-surface)',
+                                        color: 'var(--danger)',
                                         borderRadius: 7,
                                         padding: '5px 8px',
                                         fontSize: 12,

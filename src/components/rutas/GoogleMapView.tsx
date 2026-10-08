@@ -327,17 +327,17 @@ export default function GoogleMapView({
         flexDirection: 'column',
         alignItems: 'center',
         justifyContent: 'center',
-        background: 'rgba(15,23,42,0.5)',
-        border: '1px solid rgba(255,255,255,0.08)',
+        background: 'var(--panel-elevated)',
+        border: '1px solid var(--border)',
         borderRadius: 8,
         padding: 40,
         textAlign: 'center'
       }}>
         <AlertCircle size={48} color="#ef4444" style={{ marginBottom: 16 }} />
-        <div style={{ fontSize: 14, color: '#f87171', marginBottom: 8, fontWeight: 600 }}>
+        <div style={{ fontSize: 14, color: 'var(--danger)', marginBottom: 8, fontWeight: 600 }}>
           Error de configuración
         </div>
-        <div style={{ fontSize: 12, color: '#94a3b8', maxWidth: 400 }}>
+        <div style={{ fontSize: 12, color: 'var(--muted)', maxWidth: 400 }}>
           {error}
         </div>
       </div>

@@ -8,6 +8,7 @@ import {
 } from 'lucide-react';
 import { supabase } from '@/lib/supabase/client';
 import Card from '@/components/ui/Card';
+import RouteKpiCard from '@/components/rutas/RouteKpiCard';
 import Button from '@/components/ui/Button';
 import Badge from '@/components/ui/Badge';
 import GoogleMapView from '@/components/rutas/GoogleMapView';
@@ -266,8 +267,8 @@ export default function MonitoreoPage() {
     switch (status) {
       case 'completed': return '#10b981';
       case 'arrived': return '#f97316';
-      case 'pending': return '#6b7280';
-      default: return '#6b7280';
+      case 'pending': return 'var(--muted)';
+      default: return 'var(--muted)';
     }
   };
 
@@ -364,7 +365,7 @@ export default function MonitoreoPage() {
           <h1 style={{ fontSize: 24, fontWeight: 700, marginBottom: 4 }}>
             Monitoreo en Vivo
           </h1>
-          <p style={{ color: 'rgba(255,255,255,0.6)', fontSize: 14 }}>
+          <p style={{ color: 'var(--muted)', fontSize: 14 }}>
             Última actualización: {lastUpdate.toLocaleTimeString('es-NI')}
           </p>
         </div>
@@ -374,7 +375,7 @@ export default function MonitoreoPage() {
             alignItems: 'center', 
             gap: 8,
             padding: '8px 12px',
-            background: 'rgba(16, 185, 129, 0.1)',
+                background: 'var(--success-surface)',
             borderRadius: 8,
             border: '1px solid rgba(16, 185, 129, 0.2)'
           }}>
@@ -382,10 +383,10 @@ export default function MonitoreoPage() {
               width: 8, 
               height: 8, 
               borderRadius: '50%', 
-              background: '#10b981',
+                background: 'var(--success)',
               animation: 'pulse 2s infinite'
             }} />
-            <span style={{ fontSize: 12, color: '#10b981', fontWeight: 600 }}>
+                <span style={{ fontSize: 12, color: 'var(--success)', fontWeight: 600 }}>
               En Vivo
             </span>
           </div>
@@ -396,58 +397,11 @@ export default function MonitoreoPage() {
       </div>
 
       {/* Stats */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 16 }}>
-        <Card style={{ padding: 16 }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-            <div style={{ padding: 10, background: 'rgba(16, 185, 129, 0.1)', borderRadius: 8 }}>
-              <Truck size={20} color="#10b981" />
-            </div>
-            <div>
-              <div style={{ fontSize: 24, fontWeight: 700 }}>{activeRoutes.length}</div>
-              <div style={{ fontSize: 12, color: 'rgba(255,255,255,0.5)' }}>Rutas Activas</div>
-            </div>
-          </div>
-        </Card>
-
-        <Card style={{ padding: 16 }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-            <div style={{ padding: 10, background: 'rgba(59, 130, 246, 0.1)', borderRadius: 8 }}>
-              <Package size={20} color="#3b82f6" />
-            </div>
-            <div>
-              <div style={{ fontSize: 24, fontWeight: 700 }}>
-                {activeRoutes.reduce((sum, r) => sum + (r.route_stops?.filter(s => s.status === 'pending').length || 0), 0)}
-              </div>
-              <div style={{ fontSize: 12, color: 'rgba(255,255,255,0.5)' }}>Entregas Pendientes</div>
-            </div>
-          </div>
-        </Card>
-
-        <Card style={{ padding: 16 }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-            <div style={{ padding: 10, background: 'rgba(16, 185, 129, 0.1)', borderRadius: 8 }}>
-              <CheckCircle2 size={20} color="#10b981" />
-            </div>
-            <div>
-              <div style={{ fontSize: 24, fontWeight: 700 }}>
-                {activeRoutes.reduce((sum, r) => sum + (r.route_stops?.filter(s => s.status === 'completed').length || 0), 0)}
-              </div>
-              <div style={{ fontSize: 12, color: 'rgba(255,255,255,0.5)' }}>Completadas Hoy</div>
-            </div>
-          </div>
-        </Card>
-
-        <Card style={{ padding: 16 }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-            <div style={{ padding: 10, background: 'rgba(239, 68, 68, 0.1)', borderRadius: 8 }}>
-              <AlertTriangle size={20} color="#ef4444" />
-            </div>
-            <div>
-              <div style={{ fontSize: 24, fontWeight: 700 }}>{alerts.length}</div>
-              <div style={{ fontSize: 12, color: 'rgba(255,255,255,0.5)' }}>Alertas Activas</div>
-            </div>
-          </div>
-        </Card>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(210px, 1fr))', gap: 16 }}>
+        <RouteKpiCard icon={Truck} label="Rutas Activas" value={activeRoutes.length} tone="success" />
+        <RouteKpiCard icon={Package} label="Entregas Pendientes" value={activeRoutes.reduce((sum, r) => sum + (r.route_stops?.filter(s => s.status === 'pending').length || 0), 0)} tone="info" />
+        <RouteKpiCard icon={CheckCircle2} label="Completadas Hoy" value={activeRoutes.reduce((sum, r) => sum + (r.route_stops?.filter(s => s.status === 'completed').length || 0), 0)} tone="violet" />
+        <RouteKpiCard icon={AlertTriangle} label="Alertas Activas" value={alerts.length} tone="danger" />
       </div>
 
       <Card style={{ padding: 20 }}>
@@ -455,19 +409,19 @@ export default function MonitoreoPage() {
           <div style={{ display: 'grid', gap: 14 }}>
             <div>
               <h2 style={{ fontSize: 18, fontWeight: 700, marginBottom: 8 }}>Cómo leer el mapa del monitoreo</h2>
-              <p style={{ fontSize: 14, color: 'rgba(255,255,255,0.65)', lineHeight: 1.6 }}>
+              <p style={{ fontSize: 14, color: 'var(--muted)', lineHeight: 1.6 }}>
                 Aquí puedes ver un mapa operativo simplificado: la ubicación actual del vehículo cuando hay GPS y el orden real de las paradas de la ruta.
               </p>
             </div>
 
             <div style={{ display: 'grid', gap: 10 }}>
-              <div style={{ padding: 12, borderRadius: 12, background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.06)' }}>
+              <div style={{ padding: 12, borderRadius: 12, background: 'var(--surface-hover)', border: '1px solid var(--border)' }}>
                 <strong>1.</strong> Elige una ruta con el botón <strong>Ver Paradas</strong> para enfocarte en ella.
               </div>
-              <div style={{ padding: 12, borderRadius: 12, background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.06)' }}>
+              <div style={{ padding: 12, borderRadius: 12, background: 'var(--surface-hover)', border: '1px solid var(--border)' }}>
                 <strong>2.</strong> Si el vehículo envía GPS, aparecerá como punto azul en el recorrido.
               </div>
-              <div style={{ padding: 12, borderRadius: 12, background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.06)' }}>
+              <div style={{ padding: 12, borderRadius: 12, background: 'var(--surface-hover)', border: '1px solid var(--border)' }}>
                 <strong>3.</strong> Las paradas completadas se distinguen del resto por su estado dentro del recorrido.
               </div>
             </div>
@@ -480,7 +434,7 @@ export default function MonitoreoPage() {
           </div>
 
           {highlightedRoute ? (
-            <div style={{ height: 320, width: '100%', borderRadius: 12, overflow: 'hidden', border: '1px solid rgba(255,255,255,0.08)' }}>
+            <div style={{ height: 320, width: '100%', borderRadius: 12, overflow: 'hidden', border: '1px solid var(--border)' }}>
               <GoogleMapView
                 markers={mapMarkers}
                 polyline={highlightedRoute.encoded_polyline}
@@ -494,17 +448,17 @@ export default function MonitoreoPage() {
               flexDirection: 'column',
               alignItems: 'center',
               justifyContent: 'center',
-              background: 'rgba(15,23,42,0.5)',
-              border: '1px solid rgba(255,255,255,0.08)',
+              background: 'var(--panel-elevated)',
+              border: '1px solid var(--border)',
               borderRadius: 12,
               padding: 20,
               textAlign: 'center'
             }}>
-              <Truck size={40} color="#6b7280" style={{ marginBottom: 12, opacity: 0.5 }} />
-              <div style={{ fontSize: 14, fontWeight: 600, color: 'rgba(255,255,255,0.8)', marginBottom: 4 }}>
+              <Truck size={40} color="var(--muted)" style={{ marginBottom: 12, opacity: 0.5 }} />
+              <div style={{ fontSize: 14, fontWeight: 600, color: 'var(--text-secondary)', marginBottom: 4 }}>
                 {previewTitle}
               </div>
-              <div style={{ fontSize: 12, color: 'rgba(255,255,255,0.5)', maxWidth: 300 }}>
+              <div style={{ fontSize: 12, color: 'var(--muted)', maxWidth: 300 }}>
                 {previewDescription}
               </div>
             </div>
@@ -514,15 +468,15 @@ export default function MonitoreoPage() {
 
       {/* Alertas */}
       {alerts.length > 0 && (
-        <Card style={{ padding: 20, background: 'rgba(239, 68, 68, 0.05)', border: '1px solid rgba(239, 68, 68, 0.2)' }}>
-          <h2 style={{ fontSize: 16, fontWeight: 600, marginBottom: 12, color: '#ef4444' }}>
+          <Card style={{ padding: 20, background: 'var(--danger-surface)', border: '1px solid color-mix(in srgb, var(--danger) 30%, var(--border))' }}>
+            <h2 style={{ fontSize: 16, fontWeight: 600, marginBottom: 12, color: 'var(--danger)' }}>
             ⚠️ Alertas Activas
           </h2>
           <div style={{ display: 'grid', gap: 8 }}>
             {alerts.map(alert => (
               <div key={alert.id} style={{
                 padding: 12,
-                background: 'rgba(0,0,0,0.2)',
+                background: 'var(--overlay)',
                 borderRadius: 8,
                 display: 'flex',
                 justifyContent: 'space-between',
@@ -530,7 +484,7 @@ export default function MonitoreoPage() {
               }}>
                 <div>
                   <div style={{ fontSize: 14, marginBottom: 4 }}>{alert.message}</div>
-                  <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.5)' }}>
+                  <div style={{ fontSize: 11, color: 'var(--muted)' }}>
                     {getTimeSince(alert.created_at)}
                   </div>
                 </div>
@@ -546,9 +500,9 @@ export default function MonitoreoPage() {
       {/* Rutas activas */}
       {activeRoutes.length === 0 ? (
         <Card style={{ padding: 40, textAlign: 'center' }}>
-          <Activity size={48} color="#6b7280" style={{ marginBottom: 16, opacity: 0.3 }} />
+          <Activity size={48} color="var(--muted)" style={{ marginBottom: 16, opacity: 0.3 }} />
           <h2 style={{ fontSize: 18, fontWeight: 600, marginBottom: 8 }}>No hay rutas activas</h2>
-          <p style={{ color: 'rgba(255,255,255,0.5)', fontSize: 14 }}>
+          <p style={{ color: 'var(--muted)', fontSize: 14 }}>
             Las rutas en progreso aparecerán aquí para monitoreo en tiempo real
           </p>
         </Card>
@@ -564,7 +518,7 @@ export default function MonitoreoPage() {
                     <Badge variant="success">En Progreso</Badge>
                   </div>
                   {route.vehicles && (
-                    <div style={{ display: 'flex', gap: 16, fontSize: 13, color: 'rgba(255,255,255,0.6)' }}>
+                    <div style={{ display: 'flex', gap: 16, fontSize: 13, color: 'var(--muted)' }}>
                       <span style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
                         <Truck size={14} /> {route.vehicles.plate_number}
                       </span>
@@ -593,21 +547,21 @@ export default function MonitoreoPage() {
               {/* Progreso */}
               <div style={{ marginBottom: 16 }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 8, fontSize: 12 }}>
-                  <span style={{ color: 'rgba(255,255,255,0.5)' }}>Progreso de entregas</span>
+                  <span style={{ color: 'var(--muted)' }}>Progreso de entregas</span>
                   <span style={{ fontWeight: 600 }}>
                     {route.route_stops?.filter(s => s.status === 'completed').length || 0} / {route.route_stops?.length || 0}
                   </span>
                 </div>
                 <div style={{ 
                   height: 8, 
-                  background: 'rgba(255,255,255,0.1)', 
+                  background: 'var(--surface-hover)',
                   borderRadius: 4,
                   overflow: 'hidden'
                 }}>
                   <div style={{
                     height: '100%',
                     width: `${((route.route_stops?.filter(s => s.status === 'completed').length || 0) / (route.route_stops?.length || 1)) * 100}%`,
-                    background: 'linear-gradient(90deg, #10b981, #059669)',
+            background: 'linear-gradient(90deg, color-mix(in srgb, var(--success) 76%, #000000), var(--success))',
                     borderRadius: 4,
                     transition: 'width 0.3s'
                   }} />
@@ -616,18 +570,18 @@ export default function MonitoreoPage() {
 
               {/* Info de ruta */}
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 16, marginBottom: 16 }}>
-                <div style={{ padding: 12, background: 'rgba(255,255,255,0.03)', borderRadius: 8 }}>
-                  <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.5)', marginBottom: 4 }}>Inicio</div>
+                <div style={{ padding: 12, background: 'var(--surface-hover)', borderRadius: 8 }}>
+                  <div style={{ fontSize: 11, color: 'var(--muted)', marginBottom: 4 }}>Inicio</div>
                   <div style={{ fontSize: 14, fontWeight: 600 }}>{formatTime(route.start_time_actual)}</div>
                 </div>
-                <div style={{ padding: 12, background: 'rgba(255,255,255,0.03)', borderRadius: 8 }}>
-                  <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.5)', marginBottom: 4 }}>Distancia Total</div>
+                <div style={{ padding: 12, background: 'var(--surface-hover)', borderRadius: 8 }}>
+                  <div style={{ fontSize: 11, color: 'var(--muted)', marginBottom: 4 }}>Distancia Total</div>
                   <div style={{ fontSize: 14, fontWeight: 600 }}>
                     {route.total_distance_meters ? `${(route.total_distance_meters / 1000).toFixed(1)} km` : '-'}
                   </div>
                 </div>
-                <div style={{ padding: 12, background: 'rgba(255,255,255,0.03)', borderRadius: 8 }}>
-                  <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.5)', marginBottom: 4 }}>Tiempo en Ruta</div>
+                <div style={{ padding: 12, background: 'var(--surface-hover)', borderRadius: 8 }}>
+                  <div style={{ fontSize: 11, color: 'var(--muted)', marginBottom: 4 }}>Tiempo en Ruta</div>
                   <div style={{ fontSize: 14, fontWeight: 600 }}>{getTimeSince(route.start_time_actual)}</div>
                 </div>
               </div>
@@ -635,7 +589,7 @@ export default function MonitoreoPage() {
               {/* Paradas (expandible) */}
               {selectedRoute === route.id && route.route_stops && (
                 <div style={{ 
-                  borderTop: '1px solid rgba(255,255,255,0.1)', 
+                  borderTop: '1px solid var(--border)',
                   paddingTop: 16,
                   display: 'grid',
                   gap: 8
@@ -646,7 +600,7 @@ export default function MonitoreoPage() {
                     .map((stop, idx) => (
                     <div key={stop.id} style={{
                       padding: 12,
-                      background: 'rgba(255,255,255,0.03)',
+                      background: 'var(--surface-hover)',
                       borderRadius: 8,
                       borderLeft: `3px solid ${getStopStatusColor(stop.status)}`,
                       display: 'flex',
@@ -671,7 +625,7 @@ export default function MonitoreoPage() {
                           <div style={{ fontWeight: 600, fontSize: 14 }}>
                             {stop.delivery_jobs?.customer_name || 'Cliente'}
                           </div>
-                          <div style={{ fontSize: 12, color: 'rgba(255,255,255,0.5)' }}>
+                          <div style={{ fontSize: 12, color: 'var(--muted)' }}>
                             {stop.delivery_jobs?.address_text || 'Dirección'}
                           </div>
                         </div>
@@ -709,7 +663,7 @@ export default function MonitoreoPage() {
       {/* Instrucciones */}
       <Card style={{ padding: 20 }}>
         <h3 style={{ fontSize: 16, fontWeight: 600, marginBottom: 12 }}>¿Cómo funciona el monitoreo?</h3>
-        <div style={{ display: 'grid', gap: 12, fontSize: 14, color: 'rgba(255,255,255,0.7)' }}>
+        <div style={{ display: 'grid', gap: 12, fontSize: 14, color: 'var(--text-secondary)' }}>
           <p>
             <strong>1. Rutas Activas:</strong> Aquí aparecen las rutas que están en progreso. 
             Puedes ver el progreso de cada conductor y las entregas pendientes.

@@ -10,53 +10,44 @@ export default function TransfersPage() {
     const [activeTab, setActiveTab] = useState<'new' | 'receiving' | 'history'>('new');
 
     return (
-        <div className="max-w-6xl mx-auto">
-            <div className="flex items-center gap-3 mb-8">
-                <div className="p-3 bg-red-600/20 rounded-lg text-red-500">
-                    <ArrowLeftRight size={24} />
+        <div className="transfers-module-view">
+            <div className="transfers-page-heading">
+                <div className="system-title-mark" aria-hidden="true">
+                    <ArrowLeftRight size={21} />
                 </div>
                 <div>
-                    <h1 className="h-title text-white">Transferencias entre Bodegas</h1>
-                    <p className="h-subtitle text-gray-400">Gestiona el movimiento de inventario entre sucursales</p>
+                    <h1 className="h-title">Transferencias entre Bodegas</h1>
+                    <p className="h-subtitle">Gestiona el movimiento de inventario entre sucursales</p>
                 </div>
             </div>
 
-            <div className="flex gap-2 mb-8 bg-slate-800/50 p-1.5 rounded-xl w-fit border border-slate-700/50 backdrop-blur-sm">
+            <div className="transfers-tabs">
                 <button
                     onClick={() => setActiveTab('new')}
-                    className={`px-6 py-2.5 rounded-lg text-sm font-medium transition-all duration-200 flex items-center gap-2.5 ${activeTab === 'new'
-                            ? 'bg-red-600 text-white shadow-lg shadow-red-900/20 translate-y-[-1px]'
-                            : 'text-slate-400 hover:text-white hover:bg-slate-700/50'
-                        }`}
+                    className={`transfers-tab ${activeTab === 'new' ? 'is-active' : ''}`}
                 >
                     <PackagePlus size={18} />
                     Nueva Transferencia
                 </button>
-                <div className="w-px bg-slate-700/50 my-2" />
+                <div className="transfers-tabs-divider" />
                 <button
                     onClick={() => setActiveTab('receiving')}
-                    className={`px-6 py-2.5 rounded-lg text-sm font-medium transition-all duration-200 flex items-center gap-2.5 ${activeTab === 'receiving'
-                            ? 'bg-red-600 text-white shadow-lg shadow-red-900/20 translate-y-[-1px]'
-                            : 'text-slate-400 hover:text-white hover:bg-slate-700/50'
-                        }`}
+                    className={`transfers-tab ${activeTab === 'receiving' ? 'is-active' : ''}`}
                 >
                     <Inbox size={18} />
                     Por Recibir
                 </button>
-                <div className="w-px bg-slate-700/50 my-2" />
+                <div className="transfers-tabs-divider" />
                 <button
                     onClick={() => setActiveTab('history')}
-                    className={`px-6 py-2.5 rounded-lg text-sm font-medium transition-all duration-200 flex items-center gap-2.5 ${activeTab === 'history'
-                            ? 'bg-red-600 text-white shadow-lg shadow-red-900/20 translate-y-[-1px]'
-                            : 'text-slate-400 hover:text-white hover:bg-slate-700/50'
-                        }`}
+                    className={`transfers-tab ${activeTab === 'history' ? 'is-active' : ''}`}
                 >
                     <History size={18} />
                     Historial
                 </button>
             </div>
 
-            <div className="animate-fade-in">
+            <div className="transfers-tab-panel animate-fade-in">
                 {activeTab === 'new' && (
                     <TransferForm onSuccess={() => setActiveTab('receiving')} />
                 )}

@@ -10,6 +10,7 @@ import HorizontalBarChart from '@/components/charts/HorizontalBarChart';
 import PieChart from '@/components/charts/PieChart';
 import ReportPlaceholder from '@/components/reports/ReportPlaceholder';
 import { Download, Package, TrendingUp, TrendingDown, Calendar, Warehouse, AlertTriangle, DollarSign, FileText, Filter, Loader } from 'lucide-react';
+import styles from './reports.module.css';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import ExcelJS from 'exceljs';
@@ -28,13 +29,14 @@ function MobileReportCard({ title, label, total, warehouses, data, color }: {
 }) {
   return (
     <div
+      className={styles.mobileReportCard}
       style={{
-        background: 'var(--card)',
+        background: 'var(--card-surface-gradient)',
         borderRadius: 12,
         padding: 16,
         border: '1px solid var(--border)',
         marginBottom: 12,
-        boxShadow: '0 2px 8px rgba(0,0,0,0.1)',
+        boxShadow: '0 2px 8px var(--shadow)',
         borderLeft: color ? `4px solid ${color}` : '1px solid var(--border)'
       }}
     >
@@ -44,12 +46,12 @@ function MobileReportCard({ title, label, total, warehouses, data, color }: {
           <div style={{ fontSize: 15, fontWeight: 700, color: 'var(--text)', lineHeight: 1.3 }}>{title}</div>
         </div>
         <div style={{ textAlign: 'right', marginLeft: 12 }}>
-          <div style={{ fontSize: 16, fontWeight: 800, color: '#fbbf24' }}>{total}</div>
+          <div style={{ fontSize: 16, fontWeight: 800, color: 'var(--warning)' }}>{total}</div>
           <div style={{ fontSize: 11, color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Total</div>
         </div>
       </div>
 
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(120px, 1fr))', gap: 8, padding: 10, background: 'rgba(0,0,0,0.15)', borderRadius: 8 }}>
+      <div className={styles.mobileMetrics} style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(120px, 1fr))', gap: 8, padding: 10, background: 'var(--control-surface-gradient)', borderRadius: 8 }}>
         {warehouses.map(w => {
           const qty = data[w.code];
           if (qty === undefined || qty === null) return null;
@@ -60,10 +62,10 @@ function MobileReportCard({ title, label, total, warehouses, data, color }: {
                 fontSize: 12,
                 fontWeight: 700,
                 color: (typeof qty === 'string' && qty.endsWith('$'))
-                  ? '#10b981' // Green for money
+                  ? 'var(--success)'
                   : (typeof qty === 'number' ? qty > 0 : !!qty)
-                    ? '#e2e8f0'
-                    : 'rgba(255,255,255,0.2)'
+                    ? 'var(--text)'
+                    : 'var(--muted)'
               }}>
                 {qty}
               </span>
@@ -202,6 +204,8 @@ export default function ReportsPage() {
     return res.json();
   }
 
+  // Print-safe canvas palette is deliberately independent from the UI theme:
+  // exported charts keep an opaque white background and readable labels in both themes.
   // Shared Chart Canvas Helpers
   const drawBarChart = (data: any[], title: string, horizontal = true, color: string | string[] = '#3b82f6', valueFormatter?: (v: number) => string, showTotal = false) => {
     const canvas = document.createElement('canvas');
@@ -1237,36 +1241,13 @@ export default function ReportsPage() {
   const hasFilters = Object.values(globalFilters).some(v => v !== '');
 
   return (
-    <div style={{ display: 'grid', gap: 14, maxWidth: '100%', overflowX: 'hidden' }}>
-      <style>{`
-        .custom-scrollbar::-webkit-scrollbar {
-          height: 8px;
-          height: 8px;
-          transition: background 0.3s ease;
-        }
-        .custom-scrollbar::-webkit-scrollbar-track {
-          background: transparent;
-          border-radius: 4px;
-        }
-        .custom-scrollbar::-webkit-scrollbar-thumb {
-          background: transparent;
-          border-radius: 4px;
-        }
-        .table-card-hover:hover .custom-scrollbar::-webkit-scrollbar-thumb {
-          background: #cbd5e1;
-        }
-        .custom-scrollbar::-webkit-scrollbar-thumb:hover {
-          background: #94a3b8 !important;
-        }
-        @media (max-width: 640px) {
-          .h-title { font-size: 1.25rem !important; }
-          .money-maker-header { flex-direction: column; align-items: flex-start !important; }
-          .money-maker-btns { width: 100%; justify-content: space-between; }
-        }
-      `}</style>
-      <div className="reports-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 12 }}>
-        <div className="h-title" style={{ fontSize: 'clamp(18px, 5vw, 24px)', fontWeight: 700 }}>Reportes de Inventario</div>
-        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+    <div className={styles.root}>
+      <div className={styles.pageHeader}>
+        <div className={styles.pageTitleGroup}>
+          <span className={styles.titleMark}><FileText size={21} /></span>
+          <h1 className={styles.pageTitle}>Reportes de Inventario</h1>
+        </div>
+        <div className={styles.exportActions}>
           <Button variant="secondary" size="sm" onClick={exportToExcel} disabled={exporting === 'excel'}>
             <Download size={16} style={{ marginRight: 6 }} />
             <span className="btn-label" style={{ display: isMobile ? 'none' : 'inline' }}>{exporting === 'excel' ? 'Exportando...' : 'Excel'}</span>
@@ -1278,8 +1259,8 @@ export default function ReportsPage() {
         </div>
       </div>
 
-      <Card>
-        <div style={{ display: 'flex', gap: 12, alignItems: 'center', padding: 8 }}>
+      <Card className={styles.periodCard}>
+        <div className={styles.periodControl}>
           <Calendar size={18} color="var(--muted)" />
           <Select
             value={period}
@@ -1295,7 +1276,7 @@ export default function ReportsPage() {
       </Card>
 
       {sinMarcaCount > 0 && (
-        <Card>
+        <Card className={styles.statusCard}>
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 12, padding: 12 }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
               <AlertTriangle size={20} color="var(--warning)" />
@@ -1311,86 +1292,86 @@ export default function ReportsPage() {
       )}
 
       {error && (
-        <Card>
+        <Card className={styles.errorCard}>
           <div style={{ padding: 16, color: 'var(--danger)' }}>
             Error: {error}
           </div>
         </Card>
       )}
 
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: 14 }}>
-        <Card>
+      <div className={styles.kpiGrid}>
+        <Card className={styles.kpiCard} data-tone="warning">
           <div style={{ padding: 16 }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 12 }}>
-              <div style={{ width: 40, height: 40, borderRadius: 8, background: 'var(--warning)15', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+              <div className={styles.kpiIcon} style={{ width: 40, height: 40, borderRadius: 8, background: 'var(--warning-surface)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                 <TrendingDown size={20} color="var(--warning)" />
               </div>
-              <div style={{ fontSize: 13, color: 'var(--muted)' }}>Stock Bajo</div>
+              <div className={styles.kpiLabel}>Stock Bajo</div>
             </div>
             {loading ? (
               <div style={{ height: 32, background: 'var(--panel)', borderRadius: 4, animation: 'pulse 1.5s infinite' }} />
             ) : (
               <>
-                <div style={{ fontSize: 28, fontWeight: 600 }}>{stats?.lowStockItems || 0}</div>
-                <div style={{ fontSize: 12, color: 'var(--warning)', marginTop: 4 }}>Menos de 10 unidades</div>
+                <div className={styles.kpiValue}>{stats?.lowStockItems || 0}</div>
+                <div className={styles.kpiHint} style={{ fontSize: 12, color: 'var(--warning)', marginTop: 4 }}>Menos de 10 unidades</div>
               </>
             )}
           </div>
         </Card>
 
-        <Card>
+        <Card className={styles.kpiCard} data-tone="danger">
           <div style={{ padding: 16 }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 12 }}>
-              <div style={{ width: 40, height: 40, borderRadius: 8, background: 'var(--danger)15', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+              <div className={styles.kpiIcon} style={{ width: 40, height: 40, borderRadius: 8, background: 'var(--danger-surface)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                 <AlertTriangle size={20} color="var(--danger)" />
               </div>
-              <div style={{ fontSize: 13, color: 'var(--muted)' }}>Sin Stock</div>
+              <div className={styles.kpiLabel}>Sin Stock</div>
             </div>
             {loading ? (
               <div style={{ height: 32, background: 'var(--panel)', borderRadius: 4, animation: 'pulse 1.5s infinite' }} />
             ) : (
               <>
-                <div style={{ fontSize: 28, fontWeight: 600 }}>{stats?.outOfStockItems || 0}</div>
-                <div style={{ fontSize: 12, color: 'var(--danger)', marginTop: 4 }}>Productos agotados</div>
+                <div className={styles.kpiValue}>{stats?.outOfStockItems || 0}</div>
+                <div className={styles.kpiHint} style={{ fontSize: 12, color: 'var(--danger)', marginTop: 4 }}>Productos agotados</div>
               </>
             )}
           </div>
         </Card>
 
-        <Card>
+        <Card className={styles.kpiCard} data-tone="violet">
           <div style={{ padding: 16 }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 12 }}>
-              <div style={{ width: 40, height: 40, borderRadius: 8, background: 'var(--brand-primary)15', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                <Warehouse size={20} color="var(--brand-primary)" />
+              <div className={styles.kpiIcon} style={{ width: 40, height: 40, borderRadius: 8, background: 'var(--violet-surface)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                <Warehouse size={20} color="var(--kpi-violet)" />
               </div>
-              <div style={{ fontSize: 13, color: 'var(--muted)' }}>Bodegas Activas</div>
+              <div className={styles.kpiLabel}>Bodegas Activas</div>
             </div>
             {loading ? (
               <div style={{ height: 32, background: 'var(--panel)', borderRadius: 4, animation: 'pulse 1.5s infinite' }} />
             ) : (
               <>
-                <div style={{ fontSize: 28, fontWeight: 600 }}>{stats?.activeWarehouses || 0}</div>
-                <div style={{ fontSize: 12, color: 'var(--muted)', marginTop: 4 }}>Ubicaciones operativas</div>
+                <div className={styles.kpiValue}>{stats?.activeWarehouses || 0}</div>
+                <div className={styles.kpiHint} style={{ fontSize: 12, color: 'var(--muted)', marginTop: 4 }}>Ubicaciones operativas</div>
               </>
             )}
           </div>
         </Card>
 
-        <Card>
+        <Card className={styles.kpiCard} data-tone="success">
           <div style={{ padding: 16 }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 12 }}>
-              <div style={{ width: 40, height: 40, borderRadius: 8, background: '#10b98115', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                <DollarSign size={20} color="#10b981" />
+              <div className={styles.kpiIcon} style={{ width: 40, height: 40, borderRadius: 8, background: 'var(--success-surface)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                <DollarSign size={20} color="var(--success)" />
               </div>
               <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                <div style={{ fontSize: 13, color: 'var(--muted)' }}>Valor del Inventario</div>
-                <span style={{ fontSize: 9, background: '#10b98120', color: '#10b981', padding: '1px 5px', borderRadius: 4, fontWeight: 600 }}>Zoho</span>
+                <div className={styles.kpiLabel}>Valor del Inventario</div>
+                <span style={{ fontSize: 9, background: 'var(--success-surface)', color: 'var(--success)', padding: '1px 5px', borderRadius: 4, fontWeight: 600 }}>Zoho</span>
               </div>
             </div>
             {!zohoKpisLoaded ? (
               <div style={{ display: 'flex', flexDirection: 'column', gap: 6, paddingBottom: 4 }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                  <Loader size={16} color="#10b981" style={{ animation: 'spin 1.5s linear infinite' }} />
+                  <Loader size={16} color="var(--success)" style={{ animation: 'spin 1.5s linear infinite' }} />
                   <span style={{ fontSize: 16, fontWeight: 600, color: 'var(--muted)' }}>Cargando...</span>
                 </div>
                 <div style={{ fontSize: 12, color: 'var(--muted)' }}>
@@ -1399,7 +1380,7 @@ export default function ReportsPage() {
               </div>
             ) : (
               <>
-                <div style={{ fontSize: 24, fontWeight: 700, color: '#10b981' }}>
+                <div className={styles.kpiValue} style={{ fontSize: 24, fontWeight: 700, color: 'var(--success)' }}>
                   {new Intl.NumberFormat('es-NI', { style: 'currency', currency: 'USD', minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(zohoKpis?.totalValue || 0)}
                 </div>
                 <div style={{ fontSize: 12, color: 'var(--muted)', marginTop: 4 }}>
@@ -1412,13 +1393,13 @@ export default function ReportsPage() {
       </div>
 
       {/* FILTROS GLOBALES */}
-      <Card>
+      <Card className={styles.filterCard}>
         <div style={{ padding: 16 }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12 }}>
+          <div className={styles.filterHeading}>
             <Filter size={18} color="var(--brand-primary)" />
-            <h3 style={{ fontSize: 15, fontWeight: 600, margin: 0 }}>Filtros Globales</h3>
+            <h3>Filtros Globales</h3>
           </div>
-          <div className="filters-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(180px, 1fr))', gap: 12 }}>
+          <div className={styles.filterGrid}>
             <Select
               value={globalFilters.category}
               onChange={(e) => { setGlobalFilters({ ...globalFilters, category: e.target.value }); }}
@@ -1464,8 +1445,11 @@ export default function ReportsPage() {
       </Card>
 
       {/* NUEVA SECCIÓN: DISTRIBUCIÓN DE CAPITAL POR BODEGA */}
-      <div style={{ background: 'linear-gradient(135deg, #0ea5e9 0%, #0369a1 100%)', padding: '12px 20px', borderRadius: 8 }}>
-        <h2 style={{ color: 'white', fontSize: 18, fontWeight: 700, margin: 0 }}>Distribución de Capital por Bodega</h2>
+      <div className={styles.sectionHeading} data-tone="info">
+        <div className={styles.sectionHeadingTitle}>
+          <span className={styles.sectionIcon}><Warehouse size={18} /></span>
+          <h2 className={styles.sectionTitle}>Distribución de Capital por Bodega</h2>
+        </div>
       </div>
       <Card>
         <div style={{ padding: 16 }}>
@@ -1497,13 +1481,13 @@ export default function ReportsPage() {
                         'UNID': wh.value || 0,
                         'PCT': Number(percentage.toFixed(1))
                       }}
-                      color="#0ea5e9"
+                      color="var(--info)"
                     />
                   );
                 })}
               </div>
             ) : (
-              <div className="custom-scrollbar" style={{ overflowX: 'auto', borderRadius: 8, border: '1px solid var(--border)' }}>
+              <div className={`custom-scrollbar ${styles.tableScroll}`} style={{ overflowX: 'auto', borderRadius: 8, border: '1px solid var(--border)' }}>
                 <table style={{ width: '100%', minWidth: 500, borderCollapse: 'collapse', fontSize: 13 }}>
                   <thead>
                     <tr style={{ background: 'var(--panel)' }}>
@@ -1523,7 +1507,7 @@ export default function ReportsPage() {
                           <td style={{ padding: '8px 12px', fontWeight: 600 }}>{wh.label || wh.code}</td>
                           <td style={{ padding: '8px 12px', textAlign: 'center' }}>{(wh.uniqueSkus || 0).toLocaleString('es-NI')}</td>
                           <td style={{ padding: '8px 12px', textAlign: 'right' }}>{(wh.value || 0).toLocaleString('es-NI')}</td>
-                          <td style={{ padding: '8px 12px', textAlign: 'right', color: '#10b981', fontWeight: 600 }}>
+                          <td style={{ padding: '8px 12px', textAlign: 'right', color: 'var(--success)', fontWeight: 600 }}>
                             ${(wh.capital || 0).toLocaleString('es-NI', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                           </td>
                           <td style={{ padding: '8px 12px', textAlign: 'center' }}>
@@ -1547,7 +1531,7 @@ export default function ReportsPage() {
                       <td style={{ padding: '10px 12px', textAlign: 'right' }}>
                         {warehouseData.reduce((acc: number, w: any) => acc + (w.value || 0), 0).toLocaleString('es-NI')}
                       </td>
-                      <td style={{ padding: '10px 12px', textAlign: 'right', color: '#10b981' }}>
+                      <td style={{ padding: '10px 12px', textAlign: 'right', color: 'var(--success)' }}>
                         ${warehouseData.reduce((acc: number, w: any) => acc + (w.capital || 0), 0).toLocaleString('es-NI', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                       </td>
                       <td style={{ padding: '10px 12px', textAlign: 'center' }}>
@@ -1568,24 +1552,30 @@ export default function ReportsPage() {
       </Card>
 
       {/* NUEVA SECCIÓN: MONEY MAKER DE CATEGORÍAS */}
-      <div className="money-maker-header" style={{ background: 'linear-gradient(135deg, #8b5cf6 0%, #6d28d9 100%)', padding: '12px 20px', borderRadius: 8, display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 12 }}>
-        <h2 style={{ color: 'white', fontSize: 'clamp(15px, 4vw, 18px)', fontWeight: 700, margin: 0 }}>El "Money Maker" de Categorías</h2>
-        <div className="money-maker-btns" style={{ display: 'flex', background: 'rgba(255,255,255,0.2)', borderRadius: 6, padding: 2, flexWrap: 'wrap' }}>
+      <div className={styles.moneyMakerHeader} data-tone="violet">
+        <div className={styles.sectionHeadingTitle}>
+          <span className={styles.sectionIcon}><TrendingUp size={18} /></span>
+          <h2 className={styles.sectionTitle}>El "Money Maker" de Categorías</h2>
+        </div>
+        <div className={styles.moneyMakerButtons}>
           <button
             onClick={() => setCategoryViewMode('consolidated')}
-            style={{ padding: '6px 12px', borderRadius: 4, border: 'none', background: categoryViewMode === 'consolidated' ? 'white' : 'transparent', color: categoryViewMode === 'consolidated' ? '#6d28d9' : 'white', fontSize: 13, fontWeight: 600, cursor: 'pointer', transition: 'all 0.2s' }}
+            className={styles.viewModeTab}
+            aria-pressed={categoryViewMode === 'consolidated'}
           >
             General
           </button>
           <button
             onClick={() => setCategoryViewMode('units')}
-            style={{ padding: '6px 12px', borderRadius: 4, border: 'none', background: categoryViewMode === 'units' ? 'white' : 'transparent', color: categoryViewMode === 'units' ? '#6d28d9' : 'white', fontSize: 13, fontWeight: 600, cursor: 'pointer', transition: 'all 0.2s' }}
+            className={styles.viewModeTab}
+            aria-pressed={categoryViewMode === 'units'}
           >
             Desglose Unids
           </button>
           <button
             onClick={() => setCategoryViewMode('cost')}
-            style={{ padding: '6px 12px', borderRadius: 4, border: 'none', background: categoryViewMode === 'cost' ? 'white' : 'transparent', color: categoryViewMode === 'cost' ? '#6d28d9' : 'white', fontSize: 13, fontWeight: 600, cursor: 'pointer', transition: 'all 0.2s' }}
+            className={styles.viewModeTab}
+            aria-pressed={categoryViewMode === 'cost'}
           >
             Desglose Costo
           </button>
@@ -1676,13 +1666,13 @@ export default function ReportsPage() {
                             : warehouseCols.map(code => ({ code, label: code }))
                           }
                           data={statsData}
-                          color="#a78bfa"
+                          color="var(--kpi-violet)"
                         />
                       );
                     })}
                   </div>
                 ) : (
-                  <div className="custom-scrollbar" style={{ maxHeight: 400, overflowY: 'auto', overflowX: 'auto', borderRadius: 8, border: '1px solid var(--border)' }}>
+                  <div className={`custom-scrollbar ${styles.tableScroll}`} style={{ maxHeight: 400, overflowY: 'auto', overflowX: 'auto', borderRadius: 8, border: '1px solid var(--border)' }}>
                     <table style={{ width: '100%', minWidth: categoryViewMode !== 'consolidated' ? 300 + (warehouseCols.length * 70) : 500, borderCollapse: 'collapse', fontSize: 13 }}>
                       <thead>
                         <tr style={{ background: 'var(--panel)', position: 'sticky', top: 0, zIndex: 1 }}>
@@ -1710,7 +1700,7 @@ export default function ReportsPage() {
                         {categoryData.map((cat: any, idx: number) => {
                           return (
                             <tr key={idx} style={{ borderBottom: '1px solid var(--border)', background: idx % 2 === 0 ? 'transparent' : 'var(--panel)' }}>
-                              <td style={{ padding: '8px 12px', fontWeight: 600, color: '#a78bfa' }}>{cat.category || cat.label}</td>
+                              <td style={{ padding: '8px 12px', fontWeight: 600, color: 'var(--kpi-violet)' }}>{cat.category || cat.label}</td>
                               {categoryViewMode !== 'consolidated' ? (
                                 <>
                                   {warehouseCols.map(wh => {
@@ -1724,7 +1714,7 @@ export default function ReportsPage() {
                                     } else {
                                       const cost = cat[wh] || 0;
                                       return (
-                                        <td key={wh} style={{ padding: '8px 12px', textAlign: 'right', color: '#10b981', fontSize: 12 }}>
+                                        <td key={wh} style={{ padding: '8px 12px', textAlign: 'right', color: 'var(--success)', fontSize: 12 }}>
                                           {cost > 0 ? '$' + cost.toLocaleString('es-NI', { minimumFractionDigits: 1, maximumFractionDigits: 1 }) : ''}
                                         </td>
                                       );
@@ -1741,7 +1731,7 @@ export default function ReportsPage() {
                                 <>
                                   <td style={{ padding: '8px 12px', textAlign: 'center' }}>{(cat.uniqueSkus || 0).toLocaleString('es-NI')}</td>
                                   <td style={{ padding: '8px 12px', textAlign: 'right', fontWeight: 600 }}>{(cat.stock || 0).toLocaleString('es-NI')}</td>
-                                  <td style={{ padding: '8px 12px', textAlign: 'right', color: '#10b981', fontWeight: 700 }}>
+                                  <td style={{ padding: '8px 12px', textAlign: 'right', color: 'var(--success)', fontWeight: 700 }}>
                                     ${(cat.capital || 0).toLocaleString('es-NI', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                                   </td>
                                   <td style={{ padding: '8px 12px', textAlign: 'center' }}>
@@ -1759,8 +1749,8 @@ export default function ReportsPage() {
                         })}
                       </tbody>
                       <tfoot>
-                        <tr style={{ background: 'var(--panel)', position: 'sticky', bottom: 0, zIndex: 1, boxShadow: '0 -4px 6px -1px rgba(0,0,0,0.05)', borderTop: '2px solid var(--border)', fontWeight: 700 }}>
-                          <td style={{ padding: '10px 12px', textAlign: 'left', color: '#8b5cf6' }}>Total</td>
+                        <tr style={{ background: 'var(--panel)', position: 'sticky', bottom: 0, zIndex: 1, boxShadow: '0 -4px 6px -1px var(--shadow)', borderTop: '2px solid var(--border)', fontWeight: 700 }}>
+                          <td style={{ padding: '10px 12px', textAlign: 'left', color: 'var(--kpi-violet)' }}>Total</td>
                           {categoryViewMode !== 'consolidated' ? (
                             <>
                               {warehouseCols.map(wh => {
@@ -1774,7 +1764,7 @@ export default function ReportsPage() {
                                 } else {
                                   const whCost = reportData.moneyMakerCategories.reduce((acc: number, c: any) => acc + (c.capitalByWarehouse?.[wh] || 0), 0);
                                   return (
-                                    <td key={wh} style={{ padding: '10px 12px', textAlign: 'right', color: '#10b981' }}>
+                                    <td key={wh} style={{ padding: '10px 12px', textAlign: 'right', color: 'var(--success)' }}>
                                       {whCost > 0 ? '$' + whCost.toLocaleString('es-NI', { minimumFractionDigits: 1, maximumFractionDigits: 1 }) : ''}
                                     </td>
                                   );
@@ -1795,7 +1785,7 @@ export default function ReportsPage() {
                               <td style={{ padding: '10px 12px', textAlign: 'right' }}>
                                 {totalStock.toLocaleString('es-NI')}
                               </td>
-                              <td style={{ padding: '10px 12px', textAlign: 'right', color: '#10b981' }}>
+                              <td style={{ padding: '10px 12px', textAlign: 'right', color: 'var(--success)' }}>
                                 ${totalCapital.toLocaleString('es-NI', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                               </td>
                               <td style={{ padding: '10px 12px', textAlign: 'center' }}>
@@ -1826,24 +1816,30 @@ export default function ReportsPage() {
       </div>
 
       {/* NUEVA SECCIÓN: MONEY MAKER DE MARCAS */}
-      <div className="money-maker-header" style={{ background: 'linear-gradient(135deg, #f59e0b 0%, #d97706 100%)', padding: '12px 20px', borderRadius: 8, marginTop: 16, display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 12 }}>
-        <h2 style={{ color: 'white', fontSize: 'clamp(15px, 4vw, 18px)', fontWeight: 700, margin: 0 }}>El "Money Maker" de Marcas</h2>
-        <div className="money-maker-btns" style={{ display: 'flex', background: 'rgba(255,255,255,0.2)', borderRadius: 6, padding: 2, flexWrap: 'wrap' }}>
+      <div className={styles.moneyMakerHeader} data-tone="warning">
+        <div className={styles.sectionHeadingTitle}>
+          <span className={styles.sectionIcon}><TrendingUp size={18} /></span>
+          <h2 className={styles.sectionTitle}>El "Money Maker" de Marcas</h2>
+        </div>
+        <div className={styles.moneyMakerButtons}>
           <button
             onClick={() => setBrandViewMode('consolidated')}
-            style={{ padding: '6px 12px', borderRadius: 4, border: 'none', background: brandViewMode === 'consolidated' ? 'white' : 'transparent', color: brandViewMode === 'consolidated' ? '#d97706' : 'white', fontSize: 13, fontWeight: 600, cursor: 'pointer', transition: 'all 0.2s' }}
+            className={styles.viewModeTab}
+            aria-pressed={brandViewMode === 'consolidated'}
           >
             General
           </button>
           <button
             onClick={() => setBrandViewMode('units')}
-            style={{ padding: '6px 12px', borderRadius: 4, border: 'none', background: brandViewMode === 'units' ? 'white' : 'transparent', color: brandViewMode === 'units' ? '#d97706' : 'white', fontSize: 13, fontWeight: 600, cursor: 'pointer', transition: 'all 0.2s' }}
+            className={styles.viewModeTab}
+            aria-pressed={brandViewMode === 'units'}
           >
             Desglose Unids
           </button>
           <button
             onClick={() => setBrandViewMode('cost')}
-            style={{ padding: '6px 12px', borderRadius: 4, border: 'none', background: brandViewMode === 'cost' ? 'white' : 'transparent', color: brandViewMode === 'cost' ? '#d97706' : 'white', fontSize: 13, fontWeight: 600, cursor: 'pointer', transition: 'all 0.2s' }}
+            className={styles.viewModeTab}
+            aria-pressed={brandViewMode === 'cost'}
           >
             Desglose Costo
           </button>
@@ -1933,7 +1929,7 @@ export default function ReportsPage() {
                     })}
                   </div>
                 ) : (
-                  <div className="custom-scrollbar" style={{ maxHeight: 400, overflowY: 'auto', overflowX: 'auto', borderRadius: 8, border: '1px solid var(--border)' }}>
+                  <div className={`custom-scrollbar ${styles.tableScroll}`} style={{ maxHeight: 400, overflowY: 'auto', overflowX: 'auto', borderRadius: 8, border: '1px solid var(--border)' }}>
                     <table style={{ width: '100%', minWidth: brandViewMode !== 'consolidated' ? 300 + (warehouseCols.length * 70) : 500, borderCollapse: 'collapse', fontSize: 13 }}>
                       <thead>
                         <tr style={{ background: 'var(--panel)', position: 'sticky', top: 0, zIndex: 1 }}>
@@ -1961,7 +1957,7 @@ export default function ReportsPage() {
                         {brandData.map((brand: any, idx: number) => {
                           return (
                             <tr key={idx} style={{ borderBottom: '1px solid var(--border)', background: idx % 2 === 0 ? 'transparent' : 'var(--panel)' }}>
-                              <td style={{ padding: '8px 12px', fontWeight: 600, color: '#f59e0b' }}>{brand.brand}</td>
+                              <td style={{ padding: '8px 12px', fontWeight: 600, color: 'var(--warning)' }}>{brand.brand}</td>
                               {brandViewMode !== 'consolidated' ? (
                                 <>
                                   {warehouseCols.map(wh => {
@@ -1986,7 +1982,7 @@ export default function ReportsPage() {
                                 <>
                                   <td style={{ padding: '8px 12px', textAlign: 'center' }}>{(brand.uniqueSkus || 0).toLocaleString('es-NI')}</td>
                                   <td style={{ padding: '8px 12px', textAlign: 'right', fontWeight: 600 }}>{(brand.stock || 0).toLocaleString('es-NI')}</td>
-                                  <td style={{ padding: '8px 12px', textAlign: 'right', color: '#10b981', fontWeight: 700 }}>
+                                  <td style={{ padding: '8px 12px', textAlign: 'right', color: 'var(--success)', fontWeight: 700 }}>
                                     ${(brand.capital || 0).toLocaleString('es-NI', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                                   </td>
                                   <td style={{ padding: '8px 12px', textAlign: 'center' }}>
@@ -2004,8 +2000,8 @@ export default function ReportsPage() {
                         })}
                       </tbody>
                       <tfoot>
-                        <tr style={{ background: 'var(--panel)', position: 'sticky', bottom: 0, zIndex: 1, boxShadow: '0 -4px 6px -1px rgba(0,0,0,0.05)', borderTop: '2px solid var(--border)', fontWeight: 700 }}>
-                          <td style={{ padding: '10px 12px', textAlign: 'left', color: '#f59e0b' }}>Total</td>
+                        <tr style={{ background: 'var(--panel)', position: 'sticky', bottom: 0, zIndex: 1, boxShadow: '0 -4px 6px -1px var(--shadow)', borderTop: '2px solid var(--border)', fontWeight: 700 }}>
+                          <td style={{ padding: '10px 12px', textAlign: 'left', color: 'var(--warning)' }}>Total</td>
                           {brandViewMode !== 'consolidated' ? (
                             <>
                               {warehouseCols.map(wh => {
@@ -2034,7 +2030,7 @@ export default function ReportsPage() {
                               <td style={{ padding: '10px 12px', textAlign: 'right' }}>
                                 {brandData.reduce((acc: number, b: any) => acc + (b.stock || 0), 0).toLocaleString('es-NI')}
                               </td>
-                              <td style={{ padding: '10px 12px', textAlign: 'right', color: '#10b981' }}>
+                              <td style={{ padding: '10px 12px', textAlign: 'right', color: 'var(--success)' }}>
                                 ${brandData.reduce((acc: number, b: any) => acc + (b.capital || 0), 0).toLocaleString('es-NI', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                               </td>
                               <td style={{ padding: '10px 12px', textAlign: 'center' }}>
@@ -2067,18 +2063,23 @@ export default function ReportsPage() {
       </div>
 
       {/* NUEVA SECCIÓN: TOP INVENTARIO POR EQUIPO UNIDAD */}
-      <div className="money-maker-header" style={{ background: 'linear-gradient(135deg, #1e3a8a 0%, #172554 100%)', padding: '12px 20px', borderRadius: 8, marginTop: 16, display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 12 }}>
-        <h2 style={{ color: 'white', fontSize: 'clamp(15px, 4vw, 18px)', fontWeight: 700, margin: 0 }}>Top Inventario por Equipo ({topItemsViewMode === 'units' ? 'Unidad' : 'al Costo'})</h2>
-        <div className="money-maker-btns" style={{ display: 'flex', background: 'rgba(255,255,255,0.2)', borderRadius: 6, padding: 2, flexWrap: 'wrap' }}>
+      <div className={styles.moneyMakerHeader} data-tone="info">
+        <div className={styles.sectionHeadingTitle}>
+          <span className={styles.sectionIcon}><Package size={18} /></span>
+          <h2 className={styles.sectionTitle}>Top Inventario por Equipo ({topItemsViewMode === 'units' ? 'Unidad' : 'al Costo'})</h2>
+        </div>
+        <div className={styles.moneyMakerButtons}>
           <button
             onClick={() => setTopItemsViewMode('units')}
-            style={{ padding: '6px 12px', borderRadius: 4, border: 'none', background: topItemsViewMode === 'units' ? 'white' : 'transparent', color: topItemsViewMode === 'units' ? '#1e3a8a' : 'white', fontSize: 13, fontWeight: 600, cursor: 'pointer', transition: 'all 0.2s' }}
+            className={styles.viewModeTab}
+            aria-pressed={topItemsViewMode === 'units'}
           >
             Unidades
           </button>
           <button
             onClick={() => setTopItemsViewMode('cost')}
-            style={{ padding: '6px 12px', borderRadius: 4, border: 'none', background: topItemsViewMode === 'cost' ? 'white' : 'transparent', color: topItemsViewMode === 'cost' ? '#1e3a8a' : 'white', fontSize: 13, fontWeight: 600, cursor: 'pointer', transition: 'all 0.2s' }}
+            className={styles.viewModeTab}
+            aria-pressed={topItemsViewMode === 'cost'}
           >
             Al Costo
           </button>
@@ -2147,7 +2148,7 @@ export default function ReportsPage() {
                     })}
                   </div>
                 ) : (
-                  <div className="custom-scrollbar" style={{ maxHeight: 400, overflowY: 'auto', overflowX: 'auto', borderRadius: 8, border: '1px solid var(--border)' }}>
+                  <div className={`custom-scrollbar ${styles.tableScroll}`} style={{ maxHeight: 400, overflowY: 'auto', overflowX: 'auto', borderRadius: 8, border: '1px solid var(--border)' }}>
                     <table style={{ width: '100%', minWidth: 300 + (warehouseCols.length * 70), borderCollapse: 'collapse', fontSize: 13 }}>
                       <thead>
                         <tr style={{ background: 'var(--panel)', position: 'sticky', top: 0, zIndex: 1 }}>
@@ -2162,7 +2163,7 @@ export default function ReportsPage() {
                         {currentItems.map((item: any, idx: number) => {
                           return (
                             <tr key={idx} style={{ borderBottom: '1px solid var(--border)', background: idx % 2 === 0 ? 'transparent' : 'var(--panel)' }}>
-                              <td style={{ padding: '8px 12px', fontWeight: 600, color: '#60a5fa' }}>{item.name}</td>
+                              <td style={{ padding: '8px 12px', fontWeight: 600, color: 'var(--info)' }}>{item.name}</td>
                               {warehouseCols.map(wh => {
                                 if (topItemsViewMode === 'units') {
                                   const qty = item.byWarehouse?.[wh] || 0;
@@ -2174,7 +2175,7 @@ export default function ReportsPage() {
                                 } else {
                                   const cost = item.capitalByWarehouse?.[wh] || 0;
                                   return (
-                                    <td key={wh} style={{ padding: '8px 12px', textAlign: 'right', color: '#10b981', fontSize: 12, fontVariantNumeric: 'tabular-nums' }}>
+                                    <td key={wh} style={{ padding: '8px 12px', textAlign: 'right', color: 'var(--success)', fontSize: 12, fontVariantNumeric: 'tabular-nums' }}>
                                       {cost > 0 ? '$' + cost.toLocaleString('es-NI', { minimumFractionDigits: 1, maximumFractionDigits: 1 }) : ''}
                                     </td>
                                   );
@@ -2191,8 +2192,8 @@ export default function ReportsPage() {
                         })}
                       </tbody>
                       <tfoot>
-                        <tr style={{ background: 'var(--panel)', position: 'sticky', bottom: 0, zIndex: 1, boxShadow: '0 -4px 6px -1px rgba(0,0,0,0.05)', borderTop: '2px solid var(--border)', fontWeight: 700 }}>
-                          <td style={{ padding: '10px 12px', textAlign: 'left', color: '#60a5fa' }}>Total</td>
+                        <tr style={{ background: 'var(--panel)', position: 'sticky', bottom: 0, zIndex: 1, boxShadow: '0 -4px 6px -1px var(--shadow)', borderTop: '2px solid var(--border)', fontWeight: 700 }}>
+                          <td style={{ padding: '10px 12px', textAlign: 'left', color: 'var(--info)' }}>Total</td>
                           {warehouseCols.map(wh => {
                             if (topItemsViewMode === 'units') {
                               const whTotal = currentItems.reduce((acc: number, item: any) => acc + (item.byWarehouse?.[wh] || 0), 0);
@@ -2204,7 +2205,7 @@ export default function ReportsPage() {
                             } else {
                               const whCost = currentItems.reduce((acc: number, item: any) => acc + (item.capitalByWarehouse?.[wh] || 0), 0);
                               return (
-                                <td key={wh} style={{ padding: '10px 12px', textAlign: 'right', color: '#10b981', fontVariantNumeric: 'tabular-nums' }}>
+                                <td key={wh} style={{ padding: '10px 12px', textAlign: 'right', color: 'var(--success)', fontVariantNumeric: 'tabular-nums' }}>
                                   {whCost > 0 ? '$' + whCost.toLocaleString('es-NI', { minimumFractionDigits: 1, maximumFractionDigits: 1 }) : ''}
                                 </td>
                               );
@@ -2230,11 +2231,14 @@ export default function ReportsPage() {
 
 
       {/* SECCIÓN 2: EXISTENCIAS GENERALES */}
-      <div style={{ background: 'linear-gradient(135deg, #dc2626 0%, #991b1b 100%)', padding: '12px 20px', borderRadius: 8 }}>
-        <h2 style={{ color: 'white', fontSize: 18, fontWeight: 700, margin: 0 }}>EXISTENCIAS GENERALES</h2>
+      <div className={styles.sectionHeading} data-tone="danger">
+        <div className={styles.sectionHeadingTitle}>
+          <span className={styles.sectionIcon}><Package size={18} /></span>
+          <h2 className={styles.sectionTitle}>Existencias Generales</h2>
+        </div>
       </div>
 
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(320px, 100%), 1fr))', gap: 14 }}>
+      <div className={styles.chartsGrid}>
         <ChartCard title="Inventario por Categorías en Unidades">
           {loading ? (
             <div style={{ height: 300, background: 'var(--panel)', borderRadius: 4, animation: 'pulse 1.5s infinite' }} />
@@ -2277,7 +2281,7 @@ export default function ReportsPage() {
         </ChartCard>
       </div>
 
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(320px, 100%), 1fr))', gap: 14 }}>
+      <div className={styles.chartsGrid}>
         <ChartCard title="Top Inventario por Marcas en Unidades">
           {loading ? (
             <div style={{ height: 300, background: 'var(--panel)', borderRadius: 4, animation: 'pulse 1.5s infinite' }} />
@@ -2320,9 +2324,9 @@ export default function ReportsPage() {
         </ChartCard>
       </div>
 
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(320px, 100%), 1fr))', gap: 14 }}>
+      <div className={styles.chartsGrid}>
         <ChartCard title={
-          <div style={{ backgroundColor: '#1dac3cff', color: 'white', padding: '8px 12px', borderRadius: '4px', fontSize: '1rem', fontWeight: 'bold' }}>
+          <div className={styles.chartBadge} data-tone="success">
             Top 5 - Inventario en Existencia por Almacén
           </div>
         }>
@@ -2348,7 +2352,7 @@ export default function ReportsPage() {
 
         <ChartCard
           title={
-            <div style={{ backgroundColor: '#ca3131ff', color: 'white', padding: '8px 12px', borderRadius: '4px', fontSize: '1rem', fontWeight: 'bold' }}>
+            <div className={styles.chartBadge} data-tone="danger">
               Bottom 5 - Inventario en Existencia por Almacén
             </div>
           }
@@ -2374,7 +2378,7 @@ export default function ReportsPage() {
         </ChartCard>
       </div>
 
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(320px, 100%), 1fr))', gap: 14 }}>
+      <div className={styles.chartsGrid}>
         <ChartCard title="Participación de Inventario - Unidades por Categoría">
           {loading ? (
             <div style={{ height: 300, background: 'var(--panel)', borderRadius: 4, animation: 'pulse 1.5s infinite' }} />
@@ -2402,7 +2406,7 @@ export default function ReportsPage() {
         </ChartCard>
       </div>
 
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(320px, 100%), 1fr))', gap: 14, marginTop: 14 }}>
+      <div className={`${styles.chartsGrid} ${styles.chartsGridSpaced}`}>
         <ChartCard title="Participación - Top Inventario Equipos (Unidades)">
           {loading ? (
             <div style={{ height: 300, background: 'var(--panel)', borderRadius: 4, animation: 'pulse 1.5s infinite' }} />
@@ -2444,7 +2448,7 @@ export default function ReportsPage() {
       {/* SECCIÓN TOTALES */}
 
       {/* WAREHOUSE CHARTS - loaded lazily */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(320px, 100%), 1fr))', gap: 14 }}>
+      <div className={styles.chartsGrid}>
         <ChartCard title="Inventario por Almacén (Unidades)">
           {warehouseLoading ? (
             <div style={{ height: 300, display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--muted)', gap: 8 }}>

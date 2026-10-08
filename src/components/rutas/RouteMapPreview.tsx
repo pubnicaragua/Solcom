@@ -42,8 +42,8 @@ export default function RouteMapPreview({
         style={{
           minHeight: height,
           borderRadius: 16,
-          border: '1px dashed rgba(255,255,255,0.12)',
-          background: 'linear-gradient(180deg, rgba(15,23,42,0.7) 0%, rgba(2,6,23,0.85) 100%)',
+          border: '1px dashed var(--border)',
+          background: 'linear-gradient(180deg, var(--panel-2) 0%, var(--panel) 100%)',
           display: 'flex',
           flexDirection: 'column',
           alignItems: 'center',
@@ -54,7 +54,7 @@ export default function RouteMapPreview({
         }}
       >
         <div style={{ fontSize: 18, fontWeight: 700 }}>{emptyTitle}</div>
-        <div style={{ fontSize: 13, color: 'rgba(255,255,255,0.6)', maxWidth: 480, lineHeight: 1.6 }}>
+        <div style={{ fontSize: 13, color: 'var(--muted)', maxWidth: 480, lineHeight: 1.6 }}>
           {emptyDescription}
         </div>
       </div>
@@ -86,7 +86,7 @@ export default function RouteMapPreview({
         style={{
           minHeight: height,
           borderRadius: 16,
-          border: '1px solid rgba(255,255,255,0.08)',
+          border: '1px solid var(--border)',
           background: 'linear-gradient(180deg, rgba(15,23,42,0.92) 0%, rgba(2,6,23,0.98) 100%)',
           overflow: 'hidden',
           position: 'relative',
@@ -163,8 +163,8 @@ export default function RouteMapPreview({
               style={{
                 padding: 12,
                 borderRadius: 12,
-                border: '1px solid rgba(255,255,255,0.08)',
-                background: 'rgba(255,255,255,0.03)',
+                border: '1px solid var(--border)',
+                background: 'var(--surface-hover)',
                 display: 'flex',
                 alignItems: 'flex-start',
                 gap: 12,
@@ -188,11 +188,11 @@ export default function RouteMapPreview({
                 {index + 1}
               </div>
               <div>
-                <div style={{ fontSize: 13, fontWeight: 700, color: '#f8fafc', marginBottom: 4 }}>
+                <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--text)', marginBottom: 4 }}>
                   {point.label}
                 </div>
                 {point.subtitle && (
-                  <div style={{ fontSize: 12, color: 'rgba(255,255,255,0.58)', lineHeight: 1.5 }}>
+                  <div style={{ fontSize: 12, color: 'var(--muted)', lineHeight: 1.5 }}>
                     {point.subtitle}
                   </div>
                 )}

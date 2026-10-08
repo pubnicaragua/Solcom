@@ -148,10 +148,10 @@ function sortedEntries<T>(map: Map<string, T[]>): [string, T[]][] {
 
 /* ───── styling ───── */
 const LEVEL_COLORS: Record<number, { bg: string; text: string; fontWeight: number }> = {
-    0: { bg: '#0c1929', text: '#fbbf24', fontWeight: 700 },   // Estado — deep navy
-    1: { bg: '#111f36', text: '#60a5fa', fontWeight: 700 },   // Marca — slightly lighter
-    2: { bg: 'transparent', text: '#e2e8f0', fontWeight: 500 },// Producto
-    3: { bg: 'rgba(255,255,255,0.015)', text: '#94a3b8', fontWeight: 400 },// SKU (leaf)
+    0: { bg: 'var(--pivot-state-bg)', text: 'var(--pivot-total-accent)', fontWeight: 700 },
+    1: { bg: 'var(--pivot-brand-bg)', text: 'var(--pivot-brand-accent)', fontWeight: 700 },
+    2: { bg: 'transparent', text: 'var(--pivot-product-text)', fontWeight: 500 },
+    3: { bg: 'var(--surface-hover)', text: 'var(--pivot-sku-text)', fontWeight: 400 },
 };
 
 function getCellColor(qty: number): string | undefined {
@@ -181,8 +181,8 @@ function ensureTooltipCSS() {
             left: 14px;
             top: 100%;
             z-index: 100;
-            background: #1e293b;
-            color: #e2e8f0;
+            background: var(--pivot-tooltip-bg);
+            color: var(--text);
             padding: 6px 10px;
             border-radius: 6px;
             font-size: 12px;
@@ -190,8 +190,8 @@ function ensureTooltipCSS() {
             white-space: normal;
             max-width: 400px;
             min-width: 200px;
-            box-shadow: 0 4px 16px rgba(0,0,0,0.5);
-            border: 1px solid rgba(255,255,255,0.1);
+            box-shadow: 0 4px 16px var(--shadow);
+            border: 1px solid var(--border);
             pointer-events: none;
             transition: opacity 0.08s, visibility 0.08s;
             line-height: 1.4;
@@ -470,10 +470,10 @@ export default function PivotInventoryTable({ filters, cartMode, cartReady, onAd
                     alignItems: 'center',
                     justifyContent: 'center',
                     gap: 12,
-                    background: 'linear-gradient(180deg, rgba(15,27,45,0.5) 0%, transparent 100%)',
+                    background: 'linear-gradient(180deg, var(--pivot-toolbar-tint) 0%, transparent 100%)',
                     borderRadius: 12,
                 }}>
-                    <Loader2 size={22} style={{ animation: 'spin 1s linear infinite', color: '#60a5fa' }} />
+                    <Loader2 size={22} style={{ animation: 'spin 1s linear infinite', color: 'var(--pivot-brand-accent)' }} />
                     <span style={{ fontSize: 14, fontWeight: 500 }}>Cargando Tabla Pivot...</span>
                 </div>
             </Card>
@@ -500,9 +500,9 @@ export default function PivotInventoryTable({ filters, cartMode, cartReady, onAd
                             style={{
                                 marginTop: 8,
                                 padding: '6px 16px',
-                                background: 'rgba(96,165,250,0.15)',
-                                color: '#60a5fa',
-                                border: '1px solid rgba(96,165,250,0.3)',
+                                background: 'var(--surface-hover)',
+                                color: 'var(--pivot-brand-accent)',
+                                border: '1px solid var(--pivot-grid-border)',
                                 borderRadius: 8,
                                 cursor: 'pointer',
                                 fontSize: 13,
@@ -583,8 +583,8 @@ export default function PivotInventoryTable({ filters, cartMode, cartReady, onAd
                     alignItems: 'center',
                     flexWrap: 'wrap',
                     gap: 8,
-                    borderBottom: '1px solid rgba(255,255,255,0.08)',
-                    background: 'linear-gradient(135deg, rgba(15,27,45,0.8) 0%, rgba(17,31,54,0.6) 100%)',
+                    borderBottom: '1px solid var(--pivot-grid-border)',
+                    background: 'var(--pivot-toolbar-bg)',
                 }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
                         <div style={{
@@ -594,14 +594,14 @@ export default function PivotInventoryTable({ filters, cartMode, cartReady, onAd
                             background: '#22c55e',
                             boxShadow: '0 0 8px rgba(34,197,94,0.5)',
                         }} />
-                        <span style={{ fontSize: 13, fontWeight: 600, color: '#e2e8f0' }}>
+                        <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--pivot-product-text)' }}>
                             Inventario Pivot
                         </span>
                         <span style={{
                             fontSize: 11,
-                            color: '#64748b',
+                            color: 'var(--muted)',
                             padding: '2px 8px',
-                            background: 'rgba(255,255,255,0.05)',
+                            background: 'var(--pivot-grid-soft-border)',
                             borderRadius: 6,
                         }}>
                             {data.items.length.toLocaleString()} productos
@@ -644,10 +644,10 @@ export default function PivotInventoryTable({ filters, cartMode, cartReady, onAd
                                 gap: 6,
                                 padding: '5px 12px',
                                 background: hideZeroStock
-                                    ? 'rgba(251,191,36,0.15)'
-                                    : 'rgba(255,255,255,0.05)',
-                                color: hideZeroStock ? '#fbbf24' : '#94a3b8',
-                                border: `1px solid ${hideZeroStock ? 'rgba(251,191,36,0.3)' : 'rgba(255,255,255,0.1)'}`,
+                                    ? 'var(--warning-surface)'
+                                    : 'var(--pivot-grid-soft-border)',
+                                color: hideZeroStock ? 'var(--pivot-total-accent)' : 'var(--pivot-sku-text)',
+                                border: `1px solid ${hideZeroStock ? 'var(--pivot-total-border)' : 'var(--pivot-grid-border)'}`,
                                 borderRadius: 8,
                                 cursor: 'pointer',
                                 fontSize: 12,
@@ -666,9 +666,9 @@ export default function PivotInventoryTable({ filters, cartMode, cartReady, onAd
                         margin: '10px 12px 0',
                         padding: '8px 10px',
                         borderRadius: 8,
-                        border: '1px solid rgba(245,158,11,0.35)',
-                        background: 'rgba(120,53,15,0.25)',
-                        color: '#FCD34D',
+                        border: '1px solid var(--warning)',
+                        background: 'var(--warning-surface)',
+                        color: 'var(--warning)',
                         fontSize: 12,
                         fontWeight: 700,
                     }}>
@@ -724,28 +724,35 @@ export default function PivotInventoryTable({ filters, cartMode, cartReady, onAd
                             }}
                             style={{ overflowX: 'auto', overflowY: 'auto', maxHeight: '75vh', width: '100%' }}
                         >
-                            <table style={{
+                            <table className="inventory-pivot-table" style={{
                                 borderCollapse: 'separate',
                                 borderSpacing: 0,
                                 tableLayout: 'fixed',
                                 width: stickyColWidth + extraColsWidth + warehouseCodes.length * cellWidth,
                             }}>
                                 {/* ─── Header ─── */}
-                                <thead>
+                                <thead style={{
+                                    position: 'sticky',
+                                    top: 0,
+                                    zIndex: 20,
+                                    isolation: 'isolate',
+                                    backgroundColor: 'var(--pivot-header-solid)',
+                                }}>
                                     <tr>
                                         <th style={{
-                                            position: 'sticky', left: 0, top: 0, zIndex: 4,
-                                            background: '#080f1d',
+                                            position: 'sticky', left: 0, top: 0, zIndex: 12,
+                                            background: 'var(--pivot-header-bg)',
+                                            backgroundColor: 'var(--pivot-header-solid)',
                                             padding: '11px 14px',
                                             textAlign: 'left',
                                             fontSize: 10, fontWeight: 700,
-                                            color: '#64748b',
+                                            color: 'var(--pivot-header-text)',
                                             textTransform: 'uppercase',
                                             letterSpacing: '0.8px',
                                             minWidth: stickyColWidth, maxWidth: stickyColWidth, width: stickyColWidth,
                                             overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
-                                            borderRight: '1px solid rgba(255,255,255,0.06)',
-                                            borderBottom: '2px solid rgba(255,255,255,0.12)',
+                                            borderRight: '1px solid var(--pivot-grid-soft-border)',
+                                            borderBottom: '2px solid var(--pivot-header-rule)',
                                         }}>
                                             Producto
                                             <div
@@ -793,61 +800,65 @@ export default function PivotInventoryTable({ filters, cartMode, cartReady, onAd
                                             />
                                         </th>
                                         <th style={{
-                                            position: 'sticky', left: stickyColWidth, top: 0, zIndex: 4,
-                                            background: '#080f1d',
+                                            position: 'sticky', left: stickyColWidth, top: 0, zIndex: 12,
+                                            background: 'var(--pivot-header-bg)',
+                                            backgroundColor: 'var(--pivot-header-solid)',
                                             padding: '11px 8px',
                                             textAlign: 'left',
                                             fontSize: 10, fontWeight: 700,
-                                            color: '#64748b',
+                                            color: 'var(--pivot-header-text)',
                                             textTransform: 'uppercase',
                                             letterSpacing: '0.8px',
                                             minWidth: skuColWidth, width: skuColWidth,
                                             whiteSpace: 'nowrap',
-                                            borderBottom: '2px solid rgba(255,255,255,0.12)',
-                                            borderRight: '1px solid rgba(255,255,255,0.06)',
+                                            borderBottom: '2px solid var(--pivot-header-rule)',
+                                            borderRight: '1px solid var(--pivot-grid-soft-border)',
                                         }}>SKU</th>
                                         <th style={{
-                                            position: 'sticky', left: stickyColWidth + skuColWidth, top: 0, zIndex: 4,
-                                            background: '#080f1d',
+                                            position: 'sticky', left: stickyColWidth + skuColWidth, top: 0, zIndex: 12,
+                                            background: 'var(--pivot-header-bg)',
+                                            backgroundColor: 'var(--pivot-header-solid)',
                                             padding: '11px 8px',
                                             textAlign: 'left',
                                             fontSize: 10, fontWeight: 700,
-                                            color: '#64748b',
+                                            color: 'var(--pivot-header-text)',
                                             textTransform: 'uppercase',
                                             letterSpacing: '0.8px',
                                             minWidth: marcaColWidth, width: marcaColWidth,
                                             whiteSpace: 'nowrap',
-                                            borderBottom: '2px solid rgba(255,255,255,0.12)',
-                                            borderRight: '1px solid rgba(255,255,255,0.06)',
+                                            borderBottom: '2px solid var(--pivot-header-rule)',
+                                            borderRight: '1px solid var(--pivot-grid-soft-border)',
                                         }}>Marca</th>
                                         {/* Marca, Color - Sin columna remanente */}
                                         <th style={{
-                                            position: 'sticky', left: stickyColWidth + skuColWidth + marcaColWidth, top: 0, zIndex: 4,
-                                            background: '#080f1d',
+                                            position: 'sticky', left: stickyColWidth + skuColWidth + marcaColWidth, top: 0, zIndex: 12,
+                                            background: 'var(--pivot-header-bg)',
+                                            backgroundColor: 'var(--pivot-header-solid)',
                                             padding: '11px 8px',
                                             textAlign: 'left',
                                             fontSize: 10, fontWeight: 700,
-                                            color: '#64748b',
+                                            color: 'var(--pivot-header-text)',
                                             textTransform: 'uppercase',
                                             letterSpacing: '0.8px',
                                             minWidth: colorColWidth, width: colorColWidth,
                                             whiteSpace: 'nowrap',
-                                            borderBottom: '2px solid rgba(255,255,255,0.12)',
-                                            borderRight: '1px solid rgba(255,255,255,0.06)',
+                                            borderBottom: '2px solid var(--pivot-header-rule)',
+                                            borderRight: '1px solid var(--pivot-grid-soft-border)',
                                         }}>Color</th>
                                         <th style={{
-                                            position: 'sticky', left: stickyColWidth + skuColWidth + marcaColWidth + colorColWidth, top: 0, zIndex: 4,
-                                            background: '#080f1d',
+                                            position: 'sticky', left: stickyColWidth + skuColWidth + marcaColWidth + colorColWidth, top: 0, zIndex: 13,
+                                            background: 'var(--pivot-total-header-bg)',
+                                            backgroundColor: 'var(--pivot-total-header-solid)',
                                             padding: '11px 12px',
                                             textAlign: 'right',
                                             fontSize: 10, fontWeight: 700,
-                                            color: '#fbbf24',
+                                            color: 'var(--pivot-total-accent)',
                                             textTransform: 'uppercase',
                                             letterSpacing: '0.8px',
                                             minWidth: totalColWidth,
-                                            borderLeft: '2px solid rgba(255,255,255,0.12)',
-                                            borderRight: '2px solid rgba(255,255,255,0.12)',
-                                            borderBottom: '2px solid rgba(255,255,255,0.12)',
+                                            borderLeft: '2px solid var(--pivot-grid-border)',
+                                            borderRight: '2px solid var(--pivot-grid-border)',
+                                            borderBottom: '2px solid var(--pivot-total-border)',
                                         }}>
                                             Total
                                         </th>
@@ -855,19 +866,24 @@ export default function PivotInventoryTable({ filters, cartMode, cartReady, onAd
                                             const whColor = warehouseColors.get(code);
                                             return (
                                                 <th key={code} style={{
-                                                    position: 'sticky', top: 0, zIndex: 2,
-                                                    background: whColor ? whColor.color : '#080f1d',
+                                                    position: 'sticky', top: 0, zIndex: 11,
+                                                    background: whColor
+                                                        ? `linear-gradient(180deg, color-mix(in srgb, ${whColor.color} 88%, var(--pivot-header-tint) 12%) 0%, color-mix(in srgb, ${whColor.color} 76%, var(--pivot-header-tint) 24%) 100%)`
+                                                        : 'var(--pivot-header-bg)',
+                                                    backgroundColor: whColor
+                                                        ? `color-mix(in srgb, ${whColor.color} 76%, var(--pivot-header-tint) 24%)`
+                                                        : 'var(--pivot-header-solid)',
                                                     padding: '11px 12px',
                                                     textAlign: 'right',
                                                     fontSize: 10, fontWeight: 700,
-                                                    color: whColor ? whColor.text_color : '#64748b',
+                                                    color: whColor ? whColor.text_color : 'var(--pivot-header-text)',
                                                     textTransform: 'uppercase',
                                                     letterSpacing: '0.5px',
                                                     minWidth: cellWidth,
                                                     whiteSpace: 'nowrap',
-                                                    borderBottom: '2px solid rgba(255,255,255,0.12)',
-                                                    borderLeft: '1px solid rgba(255,255,255,0.08)',
-                                                    borderRight: '1px solid rgba(255,255,255,0.08)',
+                                                    borderBottom: `2px solid ${whColor ? `color-mix(in srgb, ${whColor.color} 72%, var(--pivot-header-tint))` : 'var(--pivot-header-rule)'}`,
+                                                    borderLeft: '1px solid var(--pivot-grid-border)',
+                                                    borderRight: '1px solid var(--pivot-grid-border)',
                                                 }}>
                                                     {code}
                                                 </th>
@@ -944,7 +960,7 @@ export default function PivotInventoryTable({ filters, cartMode, cartReady, onAd
                                                     if (isCartTarget) {
                                                         e.currentTarget.style.background = 'rgba(16,185,129,0.12)';
                                                     } else if (node.level >= 2) {
-                                                        e.currentTarget.style.background = 'rgba(255,255,255,0.04)';
+                                                        e.currentTarget.style.background = 'var(--pivot-grid-soft-border)';
                                                     }
                                                 }}
                                                 onMouseLeave={(e) => {
@@ -966,8 +982,8 @@ export default function PivotInventoryTable({ filters, cartMode, cartReady, onAd
                                                         overflow: 'hidden',
                                                         textOverflow: 'ellipsis',
                                                         maxWidth: stickyColWidth, width: stickyColWidth,
-                                                        borderRight: '1px solid rgba(255,255,255,0.06)',
-                                                        borderBottom: `1px solid rgba(255,255,255,${node.level <= 1 ? '0.12' : '0.05'})`,
+                                                        borderRight: '1px solid var(--pivot-grid-soft-border)',
+                                                        borderBottom: `1px solid ${node.level <= 1 ? 'var(--pivot-grid-border)' : 'var(--pivot-grid-soft-border)'}`,
                                                         cursor: hasChildren ? 'pointer' : 'default',
                                                         userSelect: 'none',
                                                     }}
@@ -1026,12 +1042,12 @@ export default function PivotInventoryTable({ filters, cartMode, cartReady, onAd
                                                         position: 'sticky', left: stickyColWidth, zIndex: 2,
                                                         padding: '7px 8px',
                                                         fontSize: 11,
-                                                        color: copiedSku === skuVal && skuVal ? '#4ade80' : '#94a3b8',
+                                                        color: copiedSku === skuVal && skuVal ? '#4ade80' : 'var(--pivot-sku-text)',
                                                         whiteSpace: 'nowrap',
                                                         overflow: 'hidden',
                                                         textOverflow: 'ellipsis',
-                                                        borderBottom: `1px solid rgba(255,255,255,${node.level <= 1 ? '0.12' : '0.05'})`,
-                                                        borderRight: '1px solid rgba(255,255,255,0.06)',
+                                                        borderBottom: `1px solid ${node.level <= 1 ? 'var(--pivot-grid-border)' : 'var(--pivot-grid-soft-border)'}`,
+                                                        borderRight: '1px solid var(--pivot-grid-soft-border)',
                                                         background: style.bg === 'transparent' || style.bg.startsWith('rgba') ? 'var(--card)' : style.bg,
                                                         minWidth: skuColWidth, maxWidth: skuColWidth,
                                                         cursor: skuVal ? 'pointer' : 'default',
@@ -1051,8 +1067,8 @@ export default function PivotInventoryTable({ filters, cartMode, cartReady, onAd
                                                     padding: '7px 8px',
                                                     fontSize: 12,
                                                     color: 'var(--text)',
-                                                    borderBottom: `1px solid rgba(255,255,255,${node.level <= 1 ? '0.12' : '0.05'})`,
-                                                    borderRight: '1px solid rgba(255,255,255,0.06)',
+                                                    borderBottom: `1px solid ${node.level <= 1 ? 'var(--pivot-grid-border)' : 'var(--pivot-grid-soft-border)'}`,
+                                                    borderRight: '1px solid var(--pivot-grid-soft-border)',
                                                     background: style.bg === 'transparent' || style.bg.startsWith('rgba') ? 'var(--card)' : style.bg,
                                                     minWidth: marcaColWidth, maxWidth: marcaColWidth,
                                                 }}>
@@ -1064,8 +1080,8 @@ export default function PivotInventoryTable({ filters, cartMode, cartReady, onAd
                                                     padding: '7px 8px',
                                                     fontSize: 12,
                                                     color: 'var(--text)',
-                                                    borderBottom: `1px solid rgba(255,255,255,${node.level <= 1 ? '0.12' : '0.05'})`,
-                                                    borderRight: '1px solid rgba(255,255,255,0.06)',
+                                                    borderBottom: `1px solid ${node.level <= 1 ? 'var(--pivot-grid-border)' : 'var(--pivot-grid-soft-border)'}`,
+                                                    borderRight: '1px solid var(--pivot-grid-soft-border)',
                                                     background: style.bg === 'transparent' || style.bg.startsWith('rgba') ? 'var(--card)' : style.bg,
                                                     minWidth: colorColWidth, maxWidth: colorColWidth,
                                                 }}>
@@ -1079,11 +1095,11 @@ export default function PivotInventoryTable({ filters, cartMode, cartReady, onAd
                                                     textAlign: 'right',
                                                     fontSize: node.level <= 1 ? 14 : 12,
                                                     fontWeight: 700,
-                                                    color: node.grandTotal === 0 ? 'rgba(251,191,36,0.3)' : '#fbbf24',
+                                                    color: node.grandTotal === 0 ? 'var(--muted)' : 'var(--pivot-total-accent)',
                                                     background: style.bg === 'transparent' || style.bg.startsWith('rgba') ? 'var(--card)' : style.bg,
-                                                    borderLeft: '2px solid rgba(255,255,255,0.12)',
-                                                    borderRight: '2px solid rgba(255,255,255,0.12)',
-                                                    borderBottom: `1px solid rgba(255,255,255,${node.level <= 1 ? '0.12' : '0.05'})`,
+                                                    borderLeft: '2px solid var(--pivot-grid-border)',
+                                                    borderRight: '2px solid var(--pivot-grid-border)',
+                                                    borderBottom: `1px solid ${node.level <= 1 ? 'var(--pivot-grid-border)' : 'var(--pivot-grid-soft-border)'}`,
                                                     fontVariantNumeric: 'tabular-nums',
                                                 }}>
                                                     <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
@@ -1104,8 +1120,12 @@ export default function PivotInventoryTable({ filters, cartMode, cartReady, onAd
                                                     const noBreakdown = isItemRow && rowItem && rowItem.hasSnapshots === false;
                                                     const whColor = warehouseColors.get(code);
                                                     const bgColor = whColor
-                                                        ? (highlight && !noBreakdown ? `${whColor.color}40` : `${whColor.color}15`)
-                                                        : (highlight && !noBreakdown ? `${highlight}15` : undefined);
+                                                        ? (highlight && !noBreakdown
+                                                            ? `color-mix(in srgb, ${whColor.color} 25%, transparent)`
+                                                            : `color-mix(in srgb, ${whColor.color} 8%, transparent)`)
+                                                        : (highlight && !noBreakdown
+                                                            ? `color-mix(in srgb, ${highlight} 8%, transparent)`
+                                                            : undefined);
 
                                                     return (
                                                         <td key={code} style={{
@@ -1113,14 +1133,14 @@ export default function PivotInventoryTable({ filters, cartMode, cartReady, onAd
                                                             textAlign: 'right',
                                                             fontSize: node.level <= 1 ? 13 : 12,
                                                             fontWeight: isGroup ? 700 : 400,
-                                                            color: noBreakdown
-                                                                ? 'rgba(100,116,139,0.25)'
-                                                                : (whColor && qty !== 0 ? whColor.text_color : (highlight || (qty !== 0 ? '#e2e8f0' : 'rgba(100,116,139,0.3)'))),
+                                                            color: noBreakdown || qty === 0
+                                                                ? 'var(--muted)'
+                                                                : `var(--pivot-warehouse-value-text, ${whColor ? whColor.text_color : (highlight || 'var(--pivot-product-text)')})`,
                                                             background: bgColor,
                                                             fontVariantNumeric: 'tabular-nums',
-                                                            borderBottom: `1px solid rgba(255,255,255,${node.level <= 1 ? '0.12' : '0.05'})`,
-                                                            borderLeft: '1px solid rgba(255,255,255,0.04)',
-                                                            borderRight: '1px solid rgba(255,255,255,0.04)',
+                                                            borderBottom: `1px solid ${node.level <= 1 ? 'var(--pivot-grid-border)' : 'var(--pivot-grid-soft-border)'}`,
+                                                            borderLeft: '1px solid var(--pivot-grid-soft-border)',
+                                                            borderRight: '1px solid var(--pivot-grid-soft-border)',
                                                             transition: 'background 0.15s',
                                                             fontStyle: noBreakdown ? 'italic' : undefined,
                                                         }}>
@@ -1150,48 +1170,48 @@ export default function PivotInventoryTable({ filters, cartMode, cartReady, onAd
                                     <tr>
                                         <td style={{
                                             position: 'sticky', left: 0, zIndex: 2,
-                                            background: '#060c18',
+                                            background: 'var(--background)',
                                             padding: '10px 14px',
                                             fontWeight: 800,
                                             fontSize: 13,
-                                            color: '#fbbf24',
+                                            color: 'var(--pivot-total-accent)',
                                             textTransform: 'uppercase',
                                             letterSpacing: '0.5px',
-                                            borderRight: '1px solid rgba(255,255,255,0.06)',
-                                            borderTop: '2px solid rgba(251,191,36,0.3)',
+                                            borderRight: '1px solid var(--pivot-grid-soft-border)',
+                                            borderTop: '2px solid var(--pivot-total-border)',
                                         }}>
                                             Gran Total
                                         </td>
-                                        <td style={{ position: 'sticky', left: stickyColWidth, zIndex: 2, background: '#060c18', borderTop: '2px solid rgba(251,191,36,0.3)', borderRight: '1px solid rgba(255,255,255,0.06)' }} />
-                                        <td style={{ position: 'sticky', left: stickyColWidth + skuColWidth, zIndex: 2, background: '#060c18', borderTop: '2px solid rgba(251,191,36,0.3)', borderRight: '1px solid rgba(255,255,255,0.06)' }} />
-                                        <td style={{ position: 'sticky', left: stickyColWidth + skuColWidth + marcaColWidth, zIndex: 2, background: '#060c18', borderTop: '2px solid rgba(251,191,36,0.3)', borderRight: '1px solid rgba(255,255,255,0.06)' }} />
+                                        <td style={{ position: 'sticky', left: stickyColWidth, zIndex: 2, background: 'var(--background)', borderTop: '2px solid var(--pivot-total-border)', borderRight: '1px solid var(--pivot-grid-soft-border)' }} />
+                                        <td style={{ position: 'sticky', left: stickyColWidth + skuColWidth, zIndex: 2, background: 'var(--background)', borderTop: '2px solid var(--pivot-total-border)', borderRight: '1px solid var(--pivot-grid-soft-border)' }} />
+                                        <td style={{ position: 'sticky', left: stickyColWidth + skuColWidth + marcaColWidth, zIndex: 2, background: 'var(--background)', borderTop: '2px solid var(--pivot-total-border)', borderRight: '1px solid var(--pivot-grid-soft-border)' }} />
 
                                         <td style={{
                                             position: 'sticky', left: stickyColWidth + skuColWidth + marcaColWidth + colorColWidth, zIndex: 2,
-                                            background: '#060c18',
+                                            background: 'var(--background)',
                                             padding: '10px 12px',
                                             textAlign: 'right',
                                             fontSize: 14,
                                             fontWeight: 800,
-                                            color: '#fbbf24',
+                                            color: 'var(--pivot-total-accent)',
                                             fontVariantNumeric: 'tabular-nums',
-                                            borderLeft: '2px solid rgba(255,255,255,0.12)',
-                                            borderRight: '2px solid rgba(255,255,255,0.12)',
-                                            borderTop: '2px solid rgba(251,191,36,0.3)',
+                                            borderLeft: '2px solid var(--pivot-grid-border)',
+                                            borderRight: '2px solid var(--pivot-grid-border)',
+                                            borderTop: '2px solid var(--pivot-total-border)',
                                             textShadow: '0 0 12px rgba(251,191,36,0.4)',
                                         }}>
                                             {grandGrandTotal.toLocaleString()}
                                         </td>
                                         {warehouseCodes.map((code) => (
                                             <td key={code} style={{
-                                                background: '#060c18',
+                                                background: 'var(--background)',
                                                 padding: '10px 12px',
                                                 textAlign: 'right',
                                                 fontSize: 13,
                                                 fontWeight: 800,
-                                                color: '#fbbf24',
+                                                color: 'var(--pivot-total-accent)',
                                                 fontVariantNumeric: 'tabular-nums',
-                                                borderTop: '2px solid rgba(251,191,36,0.3)',
+                                                borderTop: '2px solid var(--pivot-total-border)',
                                             }}>
                                                 {grandTotals[code] !== 0 ? grandTotals[code].toLocaleString() : ''}
                                             </td>
@@ -1209,15 +1229,15 @@ export default function PivotInventoryTable({ filters, cartMode, cartReady, onAd
                 {/* Footer info */}
                 <div className="pivot-footer" style={{
                     padding: '10px 16px',
-                    borderTop: '1px solid rgba(255, 255, 255, 0.06)',
+                    borderTop: '1px solid var(--pivot-grid-soft-border)',
                     display: 'flex',
                     justifyContent: 'space-between',
                     alignItems: 'center',
                     flexWrap: 'wrap',
                     gap: 8,
                     fontSize: 11,
-                    color: '#64748b',
-                    background: 'rgba(8,15,29,0.5)',
+                    color: 'var(--muted)',
+                    background: 'var(--background)',
                 }}>
                     <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
                         <span>{data.items.length.toLocaleString()} productos</span>
@@ -1297,7 +1317,7 @@ function MobileGroupNode({ node, level, warehouseCodes, data, cartMode, cartRead
 
     return (
         <div style={{
-            background: level === 0 ? 'var(--card-bg)' : 'rgba(255,255,255,0.03)',
+            background: level === 0 ? 'var(--card-bg)' : 'var(--surface-hover)',
             borderRadius: 8,
             overflow: 'hidden',
             border: '1px solid var(--border)',
@@ -1311,7 +1331,7 @@ function MobileGroupNode({ node, level, warehouseCodes, data, cartMode, cartRead
                     display: 'flex',
                     justifyContent: 'space-between',
                     alignItems: 'center',
-                    background: level === 0 ? 'rgba(15,27,45,0.4)' : 'transparent',
+                    background: level === 0 ? 'var(--panel)' : 'transparent',
                     border: 'none',
                     color: 'var(--text)',
                     cursor: 'pointer'
@@ -1322,7 +1342,7 @@ function MobileGroupNode({ node, level, warehouseCodes, data, cartMode, cartRead
                     <span style={{
                         fontSize: level === 0 ? 15 : 14,
                         fontWeight: 600,
-                        color: level === 0 ? '#fbbf24' : '#60a5fa'
+                        color: level === 0 ? 'var(--pivot-total-accent)' : 'var(--pivot-brand-accent)'
                     }}>
                         {node.label}
                     </span>
@@ -1333,7 +1353,7 @@ function MobileGroupNode({ node, level, warehouseCodes, data, cartMode, cartRead
                 <div style={{
                     fontSize: 13,
                     fontWeight: 700,
-                    color: node.grandTotal > 0 ? '#e2e8f0' : '#64748b'
+                    color: node.grandTotal > 0 ? 'var(--pivot-product-text)' : 'var(--muted)'
                 }}>
                     {node.grandTotal} un.
                 </div>
@@ -1373,11 +1393,11 @@ function MobileProductCard({ node, warehouseCodes, data, cartMode, cartReady, on
             >
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 12 }}>
                     <div>
-                        <div style={{ fontSize: 14, fontWeight: 600, color: '#e2e8f0', marginBottom: 4 }}>
+                        <div style={{ fontSize: 14, fontWeight: 600, color: 'var(--pivot-product-text)', marginBottom: 4 }}>
                             {node.label}
                         </div>
                         {/* Only show first variant SKU if available or generic info */}
-                        <div style={{ fontSize: 12, color: '#94a3b8' }}>
+                        <div style={{ fontSize: 12, color: 'var(--pivot-sku-text)' }}>
                             {node.children.length} variantes
                         </div>
                     </div>
@@ -1385,44 +1405,44 @@ function MobileProductCard({ node, warehouseCodes, data, cartMode, cartReady, on
                         <div style={{
                             fontSize: 15,
                             fontWeight: 700,
-                            color: total > 0 ? '#22c55e' : '#64748b'
+                            color: total > 0 ? '#22c55e' : 'var(--muted)'
                         }}>
                             {total}
                         </div>
-                        <div style={{ fontSize: 11, color: '#64748b' }}>Total</div>
+                        <div style={{ fontSize: 11, color: 'var(--muted)' }}>Total</div>
                     </div>
                 </div>
             </div>
 
             {expanded && (
-                <div style={{ background: 'rgba(0,0,0,0.2)', padding: 12, borderTop: '1px solid var(--border)' }}>
+                <div style={{ background: 'var(--panel-2)', padding: 12, borderTop: '1px solid var(--border)' }}>
                     {/* Breakdown by warehouse */}
                     {warehouseCodes.map(code => {
                         const qty = node.totals[code];
                         if (!qty) return null;
                         const whName = data.warehouses.find(w => w.code === code)?.name || code;
                         return (
-                            <div key={code} style={{ display: 'flex', justifyContent: 'space-between', padding: '6px 0', borderBottom: '1px solid rgba(255,255,255,0.05)' }}>
-                                <div style={{ fontSize: 13, color: '#ecf0f1' }}>{whName}</div>
-                                <div style={{ fontSize: 13, fontWeight: 600, color: '#e2e8f0' }}>{qty}</div>
+                            <div key={code} style={{ display: 'flex', justifyContent: 'space-between', padding: '6px 0', borderBottom: '1px solid var(--pivot-grid-soft-border)' }}>
+                                <div style={{ fontSize: 13, color: 'var(--text)' }}>{whName}</div>
+                                <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--pivot-product-text)' }}>{qty}</div>
                             </div>
                         );
                     })}
                     {node.children.length > 0 && (
                         <div style={{ marginTop: 12 }}>
-                            <div style={{ fontSize: 11, fontWeight: 700, color: '#64748b', marginBottom: 6, textTransform: 'uppercase' }}>Variantes</div>
+                            <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--muted)', marginBottom: 6, textTransform: 'uppercase' }}>Variantes</div>
                             {node.children.map(variant => {
                                 const rowItem = variant.items?.[0];
                                 return (
-                                    <div key={variant.label} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '6px 0', fontSize: 13, borderBottom: '1px solid rgba(255,255,255,0.03)' }}>
+                                    <div key={variant.label} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '6px 0', fontSize: 13, borderBottom: '1px solid var(--surface-hover)' }}>
                                         <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
-                                            <span style={{ color: '#cbd5e1', fontWeight: 500 }}>{variant.label}</span>
+                                            <span style={{ color: 'var(--text-secondary)', fontWeight: 500 }}>{variant.label}</span>
                                             {rowItem?.color && (
-                                                <span style={{ color: '#94a3b8', fontSize: 12 }}>• {rowItem.color}</span>
+                                                <span style={{ color: 'var(--pivot-sku-text)', fontSize: 12 }}>• {rowItem.color}</span>
                                             )}
                                         </div>
                                         <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                                            <span style={{ color: '#f8fafc', fontWeight: 600 }}>{variant.grandTotal}</span>
+                                            <span style={{ color: 'var(--text)', fontWeight: 600 }}>{variant.grandTotal}</span>
                                             {cartMode && cartReady && onAddToCart && rowItem && (
                                                 <button
                                                     onClick={(e) => { e.stopPropagation(); onAddToCart(rowItem); }}

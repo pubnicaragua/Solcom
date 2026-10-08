@@ -160,7 +160,7 @@ export default function TransferModal({
       left: 0,
       right: 0,
       bottom: 0,
-      background: 'rgba(0, 0, 0, 0.5)',
+      background: 'var(--overlay)',
       display: 'flex',
       alignItems: 'center',
       justifyContent: 'center',
@@ -307,7 +307,7 @@ export default function TransferModal({
                             cursor: 'pointer',
                             textAlign: 'center',
                             border: `1px solid ${isSelected ? 'var(--brand-primary)' : 'var(--border)'}`,
-                            background: isSelected ? 'var(--brand-primary)20' : 'var(--card)',
+                            background: isSelected ? 'var(--brand-surface)' : 'var(--card)',
                             color: isSelected ? 'var(--brand-primary)' : 'var(--text)',
                             transition: 'all 0.2s'
                           }}
@@ -379,7 +379,7 @@ export default function TransferModal({
               {error && (
                 <div style={{
                   padding: 12,
-                  background: 'var(--danger)15',
+                  background: 'var(--danger-surface)',
                   border: '1px solid var(--danger)',
                   borderRadius: 6,
                   display: 'flex',

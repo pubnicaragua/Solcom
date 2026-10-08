@@ -618,20 +618,23 @@ export default function RolesPage() {
   }, {} as Record<string, Permission[]>);
 
   return (
-    <div style={{ display: 'grid', gap: 14 }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 10 }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
-          <div className="h-title">Roles y Permisos</div>
-          <div style={{ display: 'flex', gap: 4, background: 'var(--panel)', padding: 4, borderRadius: 8, border: '1px solid var(--border)' }}>
+    <div className="roles-module-view" style={{ display: 'grid', gap: 14 }}>
+      <div className="roles-module-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 10 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 16, flexWrap: 'wrap' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+            <div className="system-title-mark"><Shield size={21} /></div>
+            <div className="h-title inventory-title">Roles y Permisos</div>
+          </div>
+          <div className="roles-view-tabs" style={{ display: 'flex', gap: 4, background: 'var(--panel)', padding: 4, borderRadius: 10, border: '1px solid var(--border)' }}>
              <button
+                className={`roles-view-tab${activeTab === 'roles' ? ' is-active' : ''}`}
                 onClick={() => setActiveTab('roles')}
-                style={{ padding: '6px 12px', borderRadius: 4, fontSize: 13, fontWeight: 500, background: activeTab === 'roles' ? 'var(--background)' : 'transparent', color: activeTab === 'roles' ? 'var(--foreground)' : 'var(--muted)', cursor: 'pointer', border: 'none', transition: 'all 0.2s' }}
              >
                 Gestión
              </button>
              <button
+                className={`roles-view-tab${activeTab === 'audit' ? ' is-active' : ''}`}
                 onClick={() => setActiveTab('audit')}
-                style={{ padding: '6px 12px', borderRadius: 4, fontSize: 13, fontWeight: 500, background: activeTab === 'audit' ? 'var(--background)' : 'transparent', color: activeTab === 'audit' ? 'var(--foreground)' : 'var(--muted)', cursor: 'pointer', border: 'none', transition: 'all 0.2s' }}
              >
                 Auditoría
              </button>
@@ -650,7 +653,7 @@ export default function RolesPage() {
       ) : (
         <>
       {showNewUserForm && (
-        <Card>
+        <Card className="roles-form-card">
           <div style={{ padding: 16 }}>
             <div className="h-subtitle" style={{ marginBottom: 12 }}>Crear Nuevo Usuario</div>
             <div style={{ display: 'grid', gap: 12 }}>
@@ -693,7 +696,7 @@ export default function RolesPage() {
 
       <div className="roles-layout-grid">
         <div style={{ display: 'grid', gap: 14, alignContent: 'start' }}>
-          <Card>
+          <Card className="roles-section-card">
             <div style={{ padding: 8 }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
                 <div className="h-subtitle">
@@ -712,12 +715,15 @@ export default function RolesPage() {
                 {rolesWithCounts.map((role) => (
                   <div
                     key={role.id}
+                    className={`roles-role-option${selectedRole === role.id ? ' is-selected' : ''}`}
                     onClick={() => setSelectedRole(role.id)}
                     style={{
                       padding: 14,
                       borderRadius: 6,
                       border: `1px solid ${selectedRole === role.id ? role.color : 'var(--border)'}`,
-                      background: selectedRole === role.id ? `${role.color}10` : 'var(--panel)',
+                      background: selectedRole === role.id
+                        ? `linear-gradient(135deg, color-mix(in srgb, ${role.color} 10%, var(--panel)) 0%, var(--panel) 100%)`
+                        : 'var(--card-surface-gradient)',
                       cursor: 'pointer',
                       transition: 'all 0.2s',
                     }}
@@ -728,7 +734,7 @@ export default function RolesPage() {
                           width: 36,
                           height: 36,
                           borderRadius: 6,
-                          background: `${role.color}20`,
+                          background: `color-mix(in srgb, ${role.color} 12%, transparent)`,
                           display: 'flex',
                           alignItems: 'center',
                           justifyContent: 'center',
@@ -749,6 +755,7 @@ export default function RolesPage() {
                       </div>
                       <div style={{ display: 'flex', gap: 6 }}>
                         <button
+                          className="roles-icon-action"
                           style={{
                             width: 28,
                             height: 28,
@@ -764,6 +771,7 @@ export default function RolesPage() {
                           <Edit size={14} color="var(--muted)" />
                         </button>
                         <button
+                          className="roles-icon-action is-danger"
                           onClick={(e) => {
                             e.stopPropagation();
                             if (role.is_custom) {
@@ -805,7 +813,7 @@ export default function RolesPage() {
             </div>
           </Card>
 
-          <Card>
+          <Card className="roles-section-card">
             <div style={{ padding: 8 }}>
               <div className="h-subtitle" style={{ marginBottom: 12 }}>
                 Usuarios por Rol
@@ -823,9 +831,9 @@ export default function RolesPage() {
                     marginBottom: 10,
                     padding: 10,
                     borderRadius: 6,
-                    border: '1px solid rgba(239, 68, 68, 0.35)',
-                    background: 'rgba(239, 68, 68, 0.12)',
-                    color: '#fecaca',
+                    border: '1px solid color-mix(in srgb, var(--danger) 35%, var(--border))',
+                    background: 'var(--danger-surface)',
+                    color: 'var(--danger)',
                     fontSize: 12,
                   }}
                 >
@@ -839,10 +847,11 @@ export default function RolesPage() {
                   filteredUsers.map((user) => (
                     <div
                       key={user.id}
+                      className="roles-user-card"
                       style={{
                         padding: 12,
                         borderRadius: 6,
-                        background: 'var(--panel)',
+                        background: 'var(--card-surface-gradient)',
                         border: '1px solid var(--border)',
                       }}
                     >
@@ -943,6 +952,7 @@ export default function RolesPage() {
                           </div>
                           <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
                             <button
+                              className="roles-action-button"
                               onClick={() => openModulePermissions(user)}
                               title="Permisos por módulo"
                               style={{
@@ -965,6 +975,7 @@ export default function RolesPage() {
                               Módulos
                             </button>
                             <button
+                              className="roles-action-button"
                               onClick={() => openWarehousePermissions(user)}
                               title="Permisos de bodegas"
                               style={{
@@ -987,6 +998,7 @@ export default function RolesPage() {
                               Bodegas
                             </button>
                             <button
+                              className="roles-icon-action"
                               onClick={() => setEditingUser(user)}
                               style={{
                                 width: 28,
@@ -1003,6 +1015,7 @@ export default function RolesPage() {
                               <Edit size={14} color="var(--muted)" />
                             </button>
                             <button
+                              className="roles-icon-action is-danger"
                               onClick={() => handleDeleteUser(user.id)}
                               style={{
                                 width: 28,
@@ -1029,7 +1042,7 @@ export default function RolesPage() {
           </Card>
         </div>
 
-        <Card>
+        <Card className="roles-section-card roles-permissions-card">
           <div style={{ padding: 8 }}>
             <div className="h-subtitle" style={{ marginBottom: 12 }}>
               {selectedRole ? `Permisos: ${rolesWithCounts.find(r => r.id === selectedRole)?.name || selectedRole}` : 'Selecciona un rol'}
@@ -1044,7 +1057,7 @@ export default function RolesPage() {
                   />
                 </div>
                 {savingPermission && (
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: 8, background: 'var(--brand-primary)10', borderRadius: 4 }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: 8, background: 'var(--brand-surface)', borderRadius: 4 }}>
                     <Loader2 size={16} style={{ animation: 'spin 1s linear infinite' }} />
                     <span style={{ fontSize: 13 }}>Actualizando permisos...</span>
                   </div>
@@ -1052,12 +1065,12 @@ export default function RolesPage() {
                 {rolePermissionsError && (
                   <div
                     style={{
-                      border: '1px solid rgba(239, 68, 68, 0.35)',
+                      border: '1px solid color-mix(in srgb, var(--danger) 35%, var(--border))',
                       borderRadius: 8,
                       padding: 10,
                       fontSize: 12,
-                      color: '#fecaca',
-                      background: 'rgba(239, 68, 68, 0.12)',
+                      color: 'var(--danger)',
+                      background: 'var(--danger-surface)',
                     }}
                   >
                     {rolePermissionsError}
@@ -1070,8 +1083,8 @@ export default function RolesPage() {
                       borderRadius: 8,
                       padding: 12,
                       fontSize: 13,
-                      color: permissionsError ? '#fecaca' : 'var(--muted)',
-                      background: permissionsError ? 'rgba(239, 68, 68, 0.12)' : 'transparent',
+                      color: permissionsError ? 'var(--danger)' : 'var(--muted)',
+                      background: permissionsError ? 'var(--danger-surface)' : 'transparent',
                     }}
                   >
                     {permissionsError
@@ -1094,7 +1107,7 @@ export default function RolesPage() {
                   ).length;
 
                   return (
-                    <div key={module}>
+                    <div key={module} className="roles-permission-group">
                       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8, gap: 8, flexWrap: 'wrap' }}>
                         <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--muted)', textTransform: 'uppercase' }}>
                           {module} ({modulePermsEnabled}/{visiblePerms.length})
@@ -1114,6 +1127,7 @@ export default function RolesPage() {
                           return (
                             <div
                               key={perm.code}
+                              className={`roles-permission-option${hasPermission ? ' is-enabled' : ''}`}
                               onClick={() => togglePermission(perm.code)}
                               style={{
                                 display: 'flex',
@@ -1121,7 +1135,7 @@ export default function RolesPage() {
                                 gap: 10,
                                 padding: 10,
                                 borderRadius: 4,
-                                background: hasPermission ? 'var(--success)10' : 'var(--panel)',
+                                background: hasPermission ? 'var(--success-surface)' : 'var(--card-surface-gradient)',
                                 border: `1px solid ${hasPermission ? 'var(--success)' : 'var(--border)'}`,
                                 cursor: 'pointer',
                                 transition: 'all 0.2s'
@@ -1170,6 +1184,7 @@ export default function RolesPage() {
 
       {moduleModalOpen && moduleModalUser && (
         <div
+          className="roles-inline-modal-backdrop"
           onClick={closeModulePermissions}
           style={{
             position: 'fixed',
@@ -1184,6 +1199,7 @@ export default function RolesPage() {
           }}
         >
           <div
+            className="roles-inline-modal"
             onClick={(event) => event.stopPropagation()}
             style={{
               width: 'min(820px, 100%)',
@@ -1216,12 +1232,12 @@ export default function RolesPage() {
                 {moduleModalError && (
                   <div
                     style={{
-                      background: 'rgba(239, 68, 68, 0.12)',
-                      border: '1px solid rgba(239, 68, 68, 0.35)',
+                      background: 'var(--danger-surface)',
+                      border: '1px solid color-mix(in srgb, var(--danger) 35%, var(--border))',
                       borderRadius: 8,
                       padding: 10,
                       fontSize: 13,
-                      color: '#fecaca',
+                      color: 'var(--danger)',
                     }}
                   >
                     {moduleModalError}
@@ -1264,7 +1280,7 @@ export default function RolesPage() {
                             padding: 10,
                             borderRadius: 8,
                             border: '1px solid var(--border)',
-                            background: effectiveAccess ? 'var(--success)10' : 'var(--panel)',
+                            background: effectiveAccess ? 'var(--success-surface)' : 'var(--panel)',
                           }}
                         >
                           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
@@ -1284,7 +1300,7 @@ export default function RolesPage() {
                                 padding: '6px 10px',
                                 borderRadius: 6,
                                 border: mode === 'inherit' ? '1px solid var(--brand-primary)' : '1px solid var(--border)',
-                                background: mode === 'inherit' ? 'var(--brand-primary)20' : 'var(--panel)',
+                                background: mode === 'inherit' ? 'var(--brand-surface)' : 'var(--panel)',
                                 color: 'var(--text)',
                                 fontSize: 12,
                                 cursor: 'pointer',
@@ -1299,7 +1315,7 @@ export default function RolesPage() {
                                 padding: '6px 10px',
                                 borderRadius: 6,
                                 border: mode === 'allow' ? '1px solid var(--success)' : '1px solid var(--border)',
-                                background: mode === 'allow' ? 'var(--success)20' : 'var(--panel)',
+                                background: mode === 'allow' ? 'var(--success-surface)' : 'var(--panel)',
                                 color: 'var(--text)',
                                 fontSize: 12,
                                 cursor: 'pointer',
@@ -1345,6 +1361,7 @@ export default function RolesPage() {
 
       {warehouseModalOpen && warehouseModalUser && (
         <div
+          className="roles-inline-modal-backdrop"
           onClick={closeWarehousePermissions}
           style={{
             position: 'fixed',
@@ -1359,6 +1376,7 @@ export default function RolesPage() {
           }}
         >
           <div
+            className="roles-inline-modal"
             onClick={(event) => event.stopPropagation()}
             style={{
               width: 'min(760px, 100%)',
@@ -1391,12 +1409,12 @@ export default function RolesPage() {
                 {warehouseModalError && (
                   <div
                     style={{
-                      background: 'rgba(239, 68, 68, 0.12)',
-                      border: '1px solid rgba(239, 68, 68, 0.35)',
+                      background: 'var(--danger-surface)',
+                      border: '1px solid color-mix(in srgb, var(--danger) 35%, var(--border))',
                       borderRadius: 8,
                       padding: 10,
                       fontSize: 13,
-                      color: '#fecaca',
+                      color: 'var(--danger)',
                     }}
                   >
                     {warehouseModalError}
@@ -1456,7 +1474,7 @@ export default function RolesPage() {
                               padding: 8,
                               borderRadius: 6,
                               border: '1px solid var(--border)',
-                              background: selectedWarehouseIds.includes(warehouse.id) ? 'var(--brand-primary)15' : 'var(--panel)',
+                              background: selectedWarehouseIds.includes(warehouse.id) ? 'var(--brand-surface)' : 'var(--panel)',
                               fontSize: 13,
                             }}
                           >

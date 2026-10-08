@@ -9,6 +9,8 @@ import {
 import { supabase } from '@/lib/supabase/client';
 import Button from '@/components/ui/Button';
 import Card from '@/components/ui/Card';
+import Select from '@/components/ui/Select';
+import RouteKpiCard from '@/components/rutas/RouteKpiCard';
 import CreateRouteModal from '@/components/rutas/CreateRouteModal';
 import GoogleMapView from '@/components/rutas/GoogleMapView';
 import RouteDetailPanel from '@/components/rutas/RouteDetailPanel';
@@ -220,86 +222,11 @@ export default function CentroRutasPage() {
       gap: 16 
     }}>
       {/* Header con estadísticas */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 12 }}>
-        <Card style={{ padding: 16 }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-            <div style={{ 
-              padding: 12, 
-              background: 'rgba(59,130,246,0.1)', 
-              borderRadius: 8 
-            }}>
-              <Package size={20} color="#3b82f6" />
-            </div>
-            <div>
-              <div style={{ fontSize: 24, fontWeight: 800, color: '#f8fafc' }}>
-                {stats.pendingJobs}
-              </div>
-              <div style={{ fontSize: 12, color: '#94a3b8' }}>
-                Pedidos Pendientes
-              </div>
-            </div>
-          </div>
-        </Card>
-
-        <Card style={{ padding: 16 }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-            <div style={{ 
-              padding: 12, 
-              background: 'rgba(34,197,94,0.1)', 
-              borderRadius: 8 
-            }}>
-              <Truck size={20} color="#22c55e" />
-            </div>
-            <div>
-              <div style={{ fontSize: 24, fontWeight: 800, color: '#f8fafc' }}>
-                {stats.activeRoutes}
-              </div>
-              <div style={{ fontSize: 12, color: '#94a3b8' }}>
-                Rutas Activas
-              </div>
-            </div>
-          </div>
-        </Card>
-
-        <Card style={{ padding: 16 }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-            <div style={{ 
-              padding: 12, 
-              background: 'rgba(168,85,247,0.1)', 
-              borderRadius: 8 
-            }}>
-              <Navigation size={20} color="#a855f7" />
-            </div>
-            <div>
-              <div style={{ fontSize: 24, fontWeight: 800, color: '#f8fafc' }}>
-                {stats.trackingDrivers}
-              </div>
-              <div style={{ fontSize: 12, color: '#94a3b8' }}>
-                En Seguimiento
-              </div>
-            </div>
-          </div>
-        </Card>
-
-        <Card style={{ padding: 16 }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-            <div style={{ 
-              padding: 12, 
-              background: stats.jobsWithoutCoords > 0 ? 'rgba(239,68,68,0.1)' : 'rgba(100,116,139,0.1)', 
-              borderRadius: 8 
-            }}>
-              <AlertCircle size={20} color={stats.jobsWithoutCoords > 0 ? '#ef4444' : '#64748b'} />
-            </div>
-            <div>
-              <div style={{ fontSize: 24, fontWeight: 800, color: '#f8fafc' }}>
-                {stats.jobsWithoutCoords}
-              </div>
-              <div style={{ fontSize: 12, color: '#94a3b8' }}>
-                Sin Coordenadas
-              </div>
-            </div>
-          </div>
-        </Card>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(210px, 1fr))', gap: 12 }}>
+        <RouteKpiCard icon={Package} label="Pedidos Pendientes" value={stats.pendingJobs} tone="info" />
+        <RouteKpiCard icon={Truck} label="Rutas Activas" value={stats.activeRoutes} tone="success" />
+        <RouteKpiCard icon={Navigation} label="En Seguimiento" value={stats.trackingDrivers} tone="violet" />
+        <RouteKpiCard icon={AlertCircle} label="Sin Coordenadas" value={stats.jobsWithoutCoords} tone={stats.jobsWithoutCoords > 0 ? 'danger' : 'neutral'} />
       </div>
 
       {/* Contenedor principal de 3 columnas */}
@@ -312,11 +239,11 @@ export default function CentroRutasPage() {
       }}>
         
         {/* COLUMNA IZQUIERDA: Pedidos Pendientes */}
-        <Card style={{ display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+        <Card style={{ display: 'flex', flexDirection: 'column', overflow: 'visible', position: 'relative', zIndex: 4 }}>
           <div style={{ 
             padding: 16, 
-            borderBottom: '1px solid rgba(255,255,255,0.08)',
-            background: 'rgba(15,23,42,0.5)'
+            borderBottom: '1px solid var(--border)',
+            background: 'var(--panel-elevated)'
           }}>
             <div style={{ 
               display: 'flex', 
@@ -327,7 +254,7 @@ export default function CentroRutasPage() {
               <h3 style={{ 
                 fontSize: 14, 
                 fontWeight: 700, 
-                color: '#f8fafc',
+                color: 'var(--text)',
                 margin: 0
               }}>
                 Pedidos Pendientes
@@ -348,7 +275,7 @@ export default function CentroRutasPage() {
                 left: 10, 
                 top: '50%', 
                 transform: 'translateY(-50%)', 
-                color: '#64748b' 
+                color: 'var(--muted)'
               }} />
               <input
                 type="text"
@@ -358,10 +285,10 @@ export default function CentroRutasPage() {
                 style={{
                   width: '100%',
                   padding: '8px 12px 8px 32px',
-                  background: 'rgba(15,23,42,0.6)',
-                  border: '1px solid rgba(255,255,255,0.1)',
+                  background: 'var(--panel-elevated)',
+                  border: '1px solid var(--border)',
                   borderRadius: 6,
-                  color: '#e2e8f0',
+                  color: 'var(--text)',
                   fontSize: 12,
                   outline: 'none'
                 }}
@@ -370,65 +297,46 @@ export default function CentroRutasPage() {
 
             {/* Filtros */}
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginBottom: 8 }}>
-              <select
+              <Select
+                aria-label="Filtrar por zona"
                 value={zoneFilter}
                 onChange={(e) => setZoneFilter(e.target.value)}
-                style={{
-                  padding: '6px 8px',
-                  background: 'rgba(15,23,42,0.6)',
-                  border: '1px solid rgba(255,255,255,0.1)',
-                  borderRadius: 6,
-                  color: '#e2e8f0',
-                  fontSize: 11,
-                  outline: 'none'
-                }}
-              >
-                <option value="">Todas las zonas</option>
-                {zones.map(zone => (
-                  <option key={zone} value={zone}>{zone}</option>
-                ))}
-              </select>
+                style={{ width: '100%', fontSize: 11 }}
+                options={[
+                  { value: '', label: 'Todas las zonas' },
+                  ...zones.map(zone => ({ value: zone, label: zone })),
+                ]}
+              />
 
-              <select
+              <Select
+                aria-label="Filtrar por prioridad"
                 value={priorityFilter}
                 onChange={(e) => setPriorityFilter(e.target.value)}
-                style={{
-                  padding: '6px 8px',
-                  background: 'rgba(15,23,42,0.6)',
-                  border: '1px solid rgba(255,255,255,0.1)',
-                  borderRadius: 6,
-                  color: '#e2e8f0',
-                  fontSize: 11,
-                  outline: 'none'
-                }}
-              >
-                <option value="">Todas las prioridades</option>
-                <option value="urgent">Urgente</option>
-                <option value="high">Alta</option>
-                <option value="normal">Normal</option>
-                <option value="low">Baja</option>
-              </select>
+                style={{ width: '100%', fontSize: 11 }}
+                options={[
+                  { value: '', label: 'Todas las prioridades' },
+                  { value: 'urgent', label: 'Urgente' },
+                  { value: 'high', label: 'Alta' },
+                  { value: 'normal', label: 'Normal' },
+                  { value: 'low', label: 'Baja' },
+                ]}
+              />
             </div>
 
             <div style={{ display: 'flex', gap: 8 }}>
-              <select
-                value={typeFilter}
-                onChange={(e) => setTypeFilter(e.target.value)}
-                style={{
-                  flex: 1,
-                  padding: '6px 8px',
-                  background: 'rgba(15,23,42,0.6)',
-                  border: '1px solid rgba(255,255,255,0.1)',
-                  borderRadius: 6,
-                  color: '#e2e8f0',
-                  fontSize: 11,
-                  outline: 'none'
-                }}
-              >
-                <option value="">Todos los alistamientos</option>
-                <option value="libre">Solo Tipo Libre</option>
-                <option value="ready_picking">Solo Listos en Bodega</option>
-              </select>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <Select
+                  aria-label="Filtrar por tipo de alistamiento"
+                  value={typeFilter}
+                  onChange={(e) => setTypeFilter(e.target.value)}
+                  style={{ width: '100%', fontSize: 11 }}
+                  options={[
+                    { value: '', label: 'Todos los alistamientos' },
+                    { value: 'libre', label: 'Solo Tipo Libre' },
+                    { value: 'ready_picking', label: 'Solo Listos en Bodega' },
+                  ]}
+                />
+              </div>
             </div>
 
             {/* Selección */}
@@ -436,14 +344,14 @@ export default function CentroRutasPage() {
               <div style={{
                 marginTop: 12,
                 padding: 8,
-                background: 'rgba(59,130,246,0.1)',
+                      background: 'var(--info-surface)',
                 border: '1px solid rgba(59,130,246,0.3)',
                 borderRadius: 6,
                 display: 'flex',
                 justifyContent: 'space-between',
                 alignItems: 'center'
               }}>
-                <span style={{ fontSize: 12, color: '#60a5fa', fontWeight: 600 }}>
+                        <span style={{ fontSize: 12, color: 'var(--info)', fontWeight: 600 }}>
                   {selectedJobs.size} seleccionado{selectedJobs.size !== 1 ? 's' : ''}
                 </span>
                 <Button
@@ -467,7 +375,7 @@ export default function CentroRutasPage() {
                 justifyContent: 'center', 
                 alignItems: 'center',
                 height: '100%',
-                color: '#64748b'
+                color: 'var(--muted)'
               }}>
                 <RefreshCw size={20} className="animate-spin" />
               </div>
@@ -475,7 +383,7 @@ export default function CentroRutasPage() {
               <div style={{ 
                 textAlign: 'center', 
                 padding: 40,
-                color: '#64748b'
+                color: 'var(--muted)'
               }}>
                 <Package size={32} style={{ opacity: 0.3, margin: '0 auto 12px' }} />
                 <div style={{ fontSize: 13 }}>No hay pedidos pendientes</div>
@@ -488,8 +396,8 @@ export default function CentroRutasPage() {
                   style={{
                     padding: 10,
                     marginBottom: 8,
-                    background: 'rgba(255,255,255,0.02)',
-                    border: '1px solid rgba(255,255,255,0.05)',
+                    background: 'var(--surface-hover)',
+                    border: '1px solid var(--border)',
                     borderRadius: 6,
                     cursor: 'pointer',
                     display: 'flex',
@@ -500,9 +408,9 @@ export default function CentroRutasPage() {
                   {selectedJobs.size === filteredJobs.length && filteredJobs.length > 0 ? (
                     <CheckSquare size={16} color="#3b82f6" />
                   ) : (
-                    <Square size={16} color="#64748b" />
+                    <Square size={16} color="var(--muted)" />
                   )}
-                  <span style={{ fontSize: 12, color: '#94a3b8', fontWeight: 600 }}>
+                  <span style={{ fontSize: 12, color: 'var(--muted)', fontWeight: 600 }}>
                     Seleccionar todos ({filteredJobs.length})
                   </span>
                 </div>
@@ -519,8 +427,8 @@ export default function CentroRutasPage() {
                       style={{
                         padding: 12,
                         marginBottom: 8,
-                        background: isSelected ? 'rgba(59,130,246,0.1)' : 'rgba(255,255,255,0.02)',
-                        border: `1px solid ${isSelected ? 'rgba(59,130,246,0.3)' : 'rgba(255,255,255,0.05)'}`,
+                        background: isSelected ? 'rgba(59,130,246,0.1)' : 'var(--surface-hover)',
+                        border: `1px solid ${isSelected ? 'rgba(59,130,246,0.3)' : 'var(--border)'}`,
                         borderRadius: 8,
                         cursor: 'pointer',
                         transition: 'all 0.2s'
@@ -531,7 +439,7 @@ export default function CentroRutasPage() {
                           {isSelected ? (
                             <CheckSquare size={18} color="#3b82f6" />
                           ) : (
-                            <Square size={18} color="#64748b" />
+                            <Square size={18} color="var(--muted)" />
                           )}
                         </div>
                         
@@ -545,7 +453,7 @@ export default function CentroRutasPage() {
                             <div style={{ 
                               fontSize: 12, 
                               fontWeight: 700, 
-                              color: '#f8fafc',
+                              color: 'var(--text)',
                               overflow: 'hidden',
                               textOverflow: 'ellipsis',
                               whiteSpace: 'nowrap',
@@ -565,7 +473,7 @@ export default function CentroRutasPage() {
 
                           <div style={{ 
                             fontSize: 11, 
-                            color: '#94a3b8',
+                            color: 'var(--muted)',
                             marginBottom: 4,
                             overflow: 'hidden',
                             textOverflow: 'ellipsis',
@@ -576,7 +484,7 @@ export default function CentroRutasPage() {
 
                           <div style={{ 
                             fontSize: 11, 
-                            color: '#64748b',
+                            color: 'var(--muted)',
                             display: 'flex',
                             alignItems: 'flex-start',
                             gap: 4,
@@ -599,10 +507,10 @@ export default function CentroRutasPage() {
                               <span style={{
                                 fontSize: 10,
                                 padding: '2px 6px',
-                                background: 'rgba(255,255,255,0.05)',
-                                border: '1px solid rgba(255,255,255,0.1)',
+                                background: 'var(--surface-hover)',
+                                border: '1px solid var(--border)',
                                 borderRadius: 4,
-                                color: '#94a3b8'
+                                color: 'var(--muted)'
                               }}>
                                 {job.zone_id}
                               </span>
@@ -647,10 +555,10 @@ export default function CentroRutasPage() {
                               <span style={{
                                 fontSize: 10,
                                 padding: '2px 6px',
-                                background: 'rgba(168,85,247,0.15)',
+              background: 'var(--violet-surface)',
                                 border: '1px solid rgba(168,85,247,0.4)',
                                 borderRadius: 4,
-                                color: '#c084fc',
+              color: 'var(--kpi-violet)',
                                 fontWeight: 600
                               }}>
                                 Libre
@@ -661,10 +569,10 @@ export default function CentroRutasPage() {
                               <span style={{
                                 fontSize: 10,
                                 padding: '2px 6px',
-                                background: 'rgba(239,68,68,0.1)',
+              background: 'var(--danger-surface)',
                                 border: '1px solid rgba(239,68,68,0.3)',
                                 borderRadius: 4,
-                                color: '#ef4444',
+              color: 'var(--danger)',
                                 display: 'flex',
                                 alignItems: 'center',
                                 gap: 3
@@ -745,13 +653,13 @@ export default function CentroRutasPage() {
             <>
               <div style={{ 
                 padding: 16, 
-                borderBottom: '1px solid rgba(255,255,255,0.08)',
-                background: 'rgba(15,23,42,0.5)'
+                borderBottom: '1px solid var(--border)',
+                background: 'var(--panel-elevated)'
               }}>
                 <h3 style={{ 
                   fontSize: 14, 
                   fontWeight: 700, 
-                  color: '#f8fafc',
+                  color: 'var(--text)',
                   margin: 0
                 }}>
                   Rutas Recientes
@@ -763,7 +671,7 @@ export default function CentroRutasPage() {
                   <div style={{ 
                     textAlign: 'center', 
                     padding: 40,
-                    color: '#64748b'
+                    color: 'var(--muted)'
                   }}>
                     <Truck size={32} style={{ opacity: 0.3, margin: '0 auto 12px' }} />
                     <div style={{ fontSize: 13 }}>No hay rutas creadas</div>
@@ -779,8 +687,8 @@ export default function CentroRutasPage() {
                       style={{
                         padding: 12,
                         marginBottom: 8,
-                        background: 'rgba(255,255,255,0.02)',
-                        border: '1px solid rgba(255,255,255,0.05)',
+                        background: 'var(--surface-hover)',
+                        border: '1px solid var(--border)',
                         borderRadius: 8,
                         cursor: 'pointer',
                         transition: 'all 0.2s'
@@ -790,20 +698,20 @@ export default function CentroRutasPage() {
                         e.currentTarget.style.borderColor = 'rgba(168,85,247,0.2)';
                       }}
                       onMouseLeave={(e) => {
-                        e.currentTarget.style.background = 'rgba(255,255,255,0.02)';
-                        e.currentTarget.style.borderColor = 'rgba(255,255,255,0.05)';
+                        e.currentTarget.style.background = 'var(--surface-hover)';
+                        e.currentTarget.style.borderColor = 'var(--border)';
                       }}
                     >
                       <div style={{ 
                         fontSize: 13, 
                         fontWeight: 700, 
-                        color: '#f8fafc',
+                        color: 'var(--text)',
                         marginBottom: 6
                       }}>
                         {route.name}
                       </div>
                       
-                      <div style={{ fontSize: 11, color: '#94a3b8', marginBottom: 4 }}>
+                      <div style={{ fontSize: 11, color: 'var(--muted)', marginBottom: 4 }}>
                         {route.driver_name || 'Sin motorizado'}
                       </div>
 
@@ -811,9 +719,9 @@ export default function CentroRutasPage() {
                         <span style={{
                           fontSize: 10,
                           padding: '2px 6px',
-                          background: 'rgba(255,255,255,0.05)',
+                          background: 'var(--surface-hover)',
                           borderRadius: 4,
-                          color: '#94a3b8'
+                          color: 'var(--muted)'
                         }}>
                           {route.route_stops?.length || 0} paradas
                         </span>
@@ -822,10 +730,10 @@ export default function CentroRutasPage() {
                           <span style={{
                             fontSize: 10,
                             padding: '2px 6px',
-                            background: 'rgba(34,197,94,0.1)',
+              background: 'var(--success-surface)',
                             border: '1px solid rgba(34,197,94,0.3)',
                             borderRadius: 4,
-                            color: '#22c55e'
+              color: 'var(--success)'
                           }}>
                             En seguimiento
                           </span>

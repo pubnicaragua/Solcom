@@ -16,7 +16,7 @@ export default function ClientePage() {
       alignItems: 'center',
       justifyContent: 'center',
       minHeight: '100vh',
-      background: '#1F2937',
+      background: 'var(--panel)',
       color: 'white'
     }}>
       <div style={{ textAlign: 'center' }}>

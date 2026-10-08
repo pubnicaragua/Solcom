@@ -69,7 +69,7 @@ export default function ResetPasswordPage() {
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'center',
-        background: 'linear-gradient(135deg, #071826 0%, #0a2540 100%)',
+        background: 'var(--page-surface-gradient)',
         padding: 20,
       }}>
         <Card>
@@ -93,7 +93,7 @@ export default function ResetPasswordPage() {
       display: 'flex',
       alignItems: 'center',
       justifyContent: 'center',
-      background: 'linear-gradient(135deg, #071826 0%, #0a2540 100%)',
+      background: 'linear-gradient(135deg, var(--bg) 0%, var(--panel-2) 100%)',
       padding: 20,
     }}>
       <div style={{ maxWidth: 440, width: '100%' }}>
@@ -102,10 +102,10 @@ export default function ResetPasswordPage() {
             <div style={{ 
               textAlign: 'center', 
               marginBottom: 32,
-              background: '#ffffff',
+              background: 'var(--panel)',
               padding: 24,
               borderRadius: 12,
-              boxShadow: '0 4px 6px rgba(0, 0, 0, 0.1)'
+              boxShadow: '0 4px 6px var(--shadow)'
             }}>
               <img 
                 src="https://www.soliscomercialni.com/Solis%20Comercial%20Logo.png" 
@@ -126,12 +126,12 @@ export default function ResetPasswordPage() {
             {error && (
               <div style={{
                 padding: 14,
-                background: 'rgba(239, 68, 68, 0.1)',
-                border: '1px solid rgba(239, 68, 68, 0.3)',
+                background: 'var(--danger-surface)',
+                border: '1px solid color-mix(in srgb, var(--danger) 35%, transparent)',
                 borderRadius: 8,
                 marginBottom: 20,
                 fontSize: 13,
-                color: '#ef4444',
+                color: 'var(--danger)',
                 display: 'flex',
                 alignItems: 'center',
                 gap: 8,
@@ -254,7 +254,7 @@ export default function ResetPasswordPage() {
           textAlign: 'center', 
           marginTop: 24, 
           fontSize: 13, 
-          color: 'rgba(255, 255, 255, 0.5)' 
+          color: 'var(--muted)'
         }}>
           © 2026 Solis Comercial - ¡A tu servicio, siempre!
         </div>

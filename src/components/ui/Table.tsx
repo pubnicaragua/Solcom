@@ -38,9 +38,9 @@ export default function Table<T extends Record<string, any>>({
 
   return (
     <div style={{ overflowX: 'auto' }}>
-      <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-        <thead>
-          <tr style={{ borderBottom: '1px solid var(--border)' }}>
+      <table style={{ width: '100%', borderCollapse: 'collapse', background: 'var(--card)' }}>
+        <thead style={{ background: 'var(--table-header-bg)' }}>
+          <tr style={{ borderBottom: '2px solid var(--table-header-rule)' }}>
             {columns.map((col) => (
               <th
                 key={col.key}
@@ -49,10 +49,11 @@ export default function Table<T extends Record<string, any>>({
                   textAlign: 'left',
                   fontSize: 12,
                   fontWeight: 600,
-                  color: 'var(--muted)',
+                  color: 'var(--table-header-text)',
                   textTransform: 'uppercase',
                   letterSpacing: '0.5px',
                   width: col.width,
+                  borderRight: '1px solid var(--table-grid-soft-border)',
                 }}
               >
                 {col.header}
@@ -65,14 +66,15 @@ export default function Table<T extends Record<string, any>>({
             <tr
               key={idx}
               style={{
-                borderBottom: '1px solid var(--border)',
+                background: idx % 2 === 0 ? 'var(--table-row-bg)' : 'var(--table-row-alt-bg)',
+                borderBottom: '1px solid var(--table-grid-border)',
                 transition: 'background 0.2s',
               }}
               onMouseEnter={(e) => {
-                e.currentTarget.style.background = 'rgba(255, 255, 255, 0.02)';
+                e.currentTarget.style.background = 'var(--surface-hover)';
               }}
               onMouseLeave={(e) => {
-                e.currentTarget.style.background = 'transparent';
+                e.currentTarget.style.background = idx % 2 === 0 ? 'var(--table-row-bg)' : 'var(--table-row-alt-bg)';
               }}
             >
               {columns.map((col) => (
@@ -82,6 +84,7 @@ export default function Table<T extends Record<string, any>>({
                     padding: '12px 16px',
                     fontSize: 14,
                     color: 'var(--text)',
+                    borderRight: '1px solid var(--table-grid-soft-border)',
                   }}
                 >
                   {col.render ? col.render(row) : row[col.key]}

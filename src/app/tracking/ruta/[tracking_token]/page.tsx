@@ -260,7 +260,7 @@ export default function DriverTrackingPage() {
     return (
       <div style={{
         minHeight: '100vh',
-        background: 'linear-gradient(135deg, #0f172a 0%, #1e293b 100%)',
+        background: 'var(--page-surface-gradient)',
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'center',
@@ -275,7 +275,7 @@ export default function DriverTrackingPage() {
     return (
       <div style={{
         minHeight: '100vh',
-        background: 'linear-gradient(135deg, #0f172a 0%, #1e293b 100%)',
+        background: 'var(--page-surface-gradient)',
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'center',
@@ -285,16 +285,16 @@ export default function DriverTrackingPage() {
           maxWidth: 400,
           width: '100%',
           padding: 24,
-          background: 'rgba(15,23,42,0.8)',
-          border: '1px solid rgba(255,255,255,0.1)',
+          background: 'var(--panel-elevated)',
+          border: '1px solid var(--border)',
           borderRadius: 12,
           textAlign: 'center'
         }}>
           <AlertCircle size={48} color="#ef4444" style={{ margin: '0 auto 16px' }} />
-          <h2 style={{ fontSize: 18, fontWeight: 700, color: '#f8fafc', marginBottom: 8 }}>
+          <h2 style={{ fontSize: 18, fontWeight: 700, color: 'var(--text)', marginBottom: 8 }}>
             Error
           </h2>
-          <p style={{ fontSize: 14, color: '#94a3b8' }}>
+          <p style={{ fontSize: 14, color: 'var(--muted)' }}>
             {error}
           </p>
         </div>
@@ -307,22 +307,22 @@ export default function DriverTrackingPage() {
   return (
     <div style={{
       minHeight: '100vh',
-      background: 'linear-gradient(135deg, #0f172a 0%, #1e293b 100%)',
+      background: 'var(--page-surface-gradient)',
       padding: 16
     }}>
       <div style={{ maxWidth: 600, margin: '0 auto' }}>
         {/* Header */}
         <div style={{
           padding: 20,
-          background: 'rgba(15,23,42,0.8)',
-          border: '1px solid rgba(255,255,255,0.1)',
+          background: 'var(--panel-elevated)',
+          border: '1px solid var(--border)',
           borderRadius: 12,
           marginBottom: 16
         }}>
-          <h1 style={{ fontSize: 20, fontWeight: 800, color: '#f8fafc', marginBottom: 8 }}>
+          <h1 style={{ fontSize: 20, fontWeight: 800, color: 'var(--text)', marginBottom: 8 }}>
             {route?.name}
           </h1>
-          <p style={{ fontSize: 14, color: '#94a3b8', marginBottom: 16 }}>
+          <p style={{ fontSize: 14, color: 'var(--muted)', marginBottom: 16 }}>
             Motorizado: {route?.driver_name}
           </p>
 
@@ -347,8 +347,8 @@ export default function DriverTrackingPage() {
                 </>
               ) : (
                 <>
-                  <Square size={16} color="#64748b" />
-                  <span style={{ fontSize: 12, color: '#94a3b8', fontWeight: 600 }}>
+                  <Square size={16} color="var(--muted)" />
+                  <span style={{ fontSize: 12, color: 'var(--muted)', fontWeight: 600 }}>
                     Tracking detenido
                   </span>
                 </>
@@ -385,15 +385,15 @@ export default function DriverTrackingPage() {
             {batteryLevel !== null && (
               <div style={{
                 padding: 8,
-                background: 'rgba(255,255,255,0.05)',
-                border: '1px solid rgba(255,255,255,0.1)',
+                background: 'var(--surface-hover)',
+                border: '1px solid var(--border)',
                 borderRadius: 6,
                 display: 'flex',
                 alignItems: 'center',
                 gap: 6
               }}>
-                <Battery size={16} color="#94a3b8" />
-                <span style={{ fontSize: 12, color: '#94a3b8', fontWeight: 600 }}>
+                <Battery size={16} color="var(--muted)" />
+                <span style={{ fontSize: 12, color: 'var(--muted)', fontWeight: 600 }}>
                   {Math.round(batteryLevel * 100)}%
                 </span>
               </div>
@@ -461,7 +461,7 @@ export default function DriverTrackingPage() {
               <div style={{ fontSize: 11, color: '#60a5fa', marginBottom: 4 }}>
                 Última ubicación enviada:
               </div>
-              <div style={{ fontSize: 12, color: '#94a3b8' }}>
+              <div style={{ fontSize: 12, color: 'var(--muted)' }}>
                 {lastLocation.time.toLocaleTimeString('es-NI')}
               </div>
             </div>
@@ -506,11 +506,11 @@ export default function DriverTrackingPage() {
             <div style={{
               marginTop: 12,
               padding: 10,
-              background: 'rgba(255,255,255,0.02)',
-              border: '1px solid rgba(255,255,255,0.05)',
+              background: 'var(--surface-hover)',
+              border: '1px solid var(--border)',
               borderRadius: 6,
               fontSize: 11,
-              color: '#64748b'
+              color: 'var(--muted)'
             }}>
               💡 Mantené esta pantalla abierta durante el recorrido para continuar compartiendo ubicación.
             </div>
@@ -520,11 +520,11 @@ export default function DriverTrackingPage() {
         {/* Lista de paradas */}
         <div style={{
           padding: 20,
-          background: 'rgba(15,23,42,0.8)',
-          border: '1px solid rgba(255,255,255,0.1)',
+          background: 'var(--panel-elevated)',
+          border: '1px solid var(--border)',
           borderRadius: 12
         }}>
-          <h2 style={{ fontSize: 16, fontWeight: 700, color: '#f8fafc', marginBottom: 16 }}>
+          <h2 style={{ fontSize: 16, fontWeight: 700, color: 'var(--text)', marginBottom: 16 }}>
             Paradas ({sortedStops.length})
           </h2>
 
@@ -534,8 +534,8 @@ export default function DriverTrackingPage() {
               style={{
                 padding: 14,
                 marginBottom: 12,
-                background: 'rgba(255,255,255,0.02)',
-                border: '1px solid rgba(255,255,255,0.05)',
+                background: 'var(--surface-hover)',
+                border: '1px solid var(--border)',
                 borderRadius: 8
               }}
             >
@@ -558,13 +558,13 @@ export default function DriverTrackingPage() {
                 </div>
 
                 <div style={{ flex: 1 }}>
-                  <div style={{ fontSize: 14, fontWeight: 700, color: '#f8fafc', marginBottom: 6 }}>
+                  <div style={{ fontSize: 14, fontWeight: 700, color: 'var(--text)', marginBottom: 6 }}>
                     {stop.client_name}
                   </div>
 
                   <div style={{ 
                     fontSize: 12, 
-                    color: '#94a3b8',
+                    color: 'var(--muted)',
                     marginBottom: 10,
                     display: 'flex',
                     alignItems: 'flex-start',

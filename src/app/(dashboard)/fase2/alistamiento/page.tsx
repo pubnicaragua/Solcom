@@ -1,6 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
+import type { CSSProperties } from 'react';
 import Link from 'next/link';
 import QRCode from 'qrcode';
 import {
@@ -622,18 +623,18 @@ export default function PickingBoardPage() {
   }
 
   const kpiItems = [
-    { label: 'En cola', value: effectiveSummary.queued, accent: '#fbbf24', bg: 'rgba(251,191,36,0.08)', icon: <Clock3 size={18} /> },
-    { label: 'En proceso', value: effectiveSummary.in_progress, accent: '#60a5fa', bg: 'rgba(96,165,250,0.08)', icon: <Activity size={18} /> },
-    { label: 'Listas', value: effectiveSummary.ready, accent: '#34d399', bg: 'rgba(52,211,153,0.08)', icon: <CheckCircle2 size={18} /> },
-    { label: 'p95 espera', value: `${p95Queue.toFixed(1)} min`, accent: '#f97316', bg: 'rgba(249,115,22,0.08)', icon: <Timer size={18} /> },
-    { label: 'Prom. alistamiento', value: `${avgPick.toFixed(1)} min`, accent: '#22d3ee', bg: 'rgba(34,211,238,0.08)', icon: <BarChart3 size={18} /> },
-    { label: 'Throughput/h', value: throughput.toFixed(3), accent: '#a78bfa', bg: 'rgba(167,139,250,0.08)', icon: <Zap size={18} /> },
+    { label: 'En cola', value: effectiveSummary.queued, accent: 'var(--warning)', icon: <Clock3 size={18} /> },
+    { label: 'En proceso', value: effectiveSummary.in_progress, accent: 'var(--info)', icon: <Activity size={18} /> },
+    { label: 'Listas', value: effectiveSummary.ready, accent: 'var(--success)', icon: <CheckCircle2 size={18} /> },
+    { label: 'p95 espera', value: `${p95Queue.toFixed(1)} min`, accent: 'var(--warning)', icon: <Timer size={18} /> },
+    { label: 'Prom. alistamiento', value: `${avgPick.toFixed(1)} min`, accent: 'var(--info)', icon: <BarChart3 size={18} /> },
+    { label: 'Throughput/h', value: throughput.toFixed(3), accent: 'var(--kpi-violet)', icon: <Zap size={18} /> },
   ];
 
   const columns = [
-    { key: 'queued', title: 'En Cola', subtitle: 'FIFO + Urgente primero', accent: '#fbbf24', rows: board.queued },
-    { key: 'processing', title: 'En Proceso', subtitle: 'Tomadas y en alistamiento', accent: '#60a5fa', rows: board.processing },
-    { key: 'ready', title: 'Listas', subtitle: 'Esperando despacho', accent: '#34d399', rows: board.ready },
+    { key: 'queued', title: 'En Cola', subtitle: 'FIFO + Urgente primero', accent: 'var(--warning)', rows: board.queued },
+    { key: 'processing', title: 'En Proceso', subtitle: 'Tomadas y en alistamiento', accent: 'var(--info)', rows: board.processing },
+    { key: 'ready', title: 'Listas', subtitle: 'Esperando despacho', accent: 'var(--success)', rows: board.ready },
   ];
 
   if (!accessLoading && !pickingAccess.can_view) {
@@ -653,18 +654,13 @@ export default function PickingBoardPage() {
   }
 
   return (
-    <div style={{ display: 'grid', gap: 16 }}>
+    <div className="fase2-module-view alistamiento-design-page" style={{ display: 'grid', gap: 16 }}>
 
       {/* ── Header ── */}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-          <div style={{
-            width: 44, height: 44, borderRadius: 12, flexShrink: 0,
-            background: 'linear-gradient(135deg, rgba(220,38,38,0.25) 0%, rgba(239,68,68,0.1) 100%)',
-            border: '1px solid rgba(220,38,38,0.28)',
-            display: 'flex', alignItems: 'center', justifyContent: 'center',
-          }}>
-            <PackageSearch size={22} style={{ color: 'var(--brand-accent)' }} />
+          <div className="inventory-title-mark">
+            <PackageSearch size={21} />
           </div>
           <div>
             <div className="h-title" style={{ fontSize: 'clamp(18px, 4vw, 24px)', lineHeight: 1.2 }}>
@@ -695,8 +691,8 @@ export default function PickingBoardPage() {
 
       {/* ── Demo banner ── */}
       {demoMode && (
-        <Card style={{ borderColor: 'rgba(56,189,248,0.4)', background: 'rgba(8,47,73,0.4)' }}>
-          <div style={{ fontSize: 13, color: '#bae6fd', display: 'flex', alignItems: 'center', gap: 8 }}>
+        <Card style={{ borderColor: 'color-mix(in srgb, var(--info) 40%, var(--border))', background: 'var(--info-surface)' }}>
+          <div style={{ fontSize: 13, color: 'var(--info)', display: 'flex', alignItems: 'center', gap: 8 }}>
             <span style={{ fontSize: 16 }}>👁</span>
             Vista demo activa: estás viendo datos estáticos de ejemplo para presentar la UI de alistamiento.
           </div>
@@ -766,12 +762,12 @@ export default function PickingBoardPage() {
 
       {/* ── Error ── */}
       {error && (
-        <Card style={{ borderColor: 'rgba(239,68,68,0.4)', background: 'rgba(127,29,29,0.22)' }}>
-          <div style={{ display: 'flex', alignItems: 'flex-start', gap: 10, color: '#fecaca' }}>
-            <AlertTriangle size={16} style={{ marginTop: 2, flexShrink: 0, color: '#f87171' }} />
+        <Card style={{ borderColor: 'color-mix(in srgb, var(--danger) 40%, var(--border))', background: 'var(--danger-surface)' }}>
+          <div style={{ display: 'flex', alignItems: 'flex-start', gap: 10, color: 'var(--text)' }}>
+            <AlertTriangle size={16} style={{ marginTop: 2, flexShrink: 0, color: 'var(--danger)' }} />
             <div style={{ fontSize: 13 }}>
               {error}
-              <div style={{ marginTop: 5, color: '#fca5a5', fontSize: 12 }}>
+              <div style={{ marginTop: 5, color: 'var(--danger)', fontSize: 12 }}>
                 Si el mensaje indica migración faltante, ejecuta <code>warehouse-picking-v1.sql</code> y activa <code>SALES_PICKING_FLOW_ENABLED=true</code>.
               </div>
             </div>
@@ -782,13 +778,24 @@ export default function PickingBoardPage() {
       {/* ── KPI Grid ── */}
       <div className="kpi-grid">
         {kpiItems.map((kpi) => (
-          <div key={kpi.label} className="kpi-card" style={{ borderColor: `${kpi.accent}38`, background: kpi.bg }}>
-            <div className="kpi-icon" style={{ color: kpi.accent, background: `${kpi.accent}18` }}>
+          <div key={kpi.label} className="kpi-card inventory-kpi-card" style={{
+            '--kpi-accent': kpi.accent,
+            '--kpi-glow': `color-mix(in srgb, ${kpi.accent} 38%, transparent)`,
+            borderColor: `color-mix(in srgb, ${kpi.accent} 42%, var(--border))`,
+            background: `radial-gradient(ellipse at 0% 100%, color-mix(in srgb, ${kpi.accent} 24%, transparent) 0%, transparent 62%), linear-gradient(135deg, color-mix(in srgb, ${kpi.accent} 12%, var(--card)) 0%, var(--card) 56%, color-mix(in srgb, ${kpi.accent} 6%, var(--panel)) 100%)`,
+            boxShadow: `0 2px 8px var(--shadow), inset 0 1px 0 color-mix(in srgb, ${kpi.accent} 16%, transparent)`,
+          } as CSSProperties}>
+            <div className="kpi-icon" style={{
+              color: kpi.accent,
+              background: `linear-gradient(135deg, color-mix(in srgb, ${kpi.accent} 24%, transparent), color-mix(in srgb, ${kpi.accent} 8%, transparent))`,
+              border: `1px solid color-mix(in srgb, ${kpi.accent} 78%, transparent)`,
+              boxShadow: `inset 0 0 12px color-mix(in srgb, ${kpi.accent} 12%, transparent), 0 0 16px color-mix(in srgb, ${kpi.accent} 16%, transparent)`,
+            }}>
               {kpi.icon}
             </div>
             <div>
               <div className="kpi-label" style={{ color: kpi.accent }}>{kpi.label}</div>
-              <div className="kpi-value">{kpi.value}</div>
+              <div className="kpi-value" style={{ color: kpi.accent }}>{kpi.value}</div>
             </div>
           </div>
         ))}
@@ -815,7 +822,11 @@ export default function PickingBoardPage() {
                     </div>
                     <span
                       className="column-count"
-                      style={{ color: col.accent, background: `${col.accent}18`, border: `1px solid ${col.accent}38` }}
+                      style={{
+                        color: col.accent,
+                        background: `color-mix(in srgb, ${col.accent} 15%, var(--card))`,
+                        border: `1px solid color-mix(in srgb, ${col.accent} 42%, var(--border))`,
+                      }}
                     >
                       {col.rows.length}
                     </span>
@@ -987,8 +998,8 @@ export default function PickingBoardPage() {
                       </div>
                       {item.serials_required && (
                         <div style={{ marginTop: 6, fontSize: 11, color: 'var(--muted)', display: 'grid', gap: 2 }}>
-                          <div>Solicitados: <span style={{ color: '#93c5fd' }}>{splitSerials(item.serial_numbers_requested).join(', ') || '—'}</span></div>
-                          <div>Seleccionados: <span style={{ color: '#6ee7b7' }}>{splitSerials(item.serial_numbers_selected).join(', ') || '—'}</span></div>
+                          <div>Solicitados: <span style={{ color: 'var(--info)' }}>{splitSerials(item.serial_numbers_requested).join(', ') || '—'}</span></div>
+                          <div>Seleccionados: <span style={{ color: 'var(--success)' }}>{splitSerials(item.serial_numbers_selected).join(', ') || '—'}</span></div>
                         </div>
                       )}
                     </div>
@@ -1068,19 +1079,19 @@ export default function PickingBoardPage() {
       )}
 
       <style jsx>{`
-        .scanner-qr-backdrop { position: fixed; inset: 0; z-index: 1000; background: rgba(2,8,23,.82); backdrop-filter: blur(8px); display: grid; place-items: center; padding: 20px; }
-        .scanner-qr-modal { width: min(100%,430px); position: relative; display: grid; justify-items: center; gap: 15px; padding: 28px; border-radius: 22px; background: #101b2e; border: 1px solid rgba(96,165,250,.28); box-shadow: 0 30px 90px rgba(0,0,0,.55); text-align: center; }
-        .scanner-qr-close { position: absolute; top: 12px; right: 14px; width: 34px; height: 34px; border: 0; border-radius: 50%; background: rgba(255,255,255,.06); color: #cbd5e1; font-size: 23px; cursor: pointer; }
-        .scanner-qr-icon { width: 48px; height: 48px; display: grid; place-items: center; border-radius: 15px; color: #7dd3fc; background: rgba(14,165,233,.12); border: 1px solid rgba(14,165,233,.28); }
-        .scanner-qr-title { color: #f8fafc; font-size: 20px; font-weight: 800; }
-        .scanner-qr-subtitle { margin-top: 6px; color: #94a3b8; font-size: 12px; line-height: 1.6; }
+        .scanner-qr-backdrop { position: fixed; inset: 0; z-index: 1000; background: var(--overlay); backdrop-filter: blur(8px); display: grid; place-items: center; padding: 20px; }
+        .scanner-qr-modal { width: min(100%,430px); position: relative; display: grid; justify-items: center; gap: 15px; padding: 28px; border-radius: 22px; background: var(--panel-elevated); border: 1px solid var(--border); box-shadow: 0 30px 90px var(--shadow); text-align: center; }
+        .scanner-qr-close { position: absolute; top: 12px; right: 14px; width: 34px; height: 34px; border: 0; border-radius: 50%; background: var(--surface-hover); color: var(--text-secondary); font-size: 23px; cursor: pointer; }
+        .scanner-qr-icon { width: 48px; height: 48px; display: grid; place-items: center; border-radius: 15px; color: var(--info); background: var(--info-surface); border: 1px solid color-mix(in srgb, var(--info) 38%, var(--border)); }
+        .scanner-qr-title { color: var(--text); font-size: 20px; font-weight: 800; }
+        .scanner-qr-subtitle { margin-top: 6px; color: var(--muted); font-size: 12px; line-height: 1.6; }
         .scanner-qr-image { width: min(100%,290px); aspect-ratio: 1; border-radius: 16px; background: white; padding: 8px; }
-        .scanner-qr-url { width: 100%; padding: 10px 12px; overflow-wrap: anywhere; border-radius: 10px; background: rgba(255,255,255,.04); color: #94a3b8; font-size: 10px; }
-        .scanner-qr-warning { padding: 10px 12px; border-radius: 10px; border: 1px solid rgba(245,158,11,.3); background: rgba(245,158,11,.1); color: #fcd34d; font-size: 11px; line-height: 1.5; }
+        .scanner-qr-url { width: 100%; padding: 10px 12px; overflow-wrap: anywhere; border-radius: 10px; background: var(--surface-hover); color: var(--muted); font-size: 10px; }
+        .scanner-qr-warning { padding: 10px 12px; border-radius: 10px; border: 1px solid var(--warning); background: var(--warning-surface); color: var(--warning); font-size: 11px; line-height: 1.5; }
         .scanner-qr-actions { width: 100%; display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
         .scanner-qr-actions button { display: flex; align-items: center; justify-content: center; gap: 7px; padding: 11px 12px; border-radius: 11px; font-weight: 700; cursor: pointer; }
-        .scanner-qr-secondary { border: 1px solid rgba(255,255,255,.12); background: rgba(255,255,255,.04); color: #cbd5e1; }
-        .scanner-qr-primary { border: 1px solid rgba(59,130,246,.55); background: #2563eb; color: white; }
+        .scanner-qr-secondary { border: 1px solid var(--border); background: var(--surface-hover); color: var(--text-secondary); }
+        .scanner-qr-primary { border: 1px solid color-mix(in srgb, var(--info) 65%, var(--border)); background: var(--info); color: var(--background); }
 
         /* ════════════════════════════════
            FILTERS TOOLBAR
@@ -1089,11 +1100,11 @@ export default function PickingBoardPage() {
           display: flex;
           align-items: flex-end;
           gap: 0;
-          background: var(--panel);
+          background: var(--card-surface-gradient);
           border: 1px solid var(--border);
           border-radius: 16px;
           padding: 14px 18px;
-          box-shadow: 0 2px 14px rgba(0,0,0,0.22);
+          box-shadow: 0 3px 12px var(--shadow), inset 0 1px 0 color-mix(in srgb, #ffffff 4%, transparent);
           flex-wrap: wrap;
           gap: 0;
         }
@@ -1154,21 +1165,21 @@ export default function PickingBoardPage() {
         }
 
         .mine-toggle:hover {
-          border-color: rgba(96,165,250,0.5);
-          color: #93c5fd;
-          background: rgba(96,165,250,0.07);
+          border-color: color-mix(in srgb, var(--info) 58%, var(--border));
+          color: var(--info);
+          background: var(--info-surface);
         }
 
         .mine-toggle--on {
-          border-color: rgba(52,211,153,0.55);
-          background: rgba(52,211,153,0.1);
-          color: #6ee7b7;
+          border-color: color-mix(in srgb, var(--success) 55%, var(--border));
+          background: var(--success-surface);
+          color: var(--success);
         }
 
         .mine-toggle--on:hover {
-          border-color: rgba(52,211,153,0.75);
-          background: rgba(52,211,153,0.16);
-          color: #34d399;
+          border-color: color-mix(in srgb, var(--success) 75%, var(--border));
+          background: color-mix(in srgb, var(--success) 16%, var(--card));
+          color: var(--success);
         }
 
         /* ════════════════════════════════
@@ -1187,18 +1198,13 @@ export default function PickingBoardPage() {
           padding: 14px 16px;
           border: 1px solid;
           border-radius: 14px;
-          transition: transform 0.18s ease, box-shadow 0.18s ease;
+          transition: transform 180ms ease, border-color 180ms ease, box-shadow 180ms ease;
           cursor: default;
         }
 
-        .kpi-card:hover {
-          transform: translateY(-2px);
-          box-shadow: 0 6px 22px rgba(0,0,0,0.28);
-        }
-
         .kpi-icon {
-          width: 38px;
-          height: 38px;
+          width: 46px;
+          height: 46px;
           border-radius: 10px;
           display: flex;
           align-items: center;
@@ -1232,11 +1238,12 @@ export default function PickingBoardPage() {
         }
 
         .board-wrap {
-          background: var(--panel);
+          background: var(--card-surface-gradient);
           border: 1px solid var(--border);
           border-radius: 16px;
           padding: 14px;
           overflow-x: auto;
+          box-shadow: 0 3px 12px var(--shadow), inset 0 1px 0 color-mix(in srgb, #ffffff 4%, transparent);
         }
 
         .board-loading {
@@ -1261,11 +1268,12 @@ export default function PickingBoardPage() {
         }
 
         .column-block {
-          border: 1px solid rgba(255,255,255,0.07);
+          border: 1px solid var(--border);
           border-top: 3px solid;
           border-radius: 14px;
           padding: 12px;
-          background: rgba(255,255,255,0.018);
+          background: var(--control-surface-gradient);
+          box-shadow: inset 0 1px 0 color-mix(in srgb, #ffffff 4%, transparent);
         }
 
         .column-header {
@@ -1274,6 +1282,10 @@ export default function PickingBoardPage() {
           align-items: flex-start;
           gap: 8px;
           margin-bottom: 12px;
+          padding: 10px 11px;
+          border: 1px solid var(--table-header-rule);
+          border-radius: 10px;
+          background: var(--table-header-bg);
         }
 
         .column-title {
@@ -1302,7 +1314,7 @@ export default function PickingBoardPage() {
            EMPTY STATE
         ════════════════════════════════ */
         .empty-col {
-          border: 1px dashed rgba(255,255,255,0.1);
+          border: 1px dashed var(--border);
           border-radius: 12px;
           padding: 24px 12px;
           font-size: 12px;
@@ -1318,9 +1330,9 @@ export default function PickingBoardPage() {
            PICK CARDS
         ════════════════════════════════ */
         .pick-card {
-          border: 1px solid rgba(255,255,255,0.08);
+          border: 1px solid var(--border);
           border-radius: 13px;
-          background: rgba(10,19,37,0.65);
+          background: var(--card-surface-gradient);
           padding: 12px;
           width: 100%;
           text-align: left;
@@ -1331,18 +1343,18 @@ export default function PickingBoardPage() {
         }
 
         .pick-card:hover {
-          border-color: rgba(96,165,250,0.45);
+          border-color: color-mix(in srgb, var(--info) 50%, var(--border));
           transform: translateY(-2px);
-          box-shadow: 0 6px 18px rgba(0,0,0,0.35);
+          box-shadow: 0 6px 18px var(--shadow);
         }
 
         .pick-card--active {
-          border-color: rgba(52,211,153,0.55) !important;
-          box-shadow: 0 0 0 1px rgba(52,211,153,0.18) inset, 0 6px 18px rgba(52,211,153,0.08) !important;
+          border-color: color-mix(in srgb, var(--success) 60%, var(--border)) !important;
+          box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--success) 18%, transparent), 0 6px 18px color-mix(in srgb, var(--success) 12%, transparent) !important;
         }
 
         .pick-card--urgent {
-          border-left: 3px solid rgba(251,191,36,0.65);
+          border-left: 3px solid color-mix(in srgb, var(--warning) 72%, var(--border));
         }
 
         .pc-top {
@@ -1362,7 +1374,7 @@ export default function PickingBoardPage() {
         .pc-customer {
           font-size: 13px;
           font-weight: 500;
-          color: #e2e8f0;
+          color: var(--text);
           margin-bottom: 8px;
           white-space: nowrap;
           overflow: hidden;
@@ -1389,7 +1401,7 @@ export default function PickingBoardPage() {
         }
 
         .pc-amount {
-          color: #93c5fd;
+          color: var(--info);
           font-weight: 600;
           justify-content: flex-end;
         }
@@ -1424,15 +1436,15 @@ export default function PickingBoardPage() {
         }
 
         .pri-urgent {
-          color: #fde68a;
-          background: rgba(245,158,11,0.18);
-          border: 1px solid rgba(245,158,11,0.32);
+          color: var(--warning);
+          background: var(--warning-surface);
+          border: 1px solid color-mix(in srgb, var(--warning) 38%, var(--border));
         }
 
         .pri-normal {
-          color: #93c5fd;
-          background: rgba(59,130,246,0.12);
-          border: 1px solid rgba(59,130,246,0.22);
+          color: var(--info);
+          background: var(--info-surface);
+          border: 1px solid color-mix(in srgb, var(--info) 30%, var(--border));
         }
 
         /* ════════════════════════════════
@@ -1449,15 +1461,15 @@ export default function PickingBoardPage() {
         }
 
         .dlv-no {
-          color: #fbbf24;
-          background: rgba(245,158,11,0.12);
-          border: 1px solid rgba(245,158,11,0.22);
+          color: var(--warning);
+          background: var(--warning-surface);
+          border: 1px solid color-mix(in srgb, var(--warning) 30%, var(--border));
         }
 
         .dlv-yes {
-          color: #22d3ee;
-          background: rgba(34,211,238,0.1);
-          border: 1px solid rgba(34,211,238,0.2);
+          color: var(--success);
+          background: var(--success-surface);
+          border: 1px solid color-mix(in srgb, var(--success) 30%, var(--border));
         }
 
         .q-pos-badge {
@@ -1467,9 +1479,9 @@ export default function PickingBoardPage() {
           border-radius: 999px;
           font-size: 10px;
           font-weight: 700;
-          color: #fde68a;
-          background: rgba(245,158,11,0.14);
-          border: 1px solid rgba(245,158,11,0.24);
+          color: var(--warning);
+          background: var(--warning-surface);
+          border: 1px solid color-mix(in srgb, var(--warning) 34%, var(--border));
         }
 
         /* ════════════════════════════════
@@ -1500,50 +1512,50 @@ export default function PickingBoardPage() {
         }
 
         .pick-cta--claim {
-          background: rgba(59,130,246,0.14);
-          border-color: rgba(59,130,246,0.32);
-          color: #93c5fd;
+          background: var(--info-surface);
+          border-color: color-mix(in srgb, var(--info) 40%, var(--border));
+          color: var(--info);
         }
         .pick-cta--claim:hover:not(:disabled) {
-          background: rgba(59,130,246,0.24);
-          border-color: rgba(59,130,246,0.52);
-          color: #bfdbfe;
+          background: color-mix(in srgb, var(--info) 18%, var(--card));
+          border-color: color-mix(in srgb, var(--info) 58%, var(--border));
+          color: var(--info);
           transform: translateY(-1px);
         }
 
         .pick-cta--start {
-          background: rgba(249,115,22,0.14);
-          border-color: rgba(249,115,22,0.32);
-          color: #fdba74;
+          background: var(--warning-surface);
+          border-color: color-mix(in srgb, var(--warning) 40%, var(--border));
+          color: var(--warning);
         }
         .pick-cta--start:hover:not(:disabled) {
-          background: rgba(249,115,22,0.24);
-          border-color: rgba(249,115,22,0.52);
-          color: #fed7aa;
+          background: color-mix(in srgb, var(--warning) 18%, var(--card));
+          border-color: color-mix(in srgb, var(--warning) 58%, var(--border));
+          color: var(--warning);
           transform: translateY(-1px);
         }
 
         .pick-cta--ready {
-          background: rgba(16,185,129,0.14);
-          border-color: rgba(16,185,129,0.32);
-          color: #6ee7b7;
+          background: var(--success-surface);
+          border-color: color-mix(in srgb, var(--success) 40%, var(--border));
+          color: var(--success);
         }
         .pick-cta--ready:hover:not(:disabled) {
-          background: rgba(16,185,129,0.24);
-          border-color: rgba(16,185,129,0.52);
-          color: #a7f3d0;
+          background: color-mix(in srgb, var(--success) 18%, var(--card));
+          border-color: color-mix(in srgb, var(--success) 58%, var(--border));
+          color: var(--success);
           transform: translateY(-1px);
         }
 
         .pick-cta--complete {
-          background: rgba(34,197,94,0.14);
-          border-color: rgba(34,197,94,0.32);
-          color: #86efac;
+          background: var(--success-surface);
+          border-color: color-mix(in srgb, var(--success) 40%, var(--border));
+          color: var(--success);
         }
         .pick-cta--complete:hover:not(:disabled) {
-          background: rgba(34,197,94,0.24);
-          border-color: rgba(34,197,94,0.52);
-          color: #bbf7d0;
+          background: color-mix(in srgb, var(--success) 18%, var(--card));
+          border-color: color-mix(in srgb, var(--success) 58%, var(--border));
+          color: var(--success);
           transform: translateY(-1px);
         }
 
@@ -1565,8 +1577,8 @@ export default function PickingBoardPage() {
         }
 
         .detail-field {
-          background: rgba(255,255,255,0.025);
-          border: 1px solid rgba(255,255,255,0.06);
+          background: var(--surface-hover);
+          border: 1px solid var(--border);
           border-radius: 10px;
           padding: 9px 11px;
         }
@@ -1614,18 +1626,18 @@ export default function PickingBoardPage() {
            LINE CARD & QUANTITY BADGE
         ════════════════════════════════ */
         .line-card {
-          border: 1px solid rgba(255,255,255,0.07);
+          border: 1px solid var(--border);
           border-radius: 10px;
-          background: rgba(255,255,255,0.02);
+          background: var(--surface-hover);
           padding: 10px;
         }
 
         .qty-badge {
           font-size: 11px;
           font-weight: 700;
-          color: #93c5fd;
-          background: rgba(59,130,246,0.12);
-          border: 1px solid rgba(59,130,246,0.2);
+          color: var(--info);
+          background: var(--info-surface);
+          border: 1px solid color-mix(in srgb, var(--info) 30%, var(--border));
           border-radius: 999px;
           padding: 2px 9px;
           white-space: nowrap;
@@ -1637,10 +1649,10 @@ export default function PickingBoardPage() {
            EVENT ROW
         ════════════════════════════════ */
         .event-row {
-          border-left: 2px solid rgba(255,255,255,0.1);
+          border-left: 2px solid var(--border);
           padding: 6px 10px;
           border-radius: 0 8px 8px 0;
-          background: rgba(255,255,255,0.02);
+          background: var(--surface-hover);
         }
 
         /* ════════════════════════════════
@@ -1657,21 +1669,21 @@ export default function PickingBoardPage() {
         }
 
         .recom--low {
-          background: rgba(59,130,246,0.09);
-          border: 1px solid rgba(59,130,246,0.24);
-          color: #93c5fd;
+          background: var(--info-surface);
+          border: 1px solid color-mix(in srgb, var(--info) 30%, var(--border));
+          color: var(--info);
         }
 
         .recom--medium {
-          background: rgba(245,158,11,0.09);
-          border: 1px solid rgba(245,158,11,0.26);
-          color: #fde68a;
+          background: var(--warning-surface);
+          border: 1px solid color-mix(in srgb, var(--warning) 32%, var(--border));
+          color: var(--warning);
         }
 
         .recom--high {
-          background: rgba(239,68,68,0.09);
-          border: 1px solid rgba(239,68,68,0.26);
-          color: #fca5a5;
+          background: var(--danger-surface);
+          border: 1px solid color-mix(in srgb, var(--danger) 32%, var(--border));
+          color: var(--danger);
         }
 
         /* ════════════════════════════════

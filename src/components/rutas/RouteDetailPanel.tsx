@@ -182,19 +182,19 @@ export default function RouteDetailPanel({ route, onOptimized }: RouteDetailPane
       {/* Header */}
       <div style={{ 
         padding: 16, 
-        borderBottom: '1px solid rgba(255,255,255,0.08)',
-        background: 'rgba(15,23,42,0.5)'
+        borderBottom: '1px solid var(--border)',
+        background: 'var(--panel-elevated)'
       }}>
         <h3 style={{ 
           fontSize: 14, 
           fontWeight: 700, 
-          color: '#f8fafc',
+          color: 'var(--text)',
           margin: '0 0 8px 0'
         }}>
           {route.name}
         </h3>
         
-        <div style={{ fontSize: 12, color: '#94a3b8', marginBottom: 12 }}>
+        <div style={{ fontSize: 12, color: 'var(--muted)', marginBottom: 12 }}>
           {route.driver_name} • {route.vehicle_label || 'Sin vehículo'}
         </div>
 
@@ -239,28 +239,28 @@ export default function RouteDetailPanel({ route, onOptimized }: RouteDetailPane
           }}>
             <div style={{
               padding: 8,
-              background: 'rgba(255,255,255,0.02)',
+              background: 'var(--surface-hover)',
               borderRadius: 6,
-              border: '1px solid rgba(255,255,255,0.05)'
+              border: '1px solid var(--border)'
             }}>
-              <div style={{ fontSize: 10, color: '#64748b', marginBottom: 2 }}>
+              <div style={{ fontSize: 10, color: 'var(--muted)', marginBottom: 2 }}>
                 Distancia
               </div>
-              <div style={{ fontSize: 14, fontWeight: 700, color: '#f8fafc' }}>
+              <div style={{ fontSize: 14, fontWeight: 700, color: 'var(--text)' }}>
                 {formatDistance(route.total_distance_meters)}
               </div>
             </div>
 
             <div style={{
               padding: 8,
-              background: 'rgba(255,255,255,0.02)',
+              background: 'var(--surface-hover)',
               borderRadius: 6,
-              border: '1px solid rgba(255,255,255,0.05)'
+              border: '1px solid var(--border)'
             }}>
-              <div style={{ fontSize: 10, color: '#64748b', marginBottom: 2 }}>
+              <div style={{ fontSize: 10, color: 'var(--muted)', marginBottom: 2 }}>
                 Duración
               </div>
-              <div style={{ fontSize: 14, fontWeight: 700, color: '#f8fafc' }}>
+              <div style={{ fontSize: 14, fontWeight: 700, color: 'var(--text)' }}>
                 {formatDuration(route.total_duration_seconds)}
               </div>
             </div>
@@ -359,7 +359,7 @@ export default function RouteDetailPanel({ route, onOptimized }: RouteDetailPane
         <div style={{ 
           fontSize: 11, 
           fontWeight: 700, 
-          color: '#94a3b8',
+          color: 'var(--muted)',
           marginBottom: 8,
           textTransform: 'uppercase',
           letterSpacing: '0.5px'
@@ -376,8 +376,8 @@ export default function RouteDetailPanel({ route, onOptimized }: RouteDetailPane
               style={{
                 padding: 10,
                 marginBottom: 8,
-                background: 'rgba(255,255,255,0.02)',
-                border: '1px solid rgba(255,255,255,0.05)',
+                background: 'var(--surface-hover)',
+                border: '1px solid var(--border)',
                 borderRadius: 8
               }}
             >
@@ -403,7 +403,7 @@ export default function RouteDetailPanel({ route, onOptimized }: RouteDetailPane
                   <div style={{ 
                     fontSize: 12, 
                     fontWeight: 700, 
-                    color: '#f8fafc',
+                    color: 'var(--text)',
                     marginBottom: 4,
                     overflow: 'hidden',
                     textOverflow: 'ellipsis',
@@ -414,7 +414,7 @@ export default function RouteDetailPanel({ route, onOptimized }: RouteDetailPane
 
                   <div style={{ 
                     fontSize: 11, 
-                    color: '#64748b',
+                    color: 'var(--muted)',
                     display: 'flex',
                     alignItems: 'flex-start',
                     gap: 4,

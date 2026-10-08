@@ -8,6 +8,7 @@ import {
 } from 'lucide-react';
 import { supabase } from '@/lib/supabase/client';
 import Card from '@/components/ui/Card';
+import RouteKpiCard from '@/components/rutas/RouteKpiCard';
 import Button from '@/components/ui/Button';
 import Badge from '@/components/ui/Badge';
 import RouteMapPreview from '@/components/rutas/RouteMapPreview';
@@ -374,7 +375,7 @@ export default function PlanificadorPage() {
       case 'urgent': return '#ef4444';
       case 'high': return '#f97316';
       case 'normal': return '#3b82f6';
-      default: return '#6b7280';
+      default: return 'var(--muted)';
     }
   };
 
@@ -443,8 +444,8 @@ export default function PlanificadorPage() {
       <Card style={{ padding: 24, textAlign: 'center' }}>
         <AlertTriangle size={48} color="#ef4444" style={{ marginBottom: 16 }} />
         <h2 style={{ fontSize: 20, fontWeight: 700, marginBottom: 8 }}>Error de Base de Datos</h2>
-        <p style={{ color: 'rgba(255,255,255,0.6)', marginBottom: 16 }}>{error}</p>
-        <p style={{ fontSize: 13, color: 'rgba(255,255,255,0.5)', marginBottom: 16 }}>
+        <p style={{ color: 'var(--muted)', marginBottom: 16 }}>{error}</p>
+        <p style={{ fontSize: 13, color: 'var(--muted)', marginBottom: 16 }}>
           Ejecuta el script <code>supabase_rutas_tables.sql</code> en tu Supabase SQL Editor para crear las tablas necesarias.
         </p>
         <Button variant="primary" onClick={fetchData}>
@@ -463,7 +464,7 @@ export default function PlanificadorPage() {
           <h1 style={{ fontSize: 24, fontWeight: 700, marginBottom: 4 }}>
             Planificador de Rutas
           </h1>
-          <p style={{ color: 'rgba(255,255,255,0.6)', fontSize: 14 }}>
+          <p style={{ color: 'var(--muted)', fontSize: 14 }}>
             Crea y optimiza rutas de entrega con Google Maps
           </p>
         </div>
@@ -479,54 +480,11 @@ export default function PlanificadorPage() {
       </div>
 
       {/* Stats */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 16 }}>
-        <Card style={{ padding: 16 }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-            <div style={{ padding: 10, background: 'rgba(59, 130, 246, 0.1)', borderRadius: 8 }}>
-              <Package size={20} color="#3b82f6" />
-            </div>
-            <div>
-              <div style={{ fontSize: 24, fontWeight: 700 }}>{unassignedJobs.length}</div>
-              <div style={{ fontSize: 12, color: 'rgba(255,255,255,0.5)' }}>Entregas Pendientes</div>
-            </div>
-          </div>
-        </Card>
-
-        <Card style={{ padding: 16 }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-            <div style={{ padding: 10, background: 'rgba(16, 185, 129, 0.1)', borderRadius: 8 }}>
-              <Truck size={20} color="#10b981" />
-            </div>
-            <div>
-              <div style={{ fontSize: 24, fontWeight: 700 }}>{vehicles.length}</div>
-              <div style={{ fontSize: 12, color: 'rgba(255,255,255,0.5)' }}>Vehículos Activos</div>
-            </div>
-          </div>
-        </Card>
-
-        <Card style={{ padding: 16 }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-            <div style={{ padding: 10, background: 'rgba(249, 115, 22, 0.1)', borderRadius: 8 }}>
-              <Route size={20} color="#f97316" />
-            </div>
-            <div>
-              <div style={{ fontSize: 24, fontWeight: 700 }}>{routes.filter(r => r.status === 'draft').length}</div>
-              <div style={{ fontSize: 12, color: 'rgba(255,255,255,0.5)' }}>Rutas en Borrador</div>
-            </div>
-          </div>
-        </Card>
-
-        <Card style={{ padding: 16 }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-            <div style={{ padding: 10, background: 'rgba(168, 85, 247, 0.1)', borderRadius: 8 }}>
-              <Navigation size={20} color="#a855f7" />
-            </div>
-            <div>
-              <div style={{ fontSize: 24, fontWeight: 700 }}>{routes.filter(r => r.status === 'in_progress').length}</div>
-              <div style={{ fontSize: 12, color: 'rgba(255,255,255,0.5)' }}>Rutas Activas</div>
-            </div>
-          </div>
-        </Card>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(210px, 1fr))', gap: 16 }}>
+        <RouteKpiCard icon={Package} label="Entregas Pendientes" value={unassignedJobs.length} tone="info" />
+        <RouteKpiCard icon={Truck} label="Vehículos Activos" value={vehicles.length} tone="success" />
+        <RouteKpiCard icon={Route} label="Rutas en Borrador" value={routes.filter(r => r.status === 'draft').length} tone="warning" />
+        <RouteKpiCard icon={Navigation} label="Rutas Activas" value={routes.filter(r => r.status === 'in_progress').length} tone="violet" />
       </div>
 
       <Card style={{ padding: 20 }}>
@@ -534,22 +492,22 @@ export default function PlanificadorPage() {
           <div style={{ display: 'grid', gap: 14 }}>
             <div>
               <h2 style={{ fontSize: 18, fontWeight: 700, marginBottom: 8 }}>Cómo armar y visualizar una ruta</h2>
-              <p style={{ fontSize: 14, color: 'rgba(255,255,255,0.65)', lineHeight: 1.6 }}>
+              <p style={{ fontSize: 14, color: 'var(--muted)', lineHeight: 1.6 }}>
                 Este módulo ya puede mostrarte una representación visual del recorrido. No es un mapa satelital, pero sí una vista operativa de las paradas con su orden y cobertura.
               </p>
             </div>
 
             <div style={{ display: 'grid', gap: 10 }}>
-              <div style={{ padding: 12, borderRadius: 12, background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.06)' }}>
+              <div style={{ padding: 12, borderRadius: 12, background: 'var(--surface-hover)', border: '1px solid var(--border)' }}>
                 <strong>1.</strong> Selecciona entregas desde la bandeja de la izquierda.
               </div>
-              <div style={{ padding: 12, borderRadius: 12, background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.06)' }}>
+              <div style={{ padding: 12, borderRadius: 12, background: 'var(--surface-hover)', border: '1px solid var(--border)' }}>
                 <strong>2.</strong> Asigna un vehículo y crea la ruta.
               </div>
-              <div style={{ padding: 12, borderRadius: 12, background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.06)' }}>
+              <div style={{ padding: 12, borderRadius: 12, background: 'var(--surface-hover)', border: '1px solid var(--border)' }}>
                 <strong>3.</strong> Usa el botón de optimización para calcular distancia, duración y secuencia recomendada.
               </div>
-              <div style={{ padding: 12, borderRadius: 12, background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.06)' }}>
+              <div style={{ padding: 12, borderRadius: 12, background: 'var(--surface-hover)', border: '1px solid var(--border)' }}>
                 <strong>4.</strong> Revisa a la derecha la vista previa del recorrido y luego inicia la ruta.
               </div>
             </div>
@@ -583,7 +541,7 @@ export default function PlanificadorPage() {
           </div>
 
           {unassignedJobs.length === 0 ? (
-            <div style={{ textAlign: 'center', padding: 40, color: 'rgba(255,255,255,0.5)' }}>
+            <div style={{ textAlign: 'center', padding: 40, color: 'var(--muted)' }}>
               <Package size={48} style={{ marginBottom: 16, opacity: 0.3 }} />
               <p>No hay entregas pendientes</p>
             </div>
@@ -597,10 +555,10 @@ export default function PlanificadorPage() {
                     padding: 12,
                     background: selectedJobs.includes(job.id) 
                       ? 'rgba(220, 38, 38, 0.1)' 
-                      : 'rgba(255,255,255,0.03)',
+                      : 'var(--surface-hover)',
                     border: selectedJobs.includes(job.id)
                       ? '1px solid rgba(220, 38, 38, 0.3)'
-                      : '1px solid rgba(255,255,255,0.05)',
+                      : '1px solid var(--border)',
                     borderRadius: 8,
                     cursor: 'pointer',
                     transition: 'all 0.2s'
@@ -615,7 +573,7 @@ export default function PlanificadorPage() {
                       background: getPriorityColor(job.priority)
                     }} />
                   </div>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, color: 'rgba(255,255,255,0.5)' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, color: 'var(--muted)' }}>
                     <MapPin size={12} />
                     {job.address_text}
                   </div>
@@ -637,7 +595,7 @@ export default function PlanificadorPage() {
           </h2>
 
           {routes.length === 0 ? (
-            <div style={{ textAlign: 'center', padding: 40, color: 'rgba(255,255,255,0.5)' }}>
+            <div style={{ textAlign: 'center', padding: 40, color: 'var(--muted)' }}>
               <Route size={48} style={{ marginBottom: 16, opacity: 0.3 }} />
               <p>No hay rutas creadas</p>
               <p style={{ fontSize: 13, marginTop: 8 }}>Selecciona entregas y crea una ruta</p>
@@ -649,8 +607,8 @@ export default function PlanificadorPage() {
                   key={route.id}
                   style={{
                     padding: 16,
-                    background: 'rgba(255,255,255,0.03)',
-                    border: '1px solid rgba(255,255,255,0.05)',
+                    background: 'var(--surface-hover)',
+                    border: '1px solid var(--border)',
                     borderRadius: 12
                   }}
                 >
@@ -671,7 +629,7 @@ export default function PlanificadorPage() {
                            route.status}
                         </Badge>
                         {route.vehicles && (
-                          <span style={{ fontSize: 12, color: 'rgba(255,255,255,0.5)' }}>
+                          <span style={{ fontSize: 12, color: 'var(--muted)' }}>
                             🚛 {route.vehicles.plate_number}
                           </span>
                         )}
@@ -709,15 +667,15 @@ export default function PlanificadorPage() {
 
                   <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 12, fontSize: 12 }}>
                     <div>
-                      <div style={{ color: 'rgba(255,255,255,0.5)', marginBottom: 4 }}>Paradas</div>
+                      <div style={{ color: 'var(--muted)', marginBottom: 4 }}>Paradas</div>
                       <div style={{ fontWeight: 600 }}>{route.route_stops?.length || 0}</div>
                     </div>
                     <div>
-                      <div style={{ color: 'rgba(255,255,255,0.5)', marginBottom: 4 }}>Distancia</div>
+                      <div style={{ color: 'var(--muted)', marginBottom: 4 }}>Distancia</div>
                       <div style={{ fontWeight: 600 }}>{formatDistance(route.total_distance_meters)}</div>
                     </div>
                     <div>
-                      <div style={{ color: 'rgba(255,255,255,0.5)', marginBottom: 4 }}>Duración</div>
+                      <div style={{ color: 'var(--muted)', marginBottom: 4 }}>Duración</div>
                       <div style={{ fontWeight: 600 }}>{formatDuration(route.total_duration_seconds)}</div>
                     </div>
                   </div>
@@ -735,7 +693,7 @@ export default function PlanificadorPage() {
         </h2>
 
         {vehicles.length === 0 ? (
-          <div style={{ textAlign: 'center', padding: 24, color: 'rgba(255,255,255,0.5)' }}>
+          <div style={{ textAlign: 'center', padding: 24, color: 'var(--muted)' }}>
             <Truck size={32} style={{ marginBottom: 8, opacity: 0.3 }} />
             <p>No hay vehículos registrados</p>
           </div>
@@ -746,8 +704,8 @@ export default function PlanificadorPage() {
                 key={vehicle.id}
                 style={{
                   padding: 16,
-                  background: 'rgba(255,255,255,0.03)',
-                  border: '1px solid rgba(255,255,255,0.05)',
+                  background: 'var(--surface-hover)',
+                  border: '1px solid var(--border)',
                   borderRadius: 8
                 }}
               >
@@ -755,12 +713,12 @@ export default function PlanificadorPage() {
                   <Truck size={20} color="#10b981" />
                   <div style={{ fontWeight: 600 }}>{vehicle.plate_number}</div>
                 </div>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13, color: 'rgba(255,255,255,0.6)' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13, color: 'var(--muted)' }}>
                   <User size={14} />
                   {vehicle.driver_name || 'Sin conductor'}
                 </div>
                 {vehicle.driver_phone && (
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, color: 'rgba(255,255,255,0.5)', marginTop: 4 }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, color: 'var(--muted)', marginTop: 4 }}>
                     <Phone size={12} />
                     {vehicle.driver_phone}
                   </div>
@@ -779,26 +737,26 @@ export default function PlanificadorPage() {
           left: 0,
           right: 0,
           bottom: 0,
-          background: 'rgba(0,0,0,0.7)',
+          background: 'var(--overlay)',
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'center',
           zIndex: 1000
         }}>
           <div style={{
-            background: '#1a1a2e',
+            background: 'var(--panel-elevated)',
             padding: 32,
             borderRadius: 16,
             width: '100%',
             maxWidth: 500,
-            border: '1px solid rgba(255,255,255,0.1)'
+            border: '1px solid var(--border)'
           }}>
             <h3 style={{ fontSize: 20, fontWeight: 700, marginBottom: 20 }}>
               Crear Nueva Ruta
             </h3>
 
             <div style={{ marginBottom: 16 }}>
-              <label style={{ display: 'block', fontSize: 13, color: 'rgba(255,255,255,0.6)', marginBottom: 8 }}>
+              <label style={{ display: 'block', fontSize: 13, color: 'var(--muted)', marginBottom: 8 }}>
                 Nombre de la ruta (opcional)
               </label>
               <input
@@ -809,17 +767,17 @@ export default function PlanificadorPage() {
                 style={{
                   width: '100%',
                   padding: 12,
-                  background: 'rgba(255,255,255,0.05)',
-                  border: '1px solid rgba(255,255,255,0.1)',
+                  background: 'var(--surface-hover)',
+                  border: '1px solid var(--border)',
                   borderRadius: 8,
-                  color: '#fff',
+                  color: 'var(--text)',
                   fontSize: 14
                 }}
               />
             </div>
 
             <div style={{ marginBottom: 16 }}>
-              <label style={{ display: 'block', fontSize: 13, color: 'rgba(255,255,255,0.6)', marginBottom: 8 }}>
+              <label style={{ display: 'block', fontSize: 13, color: 'var(--muted)', marginBottom: 8 }}>
                 Vehículo asignado
               </label>
               <div style={{ display: 'grid', gap: 8 }}>
@@ -831,10 +789,10 @@ export default function PlanificadorPage() {
                       padding: 12,
                       background: selectedVehicle === v.id 
                         ? 'rgba(220, 38, 38, 0.1)' 
-                        : 'rgba(255,255,255,0.03)',
+                        : 'var(--surface-hover)',
                       border: selectedVehicle === v.id
                         ? '1px solid rgba(220, 38, 38, 0.3)'
-                        : '1px solid rgba(255,255,255,0.05)',
+                        : '1px solid var(--border)',
                       borderRadius: 8,
                       cursor: 'pointer',
                       display: 'flex',
@@ -845,7 +803,7 @@ export default function PlanificadorPage() {
                     <Truck size={18} />
                     <div>
                       <div style={{ fontWeight: 600 }}>{v.plate_number}</div>
-                      <div style={{ fontSize: 12, color: 'rgba(255,255,255,0.5)' }}>
+                      <div style={{ fontSize: 12, color: 'var(--muted)' }}>
                         {v.driver_name || 'Sin conductor'}
                       </div>
                     </div>
@@ -858,7 +816,7 @@ export default function PlanificadorPage() {
             </div>
 
             <div style={{ marginBottom: 20 }}>
-              <div style={{ fontSize: 13, color: 'rgba(255,255,255,0.6)', marginBottom: 8 }}>
+              <div style={{ fontSize: 13, color: 'var(--muted)', marginBottom: 8 }}>
                 Entregas seleccionadas: <strong>{selectedJobs.length}</strong>
               </div>
               {selectedJobs.length === 0 && (

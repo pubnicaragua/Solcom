@@ -163,9 +163,9 @@ export default function ModernAlertBridge() {
                 width: 24,
                 height: 24,
                 borderRadius: 6,
-                border: '1px solid rgba(255,255,255,0.15)',
-                background: 'rgba(255,255,255,0.04)',
-                color: '#CBD5E1',
+                border: '1px solid var(--border)',
+                background: 'var(--surface-hover)',
+                color: 'var(--text-secondary)',
                 cursor: 'pointer',
                 display: 'grid',
                 placeItems: 'center',
@@ -181,7 +181,7 @@ export default function ModernAlertBridge() {
                 right: 0,
                 bottom: 0,
                 height: 2,
-                background: `${styles.accent}55`,
+                background: `color-mix(in srgb, ${styles.accent} 34%, transparent)`,
               }}
             />
           </div>

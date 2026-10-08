@@ -6,22 +6,23 @@ import Badge from '@/components/ui/Badge';
 
 export default function ReunionesPage() {
   return (
-    <div style={{ minHeight: '100vh', background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)' }}>
-      <div style={{ maxWidth: 1200, margin: '0 auto', padding: '40px 20px' }}>
+    <div className="reuniones-module-view" style={{ color: 'var(--text)' }}>
+      <div style={{ maxWidth: 1200, width: '100%', margin: '0 auto', paddingBottom: 24 }}>
         {/* Header */}
-        <div style={{ textAlign: 'center', marginBottom: 48, color: 'white' }}>
-          <h1 style={{ fontSize: 48, fontWeight: 700, marginBottom: 16 }}>
-            📅 Reuniones del Proyecto
-          </h1>
-          <p style={{ fontSize: 20, opacity: 0.9 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 14, marginBottom: 24 }}>
+          <div className="system-title-mark" aria-hidden="true"><Calendar size={22} /></div>
+          <div>
+            <h1 className="h-title" style={{ marginBottom: 4 }}>Reuniones del Proyecto</h1>
+            <p className="h-subtitle" style={{ fontSize: 13 }}>
             Minutas y seguimiento de reuniones - Solis Comercial ERP
-          </p>
+            </p>
+          </div>
         </div>
 
         {/* Reunión del 21 de Febrero */}
-        <Card style={{ marginBottom: 32, background: 'white', borderRadius: 16, overflow: 'hidden' }}>
+        <Card className="reuniones-page-card" style={{ marginBottom: 24, background: 'var(--card-surface-gradient)', borderRadius: 12, overflow: 'hidden' }}>
           {/* Header de la Reunión */}
-          <div style={{ background: 'linear-gradient(135deg, #f59e0b 0%, #dc2626 100%)', padding: 32, color: 'white' }}>
+          <div className="reuniones-card-hero" style={{ background: 'var(--brand-button-gradient)', padding: 28, color: 'white' }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 16 }}>
               <Calendar size={32} />
               <div>
@@ -41,20 +42,20 @@ export default function ReunionesPage() {
               </div>
             </div>
             <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
-              <Badge style={{ background: 'rgba(255,255,255,0.2)', color: 'white', padding: '6px 12px' }}>
+              <Badge style={{ background: 'var(--success-surface)', color: 'var(--success)', border: '1px solid color-mix(in srgb, var(--success) 30%, var(--border))', padding: '6px 12px' }}>
                 ✅ Completada
               </Badge>
-              <Badge style={{ background: 'rgba(255,255,255,0.2)', color: 'white', padding: '6px 12px' }}>
+              <Badge style={{ background: 'var(--info-surface)', color: 'var(--info)', border: '1px solid color-mix(in srgb, var(--info) 30%, var(--border))', padding: '6px 12px' }}>
                 🎯 Mejoras Identificadas
               </Badge>
             </div>
           </div>
 
-          <div style={{ padding: 32 }}>
+          <div className="reuniones-card-content" style={{ padding: 32 }}>
             {/* Participantes */}
             <div style={{ marginBottom: 32 }}>
               <h3 style={{ fontSize: 20, fontWeight: 600, marginBottom: 16, display: 'flex', alignItems: 'center', gap: 8 }}>
-                <Users size={24} color="#000000ff" />
+                <Users size={24} color="var(--text)" />
                 Participantes
               </h3>
               <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
@@ -64,15 +65,15 @@ export default function ReunionesPage() {
             </div>
 
             {/* Resumen Ejecutivo */}
-            <div style={{ marginBottom: 32, padding: 24, background: '#fffbeb', borderRadius: 12, borderLeft: '4px solid #f59e0b' }}>
-              <h3 style={{ fontSize: 20, fontWeight: 600, marginBottom: 16, color: '#f59e0b' }}>
+            <div style={{ marginBottom: 32, padding: 24, background: 'var(--warning-surface)', borderRadius: 12, borderLeft: '4px solid var(--warning)' }}>
+              <h3 style={{ fontSize: 20, fontWeight: 600, marginBottom: 16, color: 'var(--warning)' }}>
                 📋 Resumen Ejecutivo
               </h3>
-              <p style={{ fontSize: 16, lineHeight: 1.6, color: '#4a5568', marginBottom: 12 }}>
+              <p style={{ fontSize: 16, lineHeight: 1.6, color: 'var(--text-secondary)', marginBottom: 12 }}>
                 Se revisó el <strong>módulo de inventario</strong> y <strong>reportes</strong> para identificar mejoras de UX y funcionalidades pendientes.
                 Se detectaron varios puntos críticos que necesitan ajuste para mejorar la experiencia del usuario.
               </p>
-              <p style={{ fontSize: 16, lineHeight: 1.6, color: '#4a5568' }}>
+              <p style={{ fontSize: 16, lineHeight: 1.6, color: 'var(--text-secondary)' }}>
                 Se definieron <strong>acciones específicas</strong> para corregir el comportamiento de filtros, agregar totales en reportes,
                 y mejorar la visualización de porcentajes en análisis por marcas.
               </p>
@@ -81,7 +82,7 @@ export default function ReunionesPage() {
             {/* Puntos Clave Discutidos */}
             <div style={{ marginBottom: 32 }}>
               <h3 style={{ fontSize: 20, fontWeight: 600, marginBottom: 16, display: 'flex', alignItems: 'center', gap: 8 }}>
-                <FileText size={24} color="#f59e0b" />
+                <FileText size={24} color="var(--warning)" />
                 Puntos Clave Discutidos
               </h3>
               <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
@@ -112,17 +113,17 @@ export default function ReunionesPage() {
                     status: 'in-progress'
                   }
                 ].map((punto, idx) => (
-                  <div key={idx} style={{ padding: 20, background: 'white', border: '1px solid #e2e8f0', borderRadius: 8 }}>
+                  <div key={idx} className="reuniones-point-card" style={{ padding: 20, background: 'var(--panel)', border: '1px solid var(--border)', borderRadius: 8 }}>
                     <div style={{ display: 'flex', alignItems: 'flex-start', gap: 12 }}>
-                      {punto.status === 'approved' && <CheckCircle2 size={20} color="#10b981" />}
-                      {punto.status === 'action-required' && <AlertCircle size={20} color="#f59e0b" />}
-                      {punto.status === 'pending' && <Clock size={20} color="#6b7280" />}
-                      {punto.status === 'in-progress' && <ArrowRight size={20} color="#f59e0b" />}
+                      {punto.status === 'approved' && <CheckCircle2 size={20} color="var(--success)" />}
+                      {punto.status === 'action-required' && <AlertCircle size={20} color="var(--warning)" />}
+                      {punto.status === 'pending' && <Clock size={20} color="var(--muted)" />}
+                      {punto.status === 'in-progress' && <ArrowRight size={20} color="var(--warning)" />}
                       <div style={{ flex: 1 }}>
-                        <h4 style={{ fontSize: 16, fontWeight: 600, marginBottom: 8, color: '#1a202c' }}>
+                        <h4 style={{ fontSize: 16, fontWeight: 600, marginBottom: 8, color: 'var(--text)' }}>
                           {punto.title}
                         </h4>
-                        <p style={{ fontSize: 14, lineHeight: 1.6, color: '#4a5568', margin: 0 }}>
+                        <p style={{ fontSize: 14, lineHeight: 1.6, color: 'var(--text-secondary)', margin: 0 }}>
                           {punto.content}
                         </p>
                       </div>
@@ -133,12 +134,12 @@ export default function ReunionesPage() {
             </div>
 
             {/* Decisiones Tomadas */}
-            <div style={{ marginBottom: 32, padding: 24, background: '#f0fdf4', borderRadius: 12, borderLeft: '4px solid #10b981' }}>
-              <h3 style={{ fontSize: 20, fontWeight: 600, marginBottom: 16, color: '#10b981', display: 'flex', alignItems: 'center', gap: 8 }}>
+            <div style={{ marginBottom: 32, padding: 24, background: 'var(--success-surface)', borderRadius: 12, borderLeft: '4px solid var(--success)' }}>
+              <h3 style={{ fontSize: 20, fontWeight: 600, marginBottom: 16, color: 'var(--success)', display: 'flex', alignItems: 'center', gap: 8 }}>
                 <CheckCircle2 size={24} />
                 Decisiones Tomadas
               </h3>
-              <ul style={{ fontSize: 16, lineHeight: 1.8, color: '#4a5568', paddingLeft: 20 }}>
+              <ul style={{ fontSize: 16, lineHeight: 1.8, color: 'var(--text-secondary)', paddingLeft: 20 }}>
                 <li><strong>Corregir Filtro de Stock:</strong> Implementar lógica viceversa para mostrar productos sin existencia</li>
                 <li><strong>Eliminar Columna Remanente:</strong> Quitar columna si no tiene propósito claro o documentar su función</li>
                 <li><strong>Agregar Totales en Reportes:</strong> Incluir resumen consolidado en parte inferior de la vista</li>
@@ -150,23 +151,23 @@ export default function ReunionesPage() {
             {/* Acciones Pendientes */}
             <div style={{ marginBottom: 32 }}>
               <h3 style={{ fontSize: 20, fontWeight: 600, marginBottom: 16, display: 'flex', alignItems: 'center', gap: 8 }}>
-                <AlertCircle size={24} color="#f59e0b" />
+                <AlertCircle size={24} color="var(--warning)" />
                 Acciones Pendientes
               </h3>
 
               {/* Para Equipo de Desarrollo */}
-              <Card style={{ marginBottom: 16, padding: 20, background: '#eff6ff', border: '1px solid #3b82f6' }}>
-                <h4 style={{ fontSize: 18, fontWeight: 600, marginBottom: 12, color: '#1e40af', display: 'flex', alignItems: 'center', gap: 8 }}>
+              <Card style={{ marginBottom: 16, padding: 20, background: 'var(--info-surface)', border: '1px solid color-mix(in srgb, var(--info) 32%, var(--border))' }}>
+                <h4 style={{ fontSize: 18, fontWeight: 600, marginBottom: 12, color: 'var(--info)', display: 'flex', alignItems: 'center', gap: 8 }}>
                   🔧 Para Equipo: Mejoras en Inventario y Reportes
                 </h4>
-                <p style={{ fontSize: 14, color: '#1e3a8a', marginBottom: 16 }}>
+                <p style={{ fontSize: 14, color: 'var(--text-secondary)', marginBottom: 16 }}>
                   Implementar las mejoras identificadas en la reunión para optimizar la experiencia del usuario.
                 </p>
-                <div style={{ background: 'white', padding: 16, borderRadius: 8, marginBottom: 12 }}>
-                  <h5 style={{ fontSize: 14, fontWeight: 600, marginBottom: 8, color: '#1a202c' }}>
+                <div style={{ background: 'var(--panel)', padding: 16, borderRadius: 8, marginBottom: 12 }}>
+                  <h5 style={{ fontSize: 14, fontWeight: 600, marginBottom: 8, color: 'var(--text)' }}>
                     📝 Tareas Específicas:
                   </h5>
-                  <ol style={{ fontSize: 14, lineHeight: 1.8, color: '#4a5568', paddingLeft: 20, margin: 0 }}>
+                  <ol style={{ fontSize: 14, lineHeight: 1.8, color: 'var(--text-secondary)', paddingLeft: 20, margin: 0 }}>
                     <li><strong>Módulo de Inventario:</strong> Corregir filtro de existencias para funcionar de forma viceversa</li>
                     <li><strong>Columna Remanente:</strong> Evaluar y eliminar si no es necesaria</li>
                     <li><strong>Reportes - Totales:</strong> Agregar sección de totales en parte inferior</li>
@@ -174,18 +175,18 @@ export default function ReunionesPage() {
                     <li><strong>UX General:</strong> Implementar barras de progreso y mejoras visuales</li>
                   </ol>
                 </div>
-                <div style={{ padding: 12, background: '#dbeafe', borderRadius: 6, fontSize: 13, color: '#1e3a8a' }}>
+                <div style={{ padding: 12, background: 'var(--info-surface)', borderRadius: 6, fontSize: 13, color: 'var(--info)' }}>
                   <strong>💡 Prioridad:</strong> Alta - Estas mejoras impactan directamente el uso diario del sistema.
                 </div>
               </Card>
             </div>
 
             {/* Próximos Pasos */}
-            <div style={{ padding: 24, background: '#f8f9ff', borderRadius: 12, borderLeft: '4px solid #f59e0b' }}>
-              <h3 style={{ fontSize: 20, fontWeight: 600, marginBottom: 16, color: '#f59e0b' }}>
+            <div style={{ padding: 24, background: 'var(--warning-surface)', borderRadius: 12, borderLeft: '4px solid var(--warning)' }}>
+              <h3 style={{ fontSize: 20, fontWeight: 600, marginBottom: 16, color: 'var(--warning)' }}>
                 🚀 Próximos Pasos
               </h3>
-              <ol style={{ fontSize: 16, lineHeight: 1.8, color: '#4a5568', paddingLeft: 20, margin: 0 }}>
+              <ol style={{ fontSize: 16, lineHeight: 1.8, color: 'var(--text-secondary)', paddingLeft: 20, margin: 0 }}>
                 <li>Implementar corrección del filtro de existencias (función viceversa)</li>
                 <li>Evaluar y eliminar columna remanente del módulo de inventario</li>
                 <li>Agregar sección de totales en módulo de reportes</li>
@@ -198,9 +199,9 @@ export default function ReunionesPage() {
         </Card>
 
         {/* Reunión Principal */}
-        <Card style={{ marginBottom: 32, background: 'white', borderRadius: 16, overflow: 'hidden' }}>
+        <Card className="reuniones-page-card" style={{ marginBottom: 24, background: 'var(--card-surface-gradient)', borderRadius: 12, overflow: 'hidden' }}>
           {/* Header de la Reunión */}
-          <div style={{ background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)', padding: 32, color: 'white' }}>
+          <div className="reuniones-card-hero" style={{ background: 'var(--brand-button-gradient)', padding: 28, color: 'white' }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 16 }}>
               <Calendar size={32} />
               <div>
@@ -220,20 +221,20 @@ export default function ReunionesPage() {
               </div>
             </div>
             <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
-              <Badge style={{ background: 'rgba(255,255,255,0.2)', color: 'white', padding: '6px 12px' }}>
+              <Badge style={{ background: 'var(--success-surface)', color: 'var(--success)', border: '1px solid color-mix(in srgb, var(--success) 30%, var(--border))', padding: '6px 12px' }}>
                 ✅ Completada
               </Badge>
-              <Badge style={{ background: 'rgba(255,255,255,0.2)', color: 'white', padding: '6px 12px' }}>
+              <Badge style={{ background: 'var(--success-surface)', color: 'var(--success)', border: '1px solid color-mix(in srgb, var(--success) 30%, var(--border))', padding: '6px 12px' }}>
                 🎯 MVP Aprobado
               </Badge>
             </div>
           </div>
 
-          <div style={{ padding: 32 }}>
+          <div className="reuniones-card-content" style={{ padding: 32 }}>
             {/* Participantes */}
             <div style={{ marginBottom: 32 }}>
               <h3 style={{ fontSize: 20, fontWeight: 600, marginBottom: 16, display: 'flex', alignItems: 'center', gap: 8 }}>
-                <Users size={24} color="#667eea" />
+                <Users size={24} color="var(--info)" />
                 Participantes
               </h3>
               <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
@@ -244,15 +245,15 @@ export default function ReunionesPage() {
             </div>
 
             {/* Resumen Ejecutivo */}
-            <div style={{ marginBottom: 32, padding: 24, background: '#f8f9ff', borderRadius: 12, borderLeft: '4px solid #667eea' }}>
-              <h3 style={{ fontSize: 20, fontWeight: 600, marginBottom: 16, color: '#667eea' }}>
+            <div style={{ marginBottom: 32, padding: 24, background: 'var(--info-surface)', borderRadius: 12, borderLeft: '4px solid var(--info)' }}>
+              <h3 style={{ fontSize: 20, fontWeight: 600, marginBottom: 16, color: 'var(--info)' }}>
                 📋 Resumen Ejecutivo
               </h3>
-              <p style={{ fontSize: 16, lineHeight: 1.6, color: '#4a5568', marginBottom: 12 }}>
+              <p style={{ fontSize: 16, lineHeight: 1.6, color: 'var(--text-secondary)', marginBottom: 12 }}>
                 Se presentó y validó el <strong>MVP (Producto Mínimo Viable)</strong> del sistema ERP para Solis Comercial.
                 El cliente aprobó la interfaz visual y funcionalidades presentadas, confirmando que cumple con las expectativas iniciales.
               </p>
-              <p style={{ fontSize: 16, lineHeight: 1.6, color: '#4a5568' }}>
+              <p style={{ fontSize: 16, lineHeight: 1.6, color: 'var(--text-secondary)' }}>
                 Se definieron los <strong>siguientes pasos técnicos</strong> para integración con Zoho Creator, configuración de
                 agentes de IA con SalesIQ, y mejoras en la gestión de inventario en tiempo real.
               </p>
@@ -261,7 +262,7 @@ export default function ReunionesPage() {
             {/* Puntos Clave Discutidos */}
             <div style={{ marginBottom: 32 }}>
               <h3 style={{ fontSize: 20, fontWeight: 600, marginBottom: 16, display: 'flex', alignItems: 'center', gap: 8 }}>
-                <FileText size={24} color="#667eea" />
+                <FileText size={24} color="var(--info)" />
                 Puntos Clave Discutidos
               </h3>
               <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
@@ -292,17 +293,17 @@ export default function ReunionesPage() {
                     status: 'action-required'
                   }
                 ].map((punto, idx) => (
-                  <div key={idx} style={{ padding: 20, background: 'white', border: '1px solid #e2e8f0', borderRadius: 8 }}>
+                  <div key={idx} className="reuniones-point-card" style={{ padding: 20, background: 'var(--panel)', border: '1px solid var(--border)', borderRadius: 8 }}>
                     <div style={{ display: 'flex', alignItems: 'flex-start', gap: 12 }}>
-                      {punto.status === 'approved' && <CheckCircle2 size={20} color="#10b981" />}
-                      {punto.status === 'action-required' && <AlertCircle size={20} color="#f59e0b" />}
-                      {punto.status === 'pending' && <Clock size={20} color="#6b7280" />}
-                      {punto.status === 'in-progress' && <ArrowRight size={20} color="#667eea" />}
+                      {punto.status === 'approved' && <CheckCircle2 size={20} color="var(--success)" />}
+                      {punto.status === 'action-required' && <AlertCircle size={20} color="var(--warning)" />}
+                      {punto.status === 'pending' && <Clock size={20} color="var(--muted)" />}
+                      {punto.status === 'in-progress' && <ArrowRight size={20} color="var(--info)" />}
                       <div style={{ flex: 1 }}>
-                        <h4 style={{ fontSize: 16, fontWeight: 600, marginBottom: 8, color: '#1a202c' }}>
+                        <h4 style={{ fontSize: 16, fontWeight: 600, marginBottom: 8, color: 'var(--text)' }}>
                           {punto.title}
                         </h4>
-                        <p style={{ fontSize: 14, lineHeight: 1.6, color: '#4a5568', margin: 0 }}>
+                        <p style={{ fontSize: 14, lineHeight: 1.6, color: 'var(--text-secondary)', margin: 0 }}>
                           {punto.content}
                         </p>
                       </div>
@@ -313,12 +314,12 @@ export default function ReunionesPage() {
             </div>
 
             {/* Decisiones Tomadas */}
-            <div style={{ marginBottom: 32, padding: 24, background: '#f0fdf4', borderRadius: 12, borderLeft: '4px solid #10b981' }}>
-              <h3 style={{ fontSize: 20, fontWeight: 600, marginBottom: 16, color: '#10b981', display: 'flex', alignItems: 'center', gap: 8 }}>
+            <div style={{ marginBottom: 32, padding: 24, background: 'var(--success-surface)', borderRadius: 12, borderLeft: '4px solid var(--success)' }}>
+              <h3 style={{ fontSize: 20, fontWeight: 600, marginBottom: 16, color: 'var(--success)', display: 'flex', alignItems: 'center', gap: 8 }}>
                 <CheckCircle2 size={24} />
                 Decisiones Tomadas
               </h3>
-              <ul style={{ fontSize: 16, lineHeight: 1.8, color: '#4a5568', paddingLeft: 20 }}>
+              <ul style={{ fontSize: 16, lineHeight: 1.8, color: 'var(--text-secondary)', paddingLeft: 20 }}>
                 <li><strong>MVP Aprobado:</strong> La interfaz visual y funcionalidades presentadas cumplen con las expectativas</li>
                 <li><strong>Prioridad en Inventario:</strong> Enfocarse primero en módulo de inventario antes que reportes avanzados</li>
                 <li><strong>Mantener SalesIQ:</strong> No migrar a Twilio, optimizar integración actual con SalesIQ</li>
@@ -330,25 +331,25 @@ export default function ReunionesPage() {
             {/* Acciones Pendientes */}
             <div style={{ marginBottom: 32 }}>
               <h3 style={{ fontSize: 20, fontWeight: 600, marginBottom: 16, display: 'flex', alignItems: 'center', gap: 8 }}>
-                <AlertCircle size={24} color="#f59e0b" />
+                <AlertCircle size={24} color="var(--warning)" />
                 Acciones Pendientes
               </h3>
 
               {/* Para Luis - OpenAI */}
-              <Card style={{ marginBottom: 16, padding: 20, background: '#fffbeb', border: '1px solid #fbbf24' }}>
-                <h4 style={{ fontSize: 18, fontWeight: 600, marginBottom: 12, color: '#92400e', display: 'flex', alignItems: 'center', gap: 8 }}>
+              <Card style={{ marginBottom: 16, padding: 20, background: 'var(--warning-surface)', border: '1px solid var(--warning)' }}>
+                <h4 style={{ fontSize: 18, fontWeight: 600, marginBottom: 12, color: 'var(--warning)', display: 'flex', alignItems: 'center', gap: 8 }}>
                   🤖 Para Luis: Habilitar Modelo GPT-4.5+ en OpenAI
                 </h4>
-                <p style={{ fontSize: 14, color: '#78350f', marginBottom: 16 }}>
+                <p style={{ fontSize: 14, color: 'var(--text-secondary)', marginBottom: 16 }}>
                   El modelo actual (GPT-4.0) no soporta interpretación de imágenes, audio ni acciones automatizadas.
                   Se requiere actualizar a GPT-4.5 o superior.
                 </p>
-                <div style={{ background: 'white', padding: 16, borderRadius: 8, marginBottom: 12 }}>
-                  <h5 style={{ fontSize: 14, fontWeight: 600, marginBottom: 8, color: '#1a202c' }}>
+                <div style={{ background: 'var(--panel)', padding: 16, borderRadius: 8, marginBottom: 12 }}>
+                  <h5 style={{ fontSize: 14, fontWeight: 600, marginBottom: 8, color: 'var(--text)' }}>
                     📝 Pasos para Habilitar Modelo 4.5+:
                   </h5>
-                  <ol style={{ fontSize: 14, lineHeight: 1.8, color: '#4a5568', paddingLeft: 20, margin: 0 }}>
-                    <li>Ir a <a href="https://platform.openai.com/" target="_blank" rel="noopener" style={{ color: '#667eea', textDecoration: 'underline' }}>platform.openai.com</a></li>
+                  <ol style={{ fontSize: 14, lineHeight: 1.8, color: 'var(--text-secondary)', paddingLeft: 20, margin: 0 }}>
+                    <li>Ir a <a href="https://platform.openai.com/" target="_blank" rel="noopener" style={{ color: 'var(--info)', textDecoration: 'underline' }}>platform.openai.com</a></li>
                     <li>Iniciar sesión con las credenciales de Solis Comercial</li>
                     <li>Navegar a <strong>Settings → Limits</strong></li>
                     <li>En la sección <strong>Model Access</strong>, verificar modelos disponibles</li>
@@ -363,25 +364,25 @@ export default function ReunionesPage() {
                     <li>Una vez aprobado, actualizar el modelo en la configuración del agente en SalesIQ</li>
                   </ol>
                 </div>
-                <div style={{ padding: 12, background: '#fef3c7', borderRadius: 6, fontSize: 13, color: '#78350f' }}>
+                <div style={{ padding: 12, background: 'var(--warning-surface)', borderRadius: 6, fontSize: 13, color: 'var(--text-secondary)' }}>
                   <strong>💡 Nota:</strong> El costo de GPT-4.5 es aproximadamente 2x el de GPT-4.0. Con el consumo actual
                   (~$3.65/mes), se estima un costo de ~$7-8/mes. Validar presupuesto antes de activar.
                 </div>
               </Card>
 
               {/* Para Equipo - SalesIQ API */}
-              <Card style={{ padding: 20, background: '#eff6ff', border: '1px solid #3b82f6' }}>
-                <h4 style={{ fontSize: 18, fontWeight: 600, marginBottom: 12, color: '#1e40af', display: 'flex', alignItems: 'center', gap: 8 }}>
+              <Card style={{ padding: 20, background: 'var(--info-surface)', border: '1px solid var(--info)' }}>
+                <h4 style={{ fontSize: 18, fontWeight: 600, marginBottom: 12, color: 'var(--info)', display: 'flex', alignItems: 'center', gap: 8 }}>
                   🔌 Para Equipo: Solicitar API REST de SalesIQ
                 </h4>
-                <p style={{ fontSize: 14, color: '#1e3a8a', marginBottom: 16 }}>
+                <p style={{ fontSize: 14, color: 'var(--text-secondary)', marginBottom: 16 }}>
                   Se requiere acceso a la API REST de SalesIQ para conectar el agente de IA con datos de inventario en tiempo real.
                 </p>
-                <div style={{ background: 'white', padding: 16, borderRadius: 8, marginBottom: 12 }}>
-                  <h5 style={{ fontSize: 14, fontWeight: 600, marginBottom: 8, color: '#1a202c' }}>
+                <div style={{ background: 'var(--panel)', padding: 16, borderRadius: 8, marginBottom: 12 }}>
+                  <h5 style={{ fontSize: 14, fontWeight: 600, marginBottom: 8, color: 'var(--text)' }}>
                     📧 Mensaje para Enviar a Soporte de SalesIQ:
                   </h5>
-                  <div style={{ background: '#f8fafc', padding: 16, borderRadius: 6, fontSize: 13, fontFamily: 'monospace', lineHeight: 1.6, color: '#334155', border: '1px solid #cbd5e1' }}>
+                  <div style={{ background: 'var(--panel-2)', padding: 16, borderRadius: 6, fontSize: 13, fontFamily: 'monospace', lineHeight: 1.6, color: 'var(--text-secondary)', border: '1px solid var(--border)' }}>
                     <p style={{ margin: 0, marginBottom: 12 }}><strong>Asunto:</strong> Solicitud de Acceso a API REST - Integración con Sistema de Inventario</p>
                     <p style={{ margin: 0, marginBottom: 8 }}>Estimado equipo de SalesIQ,</p>
                     <p style={{ margin: 0, marginBottom: 8 }}>
@@ -416,7 +417,7 @@ export default function ReunionesPage() {
                       alignItems: 'center',
                       gap: 6,
                       padding: '8px 16px',
-                      background: '#3b82f6',
+                      background: 'var(--info)',
                       color: 'white',
                       borderRadius: 6,
                       textDecoration: 'none',
@@ -436,9 +437,9 @@ export default function ReunionesPage() {
                       alignItems: 'center',
                       gap: 6,
                       padding: '8px 16px',
-                      background: 'white',
-                      color: '#3b82f6',
-                      border: '1px solid #3b82f6',
+                      background: 'var(--panel)',
+                      color: 'var(--info)',
+                      border: '1px solid var(--info)',
                       borderRadius: 6,
                       textDecoration: 'none',
                       fontSize: 14,
@@ -453,11 +454,11 @@ export default function ReunionesPage() {
             </div>
 
             {/* Próximos Pasos */}
-            <div style={{ padding: 24, background: '#f8f9ff', borderRadius: 12, borderLeft: '4px solid #667eea' }}>
-              <h3 style={{ fontSize: 20, fontWeight: 600, marginBottom: 16, color: '#667eea' }}>
+            <div style={{ padding: 24, background: 'var(--info-surface)', borderRadius: 12, borderLeft: '4px solid var(--info)' }}>
+              <h3 style={{ fontSize: 20, fontWeight: 600, marginBottom: 16, color: 'var(--info)' }}>
                 🚀 Próximos Pasos
               </h3>
-              <ol style={{ fontSize: 16, lineHeight: 1.8, color: '#4a5568', paddingLeft: 20, margin: 0 }}>
+              <ol style={{ fontSize: 16, lineHeight: 1.8, color: 'var(--text-secondary)', paddingLeft: 20, margin: 0 }}>
                 <li>Solis Comercial compartirá credenciales de Zoho Creator (Client ID, Secret, Refresh Token)</li>
                 <li>Equipo de desarrollo validará estructura de datos en Zoho Books</li>
                 <li>Se configurará Supabase para rebote de datos (sin costo hasta 10GB)</li>
@@ -470,7 +471,7 @@ export default function ReunionesPage() {
         </Card>
 
         {/* Footer */}
-        <div style={{ textAlign: 'center', color: 'white', opacity: 0.9, fontSize: 14 }}>
+        <div style={{ textAlign: 'center', color: 'var(--muted)', fontSize: 13, padding: '16px 0 4px' }}>
           <p>Solis Comercial ERP - Sistema de Gestión Empresarial</p>
           <p>Desarrollado con ❤️ por el equipo de desarrollo</p>
         </div>

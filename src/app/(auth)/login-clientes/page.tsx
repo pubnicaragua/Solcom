@@ -63,7 +63,7 @@ export default function LoginClientesPage() {
     padding: '12px 14px 12px 42px',
     borderRadius: 10,
     border: '1px solid var(--border)',
-    background: 'rgba(15, 23, 42, 0.8)',
+    background: 'var(--panel-elevated)',
     fontSize: 14,
     color: 'var(--text)',
     outline: 'none',
@@ -93,12 +93,12 @@ export default function LoginClientesPage() {
         <div
           style={{
             padding: '11px 12px',
-            background: 'rgba(239, 68, 68, 0.10)',
+            background: 'var(--danger-surface)',
             border: '1px solid rgba(239, 68, 68, 0.30)',
             borderRadius: 10,
             marginBottom: 14,
             fontSize: 12,
-            color: '#fca5a5',
+            color: 'var(--danger)',
             display: 'flex',
             alignItems: 'center',
             gap: 8,

@@ -172,30 +172,33 @@ export default function Fase2ModulePage() {
   }
 
   return (
-    <div style={{ display: 'grid', gap: 14 }}>
+    <div className="fase2-module-view fase2-detail-view" style={{ display: 'grid', gap: 14 }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
-        <div>
-          <div className="h-title" style={{ fontSize: 'clamp(18px, 5vw, 24px)' }}>{config.title}</div>
-          <div style={{ fontSize: 13, color: 'var(--muted)', marginTop: 4 }}>{config.subtitle}</div>
+        <div className="fase2-page-heading">
+          <div className="system-title-mark" aria-hidden="true"><ClipboardList size={21} /></div>
+          <div>
+            <div className="h-title" style={{ fontSize: 'clamp(18px, 5vw, 24px)' }}>{config.title}</div>
+            <div style={{ fontSize: 13, color: 'var(--muted)', marginTop: 4 }}>{config.subtitle}</div>
+          </div>
         </div>
         <Button variant="secondary" size="sm" onClick={() => router.push('/fase2')}>
           <ArrowLeft size={14} /> Volver a Fase 2
         </Button>
       </div>
 
-      <Card>
-        <div style={{ padding: 20, background: `linear-gradient(135deg, ${config.color} 0%, #1f2937 100%)`, borderRadius: 8 }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8, color: 'white', marginBottom: 8 }}>
+      <Card className="fase2-intro-card">
+        <div style={{ padding: 20, background: `linear-gradient(135deg, color-mix(in srgb, ${config.color} 24%, var(--panel)) 0%, var(--panel-2) 100%)`, border: '1px solid var(--border)', borderRadius: 8 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, color: 'var(--text)', marginBottom: 8 }}>
             <ClipboardList size={18} />
             <strong>Panel operativo del módulo</strong>
           </div>
-          <div style={{ color: 'rgba(255,255,255,0.9)', fontSize: 13 }}>
+          <div style={{ color: 'var(--text-secondary)', fontSize: 13 }}>
             Registra tareas, cambia estados, asigna responsables y controla el avance en tiempo real.
           </div>
         </div>
       </Card>
 
-      <Card>
+      <Card className="fase2-form-card">
         <div style={{ padding: 16, display: 'grid', gap: 10 }}>
           <div style={{ fontSize: 15, fontWeight: 600 }}>Nuevo registro</div>
           <Input placeholder="Título" value={form.title} onChange={(e) => setForm((p) => ({ ...p, title: e.target.value }))} />
@@ -237,7 +240,7 @@ export default function Fase2ModulePage() {
         </div>
       </Card>
 
-      <Card>
+      <Card className="fase2-records-card">
         <div style={{ padding: 16, display: 'grid', gap: 10 }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
             <div style={{ fontSize: 15, fontWeight: 600 }}>Registros del módulo</div>
@@ -251,12 +254,12 @@ export default function Fase2ModulePage() {
           ) : (
             <div style={{ display: 'grid', gap: 8 }}>
               {filteredRecords.map((record) => (
-                <div key={record.id} style={{ border: '1px solid var(--border)', borderRadius: 8, padding: 12, background: 'var(--panel)' }}>
+                <div key={record.id} className="fase2-record-card" style={{ border: '1px solid var(--border)', borderRadius: 8, padding: 12, background: 'var(--panel)' }}>
                   <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8, flexWrap: 'wrap' }}>
                     <div style={{ flex: 1, minWidth: 220 }}>
                       <div style={{ fontWeight: 600 }}>{record.title}</div>
                       <div style={{ fontSize: 12, color: 'var(--muted)' }}>{record.description || 'Sin descripción'}</div>
-                      <div style={{ fontSize: 12, color: '#93c5fd', marginTop: 4 }}>
+                      <div style={{ fontSize: 12, color: 'var(--info)', marginTop: 4 }}>
                         {record.owner_email || 'sin responsable'} · {new Date(record.updated_at).toLocaleString('es-NI')}
                       </div>
                     </div>

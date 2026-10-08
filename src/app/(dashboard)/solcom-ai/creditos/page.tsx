@@ -107,28 +107,31 @@ export default function CreditosPage() {
   const getPricePerCredit = (pkg: CreditPackage) => (pkg.price / getTotalCredits(pkg)).toFixed(4);
 
   return (
-    <div className="p-6 max-w-7xl mx-auto">
+    <div className="solcom-credit-view p-6 max-w-7xl mx-auto">
       {/* Header */}
-      <div className="mb-8">
-        <h1 className="text-3xl font-bold text-gray-900 mb-2">Créditos de IA</h1>
+      <div className="solcom-credit-heading mb-8">
+        <div className="system-title-mark"><Zap size={21} /></div>
+        <div>
+          <h1 className="inventory-title">Créditos de IA</h1>
         <p className="text-gray-600">
           Compra créditos para usar los servicios de IA en Solcom
         </p>
+        </div>
       </div>
 
       {/* Balance Actual */}
-      <div className="bg-gradient-to-r from-blue-500 to-blue-600 rounded-lg p-6 mb-8 text-white">
+      <div className="solcom-credit-balance rounded-lg p-6 mb-8">
         <div className="flex items-center justify-between">
           <div>
-            <p className="text-blue-100 text-sm mb-1">Balance Actual</p>
-            <p className="text-4xl font-bold">
+            <p className="solcom-credit-balance-label text-sm mb-1">Balance Actual</p>
+            <p className="solcom-credit-balance-value text-4xl font-bold">
               {loading ? '...' : balance.toLocaleString()} créditos
             </p>
-            <p className="text-blue-100 text-sm mt-2">
+            <p className="solcom-credit-balance-label text-sm mt-2">
               ≈ ${((balance / 1000) * 0.001).toFixed(2)} USD en uso estimado
             </p>
           </div>
-          <Zap className="w-16 h-16 text-blue-200" />
+          <Zap className="w-16 h-16 solcom-credit-balance-icon" />
         </div>
       </div>
 
@@ -139,23 +142,23 @@ export default function CreditosPage() {
           {CREDIT_PACKAGES.map((pkg) => (
             <div
               key={pkg.id}
-              className={`relative bg-white rounded-lg shadow-md border-2 transition-all hover:shadow-lg ${
-                pkg.popular ? 'border-blue-500' : 'border-gray-200'
+              className={`solcom-credit-package relative rounded-lg shadow-md border-2 transition-all hover:shadow-lg${
+                pkg.popular ? ' is-popular' : ''
               }`}
             >
               {pkg.popular && (
                 <div className="absolute -top-3 left-1/2 transform -translate-x-1/2">
-                  <span className="bg-blue-500 text-white text-xs font-bold px-3 py-1 rounded-full">
+                  <span className="solcom-credit-popular-badge text-xs font-bold px-3 py-1 rounded-full">
                     MÁS POPULAR
                   </span>
                 </div>
               )}
 
               <div className="p-6">
-                <h3 className="text-xl font-bold text-gray-900 mb-2">{pkg.name}</h3>
+                <h3 className="solcom-credit-package-title text-xl font-bold mb-2">{pkg.name}</h3>
                 
                 <div className="mb-4">
-                  <p className="text-3xl font-bold text-gray-900">${pkg.price}</p>
+                  <p className="solcom-credit-package-price text-3xl font-bold">${pkg.price}</p>
                   <p className="text-sm text-gray-500">USD</p>
                 </div>
 
@@ -180,10 +183,8 @@ export default function CreditosPage() {
 
                 <button
                   onClick={() => handleSelectPackage(pkg)}
-                  className={`w-full py-2 px-4 rounded-lg font-semibold transition-colors ${
-                    pkg.popular
-                      ? 'bg-blue-500 text-white hover:bg-blue-600'
-                      : 'bg-gray-100 text-gray-900 hover:bg-gray-200'
+                  className={`solcom-credit-buy-button w-full py-2 px-4 rounded-lg font-semibold transition-colors${
+                    pkg.popular ? ' is-popular' : ''
                   }`}
                 >
                   Comprar Ahora
@@ -195,11 +196,11 @@ export default function CreditosPage() {
       </div>
 
       {/* Información de Uso */}
-      <div className="bg-blue-50 border border-blue-200 rounded-lg p-6">
-        <h3 className="text-lg font-semibold text-blue-900 mb-3">
+      <div className="solcom-credit-info rounded-lg p-6">
+        <h3 className="text-lg font-semibold mb-3">
           ¿Cómo funcionan los créditos?
         </h3>
-        <ul className="space-y-2 text-sm text-blue-800">
+        <ul className="solcom-credit-info-list space-y-2 text-sm">
           <li className="flex items-start">
             <span className="mr-2">•</span>
             <span>Cada consulta al chatbot consume créditos según los tokens usados</span>
@@ -221,10 +222,10 @@ export default function CreditosPage() {
 
       {/* Modal de Pago */}
       {showPaymentModal && selectedPackage && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-lg max-w-md w-full p-6">
+        <div className="solcom-credit-modal-backdrop fixed inset-0 flex items-center justify-center z-50 p-4">
+          <div className="solcom-credit-modal rounded-lg max-w-md w-full p-6">
             <div className="flex items-center justify-between mb-6">
-              <h3 className="text-xl font-bold text-gray-900">Procesar Pago</h3>
+              <h3 className="solcom-credit-modal-title text-xl font-bold">Procesar Pago</h3>
               <button
                 onClick={() => {
                   setShowPaymentModal(false);
@@ -237,7 +238,7 @@ export default function CreditosPage() {
             </div>
 
             <div className="mb-6">
-              <div className="bg-gray-50 rounded-lg p-4 mb-4">
+              <div className="solcom-credit-modal-summary rounded-lg p-4 mb-4">
                 <p className="text-sm text-gray-600 mb-1">Paquete seleccionado</p>
                 <p className="text-2xl font-bold text-gray-900">{selectedPackage.name}</p>
                 <div className="mt-3 space-y-1">
@@ -255,14 +256,14 @@ export default function CreditosPage() {
                 </div>
               </div>
 
-              <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
-                <p className="text-sm text-blue-900 font-semibold mb-2">Monto a pagar</p>
-                <p className="text-3xl font-bold text-blue-900">${selectedPackage.price} USD</p>
+              <div className="solcom-credit-modal-amount rounded-lg p-4">
+                <p className="text-sm font-semibold mb-2">Monto a pagar</p>
+                <p className="text-3xl font-bold">${selectedPackage.price} USD</p>
               </div>
             </div>
 
             {paymentError && (
-              <div className="mb-6 bg-red-50 border border-red-200 rounded-lg p-4">
+              <div className="solcom-credit-payment-error mb-6 rounded-lg p-4">
                 <div className="flex items-start">
                   <AlertCircle className="w-5 h-5 text-red-500 mr-3 flex-shrink-0 mt-0.5" />
                   <div>
@@ -277,7 +278,7 @@ export default function CreditosPage() {
               <button
                 onClick={handleProcessPayment}
                 disabled={processingPayment}
-                className="w-full bg-blue-500 text-white py-3 px-4 rounded-lg font-semibold hover:bg-blue-600 disabled:bg-gray-300 disabled:cursor-not-allowed transition-colors flex items-center justify-center"
+                className="solcom-credit-pay-button w-full py-3 px-4 rounded-lg font-semibold disabled:cursor-not-allowed transition-colors flex items-center justify-center"
               >
                 {processingPayment ? (
                   <>
@@ -297,7 +298,7 @@ export default function CreditosPage() {
                   setShowPaymentModal(false);
                   setPaymentError('');
                 }}
-                className="w-full bg-gray-100 text-gray-700 py-3 px-4 rounded-lg font-semibold hover:bg-gray-200 transition-colors"
+                className="solcom-credit-cancel-button w-full py-3 px-4 rounded-lg font-semibold transition-colors"
               >
                 Cancelar
               </button>

@@ -159,8 +159,8 @@ export default function VentasSyncAdminPage() {
                             gap: 6,
                             padding: '10px 12px',
                             borderRadius: 8,
-                            border: '1px solid rgba(255,255,255,0.12)',
-                            background: 'rgba(255,255,255,0.04)',
+                            border: '1px solid var(--border)',
+                            background: 'var(--surface-hover)',
                             color: 'var(--text)',
                             textDecoration: 'none',
                             fontSize: 13,
@@ -246,7 +246,7 @@ export default function VentasSyncAdminPage() {
                                     const action = inferRetryAction(row);
                                     const retryKey = `${row.document_type}:${row.id}:${action}`;
                                     return (
-                                        <tr key={`${row.document_type}:${row.id}`} style={{ borderBottom: '1px solid rgba(255,255,255,0.06)' }}>
+                                        <tr key={`${row.document_type}:${row.id}`} style={{ borderBottom: '1px solid var(--border)' }}>
                                             <td style={{ padding: '8px 6px' }}>{row.document_type}</td>
                                             <td style={{ padding: '8px 6px', fontWeight: 700 }}>{documentNumber}</td>
                                             <td style={{ padding: '8px 6px' }}>{row.status || '—'}</td>
@@ -317,7 +317,7 @@ export default function VentasSyncAdminPage() {
                                 {(data.delete_sync_issues || []).map((row) => {
                                     const retryKey = `delete:${row.document_type}:${row.document_id}`;
                                     return (
-                                        <tr key={row.id} style={{ borderBottom: '1px solid rgba(255,255,255,0.06)' }}>
+                                        <tr key={row.id} style={{ borderBottom: '1px solid var(--border)' }}>
                                             <td style={{ padding: '8px 6px' }}>{row.document_type}</td>
                                             <td style={{ padding: '8px 6px', fontWeight: 700 }}>{row.document_number || row.document_id}</td>
                                             <td style={{ padding: '8px 6px' }}>{formatDateTime(row.requested_at)}</td>

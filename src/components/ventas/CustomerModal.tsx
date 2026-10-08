@@ -408,13 +408,13 @@ export default function CustomerModal({ isOpen, onClose, onSave, editingCustomer
     return (
         <div style={{
             position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
-            background: 'rgba(0,0,0,0.6)', display: 'flex', alignItems: 'center',
+            background: 'var(--overlay)', display: 'flex', alignItems: 'center',
             justifyContent: 'center', zIndex: 3000, padding: '20px',
             backdropFilter: 'blur(4px)',
         }}>
             <div style={{
                 background: 'var(--card)', borderRadius: '16px', maxWidth: '520px',
-                width: '100%', boxShadow: '0 25px 60px rgba(0,0,0,0.5)',
+                width: '100%', boxShadow: '0 25px 60px var(--shadow)',
                 border: '1px solid var(--border)', animation: 'fadeInUp 0.2s ease',
                 maxHeight: '90vh', display: 'flex', flexDirection: 'column',
                 overflow: 'hidden'
@@ -599,7 +599,7 @@ export default function CustomerModal({ isOpen, onClose, onSave, editingCustomer
                             {typeof window !== 'undefined' && !(window as any).google?.maps && (
                                 <div style={{
                                     position: 'absolute', top: 0, left: 0, right: 0, bottom: 0,
-                                    background: 'rgba(0,0,0,0.4)', display: 'flex', alignItems: 'center',
+                                    background: 'var(--overlay)', display: 'flex', alignItems: 'center',
                                     justifyContent: 'center', color: 'var(--muted)', fontSize: '13px',
                                     zIndex: 1, gap: '8px'
                                 }}>

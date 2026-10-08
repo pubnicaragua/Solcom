@@ -168,7 +168,7 @@ export default function SalesOrderPreview({
             style={{
                 position: 'fixed',
                 inset: 0,
-                background: 'rgba(0,0,0,0.62)',
+                background: 'var(--overlay)',
                 backdropFilter: 'blur(3px)',
                 zIndex: 2100,
                 padding: '24px 16px',
@@ -182,7 +182,7 @@ export default function SalesOrderPreview({
                     background: 'var(--card)',
                     borderRadius: 14,
                     border: '1px solid var(--border)',
-                    boxShadow: '0 24px 48px rgba(0,0,0,0.45)',
+                    boxShadow: '0 24px 48px var(--shadow)',
                     overflow: 'hidden',
                 }}
             >
@@ -472,7 +472,7 @@ export default function SalesOrderPreview({
                                     display: 'grid',
                                     gridTemplateColumns: '1.8fr 110px 120px 100px 130px',
                                     padding: '10px 12px',
-                                    background: 'rgba(255,255,255,0.03)',
+                                    background: 'var(--surface-hover)',
                                     borderBottom: '1px solid var(--border)',
                                     fontSize: 11,
                                     color: 'var(--muted)',
@@ -558,7 +558,7 @@ export default function SalesOrderPreview({
                                     padding: '10px 12px',
                                     borderRadius: 8,
                                     border: '1px solid var(--border)',
-                                    background: 'rgba(255,255,255,0.02)',
+                                    background: 'var(--surface-hover)',
                                     fontSize: 12,
                                     color: 'var(--muted)',
                                 }}

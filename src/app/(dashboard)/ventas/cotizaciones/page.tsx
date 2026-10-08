@@ -2,6 +2,7 @@
 
 import Link from 'next/link';
 import { useEffect, useState } from 'react';
+import type { CSSProperties } from 'react';
 import {
   FileText,
   Plus,
@@ -62,12 +63,12 @@ const STATUS_TABS: Array<{ key: 'todas' | QuoteStatus; label: string }> = [
 ];
 
 const statusConfig: Record<QuoteStatus, { bg: string; text: string; label: string }> = {
-  borrador: { bg: 'rgba(107,114,128,0.15)', text: '#9CA3AF', label: 'Borrador' },
-  enviada: { bg: 'rgba(59,130,246,0.15)', text: '#60A5FA', label: 'Enviada' },
-  aceptada: { bg: 'rgba(16,185,129,0.15)', text: '#34D399', label: 'Aceptada' },
-  rechazada: { bg: 'rgba(239,68,68,0.15)', text: '#F87171', label: 'Rechazada' },
-  vencida: { bg: 'rgba(245,158,11,0.15)', text: '#FBBF24', label: 'Vencida' },
-  convertida: { bg: 'rgba(168,85,247,0.18)', text: '#C084FC', label: 'Convertida' },
+  borrador: { bg: 'var(--surface-hover)', text: 'var(--muted)', label: 'Borrador' },
+  enviada: { bg: 'var(--info-surface)', text: 'var(--info)', label: 'Enviada' },
+  aceptada: { bg: 'var(--success-surface)', text: 'var(--success)', label: 'Aceptada' },
+  rechazada: { bg: 'var(--danger-surface)', text: 'var(--danger)', label: 'Rechazada' },
+  vencida: { bg: 'var(--warning-surface)', text: 'var(--warning)', label: 'Vencida' },
+  convertida: { bg: 'var(--violet-surface)', text: 'var(--kpi-violet)', label: 'Convertida' },
 };
 
 export default function CotizacionesPage() {
@@ -213,34 +214,34 @@ export default function CotizacionesPage() {
       label: 'Total Cotizado',
       value: `$${kpis.totalCotizado.toLocaleString('en-US', { minimumFractionDigits: 2 })}`,
       icon: FileText,
-      color: '#3B82F6',
-      bg: 'rgba(59,130,246,0.08)',
+      color: 'var(--info)',
+      bg: 'var(--info-surface)',
     },
     {
       label: 'Enviadas',
       value: String(kpis.enviadas),
       icon: Clock,
-      color: '#60A5FA',
-      bg: 'rgba(59,130,246,0.08)',
+      color: 'var(--info)',
+      bg: 'var(--info-surface)',
     },
     {
       label: 'Aceptadas',
       value: String(kpis.aceptadas),
       icon: CheckCircle,
-      color: '#10B981',
-      bg: 'rgba(16,185,129,0.08)',
+      color: 'var(--success)',
+      bg: 'var(--success-surface)',
     },
     {
       label: 'Convertidas',
       value: String(kpis.convertidas),
       icon: ArrowRightLeft,
-      color: '#A855F7',
-      bg: 'rgba(168,85,247,0.1)',
+      color: 'var(--kpi-violet)',
+      bg: 'var(--violet-surface)',
     },
   ];
 
   return (
-    <div style={{ color: 'var(--text)' }}>
+    <div className="sales-design-page" style={{ color: 'var(--text)' }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '24px', flexWrap: 'wrap', gap: '12px' }}>
         <div>
           <div style={{ marginBottom: 8 }}>
@@ -249,7 +250,7 @@ export default function CotizacionesPage() {
             </Link>
           </div>
           <h1 className="h-title" style={{ fontWeight: 700, marginBottom: 4, display: 'flex', alignItems: 'center', gap: 10 }}>
-            <FileText size={24} style={{ color: '#3B82F6' }} />
+            <span className="inventory-title-mark"><FileText size={21} /></span>
             Cotizaciones
           </h1>
           <p style={{ fontSize: 14, color: 'var(--muted)' }}>
@@ -264,34 +265,40 @@ export default function CotizacionesPage() {
           }}
           style={{
             display: 'inline-flex', alignItems: 'center', gap: 8,
-            padding: '11px 20px', background: '#3B82F6', color: 'white',
+            padding: '11px 20px', background: 'var(--brand-button-gradient)', color: 'white',
             border: 'none', borderRadius: 10, fontSize: 14, fontWeight: 700,
-            cursor: 'pointer',
+            cursor: 'pointer', boxShadow: '0 5px 16px var(--sidebar-active-glow)',
           }}
         >
           <Plus size={17} /> Nueva Cotización
         </button>
       </div>
 
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 16, marginBottom: 24 }}>
+      <div className="sales-design-kpi-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 16, marginBottom: 24 }}>
         {kpiCards.map((kpi, index) => {
           const Icon = kpi.icon;
           return (
             <div
               key={index}
+              className="sales-design-kpi"
               style={{
-                background: 'var(--card)',
                 padding: 18,
                 borderRadius: 12,
-                border: '1px solid var(--border)',
-              }}
+                '--kpi-accent': kpi.color,
+                '--kpi-glow': `color-mix(in srgb, ${kpi.color} 38%, transparent)`,
+                background: `radial-gradient(ellipse at 0% 100%, color-mix(in srgb, ${kpi.color} 24%, transparent) 0%, transparent 62%), linear-gradient(135deg, color-mix(in srgb, ${kpi.color} 12%, var(--card)) 0%, var(--card) 56%, color-mix(in srgb, ${kpi.color} 6%, var(--panel)) 100%)`,
+                border: `1px solid color-mix(in srgb, ${kpi.color} 42%, var(--border))`,
+                boxShadow: `0 2px 8px var(--shadow), inset 0 1px 0 color-mix(in srgb, ${kpi.color} 16%, transparent)`,
+              } as CSSProperties}
             >
               <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 10 }}>
                 <div style={{
                   width: 36,
                   height: 36,
                   borderRadius: 10,
-                  background: kpi.bg,
+                  background: `linear-gradient(135deg, color-mix(in srgb, ${kpi.color} 24%, transparent), color-mix(in srgb, ${kpi.color} 8%, transparent))`,
+                  border: `1px solid color-mix(in srgb, ${kpi.color} 78%, transparent)`,
+                  boxShadow: `inset 0 0 12px color-mix(in srgb, ${kpi.color} 12%, transparent), 0 0 16px color-mix(in srgb, ${kpi.color} 16%, transparent)`,
                   display: 'inline-flex',
                   alignItems: 'center',
                   justifyContent: 'center',
@@ -300,13 +307,13 @@ export default function CotizacionesPage() {
                 </div>
                 <div style={{ color: 'var(--muted)', fontSize: 13, fontWeight: 600 }}>{kpi.label}</div>
               </div>
-              <div style={{ fontSize: 26, fontWeight: 800 }}>{kpi.value}</div>
+              <div style={{ fontSize: 26, fontWeight: 800, color: kpi.color }}>{kpi.value}</div>
             </div>
           );
         })}
       </div>
 
-      <div style={{
+      <div className="sales-design-panel sales-design-tabs" style={{
         display: 'flex', gap: 4, marginBottom: 16,
         background: 'var(--card)', padding: 4, borderRadius: 12,
         border: '1px solid var(--border)', overflowX: 'auto',
@@ -325,11 +332,12 @@ export default function CotizacionesPage() {
                 borderRadius: 8,
                 padding: '10px 15px',
                 cursor: 'pointer',
-                background: isActive ? '#3B82F6' : 'transparent',
+                background: isActive ? 'var(--brand-button-gradient)' : 'transparent',
                 color: isActive ? 'white' : 'var(--muted)',
                 fontSize: 13,
                 fontWeight: isActive ? 700 : 600,
                 whiteSpace: 'nowrap',
+                boxShadow: isActive ? '0 3px 10px var(--sidebar-active-glow)' : 'none',
               }}
             >
               {tab.label}
@@ -338,7 +346,7 @@ export default function CotizacionesPage() {
         })}
       </div>
 
-      <div style={{
+      <div className="sales-design-panel" style={{
         background: 'var(--card)', padding: '14px 16px', borderRadius: 12,
         marginBottom: 16, border: '1px solid var(--border)',
         display: 'flex', gap: 10, alignItems: 'flex-end', flexWrap: 'wrap',
@@ -404,9 +412,9 @@ export default function CotizacionesPage() {
       {error && (
         <div style={{
           marginBottom: 14,
-          border: '1px solid rgba(239,68,68,0.45)',
-          background: 'rgba(127,29,29,0.3)',
-          color: '#FCA5A5',
+          border: '1px solid color-mix(in srgb, var(--danger) 40%, var(--border))',
+          background: 'var(--danger-surface)',
+          color: 'var(--danger)',
           borderRadius: 10,
           padding: '10px 12px',
           fontSize: 13,
@@ -416,13 +424,14 @@ export default function CotizacionesPage() {
         </div>
       )}
 
-      <div style={{ background: 'var(--card)', borderRadius: 12, border: '1px solid var(--border)', overflow: 'hidden' }}>
-        <div style={{
+      <div className="sales-design-table-card" style={{ background: 'var(--card)', borderRadius: 12, border: '1px solid var(--border)', overflow: 'hidden' }}>
+        <div className="sales-design-table-head" style={{
           display: 'grid',
           gridTemplateColumns: '110px 1.2fr 150px 120px 140px 220px',
           padding: '13px 16px',
           borderBottom: '1px solid var(--border)',
-          background: 'rgba(255,255,255,0.03)',
+          background: 'var(--table-header-bg)',
+          borderColor: 'var(--table-header-rule)',
         }}>
           {['Fecha', 'Cliente', 'Número', 'Estado', 'Total', 'Acciones'].map((header, index) => (
             <div
@@ -430,7 +439,7 @@ export default function CotizacionesPage() {
               style={{
                 fontSize: 11,
                 fontWeight: 700,
-                color: 'var(--muted)',
+                color: 'var(--table-header-text)',
                 textTransform: 'uppercase',
                 letterSpacing: 0.5,
                 textAlign: index === 4 ? 'right' : 'left',
@@ -460,6 +469,7 @@ export default function CotizacionesPage() {
             return (
               <div
                 key={quote.id}
+                className="sales-design-list-row"
                 style={{
                   display: 'grid',
                   gridTemplateColumns: '110px 1.2fr 150px 120px 140px 220px',
@@ -479,7 +489,7 @@ export default function CotizacionesPage() {
                   )}
                 </div>
 
-                <div style={{ marginRight: '10px', fontSize: 13, fontWeight: 700, color: '#60A5FA', display: 'flex', alignItems: 'center', gap: 6 }}>
+                <div style={{ marginRight: '10px', fontSize: 13, fontWeight: 700, color: 'var(--info)', display: 'flex', alignItems: 'center', gap: 6 }}>
                   {quote.quote_number}
                   {quote.source === 'inventory_cart' && (
                     <span
@@ -488,8 +498,8 @@ export default function CotizacionesPage() {
                         fontSize: 10,
                         padding: '2px 6px',
                         borderRadius: 6,
-                        background: 'rgba(16,185,129,0.15)',
-                        color: '#34d399',
+                        background: 'var(--success-surface)',
+                        color: 'var(--success)',
                         fontWeight: 700,
                         whiteSpace: 'nowrap',
                       }}
@@ -507,9 +517,9 @@ export default function CotizacionesPage() {
                     style={{
                       borderRadius: 8,
                       border: '1px solid var(--border)',
-                      background: sc.bg,
+                      backgroundColor: sc.bg,
                       color: sc.text,
-                      padding: '5px 8px',
+                      padding: '5px 28px 5px 8px',
                       fontSize: 12,
                       fontWeight: 700,
                       cursor: quote.status === 'convertida' ? 'not-allowed' : 'pointer',
@@ -534,9 +544,9 @@ export default function CotizacionesPage() {
                     title="Ver cotización"
                     style={{
                       width: 32, height: 32, borderRadius: 7,
-                      border: '1px solid rgba(96,165,250,0.4)',
-                      background: 'rgba(59,130,246,0.12)',
-                      color: '#60A5FA',
+                      border: '1px solid color-mix(in srgb, var(--info) 40%, var(--border))',
+                      background: 'var(--info-surface)',
+                      color: 'var(--info)',
                       display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
                       cursor: 'pointer',
                     }}
@@ -549,7 +559,7 @@ export default function CotizacionesPage() {
                     style={{
                       width: 32, height: 32, borderRadius: 7,
                       border: '1px solid var(--border)',
-                      background: 'rgba(255,255,255,0.04)',
+                      background: 'var(--surface-hover)',
                       color: 'var(--muted)',
                       display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
                       cursor: 'pointer',
@@ -565,9 +575,9 @@ export default function CotizacionesPage() {
                       title={quote.status === 'convertida' ? 'Ya convertida' : 'Convertir a factura'}
                       style={{
                         width: 32, height: 32, borderRadius: 7,
-                        border: '1px solid rgba(168,85,247,0.5)',
-                        background: quote.status === 'convertida' ? 'rgba(168,85,247,0.1)' : 'rgba(168,85,247,0.2)',
-                        color: '#C084FC',
+                        border: '1px solid color-mix(in srgb, var(--kpi-violet) 45%, var(--border))',
+                        background: 'var(--violet-surface)',
+                        color: 'var(--kpi-violet)',
                         display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
                         cursor: quote.status === 'convertida' ? 'not-allowed' : 'pointer',
                         opacity: quote.status === 'convertida' ? 0.65 : 1,
@@ -583,9 +593,9 @@ export default function CotizacionesPage() {
                     title={quote.status === 'convertida' ? 'No se puede eliminar convertida' : 'Eliminar'}
                     style={{
                       width: 32, height: 32, borderRadius: 7,
-                      border: '1px solid rgba(239,68,68,0.35)',
-                      background: 'rgba(239,68,68,0.12)',
-                      color: '#F87171',
+                      border: '1px solid color-mix(in srgb, var(--danger) 35%, var(--border))',
+                      background: 'var(--danger-surface)',
+                      color: 'var(--danger)',
                       display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
                       cursor: quote.status === 'convertida' ? 'not-allowed' : 'pointer',
                       opacity: quote.status === 'convertida' ? 0.5 : 1,

@@ -50,7 +50,7 @@ function DashboardContent({ children }: { children: React.ReactNode }) {
           overflow-x: hidden;
           -webkit-overflow-scrolling: touch;
           padding: 24px;
-          background: var(--background);
+          background: var(--page-surface-gradient);
         }
 
         /* Tablet */

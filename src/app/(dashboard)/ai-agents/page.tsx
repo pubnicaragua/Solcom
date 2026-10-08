@@ -248,12 +248,15 @@ export default function AIAgentsPage() {
   }
 
   return (
-    <div style={{ display: 'grid', gap: 14 }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-        <div>
-          <div className="h-title">Agentes IA</div>
-          <div style={{ fontSize: 14, color: 'var(--muted)', marginTop: 4 }}>
-            Prueba los agentes de inteligencia artificial en tiempo real
+    <div className="ai-agents-view" style={{ display: 'grid', gap: 18 }}>
+      <div className="ai-agents-page-heading" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+          <div className="system-title-mark"><Bot size={21} /></div>
+          <div>
+            <div className="inventory-title">Agentes IA</div>
+            <div style={{ fontSize: 14, color: 'var(--muted)', marginTop: 4 }}>
+              Prueba los agentes de inteligencia artificial en tiempo real
+            </div>
           </div>
         </div>
         <Badge variant="success" size="sm">
@@ -262,7 +265,7 @@ export default function AIAgentsPage() {
         </Badge>
       </div>
 
-      <div style={{ display: 'grid', gridTemplateColumns: '350px 1fr', gap: 14, height: 'calc(100vh - 200px)' }}>
+      <div className="ai-agents-workspace" style={{ height: 'calc(100vh - 200px)' }}>
         <div style={{ display: 'grid', gap: 14, alignContent: 'start', overflowY: 'auto' }}>
           <Card>
             <div style={{ padding: 8 }}>
@@ -276,12 +279,13 @@ export default function AIAgentsPage() {
                   return (
                     <div
                       key={agent.id}
+                      className={`ai-agent-option${isSelected ? ' is-selected' : ''}${agent.status !== 'active' ? ' is-inactive' : ''}`}
                       onClick={() => agent.status === 'active' && handleSelectAgent(agent)}
                       style={{
                         padding: 12,
-                        borderRadius: 6,
+                        borderRadius: 12,
                         border: `1px solid ${isSelected ? agent.color : 'var(--border)'}`,
-                        background: isSelected ? `${agent.color}10` : 'var(--panel)',
+                        background: `radial-gradient(circle at 100% 0%, color-mix(in srgb, ${agent.color} ${isSelected ? 18 : 8}%, transparent), transparent 48%), var(--card-surface-gradient)`,
                         cursor: agent.status === 'active' ? 'pointer' : 'not-allowed',
                         opacity: agent.status === 'inactive' ? 0.5 : 1,
                         transition: 'all 0.2s',
@@ -293,7 +297,7 @@ export default function AIAgentsPage() {
                             width: 32,
                             height: 32,
                             borderRadius: 6,
-                            background: `${agent.color}20`,
+                            background: `color-mix(in srgb, ${agent.color} 12%, transparent)`,
                             display: 'flex',
                             alignItems: 'center',
                             justifyContent: 'center',
@@ -346,7 +350,7 @@ export default function AIAgentsPage() {
           {selectedAgent?.id === 'sales-analyst' && (
             <Card>
               <div style={{ padding: 12 }}>
-                <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 8, color: '#06B6D4' }}>
+                <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 8, color: 'var(--info)' }}>
                   📊 Consultas de Ventas
                 </div>
                 <div style={{ display: 'grid', gap: 6, fontSize: 12, color: 'var(--muted)' }}>
@@ -366,7 +370,7 @@ export default function AIAgentsPage() {
         <Card style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
           {selectedAgent ? (
             <>
-              <div style={{ 
+              <div className="ai-agent-chat-header" style={{
                 padding: 16, 
                 borderBottom: '1px solid var(--border)',
                 display: 'flex',
@@ -378,7 +382,7 @@ export default function AIAgentsPage() {
                     width: 40,
                     height: 40,
                     borderRadius: 8,
-                    background: `${selectedAgent.color}20`,
+                    background: `color-mix(in srgb, ${selectedAgent.color} 12%, transparent)`,
                     display: 'flex',
                     alignItems: 'center',
                     justifyContent: 'center',
@@ -509,11 +513,11 @@ export default function AIAgentsPage() {
           </div>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: 12 }}>
             {AGENTS.filter(a => a.status === 'active').map((agent) => (
-              <div key={agent.id} style={{ 
+              <div key={agent.id} className="ai-agent-usage-card" style={{
                 padding: 12, 
-                background: 'var(--panel)', 
-                borderRadius: 6,
-                border: '1px solid var(--border)',
+                background: `radial-gradient(circle at 100% 0%, color-mix(in srgb, ${agent.color} 18%, transparent), transparent 45%), var(--card-surface-gradient)`,
+                borderRadius: 12,
+                border: `1px solid color-mix(in srgb, ${agent.color} 28%, var(--border))`,
               }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
                   {(() => {
@@ -534,7 +538,7 @@ export default function AIAgentsPage() {
         </div>
       </Card>
 
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 }}>
+      <div className="ai-agents-integration-grid">
         <Card>
           <div style={{ padding: 16 }}>
             <h2 style={{ fontSize: '1.125rem', fontWeight: 600, marginBottom: '0.75rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
@@ -562,7 +566,7 @@ export default function AIAgentsPage() {
 
             <div style={{ fontSize: 12, fontWeight: 600, marginBottom: 8 }}>Request Body:</div>
             <pre style={{ 
-              background: '#0a1929', 
+              background: 'var(--background)',
               padding: 12, 
               borderRadius: 6, 
               fontSize: 11,
@@ -577,7 +581,7 @@ export default function AIAgentsPage() {
 
             <div style={{ fontSize: 12, fontWeight: 600, marginTop: 12, marginBottom: 8 }}>Response:</div>
             <pre style={{ 
-              background: '#0a1929', 
+              background: 'var(--background)',
               padding: 12, 
               borderRadius: 6, 
               fontSize: 11,
@@ -641,14 +645,12 @@ export default function AIAgentsPage() {
               />
             </div>
 
-            <div style={{ 
+            <div className="ai-agents-doc-note" style={{
               marginTop: 16, 
               padding: 12, 
-              background: '#3B82F610', 
               borderRadius: 6, 
-              border: '1px solid #3B82F6' 
             }}>
-              <div style={{ fontSize: 12, fontWeight: 600, color: '#3B82F6', marginBottom: 4 }}>
+              <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--info)', marginBottom: 4 }}>
                 📚 Documentación Completa
               </div>
               <div style={{ fontSize: 11, color: 'var(--muted)' }}>

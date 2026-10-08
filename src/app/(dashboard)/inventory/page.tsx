@@ -436,10 +436,15 @@ export default function InventoryPage() {
   return (
     <div className="inv-page" style={{ display: 'grid', gap: 14 }}>
       <div className="inv-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 12 }}>
-        <div>
-          <div className="h-title">Inventario Completo</div>
-          <div className="inv-subtitle" style={{ fontSize: 13, color: 'var(--muted)', marginTop: 4 }}>
-            Gestión avanzada de existencias por bodega
+        <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
+          <div className="inventory-title-mark" aria-hidden="true">
+            <Package size={22} strokeWidth={1.9} />
+          </div>
+          <div>
+            <div className="h-title inventory-title">Inventario Completo</div>
+            <div className="inv-subtitle" style={{ fontSize: 13, color: 'var(--muted)', marginTop: 4 }}>
+              Gestión avanzada de existencias por bodega
+            </div>
           </div>
         </div>
         <div className="inv-actions" style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
@@ -467,11 +472,11 @@ export default function InventoryPage() {
                 borderRadius: 10,
                 border: cartMode
                   ? '1.5px solid rgba(16,185,129,0.6)'
-                  : '1.5px solid rgba(255,255,255,0.12)',
+                  : '1.5px solid var(--border)',
                 background: cartMode
                   ? 'linear-gradient(135deg, rgba(16,185,129,0.2) 0%, rgba(5,150,105,0.15) 100%)'
-                  : 'rgba(255,255,255,0.04)',
-                color: cartMode ? '#34d399' : 'var(--muted)',
+                  : 'var(--surface-hover)',
+                color: cartMode ? 'var(--success)' : 'var(--muted)',
                 fontSize: 13,
                 fontWeight: 700,
                 cursor: 'pointer',
@@ -521,7 +526,7 @@ export default function InventoryPage() {
                 borderRadius: 10,
                 border: '1px solid rgba(16,185,129,0.3)',
                 background: 'rgba(16,185,129,0.08)',
-                color: '#34d399',
+                color: 'var(--success)',
                 fontSize: 12,
                 fontWeight: 700,
                 cursor: 'pointer',
@@ -562,7 +567,7 @@ export default function InventoryPage() {
         <Card>
           <div style={{ padding: 14, display: 'grid', gap: 12 }}>
             <div style={{ fontSize: 13, fontWeight: 800, color: 'var(--text)', display: 'flex', alignItems: 'center', gap: 8 }}>
-              <ShoppingCart size={16} color="#34d399" />
+              <ShoppingCart size={16} color="var(--success)" />
               Flujo de ventas desde inventario
             </div>
 
@@ -578,18 +583,18 @@ export default function InventoryPage() {
                     width: '100%',
                     padding: '8px 10px',
                     borderRadius: 8,
-                    border: parentWarehouseId ? '1px solid rgba(16,185,129,0.35)' : '1px solid rgba(255,255,255,0.12)',
-                    background: '#1a1d23',
+                border: parentWarehouseId ? '1px solid rgba(16,185,129,0.35)' : '1px solid var(--border)',
+                background: 'var(--control-bg)',
                     color: 'var(--text)',
                     fontSize: 13,
                     fontWeight: 600,
                   }}
                 >
-                  <option value="" style={{ background: '#1a1d23', color: 'var(--text)' }}>
+                <option value="" style={{ background: 'var(--control-bg)', color: 'var(--text)' }}>
                     {loadingParentWarehouses ? 'Cargando bodegas...' : 'Seleccionar bodega empresarial...'}
                   </option>
                   {parentWarehouses.map((warehouse) => (
-                    <option key={warehouse.id} value={warehouse.id} style={{ background: '#1a1d23', color: 'var(--text)' }}>
+                    <option key={warehouse.id} value={warehouse.id} style={{ background: 'var(--control-bg)', color: 'var(--text)' }}>
                       {warehouse.code} — {warehouse.name}
                     </option>
                   ))}
@@ -623,7 +628,7 @@ export default function InventoryPage() {
                             style={{
                               fontSize: 11,
                               fontWeight: 700,
-                              color: isParent ? '#34d399' : '#93C5FD',
+                              color: isParent ? 'var(--success)' : 'var(--pivot-brand-accent)',
                               border: isParent ? '1px solid rgba(16,185,129,0.45)' : '1px solid rgba(96,165,250,0.35)',
                               background: isParent ? 'rgba(16,185,129,0.18)' : 'rgba(59,130,246,0.12)',
                               padding: '2px 8px',
@@ -663,9 +668,9 @@ export default function InventoryPage() {
                         style={{
                           padding: '7px 10px',
                           borderRadius: 8,
-                          border: active ? '1px solid rgba(16,185,129,0.45)' : '1px solid rgba(255,255,255,0.12)',
-                          background: active ? 'rgba(16,185,129,0.15)' : 'rgba(255,255,255,0.02)',
-                          color: active ? '#34d399' : 'var(--muted)',
+                          border: active ? '1px solid rgba(16,185,129,0.45)' : '1px solid var(--border)',
+                          background: active ? 'rgba(16,185,129,0.15)' : 'var(--surface-hover)',
+                          color: active ? 'var(--success)' : 'var(--muted)',
                           fontSize: 12,
                           fontWeight: 700,
                           cursor: disabled ? 'not-allowed' : 'pointer',
@@ -680,7 +685,7 @@ export default function InventoryPage() {
               </div>
             </div>
 
-            <div style={{ fontSize: 12, color: parentWarehouseId ? '#34d399' : 'var(--muted)' }}>
+            <div style={{ fontSize: 12, color: parentWarehouseId ? 'var(--success)' : 'var(--muted)' }}>
               {parentWarehouseId
                 ? 'La tabla pivot y el carrito trabajan con la familia completa: bodega padre + almacenes hijos.'
                 : 'Selecciona la bodega padre para habilitar el carrito y evitar ventas fuera de su familia de almacenes.'}
@@ -690,9 +695,9 @@ export default function InventoryPage() {
               <div style={{
                 padding: '8px 10px',
                 borderRadius: 8,
-                border: '1px solid rgba(239,68,68,0.4)',
-                background: 'rgba(127,29,29,0.3)',
-                color: '#FCA5A5',
+                border: '1px solid var(--danger)',
+                background: 'var(--danger-surface)',
+                color: 'var(--danger)',
                 fontSize: 12,
                 fontWeight: 700,
               }}>
@@ -742,7 +747,7 @@ export default function InventoryPage() {
                   position: 'absolute',
                   left: 12,
                   top: 10,
-                  color: '#6B7280'
+                  color: 'var(--muted)'
                 }}
               />
               <Input
@@ -873,7 +878,7 @@ export default function InventoryPage() {
       {/* Acciones Masivas */}
       {selectedItems.length > 0 && (
         <Card>
-          <div style={{ padding: 12, display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: 'var(--brand-primary)10', flexWrap: 'wrap', gap: 8 }}>
+          <div style={{ padding: 12, display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: 'var(--brand-surface)', flexWrap: 'wrap', gap: 8 }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
               <Badge variant="success" size="sm">
                 {selectedItems.length} seleccionados
@@ -997,7 +1002,7 @@ export default function InventoryPage() {
             color: 'white',
             fontSize: 13,
             fontWeight: 700,
-            boxShadow: '0 8px 32px rgba(16,185,129,0.35), 0 2px 8px rgba(0,0,0,0.3)',
+            boxShadow: '0 8px 32px rgba(16,185,129,0.35), 0 2px 8px var(--shadow)',
             animation: 'toastSlideUp 0.35s ease-out',
             whiteSpace: 'nowrap',
             maxWidth: '90vw',
@@ -1010,7 +1015,7 @@ export default function InventoryPage() {
             width: 22,
             height: 22,
             borderRadius: '50%',
-            background: 'rgba(255,255,255,0.25)',
+            background: 'var(--surface-hover)',
             display: 'inline-flex',
             alignItems: 'center',
             justifyContent: 'center',
@@ -1024,7 +1029,7 @@ export default function InventoryPage() {
             {cartToast.name}
           </span>
           <span style={{
-            background: 'rgba(255,255,255,0.2)',
+            background: 'var(--surface-hover)',
             padding: '2px 8px',
             borderRadius: 6,
             fontSize: 12,
@@ -1098,7 +1103,7 @@ export default function InventoryPage() {
           style={{
             position: 'fixed',
             inset: 0,
-            background: 'rgba(0,0,0,0.6)',
+            background: 'var(--overlay)',
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
@@ -1116,7 +1121,7 @@ export default function InventoryPage() {
               maxHeight: '90vh',
               overflow: 'auto',
               padding: 32,
-              boxShadow: '0 20px 60px rgba(0,0,0,0.4)',
+              boxShadow: '0 20px 60px var(--shadow)',
             }}
             onClick={(e) => e.stopPropagation()}
           >
@@ -1217,10 +1222,10 @@ export default function InventoryPage() {
               </div>
             </div>
 
-            <div style={{ marginBottom: 24, padding: 20, background: 'rgba(59, 130, 246, 0.08)', borderRadius: 12, border: '1px solid rgba(59, 130, 246, 0.2)' }}>
+            <div style={{ marginBottom: 24, padding: 20, background: 'var(--info-surface)', borderRadius: 12, border: '1px solid var(--info)' }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 12 }}>
-                <Search size={18} color="#3b82f6" />
-                <h3 style={{ fontSize: 14, fontWeight: 600, margin: 0, color: '#3b82f6' }}>Ejemplo de Fila</h3>
+                <Search size={18} color="var(--info)" />
+                <h3 style={{ fontSize: 14, fontWeight: 600, margin: 0, color: 'var(--info)' }}>Ejemplo de Fila</h3>
               </div>
               <div style={{
                 fontSize: 12,

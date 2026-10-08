@@ -259,14 +259,14 @@ export default function SolcomAIPage() {
 
   // Desglose por tipo de solicitud
   const REQUEST_TYPE_LABELS: Record<string, { label: string; color: string; icon: string }> = {
-    'salesiq_chatbot': { label: 'Chatbot SalesIQ (Mía)', color: '#3b82f6', icon: '🤖' },
-    'ai_chat_customer-service': { label: 'Chat Interno - Atención', color: '#10b981', icon: '💬' },
-    'ai_chat_collections': { label: 'Chat Interno - Cobranza', color: '#f59e0b', icon: '💰' },
-    'ai_chat_quotes': { label: 'Chat Interno - Cotizaciones', color: '#8b5cf6', icon: '📋' },
-    'ai_chat_invoicing': { label: 'Chat Interno - Facturación', color: '#ec4899', icon: '📄' },
-    'ai_chat_audit': { label: 'Chat Interno - Auditoría', color: '#14b8a6', icon: '🔍' },
-    'image_analysis': { label: 'Análisis de Imágenes', color: '#f97316', icon: '📷' },
-    'url_analysis': { label: 'Análisis de URLs', color: '#6366f1', icon: '🔗' },
+    'salesiq_chatbot': { label: 'Chatbot SalesIQ (Mía)', color: 'var(--info)', icon: '🤖' },
+    'ai_chat_customer-service': { label: 'Chat Interno - Atención', color: 'var(--success)', icon: '💬' },
+    'ai_chat_collections': { label: 'Chat Interno - Cobranza', color: 'var(--warning)', icon: '💰' },
+    'ai_chat_quotes': { label: 'Chat Interno - Cotizaciones', color: 'var(--kpi-violet)', icon: '📋' },
+    'ai_chat_invoicing': { label: 'Chat Interno - Facturación', color: 'var(--brand-primary)', icon: '📄' },
+    'ai_chat_audit': { label: 'Chat Interno - Auditoría', color: 'var(--info)', icon: '🔍' },
+    'image_analysis': { label: 'Análisis de Imágenes', color: 'var(--warning)', icon: '📷' },
+    'url_analysis': { label: 'Análisis de URLs', color: 'var(--kpi-violet)', icon: '🔗' },
   };
 
   const usageByType = usageLogs.reduce((acc, log) => {
@@ -280,7 +280,7 @@ export default function SolcomAIPage() {
 
   const sortedUsageTypes = Object.entries(usageByType).sort(([, a], [, b]) => b.cost - a.cost);
   const serviceStatus = activeKeysCount > 0 ? 'Operativo' : 'Sin claves activas';
-  const serviceStatusColor = activeKeysCount > 0 ? '#10b981' : '#f59e0b';
+  const serviceStatusColor = activeKeysCount > 0 ? 'var(--success)' : 'var(--warning)';
 
   const tabs = [
     { id: 'uso' as TabType, label: 'Uso y Estadísticas', icon: Activity },
@@ -292,22 +292,25 @@ export default function SolcomAIPage() {
   if (loading) {
     return (
       <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '50vh' }}>
-        <RefreshCw size={32} className="animate-spin" color="#dc2626" />
+        <RefreshCw size={32} className="animate-spin" color="var(--brand-primary)" />
       </div>
     );
   }
 
   return (
-    <div style={{ display: 'grid', gap: 24 }}>
+    <div className="solcom-ai-view" style={{ display: 'grid', gap: 20 }}>
       {/* Encabezado */}
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-        <div>
-          <h1 style={{ fontSize: 28, fontWeight: 700, marginBottom: 8 }}>
-            Solcom AI
-          </h1>
-          <p style={{ color: 'rgba(255,255,255,0.6)', fontSize: 14 }}>
+      <div className="solcom-ai-page-heading" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+          <div className="system-title-mark"><Bot size={21} /></div>
+          <div>
+            <h1 className="inventory-title">
+              Solcom AI
+            </h1>
+          <p style={{ color: 'var(--muted)', fontSize: 14 }}>
             Inteligencia Artificial de Solis Comercial • Powered by Software Nicaragua
           </p>
+          </div>
         </div>
         <Button 
           variant="primary" 
@@ -319,55 +322,37 @@ export default function SolcomAIPage() {
         </Button>
       </div>
 
-      <Card style={{ padding: 20 }}>
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 16 }}>
-          <div>
-            <div style={{ fontSize: 12, color: 'rgba(255,255,255,0.5)', marginBottom: 6 }}>Estado del servicio</div>
-            <div style={{ fontSize: 16, fontWeight: 700, color: serviceStatusColor }}>{serviceStatus}</div>
+      <Card className="solcom-ai-service-summary" style={{ padding: 20 }}>
+        <div className="solcom-ai-service-grid">
+          <div className="solcom-ai-service-item">
+            <div style={{ fontSize: 12, color: 'var(--muted)', marginBottom: 6 }}>Estado del servicio</div>
+            <div className="solcom-ai-service-value" style={{ color: serviceStatusColor }}>{serviceStatus}</div>
           </div>
-          <div>
-            <div style={{ fontSize: 12, color: 'rgba(255,255,255,0.5)', marginBottom: 6 }}>Claves registradas</div>
-            <div style={{ fontSize: 16, fontWeight: 700 }}>{apiKeys.length}</div>
+          <div className="solcom-ai-service-item">
+            <div style={{ fontSize: 12, color: 'var(--muted)', marginBottom: 6 }}>Claves registradas</div>
+            <div className="solcom-ai-service-value">{apiKeys.length}</div>
           </div>
-          <div>
-            <div style={{ fontSize: 12, color: 'rgba(255,255,255,0.5)', marginBottom: 6 }}>Asistentes registrados</div>
-            <div style={{ fontSize: 16, fontWeight: 700 }}>{assistants.length}</div>
+          <div className="solcom-ai-service-item">
+            <div style={{ fontSize: 12, color: 'var(--muted)', marginBottom: 6 }}>Asistentes registrados</div>
+            <div className="solcom-ai-service-value">{assistants.length}</div>
           </div>
-          <div>
-            <div style={{ fontSize: 12, color: 'rgba(255,255,255,0.5)', marginBottom: 6 }}>Qué hace “Actualizar”</div>
-            <div style={{ fontSize: 13, color: 'rgba(255,255,255,0.8)', lineHeight: 1.5 }}>Vuelve a leer las claves, asistentes y registros reales desde Supabase.</div>
+          <div className="solcom-ai-service-item solcom-ai-service-note">
+            <div style={{ fontSize: 12, color: 'var(--muted)', marginBottom: 6 }}>Qué hace “Actualizar”</div>
+            <div style={{ fontSize: 13, color: 'var(--text-secondary)', lineHeight: 1.5 }}>Vuelve a leer las claves, asistentes y registros reales desde Supabase.</div>
           </div>
         </div>
       </Card>
 
       {/* Tabs de navegación */}
-      <div style={{ 
-        display: 'flex', 
-        gap: 8, 
-        borderBottom: '1px solid rgba(255,255,255,0.1)',
-        paddingBottom: 16
-      }}>
+      <div className="solcom-ai-tabs">
         {tabs.map(tab => {
           const Icon = tab.icon;
           const isActive = activeTab === tab.id;
           return (
             <button
               key={tab.id}
+              className={`solcom-ai-tab${isActive ? ' is-active' : ''}`}
               onClick={() => setActiveTab(tab.id)}
-              style={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: 8,
-                padding: '10px 16px',
-                background: isActive ? 'rgba(220, 38, 38, 0.1)' : 'transparent',
-                border: isActive ? '1px solid rgba(220, 38, 38, 0.3)' : '1px solid transparent',
-                borderRadius: 8,
-                color: isActive ? '#dc2626' : 'rgba(255,255,255,0.6)',
-                cursor: 'pointer',
-                fontSize: 14,
-                fontWeight: isActive ? 600 : 400,
-                transition: 'all 0.2s'
-              }}
             >
               <Icon size={18} />
               {tab.label}
@@ -380,91 +365,64 @@ export default function SolcomAIPage() {
       {activeTab === 'uso' && (
         <div style={{ display: 'grid', gap: 24 }}>
           {/* Tarjetas de resumen */}
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 16 }}>
-            <Card style={{ padding: 20 }}>
+          <div className="solcom-ai-kpi-grid">
+            <Card className="solcom-ai-kpi-card tone-brand" style={{ padding: 20 }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 12 }}>
-                <div style={{ padding: 10, background: 'rgba(220, 38, 38, 0.1)', borderRadius: 8 }}>
-                  <Zap size={20} color="#dc2626" />
-                </div>
-                <span style={{ fontSize: 13, color: 'rgba(255,255,255,0.6)' }}>Solicitudes Totales</span>
+                <div style={{ padding: 10, background: 'var(--brand-surface)', borderRadius: 8 }}><Zap size={20} color="var(--brand-primary)" /></div>
+                <span style={{ fontSize: 13, color: 'var(--muted)' }}>Solicitudes Totales</span>
               </div>
-              <div style={{ fontSize: 28, fontWeight: 700 }}>{formatNumber(usage.total_requests)}</div>
+              <div className="solcom-ai-kpi-value">{formatNumber(usage.total_requests)}</div>
             </Card>
-
-            <Card style={{ padding: 20 }}>
+            <Card className="solcom-ai-kpi-card tone-info" style={{ padding: 20 }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 12 }}>
-                <div style={{ padding: 10, background: 'rgba(59, 130, 246, 0.1)', borderRadius: 8 }}>
-                  <MessageSquare size={20} color="#3b82f6" />
-                </div>
-                <span style={{ fontSize: 13, color: 'rgba(255,255,255,0.6)' }}>Tokens Usados</span>
+                <div style={{ padding: 10, background: 'var(--info-surface)', borderRadius: 8 }}><MessageSquare size={20} color="var(--info)" /></div>
+                <span style={{ fontSize: 13, color: 'var(--muted)' }}>Tokens Usados</span>
               </div>
-              <div style={{ fontSize: 28, fontWeight: 700 }}>{formatNumber(usage.total_tokens)}</div>
+              <div className="solcom-ai-kpi-value">{formatNumber(usage.total_tokens)}</div>
             </Card>
-
-            <Card style={{ padding: 20 }}>
+            <Card className="solcom-ai-kpi-card tone-success" style={{ padding: 20 }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 12 }}>
-                <div style={{ padding: 10, background: 'rgba(16, 185, 129, 0.1)', borderRadius: 8 }}>
-                  <DollarSign size={20} color="#10b981" />
-                </div>
-                <span style={{ fontSize: 13, color: 'rgba(255,255,255,0.6)' }}>Costo Total</span>
+                <div style={{ padding: 10, background: 'var(--success-surface)', borderRadius: 8 }}><DollarSign size={20} color="var(--success)" /></div>
+                <span style={{ fontSize: 13, color: 'var(--muted)' }}>Costo Total</span>
               </div>
-              <div style={{ fontSize: 28, fontWeight: 700 }}>{formatCurrency(usage.total_cost)}</div>
+              <div className="solcom-ai-kpi-value">{formatCurrency(usage.total_cost)}</div>
             </Card>
-
-            <Card style={{ padding: 20 }}>
+            <Card className="solcom-ai-kpi-card tone-warning" style={{ padding: 20 }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 12 }}>
-                <div style={{ padding: 10, background: 'rgba(249, 115, 22, 0.1)', borderRadius: 8 }}>
-                  <TrendingUp size={20} color="#f97316" />
-                </div>
-                <span style={{ fontSize: 13, color: 'rgba(255,255,255,0.6)' }}>Este Mes</span>
+                <div style={{ padding: 10, background: 'var(--warning-surface)', borderRadius: 8 }}><TrendingUp size={20} color="var(--warning)" /></div>
+                <span style={{ fontSize: 13, color: 'var(--muted)' }}>Este Mes</span>
               </div>
-              <div style={{ fontSize: 28, fontWeight: 700 }}>{formatNumber(usage.this_month_requests)}</div>
-              <div style={{ fontSize: 12, color: 'rgba(255,255,255,0.5)', marginTop: 4 }}>
-                {formatNumber(usage.this_month_tokens)} tokens
-              </div>
+              <div className="solcom-ai-kpi-value">{formatNumber(usage.this_month_requests)}</div>
+              <div style={{ fontSize: 12, color: 'var(--muted)', marginTop: 4 }}>{formatNumber(usage.this_month_tokens)} tokens</div>
+            </Card>
+          </div>
+          <div className="solcom-ai-kpi-grid solcom-ai-kpi-grid-secondary">
+            <Card className="solcom-ai-kpi-card tone-info" style={{ padding: 20 }}>
+              <div style={{ fontSize: 13, color: 'var(--muted)', marginBottom: 8 }}>Claves activas</div>
+              <div className="solcom-ai-kpi-value">{formatNumber(activeKeysCount)}</div>
+              <div style={{ fontSize: 12, color: 'var(--muted)', marginTop: 6 }}>{revokedKeysCount > 0 ? `${formatNumber(revokedKeysCount)} revocadas` : 'Sin claves revocadas'}</div>
+            </Card>
+            <Card className="solcom-ai-kpi-card tone-warning" style={{ padding: 20 }}>
+              <div style={{ fontSize: 13, color: 'var(--muted)', marginBottom: 8 }}>Costo del mes</div>
+              <div className="solcom-ai-kpi-value">{formatCurrency(usage.this_month_cost)}</div>
+              <div style={{ fontSize: 12, color: 'var(--muted)', marginTop: 6 }}>Consumo acumulado del mes actual</div>
+            </Card>
+            <Card className="solcom-ai-kpi-card tone-violet" style={{ padding: 20 }}>
+              <div style={{ fontSize: 13, color: 'var(--muted)', marginBottom: 8 }}>Promedio por solicitud</div>
+              <div className="solcom-ai-kpi-value">{formatNumber(Math.round(averageTokensPerRequest))}</div>
+              <div style={{ fontSize: 12, color: 'var(--muted)', marginTop: 6 }}>{formatCurrency(averageCostPerRequest)} por solicitud</div>
+            </Card>
+            <Card className="solcom-ai-kpi-card tone-brand" style={{ padding: 20 }}>
+              <div style={{ fontSize: 13, color: 'var(--muted)', marginBottom: 8 }}>Última actividad</div>
+              <div className="solcom-ai-kpi-value solcom-ai-kpi-value-compact">{lastUsageAt ? new Date(lastUsageAt).toLocaleDateString('es-NI') : 'Sin actividad'}</div>
+              <div style={{ fontSize: 12, color: 'var(--muted)', marginTop: 6 }}>{lastUsageAt ? new Date(lastUsageAt).toLocaleTimeString('es-NI') : 'Todavía no hay registros'}</div>
             </Card>
           </div>
 
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 16 }}>
-            <Card style={{ padding: 20 }}>
-              <div style={{ fontSize: 13, color: 'rgba(255,255,255,0.6)', marginBottom: 8 }}>Claves activas</div>
-              <div style={{ fontSize: 28, fontWeight: 700 }}>{formatNumber(activeKeysCount)}</div>
-              <div style={{ fontSize: 12, color: 'rgba(255,255,255,0.5)', marginTop: 6 }}>
-                {revokedKeysCount > 0 ? `${formatNumber(revokedKeysCount)} revocadas` : 'Sin claves revocadas'}
-              </div>
-            </Card>
-
-            <Card style={{ padding: 20 }}>
-              <div style={{ fontSize: 13, color: 'rgba(255,255,255,0.6)', marginBottom: 8 }}>Costo del mes</div>
-              <div style={{ fontSize: 28, fontWeight: 700 }}>{formatCurrency(usage.this_month_cost)}</div>
-              <div style={{ fontSize: 12, color: 'rgba(255,255,255,0.5)', marginTop: 6 }}>
-                Consumo acumulado del mes actual
-              </div>
-            </Card>
-
-            <Card style={{ padding: 20 }}>
-              <div style={{ fontSize: 13, color: 'rgba(255,255,255,0.6)', marginBottom: 8 }}>Promedio por solicitud</div>
-              <div style={{ fontSize: 28, fontWeight: 700 }}>{formatNumber(Math.round(averageTokensPerRequest))}</div>
-              <div style={{ fontSize: 12, color: 'rgba(255,255,255,0.5)', marginTop: 6 }}>
-                {formatCurrency(averageCostPerRequest)} por solicitud
-              </div>
-            </Card>
-
-            <Card style={{ padding: 20 }}>
-              <div style={{ fontSize: 13, color: 'rgba(255,255,255,0.6)', marginBottom: 8 }}>Última actividad</div>
-              <div style={{ fontSize: 20, fontWeight: 700 }}>
-                {lastUsageAt ? new Date(lastUsageAt).toLocaleDateString('es-NI') : 'Sin actividad'}
-              </div>
-              <div style={{ fontSize: 12, color: 'rgba(255,255,255,0.5)', marginTop: 6 }}>
-                {lastUsageAt ? new Date(lastUsageAt).toLocaleTimeString('es-NI') : 'Todavía no hay registros'}
-              </div>
-            </Card>
-          </div>
-
-          <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1.2fr) minmax(320px, 0.8fr)', gap: 16 }}>
+          <div className="solcom-ai-insights-grid" style={{ display: 'grid', gap: 16 }}>
             <Card style={{ padding: 24 }}>
               <h3 style={{ fontSize: 18, fontWeight: 600, marginBottom: 16 }}>Resumen ejecutivo del servicio</h3>
-              <div style={{ display: 'grid', gap: 12, color: 'rgba(255,255,255,0.82)', fontSize: 14, lineHeight: 1.6 }}>
+              <div style={{ display: 'grid', gap: 12, color: 'var(--text-secondary)', fontSize: 14, lineHeight: 1.6 }}>
                 <p>
                   <strong>Qué estás viendo:</strong> este panel resume cuánto se está usando la IA, cuántas claves siguen activas y si los asistentes configurados están listos para responder.
                 </p>
@@ -483,20 +441,20 @@ export default function SolcomAIPage() {
             <Card style={{ padding: 24 }}>
               <h3 style={{ fontSize: 18, fontWeight: 600, marginBottom: 16 }}>Capacidad actual</h3>
               <div style={{ display: 'grid', gap: 12 }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: 12, borderRadius: 10, background: 'rgba(255,255,255,0.03)' }}>
-                  <span style={{ fontSize: 14, color: 'rgba(255,255,255,0.75)' }}>Asistentes con texto</span>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: 12, borderRadius: 10, background: 'var(--surface-hover)' }}>
+                  <span style={{ fontSize: 14, color: 'var(--text-secondary)' }}>Asistentes con texto</span>
                   <strong>{formatNumber(assistantsWithText)}</strong>
                 </div>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: 12, borderRadius: 10, background: 'rgba(255,255,255,0.03)' }}>
-                  <span style={{ fontSize: 14, color: 'rgba(255,255,255,0.75)' }}>Asistentes con inventario</span>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: 12, borderRadius: 10, background: 'var(--surface-hover)' }}>
+                  <span style={{ fontSize: 14, color: 'var(--text-secondary)' }}>Asistentes con inventario</span>
                   <strong>{formatNumber(assistantsWithInventory)}</strong>
                 </div>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: 12, borderRadius: 10, background: 'rgba(255,255,255,0.03)' }}>
-                  <span style={{ fontSize: 14, color: 'rgba(255,255,255,0.75)' }}>Asistentes con ventas</span>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: 12, borderRadius: 10, background: 'var(--surface-hover)' }}>
+                  <span style={{ fontSize: 14, color: 'var(--text-secondary)' }}>Asistentes con ventas</span>
                   <strong>{formatNumber(assistantsWithSales)}</strong>
                 </div>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: 12, borderRadius: 10, background: 'rgba(255,255,255,0.03)' }}>
-                  <span style={{ fontSize: 14, color: 'rgba(255,255,255,0.75)' }}>Días con uso este mes</span>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: 12, borderRadius: 10, background: 'var(--surface-hover)' }}>
+                  <span style={{ fontSize: 14, color: 'var(--text-secondary)' }}>Días con uso este mes</span>
                   <strong>{formatNumber(usageDaysThisMonth)}</strong>
                 </div>
               </div>
@@ -506,33 +464,33 @@ export default function SolcomAIPage() {
           {/* Desglose por origen */}
           <Card style={{ padding: 24 }}>
             <h3 style={{ fontSize: 18, fontWeight: 600, marginBottom: 4 }}>Desglose por Origen</h3>
-            <p style={{ fontSize: 13, color: 'rgba(255,255,255,0.5)', marginBottom: 20 }}>
+            <p style={{ fontSize: 13, color: 'var(--muted)', marginBottom: 20 }}>
               Detalle de consumo por cada módulo o integración que usa IA
             </p>
             {sortedUsageTypes.length === 0 ? (
-              <div style={{ textAlign: 'center', padding: 32, color: 'rgba(255,255,255,0.4)' }}>
+              <div style={{ textAlign: 'center', padding: 32, color: 'var(--muted)' }}>
                 <Database size={32} style={{ marginBottom: 8, opacity: 0.3 }} />
                 <p>No hay registros de uso aún</p>
               </div>
             ) : (
-              <div style={{ display: 'grid', gap: 8 }}>
+              <div className="solcom-ai-breakdown-table" style={{ display: 'grid', gap: 8 }}>
                 {/* Header */}
-                <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr 1fr 1fr', gap: 12, padding: '8px 12px', fontSize: 12, color: 'rgba(255,255,255,0.4)', fontWeight: 600, textTransform: 'uppercase' as const, letterSpacing: '0.05em' }}>
+                <div className="solcom-ai-breakdown-header" style={{ display: 'grid', gridTemplateColumns: '2fr 1fr 1fr 1fr', gap: 12, padding: '8px 12px', fontSize: 12, fontWeight: 600, textTransform: 'uppercase' as const, letterSpacing: '0.05em' }}>
                   <span>Origen</span>
                   <span style={{ textAlign: 'right' }}>Solicitudes</span>
                   <span style={{ textAlign: 'right' }}>Tokens</span>
                   <span style={{ textAlign: 'right' }}>Costo</span>
                 </div>
                 {sortedUsageTypes.map(([type, data]) => {
-                  const info = REQUEST_TYPE_LABELS[type] || { label: type, color: '#6b7280', icon: '⚡' };
+                  const info = REQUEST_TYPE_LABELS[type] || { label: type, color: 'var(--muted)', icon: '⚡' };
                   const costPercent = usage.total_cost > 0 ? (data.cost / usage.total_cost) * 100 : 0;
                   return (
-                    <div key={type} style={{
+                    <div key={type} className="solcom-ai-breakdown-row" style={{
                       display: 'grid',
                       gridTemplateColumns: '2fr 1fr 1fr 1fr',
                       gap: 12,
                       padding: '12px',
-                      background: 'rgba(255,255,255,0.03)',
+                      background: 'var(--surface-hover)',
                       borderRadius: 10,
                       borderLeft: `3px solid ${info.color}`,
                       alignItems: 'center'
@@ -541,7 +499,7 @@ export default function SolcomAIPage() {
                         <span style={{ fontSize: 16 }}>{info.icon}</span>
                         <div>
                           <div style={{ fontSize: 14, fontWeight: 500 }}>{info.label}</div>
-                          <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.4)' }}>{costPercent.toFixed(1)}% del total</div>
+                          <div style={{ fontSize: 11, color: 'var(--muted)' }}>{costPercent.toFixed(1)}% del total</div>
                         </div>
                       </div>
                       <div style={{ textAlign: 'right', fontSize: 15, fontWeight: 600 }}>{formatNumber(data.requests)}</div>
@@ -551,11 +509,11 @@ export default function SolcomAIPage() {
                   );
                 })}
                 {/* Total row */}
-                <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr 1fr 1fr', gap: 12, padding: '12px', borderTop: '1px solid rgba(255,255,255,0.1)', marginTop: 4 }}>
+                <div className="solcom-ai-breakdown-total" style={{ display: 'grid', gridTemplateColumns: '2fr 1fr 1fr 1fr', gap: 12, padding: '12px', borderTop: '1px solid var(--border)', marginTop: 4 }}>
                   <span style={{ fontSize: 14, fontWeight: 700 }}>Total</span>
                   <span style={{ textAlign: 'right', fontSize: 15, fontWeight: 700 }}>{formatNumber(usage.total_requests)}</span>
                   <span style={{ textAlign: 'right', fontSize: 15, fontWeight: 700 }}>{formatNumber(usage.total_tokens)}</span>
-                  <span style={{ textAlign: 'right', fontSize: 15, fontWeight: 700, color: '#10b981' }}>{formatCurrency(usage.total_cost)}</span>
+                      <span style={{ textAlign: 'right', fontSize: 15, fontWeight: 700, color: 'var(--success)' }}>{formatCurrency(usage.total_cost)}</span>
                 </div>
               </div>
             )}
@@ -569,7 +527,7 @@ export default function SolcomAIPage() {
           {/* Explicación */}
           <Card style={{ padding: 24 }}>
             <h3 style={{ fontSize: 18, fontWeight: 600, marginBottom: 16 }}>¿Qué es esto?</h3>
-            <div style={{ display: 'grid', gap: 16, color: 'rgba(255,255,255,0.8)', fontSize: 14, lineHeight: 1.6 }}>
+            <div style={{ display: 'grid', gap: 16, color: 'var(--text-secondary)', fontSize: 14, lineHeight: 1.6 }}>
               <p>
                 <strong>Solcom AI</strong> es el servicio de inteligencia artificial de Solis Comercial. 
                 Cada vez que usas funciones de IA en el sistema (como el chatbot de compras, análisis de inventario, 
@@ -597,7 +555,7 @@ export default function SolcomAIPage() {
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 24 }}>
               <div>
                 <h2 style={{ fontSize: 20, fontWeight: 700, marginBottom: 4 }}>Claves de API</h2>
-                <p style={{ color: 'rgba(255,255,255,0.6)', fontSize: 14 }}>
+                <p style={{ color: 'var(--muted)', fontSize: 14 }}>
                   Usa estas claves para conectar aplicaciones externas con Solcom AI
                 </p>
               </div>
@@ -610,19 +568,19 @@ export default function SolcomAIPage() {
             {/* Alerta de seguridad */}
             <div style={{ 
               padding: 16, 
-              background: 'rgba(249, 115, 22, 0.1)', 
+              background: 'var(--warning-surface)',
               borderRadius: 8, 
               marginBottom: 24,
-              border: '1px solid rgba(249, 115, 22, 0.2)'
+              border: '1px solid color-mix(in srgb, var(--warning) 34%, var(--border))'
             }}>
-              <div style={{ fontSize: 13, color: 'rgba(255,255,255,0.8)' }}>
+              <div style={{ fontSize: 13, color: 'var(--text-secondary)' }}>
                 ⚠️ <strong>Importante:</strong> No compartas tus claves de API. Si crees que una clave fue comprometida, elimínala inmediatamente y crea una nueva.
               </div>
             </div>
 
             {/* Lista de claves */}
             {apiKeys.length === 0 ? (
-              <div style={{ textAlign: 'center', padding: 40, color: 'rgba(255,255,255,0.5)' }}>
+              <div style={{ textAlign: 'center', padding: 40, color: 'var(--muted)' }}>
                 <Key size={48} style={{ marginBottom: 16, opacity: 0.3 }} />
                 <p>No tienes claves de API creadas en Supabase</p>
                 <p style={{ fontSize: 13, marginTop: 8 }}>Si acabas de crear una, usa “Actualizar” para volver a leer la base de datos.</p>
@@ -632,9 +590,9 @@ export default function SolcomAIPage() {
                 {apiKeys.map(key => (
                   <div key={key.id} style={{
                     padding: 16,
-                    background: 'rgba(255,255,255,0.03)',
+                    background: 'var(--surface-hover)',
                     borderRadius: 12,
-                    border: '1px solid rgba(255,255,255,0.05)',
+                    border: '1px solid var(--border)',
                     display: 'grid',
                     gridTemplateColumns: '1fr auto',
                     gap: 16,
@@ -647,8 +605,8 @@ export default function SolcomAIPage() {
                           {key.status === 'active' ? 'Activa' : 'Revocada'}
                         </Badge>
                       </div>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 16, fontSize: 13, color: 'rgba(255,255,255,0.5)' }}>
-                        <code style={{ background: 'rgba(0,0,0,0.3)', padding: '4px 8px', borderRadius: 4 }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 16, fontSize: 13, color: 'var(--muted)' }}>
+                        <code style={{ background: 'var(--overlay)', padding: '4px 8px', borderRadius: 4 }}>
                           {key.key}
                         </code>
                         <span>Creada: {new Date(key.created_at).toLocaleDateString('es-NI')}</span>
@@ -661,14 +619,14 @@ export default function SolcomAIPage() {
                         size="sm"
                         onClick={() => copyToClipboard(key.full_key || key.key, key.id)}
                       >
-                        {copiedKey === key.id ? <CheckCircle2 size={16} color="#10b981" /> : <Copy size={16} />}
+                        {copiedKey === key.id ? <CheckCircle2 size={16} color="var(--success)" /> : <Copy size={16} />}
                       </Button>
                       <Button 
                         variant="ghost" 
                         size="sm"
                         onClick={() => deleteApiKey(key.id)}
                       >
-                        <Trash2 size={16} color="#ef4444" />
+                        <Trash2 size={16} color="var(--danger)" />
                       </Button>
                     </div>
                   </div>
@@ -685,19 +643,19 @@ export default function SolcomAIPage() {
               left: 0,
               right: 0,
               bottom: 0,
-              background: 'rgba(0,0,0,0.7)',
+              background: 'var(--overlay)',
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
               zIndex: 1000
             }}>
               <div style={{
-                background: '#1a1a2e',
+                background: 'var(--panel-elevated)',
                 padding: 32,
                 borderRadius: 16,
                 width: '100%',
                 maxWidth: 450,
-                border: '1px solid rgba(255,255,255,0.1)'
+                border: '1px solid var(--border)'
               }}>
                 {newlyCreatedKey ? (
                   <>
@@ -706,17 +664,17 @@ export default function SolcomAIPage() {
                     </h3>
                     <div style={{ 
                       padding: 16, 
-                      background: 'rgba(16, 185, 129, 0.1)', 
+                      background: 'var(--success-surface)',
                       borderRadius: 8, 
                       marginBottom: 16,
-                      border: '1px solid rgba(16, 185, 129, 0.2)'
+                      border: '1px solid color-mix(in srgb, var(--success) 34%, var(--border))'
                     }}>
-                      <p style={{ fontSize: 13, color: 'rgba(255,255,255,0.8)', marginBottom: 12 }}>
+                      <p style={{ fontSize: 13, color: 'var(--text-secondary)', marginBottom: 12 }}>
                         <strong>¡Copia esta clave ahora!</strong> No podrás verla de nuevo.
                       </p>
                       <code style={{ 
                         display: 'block',
-                        background: 'rgba(0,0,0,0.3)', 
+                        background: 'var(--overlay)',
                         padding: 12, 
                         borderRadius: 6,
                         fontSize: 12,
@@ -749,7 +707,7 @@ export default function SolcomAIPage() {
                       Crear Nueva Clave de API
                     </h3>
                     <div style={{ marginBottom: 20 }}>
-                      <label style={{ display: 'block', fontSize: 13, color: 'rgba(255,255,255,0.6)', marginBottom: 8 }}>
+                      <label style={{ display: 'block', fontSize: 13, color: 'var(--muted)', marginBottom: 8 }}>
                         Nombre de la clave (para identificarla)
                       </label>
                       <input
@@ -760,10 +718,10 @@ export default function SolcomAIPage() {
                         style={{
                           width: '100%',
                           padding: 12,
-                          background: 'rgba(255,255,255,0.05)',
-                          border: '1px solid rgba(255,255,255,0.1)',
+                          background: 'var(--surface-hover)',
+                          border: '1px solid var(--border)',
                           borderRadius: 8,
-                          color: '#fff',
+                          color: 'var(--text)',
                           fontSize: 14
                         }}
                       />
@@ -801,7 +759,7 @@ export default function SolcomAIPage() {
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 24 }}>
               <div>
                 <h2 style={{ fontSize: 20, fontWeight: 700, marginBottom: 4 }}>Asistentes de IA</h2>
-                <p style={{ color: 'rgba(255,255,255,0.6)', fontSize: 14 }}>
+                <p style={{ color: 'var(--muted)', fontSize: 14 }}>
                   Configura asistentes virtuales para diferentes áreas del negocio
                 </p>
               </div>
@@ -813,7 +771,7 @@ export default function SolcomAIPage() {
 
             {/* Lista de asistentes */}
             {assistants.length === 0 ? (
-              <div style={{ textAlign: 'center', padding: 40, color: 'rgba(255,255,255,0.5)' }}>
+              <div style={{ textAlign: 'center', padding: 40, color: 'var(--muted)' }}>
                 <Bot size={48} style={{ marginBottom: 16, opacity: 0.3 }} />
                 <p>No tienes asistentes configurados</p>
                 <p style={{ fontSize: 13, marginTop: 8 }}>Crea un asistente para automatizar tareas</p>
@@ -823,24 +781,24 @@ export default function SolcomAIPage() {
                 {assistants.map(assistant => (
                   <div key={assistant.id} style={{
                     padding: 20,
-                    background: 'rgba(255,255,255,0.03)',
+                    background: 'var(--surface-hover)',
                     borderRadius: 12,
-                    border: '1px solid rgba(255,255,255,0.05)'
+                    border: '1px solid var(--border)'
                   }}>
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'start', marginBottom: 12 }}>
                       <div>
                         <h3 style={{ fontSize: 18, fontWeight: 600, marginBottom: 4 }}>{assistant.name}</h3>
-                        <p style={{ fontSize: 13, color: 'rgba(255,255,255,0.5)' }}>
+                        <p style={{ fontSize: 13, color: 'var(--muted)' }}>
                           {assistant.description || 'Sin descripción'}
                         </p>
                       </div>
                       <Button variant="ghost" size="sm" onClick={() => deleteAssistant(assistant.id)}>
-                        <Trash2 size={16} color="#ef4444" />
+                        <Trash2 size={16} color="var(--danger)" />
                       </Button>
                     </div>
                     
                     <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-                      <span style={{ fontSize: 12, fontWeight: 500, marginRight: 8, color: 'rgba(255,255,255,0.6)' }}>
+                      <span style={{ fontSize: 12, fontWeight: 500, marginRight: 8, color: 'var(--muted)' }}>
                         Capacidades:
                       </span>
                       {assistant.capabilities?.text && (
@@ -867,26 +825,26 @@ export default function SolcomAIPage() {
               left: 0,
               right: 0,
               bottom: 0,
-              background: 'rgba(0,0,0,0.7)',
+              background: 'var(--overlay)',
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
               zIndex: 1000
             }}>
               <div style={{
-                background: '#1a1a2e',
+                background: 'var(--panel-elevated)',
                 padding: 32,
                 borderRadius: 16,
                 width: '100%',
                 maxWidth: 500,
-                border: '1px solid rgba(255,255,255,0.1)'
+                border: '1px solid var(--border)'
               }}>
                 <h3 style={{ fontSize: 20, fontWeight: 700, marginBottom: 20 }}>
                   Crear Nuevo Asistente
                 </h3>
                 
                 <div style={{ marginBottom: 16 }}>
-                  <label style={{ display: 'block', fontSize: 13, color: 'rgba(255,255,255,0.6)', marginBottom: 8 }}>
+                  <label style={{ display: 'block', fontSize: 13, color: 'var(--muted)', marginBottom: 8 }}>
                     Nombre del asistente
                   </label>
                   <input
@@ -897,17 +855,17 @@ export default function SolcomAIPage() {
                     style={{
                       width: '100%',
                       padding: 12,
-                      background: 'rgba(255,255,255,0.05)',
-                      border: '1px solid rgba(255,255,255,0.1)',
+                      background: 'var(--surface-hover)',
+                      border: '1px solid var(--border)',
                       borderRadius: 8,
-                      color: '#fff',
+                      color: 'var(--text)',
                       fontSize: 14
                     }}
                   />
                 </div>
 
                 <div style={{ marginBottom: 16 }}>
-                  <label style={{ display: 'block', fontSize: 13, color: 'rgba(255,255,255,0.6)', marginBottom: 8 }}>
+                  <label style={{ display: 'block', fontSize: 13, color: 'var(--muted)', marginBottom: 8 }}>
                     Descripción (opcional)
                   </label>
                   <textarea
@@ -918,10 +876,10 @@ export default function SolcomAIPage() {
                     style={{
                       width: '100%',
                       padding: 12,
-                      background: 'rgba(255,255,255,0.05)',
-                      border: '1px solid rgba(255,255,255,0.1)',
+                      background: 'var(--surface-hover)',
+                      border: '1px solid var(--border)',
                       borderRadius: 8,
-                      color: '#fff',
+                      color: 'var(--text)',
                       fontSize: 14,
                       resize: 'none'
                     }}
@@ -929,7 +887,7 @@ export default function SolcomAIPage() {
                 </div>
 
                 <div style={{ marginBottom: 20 }}>
-                  <label style={{ display: 'block', fontSize: 13, color: 'rgba(255,255,255,0.6)', marginBottom: 12 }}>
+                  <label style={{ display: 'block', fontSize: 13, color: 'var(--muted)', marginBottom: 12 }}>
                     Capacidades (¿qué puede hacer?)
                   </label>
                   <div style={{ display: 'grid', gap: 8 }}>
@@ -947,11 +905,11 @@ export default function SolcomAIPage() {
                         style={{
                           padding: 12,
                           background: newAssistantCaps[cap.key as keyof typeof newAssistantCaps]
-                            ? 'rgba(220, 38, 38, 0.1)'
-                            : 'rgba(255,255,255,0.03)',
+                            ? 'var(--brand-surface)'
+                            : 'var(--surface-hover)',
                           border: newAssistantCaps[cap.key as keyof typeof newAssistantCaps]
-                            ? '1px solid rgba(220, 38, 38, 0.3)'
-                            : '1px solid rgba(255,255,255,0.05)',
+                            ? '1px solid color-mix(in srgb, var(--brand-primary) 48%, var(--border))'
+                            : '1px solid var(--border)',
                           borderRadius: 8,
                           cursor: 'pointer',
                           display: 'flex',
@@ -961,12 +919,12 @@ export default function SolcomAIPage() {
                       >
                         <div>
                           <div style={{ fontSize: 14, fontWeight: 500 }}>{cap.label}</div>
-                          <div style={{ fontSize: 12, color: 'rgba(255,255,255,0.5)' }}>{cap.desc}</div>
+                          <div style={{ fontSize: 12, color: 'var(--muted)' }}>{cap.desc}</div>
                         </div>
                         {newAssistantCaps[cap.key as keyof typeof newAssistantCaps] ? (
-                          <CheckCircle2 size={20} color="#dc2626" />
+                          <CheckCircle2 size={20} color="var(--brand-primary)" />
                         ) : (
-                          <XCircle size={20} color="rgba(255,255,255,0.2)" />
+                          <XCircle size={20} color="var(--muted)" />
                         )}
                       </div>
                     ))}
@@ -1007,42 +965,42 @@ export default function SolcomAIPage() {
             </h2>
             
             <div style={{ display: 'grid', gap: 24 }}>
-              <div style={{ padding: 20, background: 'rgba(59, 130, 246, 0.1)', borderRadius: 12, border: '1px solid rgba(59, 130, 246, 0.2)' }}>
-                <h3 style={{ fontSize: 16, fontWeight: 600, marginBottom: 12, color: '#3b82f6' }}>
+              <div style={{ padding: 20, background: 'var(--info-surface)', borderRadius: 12, border: '1px solid color-mix(in srgb, var(--info) 28%, var(--border))' }}>
+                <h3 style={{ fontSize: 16, fontWeight: 600, marginBottom: 12, color: 'var(--info)' }}>
                   🤖 ¿Qué es Solcom AI?
                 </h3>
-                <p style={{ fontSize: 14, color: 'rgba(255,255,255,0.8)', lineHeight: 1.6 }}>
+                <p style={{ fontSize: 14, color: 'var(--text-secondary)', lineHeight: 1.6 }}>
                   Es el sistema de inteligencia artificial integrado en Solis Comercial. Te permite hacer preguntas 
                   sobre tu inventario, analizar compras, y obtener recomendaciones automáticas basadas en tus datos reales.
                 </p>
               </div>
 
-              <div style={{ padding: 20, background: 'rgba(16, 185, 129, 0.1)', borderRadius: 12, border: '1px solid rgba(16, 185, 129, 0.2)' }}>
-                <h3 style={{ fontSize: 16, fontWeight: 600, marginBottom: 12, color: '#10b981' }}>
+              <div style={{ padding: 20, background: 'var(--success-surface)', borderRadius: 12, border: '1px solid color-mix(in srgb, var(--success) 28%, var(--border))' }}>
+                <h3 style={{ fontSize: 16, fontWeight: 600, marginBottom: 12, color: 'var(--success)' }}>
                   🔑 ¿Para qué sirven las Claves de API?
                 </h3>
-                <p style={{ fontSize: 14, color: 'rgba(255,255,255,0.8)', lineHeight: 1.6 }}>
+                <p style={{ fontSize: 14, color: 'var(--text-secondary)', lineHeight: 1.6 }}>
                   Las claves de API te permiten conectar aplicaciones externas (como Zoho SalesIQ, apps móviles, 
                   o sistemas de terceros) con Solcom AI. Cada clave es única y registra el uso de cada aplicación.
                 </p>
               </div>
 
-              <div style={{ padding: 20, background: 'rgba(249, 115, 22, 0.1)', borderRadius: 12, border: '1px solid rgba(249, 115, 22, 0.2)' }}>
-                <h3 style={{ fontSize: 16, fontWeight: 600, marginBottom: 12, color: '#f97316' }}>
+              <div style={{ padding: 20, background: 'var(--warning-surface)', borderRadius: 12, border: '1px solid color-mix(in srgb, var(--warning) 28%, var(--border))' }}>
+                <h3 style={{ fontSize: 16, fontWeight: 600, marginBottom: 12, color: 'var(--warning)' }}>
                   🤝 ¿Qué son los Asistentes?
                 </h3>
-                <p style={{ fontSize: 14, color: 'rgba(255,255,255,0.8)', lineHeight: 1.6 }}>
+                <p style={{ fontSize: 14, color: 'var(--text-secondary)', lineHeight: 1.6 }}>
                   Los asistentes son "personalidades" de IA configuradas para tareas específicas. Por ejemplo, 
                   puedes tener un asistente especializado en compras que analiza qué productos necesitas reponer, 
                   y otro para atención al cliente que responde preguntas sobre productos.
                 </p>
               </div>
 
-              <div style={{ padding: 20, background: 'rgba(220, 38, 38, 0.1)', borderRadius: 12, border: '1px solid rgba(220, 38, 38, 0.2)' }}>
-                <h3 style={{ fontSize: 16, fontWeight: 600, marginBottom: 12, color: '#dc2626' }}>
+              <div style={{ padding: 20, background: 'var(--brand-surface)', borderRadius: 12, border: '1px solid color-mix(in srgb, var(--brand-primary) 28%, var(--border))' }}>
+                <h3 style={{ fontSize: 16, fontWeight: 600, marginBottom: 12, color: 'var(--brand-primary)' }}>
                   📊 ¿Cómo se mide el uso?
                 </h3>
-                <p style={{ fontSize: 14, color: 'rgba(255,255,255,0.8)', lineHeight: 1.6 }}>
+                <p style={{ fontSize: 14, color: 'var(--text-secondary)', lineHeight: 1.6 }}>
                   Cada mensaje que envías o recibes de la IA consume "tokens". Un token es aproximadamente 
                   una palabra. El sistema registra cuántos tokens usas para que puedas monitorear el consumo.
                 </p>
@@ -1056,25 +1014,25 @@ export default function SolcomAIPage() {
             </h2>
             
             <div style={{ display: 'grid', gap: 16 }}>
-              <p style={{ fontSize: 14, color: 'rgba(255,255,255,0.8)' }}>
+              <p style={{ fontSize: 14, color: 'var(--text-secondary)' }}>
                 Para conectar Solcom AI con tu chat de Zoho SalesIQ:
               </p>
               
-              <ol style={{ paddingLeft: 20, display: 'grid', gap: 12, fontSize: 14, color: 'rgba(255,255,255,0.8)' }}>
+              <ol style={{ paddingLeft: 20, display: 'grid', gap: 12, fontSize: 14, color: 'var(--text-secondary)' }}>
                 <li><strong>Crea una clave de API</strong> en la pestaña "Claves de API"</li>
                 <li>En Zoho SalesIQ, ve a <strong>Configuración → Integraciones → Webhooks</strong></li>
                 <li>Crea un nuevo webhook con la URL de tu servidor</li>
-                <li>Agrega el header <code style={{ background: 'rgba(0,0,0,0.3)', padding: '2px 6px', borderRadius: 4 }}>Authorization: Bearer TU_CLAVE_API</code></li>
+                <li>Agrega el header <code style={{ background: 'var(--overlay)', padding: '2px 6px', borderRadius: 4 }}>Authorization: Bearer TU_CLAVE_API</code></li>
                 <li>Configura el formato de mensaje según la documentación</li>
               </ol>
 
               <div style={{ 
                 padding: 16, 
-                background: 'rgba(59, 130, 246, 0.1)', 
+                background: 'var(--info-surface)',
                 borderRadius: 8,
-                border: '1px solid rgba(59, 130, 246, 0.2)'
+                border: '1px solid color-mix(in srgb, var(--info) 34%, var(--border))'
               }}>
-                <p style={{ fontSize: 13, color: 'rgba(255,255,255,0.8)' }}>
+                <p style={{ fontSize: 13, color: 'var(--text-secondary)' }}>
                   💡 <strong>Tip:</strong> Si necesitas ayuda con la integración, contacta al equipo de Software Nicaragua.
                 </p>
               </div>

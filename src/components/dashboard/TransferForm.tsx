@@ -187,14 +187,14 @@ export default function TransferForm({ onSuccess }: { onSuccess: () => void }) {
     }
 
     return (
-        <Card className="max-w-5xl mx-auto border-slate-700/50 bg-slate-800/40 backdrop-blur-sm shadow-xl p-8">
+        <Card className="transfer-form-view">
             <div className="space-y-8">
 
                 {/* Header Section: Warehouses & Date */}
                 <div className="grid grid-cols-1 lg:grid-cols-[1fr,auto,1fr] gap-6 items-start">
 
                     {/* Origin */}
-                    <div className="bg-slate-900/50 p-5 rounded-2xl border border-slate-700/50 hover:border-slate-600 transition-colors group">
+                    <div className="transfer-warehouse-panel bg-slate-900/50 p-5 rounded-2xl border border-slate-700/50 hover:border-slate-600 transition-colors group">
                         <span className="text-xs uppercase tracking-wider text-red-400 font-bold mb-3 flex items-center gap-2">
                             <div className="w-2 h-2 rounded-full bg-red-500 animate-pulse" />
                             Desde (Origen)
@@ -204,7 +204,7 @@ export default function TransferForm({ onSuccess }: { onSuccess: () => void }) {
                             onChange={(e) => setFormData(prev => ({ ...prev, from_warehouse_id: e.target.value }))}
                             options={[{ value: '', label: 'Seleccionar Bodega...' }, ...warehouses.map(w => ({ value: w.id, label: w.name }))]}
                             disabled={loading}
-                            className="w-full bg-slate-800 border-slate-600 focus:border-red-500"
+                            className="w-full"
                         />
                         {formData.from_warehouse_id && (
                             <div className="mt-2 text-xs text-slate-500">
@@ -222,7 +222,7 @@ export default function TransferForm({ onSuccess }: { onSuccess: () => void }) {
                     </div>
 
                     {/* Destination */}
-                    <div className="bg-slate-900/50 p-5 rounded-2xl border border-slate-700/50 hover:border-slate-600 transition-colors group">
+                    <div className="transfer-warehouse-panel bg-slate-900/50 p-5 rounded-2xl border border-slate-700/50 hover:border-slate-600 transition-colors group">
                         <span className="text-xs uppercase tracking-wider text-emerald-400 font-bold mb-3 flex items-center gap-2">
                             <div className="w-2 h-2 rounded-full bg-emerald-500" />
                             Hacia (Destino)
@@ -232,7 +232,7 @@ export default function TransferForm({ onSuccess }: { onSuccess: () => void }) {
                             onChange={(e) => setFormData(prev => ({ ...prev, to_warehouse_id: e.target.value }))}
                             options={[{ value: '', label: 'Seleccionar Bodega...' }, ...warehouses.map(w => ({ value: w.id, label: w.name }))]}
                             disabled={loading}
-                            className="w-full bg-slate-800 border-slate-600 focus:border-emerald-500"
+                            className="w-full"
                         />
                         {formData.to_warehouse_id && (
                             <div className="mt-2 text-xs text-slate-500">
@@ -324,7 +324,7 @@ export default function TransferForm({ onSuccess }: { onSuccess: () => void }) {
                         </div>
                     </div>
 
-                    <div className="bg-slate-900/30 rounded-xl border border-slate-700/50 overflow-hidden min-h-[200px] relative">
+                    <div className="transfer-items-table-wrap bg-slate-900/30 rounded-xl border border-slate-700/50 overflow-hidden min-h-[200px] relative">
                         {lineItems.length === 0 ? (
                             <div className="absolute inset-0 flex flex-col items-center justify-center text-slate-600 gap-4">
                                 <div className="p-4 bg-slate-900/50 rounded-full border border-slate-800/50">
@@ -334,7 +334,7 @@ export default function TransferForm({ onSuccess }: { onSuccess: () => void }) {
                                 <p className="text-xs max-w-xs text-center text-slate-500">Busca productos en la barra superior para agregarlos a esta transferencia.</p>
                             </div>
                         ) : (
-                            <table className="w-full text-sm text-left border-collapse">
+                            <table className="transfer-items-table w-full text-sm text-left border-collapse">
                                 <thead className="bg-slate-900/80 text-slate-400 font-medium text-xs uppercase tracking-wider backdrop-blur-sm sticky top-0 z-10">
                                     <tr>
                                         <th className="p-4 pl-6 font-semibold">Producto</th>

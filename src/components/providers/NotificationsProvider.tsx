@@ -132,7 +132,7 @@ export default function NotificationsProvider({ children }: { children: React.Re
           border: '1px solid var(--border, #374151)',
           borderRadius: 8,
           padding: '16px',
-          boxShadow: '0 4px 12px rgba(0,0,0,0.15)',
+          boxShadow: '0 4px 12px var(--shadow)',
           display: 'flex',
           gap: 12,
           alignItems: 'flex-start',

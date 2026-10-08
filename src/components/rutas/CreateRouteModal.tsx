@@ -147,7 +147,7 @@ export default function CreateRouteModal({ selectedJobs, onClose, onSuccess }: C
       left: 0,
       right: 0,
       bottom: 0,
-      background: 'rgba(0,0,0,0.7)',
+      background: 'var(--overlay)',
       display: 'flex',
       alignItems: 'center',
       justifyContent: 'center',
@@ -158,12 +158,12 @@ export default function CreateRouteModal({ selectedJobs, onClose, onSuccess }: C
         <form onSubmit={handleSubmit}>
           <div style={{ 
             padding: 20, 
-            borderBottom: '1px solid rgba(255,255,255,0.08)',
+            borderBottom: '1px solid var(--border)',
             display: 'flex',
             justifyContent: 'space-between',
             alignItems: 'center'
           }}>
-            <h3 style={{ margin: 0, color: '#f8fafc', fontSize: 18, fontWeight: 700 }}>
+            <h3 style={{ margin: 0, color: 'var(--text)', fontSize: 18, fontWeight: 700 }}>
               Crear Nueva Ruta
             </h3>
             <button
@@ -172,7 +172,7 @@ export default function CreateRouteModal({ selectedJobs, onClose, onSuccess }: C
               style={{
                 background: 'transparent',
                 border: 'none',
-                color: '#64748b',
+                color: 'var(--muted)',
                 cursor: 'pointer',
                 padding: 4
               }}
@@ -214,7 +214,7 @@ export default function CreateRouteModal({ selectedJobs, onClose, onSuccess }: C
                 display: 'block', 
                 fontSize: 12, 
                 fontWeight: 600, 
-                color: '#e2e8f0',
+                color: 'var(--text)',
                 marginBottom: 6
               }}>
                 Nombre de la ruta *
@@ -228,10 +228,10 @@ export default function CreateRouteModal({ selectedJobs, onClose, onSuccess }: C
                 style={{
                   width: '100%',
                   padding: '10px 12px',
-                  background: 'rgba(15,23,42,0.6)',
-                  border: '1px solid rgba(255,255,255,0.1)',
+                  background: 'var(--panel-elevated)',
+                  border: '1px solid var(--border)',
                   borderRadius: 6,
-                  color: '#e2e8f0',
+                  color: 'var(--text)',
                   fontSize: 13,
                   outline: 'none'
                 }}
@@ -244,7 +244,7 @@ export default function CreateRouteModal({ selectedJobs, onClose, onSuccess }: C
                 display: 'block', 
                 fontSize: 12, 
                 fontWeight: 600, 
-                color: '#e2e8f0',
+                color: 'var(--text)',
                 marginBottom: 6
               }}>
                 <User size={14} style={{ display: 'inline', marginRight: 4 }} />
@@ -259,10 +259,10 @@ export default function CreateRouteModal({ selectedJobs, onClose, onSuccess }: C
                 style={{
                   width: '100%',
                   padding: '10px 12px',
-                  background: 'rgba(15,23,42,0.6)',
-                  border: '1px solid rgba(255,255,255,0.1)',
+                  background: 'var(--panel-elevated)',
+                  border: '1px solid var(--border)',
                   borderRadius: 6,
-                  color: '#e2e8f0',
+                  color: 'var(--text)',
                   fontSize: 13,
                   outline: 'none'
                 }}
@@ -275,7 +275,7 @@ export default function CreateRouteModal({ selectedJobs, onClose, onSuccess }: C
                 display: 'block', 
                 fontSize: 12, 
                 fontWeight: 600, 
-                color: '#e2e8f0',
+                color: 'var(--text)',
                 marginBottom: 6
               }}>
                 <Phone size={14} style={{ display: 'inline', marginRight: 4 }} />
@@ -290,10 +290,10 @@ export default function CreateRouteModal({ selectedJobs, onClose, onSuccess }: C
                 style={{
                   width: '100%',
                   padding: '10px 12px',
-                  background: 'rgba(15,23,42,0.6)',
-                  border: '1px solid rgba(255,255,255,0.1)',
+                  background: 'var(--panel-elevated)',
+                  border: '1px solid var(--border)',
                   borderRadius: 6,
-                  color: '#e2e8f0',
+                  color: 'var(--text)',
                   fontSize: 13,
                   outline: 'none'
                 }}
@@ -306,7 +306,7 @@ export default function CreateRouteModal({ selectedJobs, onClose, onSuccess }: C
                 display: 'block', 
                 fontSize: 12, 
                 fontWeight: 600, 
-                color: '#e2e8f0',
+                color: 'var(--text)',
                 marginBottom: 6
               }}>
                 <Truck size={14} style={{ display: 'inline', marginRight: 4 }} />
@@ -320,10 +320,10 @@ export default function CreateRouteModal({ selectedJobs, onClose, onSuccess }: C
                 style={{
                   width: '100%',
                   padding: '10px 12px',
-                  background: 'rgba(15,23,42,0.6)',
-                  border: '1px solid rgba(255,255,255,0.1)',
+                  background: 'var(--panel-elevated)',
+                  border: '1px solid var(--border)',
                   borderRadius: 6,
-                  color: '#e2e8f0',
+                  color: 'var(--text)',
                   fontSize: 13,
                   outline: 'none'
                 }}
@@ -336,7 +336,7 @@ export default function CreateRouteModal({ selectedJobs, onClose, onSuccess }: C
                 display: 'block', 
                 fontSize: 12, 
                 fontWeight: 600, 
-                color: '#e2e8f0',
+                color: 'var(--text)',
                 marginBottom: 6
               }}>
                 <MapPin size={14} style={{ display: 'inline', marginRight: 4 }} />
@@ -344,14 +344,14 @@ export default function CreateRouteModal({ selectedJobs, onClose, onSuccess }: C
               </label>
               <div style={{
                 padding: 10,
-                background: 'rgba(15,23,42,0.6)',
-                border: '1px solid rgba(255,255,255,0.1)',
+                background: 'var(--panel-elevated)',
+                border: '1px solid var(--border)',
                 borderRadius: 6,
                 fontSize: 12,
-                color: '#94a3b8'
+                color: 'var(--muted)'
               }}>
                 Bodega Solcom (por defecto)
-                <div style={{ fontSize: 11, color: '#64748b', marginTop: 4 }}>
+                <div style={{ fontSize: 11, color: 'var(--muted)', marginTop: 4 }}>
                   {formData.originLat}, {formData.originLng}
                 </div>
               </div>
@@ -365,7 +365,7 @@ export default function CreateRouteModal({ selectedJobs, onClose, onSuccess }: C
                 gap: 8,
                 cursor: 'pointer',
                 fontSize: 13,
-                color: '#e2e8f0'
+                color: 'var(--text)'
               }}>
                 <input
                   type="checkbox"
@@ -419,7 +419,7 @@ export default function CreateRouteModal({ selectedJobs, onClose, onSuccess }: C
               <div style={{
                 marginTop: 12,
                 fontSize: 11,
-                color: '#64748b',
+                color: 'var(--muted)',
                 textAlign: 'center'
               }}>
                 Completá las coordenadas de los pedidos antes de crear la ruta

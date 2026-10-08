@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import Card from '@/components/ui/Card';
 import Button from '@/components/ui/Button';
+import Select from '@/components/ui/Select';
 import {
   AlertCircle,
   AlertTriangle,
@@ -555,30 +556,30 @@ export default function ComprasRestockPage() {
 
     if (row.stock_total === 0) {
       if (weeklyAvg > 0) {
-        return { label: 'Agotado (0 sem)', color: '#ef4444', icon: AlertCircle, bg: 'rgba(239,68,68,0.1)' };
+        return { label: 'Agotado (0 sem)', color: 'var(--danger)', icon: AlertCircle, bg: 'var(--danger-surface)' };
       }
-      return { label: 'Sin Stock', color: '#64748b', icon: AlertCircle, bg: 'rgba(100,116,139,0.1)' };
+      return { label: 'Sin Stock', color: 'var(--muted)', icon: AlertCircle, bg: 'var(--surface-hover)' };
     }
 
     if (weeklyAvg === 0) {
-      return { label: 'Sano (Sin ventas)', color: '#10b981', icon: CheckCircle2, bg: 'rgba(16,185,129,0.1)' };
+      return { label: 'Sano (Sin ventas)', color: 'var(--success)', icon: CheckCircle2, bg: 'var(--success-surface)' };
     }
 
     const coverageWeeks = row.stock_total / weeklyAvg;
 
     if (coverageWeeks <= 1.5) {
-      return { label: `Crítico (~${coverageWeeks.toFixed(1)} sem)`, color: '#f59e0b', icon: AlertTriangle, bg: 'rgba(245,158,11,0.1)' };
+      return { label: `Crítico (~${coverageWeeks.toFixed(1)} sem)`, color: 'var(--warning)', icon: AlertTriangle, bg: 'var(--warning-surface)' };
     }
     if (coverageWeeks <= 5.0) {
-      return { label: `Sano (~${coverageWeeks.toFixed(1)} sem)`, color: '#10b981', icon: CheckCircle2, bg: 'rgba(16,185,129,0.1)' };
+      return { label: `Sano (~${coverageWeeks.toFixed(1)} sem)`, color: 'var(--success)', icon: CheckCircle2, bg: 'var(--success-surface)' };
     }
-    return { label: `Exceso (~${coverageWeeks.toFixed(1)} sem)`, color: '#3b82f6', icon: TrendingDown, bg: 'rgba(59,130,246,0.1)' };
+    return { label: `Exceso (~${coverageWeeks.toFixed(1)} sem)`, color: 'var(--info)', icon: TrendingDown, bg: 'var(--info-surface)' };
   };
 
   const noticePalette: Record<PageNotice['type'], { bg: string; color: string; border: string }> = {
-    error: { bg: 'rgba(239, 68, 68, 0.14)', color: '#fecaca', border: 'rgba(239, 68, 68, 0.28)' },
-    success: { bg: 'rgba(16, 185, 129, 0.14)', color: '#bbf7d0', border: 'rgba(16, 185, 129, 0.28)' },
-    info: { bg: 'rgba(59, 130, 246, 0.14)', color: '#bfdbfe', border: 'rgba(59, 130, 246, 0.28)' },
+    error: { bg: 'var(--danger-surface)', color: 'var(--danger)', border: 'color-mix(in srgb, var(--danger) 35%, var(--border))' },
+    success: { bg: 'var(--success-surface)', color: 'var(--success)', border: 'color-mix(in srgb, var(--success) 35%, var(--border))' },
+    info: { bg: 'var(--info-surface)', color: 'var(--info)', border: 'color-mix(in srgb, var(--info) 35%, var(--border))' },
   };
 
   const shellStyle: React.CSSProperties = {
@@ -595,7 +596,7 @@ export default function ComprasRestockPage() {
     padding: '0 16px',
     borderRadius: 8,
     border: 'none',
-    background: 'var(--brand-primary)', // Solis Red
+    background: 'var(--brand-button-gradient)',
     color: '#ffffff',
     fontSize: 14,
     fontWeight: 600,
@@ -606,16 +607,16 @@ export default function ComprasRestockPage() {
     cursor: 'pointer',
     transition: 'all 150ms ease',
     whiteSpace: 'nowrap',
-    boxShadow: '0 4px 12px rgba(220, 38, 38, 0.25)',
+    boxShadow: '0 4px 12px var(--sidebar-active-glow)',
   };
 
   const toolbarButtonStyleExcel: React.CSSProperties = {
     height: 38,
     padding: '0 14px',
     borderRadius: 8,
-    border: '1px solid rgba(16, 185, 129, 0.2)',
-    background: 'rgba(16, 185, 129, 0.06)',
-    color: '#10b981', // Excel Green
+    border: '1px solid color-mix(in srgb, var(--success) 32%, var(--border))',
+    background: 'var(--success-surface)',
+    color: 'var(--success)',
     fontSize: 13,
     fontWeight: 600,
     display: 'inline-flex',
@@ -631,9 +632,9 @@ export default function ComprasRestockPage() {
     height: 38,
     padding: '0 14px',
     borderRadius: 8,
-    border: '1px solid rgba(99, 102, 241, 0.2)',
-    background: 'rgba(99, 102, 241, 0.08)',
-    color: '#818cf8', // Indigo/violet tint
+    border: '1px solid color-mix(in srgb, var(--kpi-violet) 32%, var(--border))',
+    background: 'var(--violet-surface)',
+    color: 'var(--kpi-violet)',
     fontSize: 13,
     fontWeight: 600,
     display: 'inline-flex',
@@ -646,7 +647,7 @@ export default function ComprasRestockPage() {
   };
 
   return (
-    <div style={shellStyle}>
+    <div className="compras-module-view" style={shellStyle}>
       <style>{`
 
 
@@ -654,8 +655,8 @@ export default function ComprasRestockPage() {
           transition: all 150ms ease-in-out;
         }
         .compras-btn-primary:hover:not(:disabled) {
-          background: #b91c1c !important;
-          box-shadow: 0 6px 16px rgba(220, 38, 38, 0.35) !important;
+          filter: brightness(1.06);
+          box-shadow: 0 6px 16px var(--sidebar-active-glow) !important;
         }
         .compras-btn-primary:active:not(:disabled) {
           transform: scale(0.97);
@@ -665,9 +666,9 @@ export default function ComprasRestockPage() {
           transition: all 150ms ease-in-out;
         }
         .compras-btn-excel:hover:not(:disabled) {
-          background: rgba(16, 185, 129, 0.14) !important;
-          border-color: rgba(16, 185, 129, 0.4) !important;
-          color: #34d399 !important;
+          background: var(--success-surface) !important;
+          border-color: var(--success) !important;
+          color: var(--success) !important;
         }
         .compras-btn-excel:active:not(:disabled) {
           transform: scale(0.97);
@@ -677,9 +678,9 @@ export default function ComprasRestockPage() {
           transition: all 150ms ease-in-out;
         }
         .compras-btn-ai:hover:not(:disabled) {
-          background: rgba(99, 102, 241, 0.14) !important;
-          border-color: rgba(99, 102, 241, 0.4) !important;
-          color: #a5b4fc !important;
+          background: var(--violet-surface) !important;
+          border-color: var(--kpi-violet) !important;
+          color: var(--kpi-violet) !important;
         }
         .compras-btn-ai:active:not(:disabled) {
           transform: scale(0.97);
@@ -689,7 +690,8 @@ export default function ComprasRestockPage() {
           transition: border-color 150ms ease;
         }
         .compras-date-input:focus {
-          border-color: rgba(96, 165, 250, 0.4) !important;
+          border-color: var(--info) !important;
+          box-shadow: 0 0 0 3px var(--focus-ring);
           outline: none;
         }
       `}</style>
@@ -697,20 +699,20 @@ export default function ComprasRestockPage() {
 
 
       {/* HEADER SECTION */}
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: 16 }}>
+      <div className="compras-page-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: 16 }}>
         <div>
-          <h1 style={{ margin: 0, fontSize: 28, color: '#f8fafc', fontWeight: 800, display: 'flex', alignItems: 'center', gap: 12 }}>
-            <div style={{ background: 'rgba(59,130,246,0.2)', padding: 8, borderRadius: 12 }}>
-              <ShoppingCart size={24} color="#60a5fa" />
+          <h1 className="inventory-title compras-page-title">
+            <div className="system-title-mark">
+              <ShoppingCart size={21} />
             </div>
             Estrategia de Compras
           </h1>
-          <p style={{ margin: '6px 0 0 0', color: '#94a3b8', fontSize: 14 }}>
+          <p style={{ margin: '6px 0 0 0', color: 'var(--muted)', fontSize: 14 }}>
             Análisis de cobertura de inventario basado en ventas reales.
           </p>
         </div>
         <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'flex-end', justifyContent: mobileView ? 'stretch' : 'flex-end' }}>
-          <label style={{ display: 'grid', gap: 4, color: '#94a3b8', fontSize: 11 }}>
+          <label style={{ display: 'grid', gap: 4, color: 'var(--muted)', fontSize: 11 }}>
             Inicio
             <input
               type="date"
@@ -722,15 +724,15 @@ export default function ComprasRestockPage() {
               style={{
                 height: 40,
                 borderRadius: 8,
-                border: '1px solid rgba(148,163,184,0.24)',
-                background: 'rgba(15,23,42,0.72)',
-                color: '#e2e8f0',
+                border: '1px solid var(--border)',
+                background: 'var(--control-surface-gradient)',
+                color: 'var(--text)',
                 padding: '0 12px',
                 minWidth: 150,
               }}
             />
           </label>
-          <label style={{ display: 'grid', gap: 4, color: '#94a3b8', fontSize: 11 }}>
+          <label style={{ display: 'grid', gap: 4, color: 'var(--muted)', fontSize: 11 }}>
             Final
             <input
               type="date"
@@ -742,9 +744,9 @@ export default function ComprasRestockPage() {
               style={{
                 height: 40,
                 borderRadius: 8,
-                border: '1px solid rgba(148,163,184,0.24)',
-                background: 'rgba(15,23,42,0.72)',
-                color: '#e2e8f0',
+                border: '1px solid var(--border)',
+                background: 'var(--control-surface-gradient)',
+                color: 'var(--text)',
                 padding: '0 12px',
                 minWidth: 150,
               }}
@@ -786,63 +788,63 @@ export default function ComprasRestockPage() {
 
       {/* DASHBOARD KPIs */}
       {results && (
-        <div style={{ display: 'grid', gridTemplateColumns: mobileView ? '1fr' : 'repeat(4, 1fr)', gap: 16 }}>
-          <Card style={{ padding: 20, border: '1px solid rgba(59,130,246,0.2)', background: 'rgba(15,23,42,0.6)' }}>
+        <div className="compras-kpi-grid">
+          <Card className="compras-kpi-card tone-info" style={{ padding: 20 }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 12 }}>
-              <div style={{ background: 'rgba(59,130,246,0.1)', padding: 8, borderRadius: 8 }}><Wallet size={20} color="#60a5fa" /></div>
-              <div style={{ color: '#94a3b8', fontSize: 13, fontWeight: 600 }}>Presupuesto Sugerido</div>
+              <div className="compras-kpi-icon"><Wallet size={20} /></div>
+              <div className="compras-kpi-label">Presupuesto Sugerido</div>
             </div>
-            <div style={{ fontSize: 28, fontWeight: 800, color: '#f8fafc' }}>{formatCurrency(totalDinero)}</div>
-            <div style={{ fontSize: 12, color: '#64748b', marginTop: 4 }}>Para reponer {Math.round(totalUnidades)} unidades</div>
+            <div className="compras-kpi-value">{formatCurrency(totalDinero)}</div>
+            <div className="compras-kpi-note">Para reponer {Math.round(totalUnidades)} unidades</div>
           </Card>
 
-          <Card style={{ padding: 20, border: '1px solid rgba(239,68,68,0.2)', background: 'rgba(15,23,42,0.6)' }}>
+          <Card className="compras-kpi-card tone-danger" style={{ padding: 20 }}>
              <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 12 }}>
-              <div style={{ background: 'rgba(239,68,68,0.1)', padding: 8, borderRadius: 8 }}><AlertTriangle size={20} color="#f87171" /></div>
-              <div style={{ color: '#94a3b8', fontSize: 13, fontWeight: 600 }}>Ítems Críticos</div>
+              <div className="compras-kpi-icon"><AlertTriangle size={20} /></div>
+              <div className="compras-kpi-label">Ítems Críticos</div>
             </div>
-            <div style={{ fontSize: 28, fontWeight: 800, color: '#fca5a5' }}>{kpis.critical}</div>
-            <div style={{ fontSize: 12, color: '#64748b', marginTop: 4 }}>Riesgo inminente de quiebre</div>
+            <div className="compras-kpi-value">{kpis.critical}</div>
+            <div className="compras-kpi-note">Riesgo inminente de quiebre</div>
           </Card>
 
-          <Card style={{ padding: 20, border: '1px solid rgba(16,185,129,0.2)', background: 'rgba(15,23,42,0.6)' }}>
+          <Card className="compras-kpi-card tone-success" style={{ padding: 20 }}>
              <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 12 }}>
-              <div style={{ background: 'rgba(16,185,129,0.1)', padding: 8, borderRadius: 8 }}><CheckCircle2 size={20} color="#34d399" /></div>
-              <div style={{ color: '#94a3b8', fontSize: 13, fontWeight: 600 }}>Ítems Sanos</div>
+              <div className="compras-kpi-icon"><CheckCircle2 size={20} /></div>
+              <div className="compras-kpi-label">Ítems Sanos</div>
             </div>
-            <div style={{ fontSize: 28, fontWeight: 800, color: '#6ee7b7' }}>{kpis.healthy}</div>
-            <div style={{ fontSize: 12, color: '#64748b', marginTop: 4 }}>Cobertura adecuada (1.5 - 4 sem.)</div>
+            <div className="compras-kpi-value">{kpis.healthy}</div>
+            <div className="compras-kpi-note">Cobertura adecuada (1.5 - 4 sem.)</div>
           </Card>
 
-           <Card style={{ padding: 20, border: '1px solid rgba(99,102,241,0.2)', background: 'rgba(15,23,42,0.6)' }}>
+           <Card className="compras-kpi-card tone-violet" style={{ padding: 20 }}>
              <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 12 }}>
-              <div style={{ background: 'rgba(99,102,241,0.1)', padding: 8, borderRadius: 8 }}><TrendingDown size={20} color="#818cf8" /></div>
-              <div style={{ color: '#94a3b8', fontSize: 13, fontWeight: 600 }}>Sobre-Stock</div>
+              <div className="compras-kpi-icon"><TrendingDown size={20} /></div>
+              <div className="compras-kpi-label">Sobre-Stock</div>
             </div>
-            <div style={{ fontSize: 28, fontWeight: 800, color: '#a5b4fc' }}>{kpis.overstocked}</div>
-            <div style={{ fontSize: 12, color: '#64748b', marginTop: 4 }}>Más de 4 semanas de cobertura</div>
+            <div className="compras-kpi-value">{kpis.overstocked}</div>
+            <div className="compras-kpi-note">Más de 4 semanas de cobertura</div>
           </Card>
         </div>
       )}
 
       {/* TABLE SECTION */}
       {results ? (
-        <Card style={{ border: '1px solid rgba(255,255,255,0.08)', overflow: 'hidden' }}>
+        <Card className="compras-results-card" style={{ border: '1px solid var(--border)', overflow: 'hidden' }}>
           {/* Toolbar */}
           <div
             style={{
               padding: '16px 20px',
-              borderBottom: '1px solid rgba(255,255,255,0.06)',
+              borderBottom: '1px solid var(--border)',
               display: 'flex',
               flexWrap: 'wrap',
               justifyContent: 'space-between',
               gap: 16,
-              background: 'rgba(15,23,42,0.4)',
+              background: 'var(--card-surface-gradient)',
             }}
           >
             <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', flex: 1 }}>
               {/* Vistas selector */}
-              <div style={{ display: 'flex', background: 'rgba(0,0,0,0.2)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: 10, padding: 2 }}>
+              <div className="compras-view-switch">
                 <button
                   onClick={() => {
                     setActiveView('compras');
@@ -852,8 +854,9 @@ export default function ComprasRestockPage() {
                     padding: '6px 12px',
                     borderRadius: 8,
                     border: 'none',
-                    background: activeView === 'compras' ? 'rgba(255,255,255,0.08)' : 'transparent',
-                    color: activeView === 'compras' ? '#ffffff' : '#94a3b8',
+                    background: activeView === 'compras' ? 'var(--brand-button-gradient)' : 'transparent',
+                    color: activeView === 'compras' ? '#fff' : 'var(--muted)',
+                    boxShadow: activeView === 'compras' ? '0 3px 9px var(--sidebar-active-glow)' : 'none',
                     fontSize: 13,
                     fontWeight: 600,
                     cursor: 'pointer',
@@ -871,8 +874,9 @@ export default function ComprasRestockPage() {
                     padding: '6px 12px',
                     borderRadius: 8,
                     border: 'none',
-                    background: activeView === 'ventas' ? 'rgba(255,255,255,0.08)' : 'transparent',
-                    color: activeView === 'ventas' ? '#ffffff' : '#94a3b8',
+                    background: activeView === 'ventas' ? 'var(--brand-button-gradient)' : 'transparent',
+                    color: activeView === 'ventas' ? '#fff' : 'var(--muted)',
+                    boxShadow: activeView === 'ventas' ? '0 3px 9px var(--sidebar-active-glow)' : 'none',
                     fontSize: 13,
                     fontWeight: 600,
                     cursor: 'pointer',
@@ -888,14 +892,14 @@ export default function ComprasRestockPage() {
                   display: 'flex',
                   alignItems: 'center',
                   gap: 8,
-                  background: 'rgba(0,0,0,0.2)',
-                  border: '1px solid rgba(255,255,255,0.1)',
+                  background: 'var(--control-surface-gradient)',
+                  border: '1px solid var(--border)',
                   borderRadius: 10,
                   padding: '8px 14px',
                   flex: mobileView ? 1 : '0 1 250px',
                 }}
               >
-                <Search size={16} color="#94a3b8" />
+                <Search size={16} color="var(--muted)" />
                 <input
                   value={searchTerm}
                   onChange={(e) => setSearchTerm(e.target.value)}
@@ -904,64 +908,50 @@ export default function ComprasRestockPage() {
                     width: '100%',
                     background: 'transparent',
                     border: 'none',
-                    color: '#f8fafc',
+                    color: 'var(--text)',
                     outline: 'none',
                     fontSize: 14,
                   }}
                 />
               </div>
-              <select
+              <Select
+                className="compras-filter-select"
+                aria-label="Filtrar por marca"
                 value={selectedBrand}
                 onChange={(e) => setSelectedBrand(e.target.value)}
-                style={{
-                  background: 'rgba(0,0,0,0.2)',
-                  border: '1px solid rgba(255,255,255,0.1)',
-                  borderRadius: 10,
-                  color: '#e2e8f0',
-                  fontSize: 14,
-                  padding: '8px 12px',
-                  minWidth: 170,
-                }}
-              >
-                <option value="all">Todas las marcas</option>
-                {brandOptions.map((brand) => (
-                  <option key={brand} value={brand}>{brand}</option>
-                ))}
-              </select>
-              <select
+                options={[
+                  { value: 'all', label: 'Todas las marcas' },
+                  ...brandOptions.map((brand) => ({ value: brand, label: brand })),
+                ]}
+                style={{ minWidth: 170 }}
+              />
+              <Select
+                className="compras-filter-select"
+                aria-label="Filtrar por categoría"
                 value={selectedCategory}
                 onChange={(e) => setSelectedCategory(e.target.value)}
-                style={{
-                  background: 'rgba(0,0,0,0.2)',
-                  border: '1px solid rgba(255,255,255,0.1)',
-                  borderRadius: 10,
-                  color: '#e2e8f0',
-                  fontSize: 14,
-                  padding: '8px 12px',
-                  minWidth: 190,
-                }}
-              >
-                <option value="all">Todas las categorias</option>
-                {categoryOptions.map((category) => (
-                  <option key={category} value={category}>{category}</option>
-                ))}
-              </select>
+                options={[
+                  { value: 'all', label: 'Todas las categorías' },
+                  ...categoryOptions.map((category) => ({ value: category, label: category })),
+                ]}
+                style={{ minWidth: 190 }}
+              />
               <label
                 style={{
                   display: 'flex',
                   alignItems: 'center',
                   gap: 8,
-                  color: '#e2e8f0',
+                  color: 'var(--text)',
                   fontSize: 14,
-                  border: '1px solid rgba(255,255,255,0.1)',
+                  border: '1px solid var(--border)',
                   borderRadius: 10,
                   padding: '8px 14px',
                   cursor: 'pointer',
                   userSelect: 'none',
-                  background: onlyNeedsRestock ? 'rgba(59,130,246,0.1)' : 'transparent',
+                  background: onlyNeedsRestock ? 'var(--info-surface)' : 'var(--control-surface-gradient)',
                 }}
               >
-                <SlidersHorizontal size={16} color={onlyNeedsRestock ? '#60a5fa' : '#94a3b8'} />
+                <SlidersHorizontal size={16} color={onlyNeedsRestock ? 'var(--info)' : 'var(--muted)'} />
                 <input type="checkbox" checked={onlyNeedsRestock} onChange={(e) => setOnlyNeedsRestock(e.target.checked)} style={{ display: 'none' }} />
                 Mostrar solo requeridos
               </label>
@@ -989,21 +979,21 @@ export default function ComprasRestockPage() {
 
           {/* Table */}
           {!mobileView ? (
-            <div style={{ overflowX: 'auto', maxHeight: 600 }}>
-              <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: 14 }}>
-                <thead style={{ background: 'rgba(15,23,42,0.9)', position: 'sticky', top: 0, zIndex: 1, backdropFilter: 'blur(8px)' }}>
+            <div className="compras-table-scroll" style={{ overflowX: 'auto', maxHeight: 600 }}>
+              <table className="compras-table" style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: 14 }}>
+                <thead className="compras-table-head">
                   <tr>
-                    <th style={{ padding: '16px 20px', color: '#94a3b8', fontWeight: 600, borderBottom: '1px solid rgba(255,255,255,0.05)' }}>Producto</th>
-                    <th style={{ padding: '16px 20px', color: '#94a3b8', fontWeight: 600, borderBottom: '1px solid rgba(255,255,255,0.05)' }}>{activeView === 'compras' ? 'Estado' : 'Cobertura'}</th>
-                    <th style={{ padding: '16px 20px', color: '#94a3b8', fontWeight: 600, textAlign: 'right', borderBottom: '1px solid rgba(255,255,255,0.05)' }}>Ventas (4 sem)</th>
+                    <th style={{ padding: '16px 20px', color: 'var(--muted)', fontWeight: 600, borderBottom: '1px solid var(--border)' }}>Producto</th>
+                    <th style={{ padding: '16px 20px', color: 'var(--muted)', fontWeight: 600, borderBottom: '1px solid var(--border)' }}>{activeView === 'compras' ? 'Estado' : 'Cobertura'}</th>
+                    <th style={{ padding: '16px 20px', color: 'var(--muted)', fontWeight: 600, textAlign: 'right', borderBottom: '1px solid var(--border)' }}>Ventas (4 sem)</th>
                     {activeView === 'ventas' && (
-                      <th style={{ padding: '16px 20px', color: '#94a3b8', fontWeight: 600, textAlign: 'right', borderBottom: '1px solid rgba(255,255,255,0.05)' }}>P. Unitario</th>
+                      <th style={{ padding: '16px 20px', color: 'var(--muted)', fontWeight: 600, textAlign: 'right', borderBottom: '1px solid var(--border)' }}>P. Unitario</th>
                     )}
-                    <th style={{ padding: '16px 20px', color: '#94a3b8', fontWeight: 600, textAlign: 'right', borderBottom: '1px solid rgba(255,255,255,0.05)' }}>Stock Actual</th>
+                    <th style={{ padding: '16px 20px', color: 'var(--muted)', fontWeight: 600, textAlign: 'right', borderBottom: '1px solid var(--border)' }}>Stock Actual</th>
                     {activeView === 'compras' && (
                       <>
-                        <th style={{ padding: '16px 20px', color: '#94a3b8', fontWeight: 600, textAlign: 'right', borderBottom: '1px solid rgba(255,255,255,0.05)' }}>Sugerido</th>
-                        <th style={{ padding: '16px 20px', color: '#94a3b8', fontWeight: 600, textAlign: 'right', borderBottom: '1px solid rgba(255,255,255,0.05)' }}>Inversión</th>
+                        <th style={{ padding: '16px 20px', color: 'var(--muted)', fontWeight: 600, textAlign: 'right', borderBottom: '1px solid var(--border)' }}>Sugerido</th>
+                        <th style={{ padding: '16px 20px', color: 'var(--muted)', fontWeight: 600, textAlign: 'right', borderBottom: '1px solid var(--border)' }}>Inversión</th>
                       </>
                     )}
                   </tr>
@@ -1011,7 +1001,7 @@ export default function ComprasRestockPage() {
                 <tbody>
                   {filteredResults.length === 0 ? (
                     <tr>
-                      <td colSpan={6} style={{ padding: 40, textAlign: 'center', color: '#64748b' }}>
+                      <td colSpan={6} style={{ padding: 40, textAlign: 'center', color: 'var(--muted)' }}>
                         No hay productos que coincidan con los filtros.
                       </td>
                     </tr>
@@ -1024,31 +1014,31 @@ export default function ComprasRestockPage() {
                       return (
                         <tr
                           key={row.item_id}
+                          className={`compras-table-row${isHovered ? ' is-hovered' : ''}`}
                           onMouseEnter={() => setHoveredItemId(row.item_id)}
                           onMouseLeave={() => setHoveredItemId(null)}
                           style={{
-                            borderBottom: '1px solid rgba(255,255,255,0.03)',
-                            background: isHovered ? 'rgba(255,255,255,0.02)' : 'transparent',
+                            borderBottom: '1px solid var(--table-grid-border)',
                             transition: 'background-color 150ms ease',
                           }}
                         >
                           <td style={{ padding: '14px 20px' }}>
-                            <div style={{ color: '#f8fafc', fontWeight: 600, marginBottom: 4 }}>{row.name}</div>
-                            <div style={{ color: '#64748b', fontSize: 12, display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                            <div style={{ color: 'var(--text)', fontWeight: 600, marginBottom: 4 }}>{row.name}</div>
+                            <div style={{ color: 'var(--muted)', fontSize: 12, display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
                               <span>SKU: {row.sku}</span>
                               {row.color && row.color !== 'Sin color' && (
-                                <span style={{ border: '1px solid rgba(148,163,184,0.35)', borderRadius: 999, padding: '2px 8px', color: '#cbd5e1' }}>
+                                <span style={{ border: '1px solid var(--border)', borderRadius: 999, padding: '2px 8px', color: 'var(--text-secondary)' }}>
                                   Color: {row.color}
                                 </span>
                               )}
                               {row.state && (
                                 <span
                                   style={{
-                                    border: '1px solid ' + (row.state.toLowerCase() === 'nuevo' ? 'rgba(16,185,129,0.3)' : 'rgba(245,158,11,0.3)'),
-                                    background: row.state.toLowerCase() === 'nuevo' ? 'rgba(16,185,129,0.1)' : 'rgba(245,158,11,0.1)',
+                                    border: '1px solid ' + (row.state.toLowerCase() === 'nuevo' ? 'color-mix(in srgb, var(--success) 36%, var(--border))' : 'color-mix(in srgb, var(--warning) 36%, var(--border))'),
+                                    background: row.state.toLowerCase() === 'nuevo' ? 'var(--success-surface)' : 'var(--warning-surface)',
                                     borderRadius: 999,
                                     padding: '2px 8px',
-                                    color: row.state.toLowerCase() === 'nuevo' ? '#34d399' : '#fbbf24',
+                                    color: row.state.toLowerCase() === 'nuevo' ? 'var(--success)' : 'var(--warning)',
                                     fontSize: 11,
                                     fontWeight: 600,
                                     textTransform: 'capitalize'
@@ -1058,7 +1048,7 @@ export default function ComprasRestockPage() {
                                 </span>
                               )}
                             </div>
-                            <div style={{ color: '#94a3b8', fontSize: 11, marginTop: 2 }}>
+                            <div style={{ color: 'var(--muted)', fontSize: 11, marginTop: 2 }}>
                               {row.marca || 'Sin marca'} · {row.category || 'Sin categoria'}
                             </div>
                           </td>
@@ -1080,29 +1070,29 @@ export default function ComprasRestockPage() {
                               {status.label}
                             </span>
                           </td>
-                          <td style={{ padding: '14px 20px', textAlign: 'right', color: '#cbd5e1' }}>
-                            {row.sales_sum} <span style={{ color: '#64748b', fontSize: 12 }}>uds</span>
+                          <td style={{ padding: '14px 20px', textAlign: 'right', color: 'var(--text-secondary)' }}>
+                            {row.sales_sum} <span style={{ color: 'var(--muted)', fontSize: 12 }}>uds</span>
                           </td>
                           {activeView === 'ventas' && (
-                            <td style={{ padding: '14px 20px', textAlign: 'right', color: '#cbd5e1' }}>
+                            <td style={{ padding: '14px 20px', textAlign: 'right', color: 'var(--text-secondary)' }}>
                               {formatCurrency(row.price)}
                             </td>
                           )}
-                          <td style={{ padding: '14px 20px', textAlign: 'right', color: '#cbd5e1' }}>
-                            {row.stock_total} <span style={{ color: '#64748b', fontSize: 12 }}>uds</span>
+                          <td style={{ padding: '14px 20px', textAlign: 'right', color: 'var(--text-secondary)' }}>
+                            {row.stock_total} <span style={{ color: 'var(--muted)', fontSize: 12 }}>uds</span>
                           </td>
                           {activeView === 'compras' && (
                             <>
                               <td style={{ padding: '14px 20px', textAlign: 'right' }}>
                                 {row.restock_sugerido > 0 ? (
-                                   <span style={{ color: '#60a5fa', fontWeight: 700, fontSize: 15 }}>
+                                    <span style={{ color: 'var(--info)', fontWeight: 700, fontSize: 15 }}>
                                     +{Math.round(row.restock_sugerido)}
                                    </span>
                                 ) : (
-                                    <span style={{ color: '#64748b' }}>-</span>
+                                    <span style={{ color: 'var(--muted)' }}>-</span>
                                 )}
                               </td>
-                              <td style={{ padding: '14px 20px', textAlign: 'right', color: '#10b981', fontWeight: 600 }}>
+                          <td style={{ padding: '14px 20px', textAlign: 'right', color: 'var(--success)', fontWeight: 600 }}>
                                 {row.presupuesto > 0 ? formatCurrency(row.presupuesto) : '-'}
                               </td>
                             </>
@@ -1115,33 +1105,33 @@ export default function ComprasRestockPage() {
               </table>
             </div>
           ) : (
-             <div style={{ display: 'grid', gap: 12, padding: 16 }}>
+             <div className="compras-mobile-results" style={{ display: 'grid', gap: 12, padding: 16 }}>
                 {filteredResults.map((row) => {
                   const status = getCoverageStatus(row);
                   const StatusIcon = status.icon;
                   return (
-                    <div key={row.item_id} style={{ border: '1px solid rgba(255,255,255,0.06)', borderRadius: 12, padding: 16, background: 'rgba(0,0,0,0.2)' }}>
+                    <div key={row.item_id} className="compras-mobile-row" style={{ border: '1px solid var(--border)', borderRadius: 12, padding: 16, background: 'var(--card-surface-gradient)', boxShadow: '0 3px 10px var(--shadow)' }}>
                       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 8 }}>
-                         <div style={{ color: '#f8fafc', fontWeight: 600, fontSize: 15, paddingRight: 10 }}>{row.name}</div>
+                         <div style={{ color: 'var(--text)', fontWeight: 600, fontSize: 15, paddingRight: 10 }}>{row.name}</div>
                          <span style={{ display: 'flex', alignItems: 'center', gap: 4, color: status.color, background: status.bg, padding: '4px 8px', borderRadius: 6, fontSize: 11, fontWeight: 600, flexShrink: 0 }}>
                             <StatusIcon size={12} /> {status.label}
                           </span>
                       </div>
-                      <div style={{ color: '#64748b', fontSize: 12, display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', marginBottom: 4 }}>
+                      <div style={{ color: 'var(--muted)', fontSize: 12, display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', marginBottom: 4 }}>
                         <span>SKU: {row.sku}</span>
                         {row.color && row.color !== 'Sin color' && (
-                          <span style={{ border: '1px solid rgba(148,163,184,0.35)', borderRadius: 999, padding: '2px 8px', color: '#cbd5e1' }}>
+                          <span style={{ border: '1px solid var(--border)', borderRadius: 999, padding: '2px 8px', color: 'var(--text-secondary)' }}>
                             Color: {row.color}
                           </span>
                         )}
                         {row.state && (
                           <span
                             style={{
-                              border: '1px solid ' + (row.state.toLowerCase() === 'nuevo' ? 'rgba(16,185,129,0.3)' : 'rgba(245,158,11,0.3)'),
-                              background: row.state.toLowerCase() === 'nuevo' ? 'rgba(16,185,129,0.1)' : 'rgba(245,158,11,0.1)',
+                              border: '1px solid ' + (row.state.toLowerCase() === 'nuevo' ? 'color-mix(in srgb, var(--success) 36%, var(--border))' : 'color-mix(in srgb, var(--warning) 36%, var(--border))'),
+                              background: row.state.toLowerCase() === 'nuevo' ? 'var(--success-surface)' : 'var(--warning-surface)',
                               borderRadius: 999,
                               padding: '2px 8px',
-                              color: row.state.toLowerCase() === 'nuevo' ? '#34d399' : '#fbbf24',
+                              color: row.state.toLowerCase() === 'nuevo' ? 'var(--success)' : 'var(--warning)',
                               fontSize: 11,
                               fontWeight: 600,
                               textTransform: 'capitalize'
@@ -1151,7 +1141,7 @@ export default function ComprasRestockPage() {
                           </span>
                         )}
                       </div>
-                      <div style={{ color: '#94a3b8', fontSize: 11, marginBottom: 16 }}>
+                      <div style={{ color: 'var(--muted)', fontSize: 11, marginBottom: 16 }}>
                         {row.marca || 'Sin marca'} · {row.category || 'Sin categoria'}
                       </div>
                       
@@ -1159,35 +1149,35 @@ export default function ComprasRestockPage() {
                         {activeView === 'compras' ? (
                           <>
                             <div>
-                               <div style={{ color: '#64748b', fontSize: 11, marginBottom: 2 }}>Stock Actual</div>
-                               <div style={{ color: '#e2e8f0', fontWeight: 600 }}>{row.stock_total} uds</div>
+                               <div style={{ color: 'var(--muted)', fontSize: 11, marginBottom: 2 }}>Stock Actual</div>
+                               <div style={{ color: 'var(--text)', fontWeight: 600 }}>{row.stock_total} uds</div>
                             </div>
                              <div>
-                               <div style={{ color: '#64748b', fontSize: 11, marginBottom: 2 }}>Sugerido Comprar</div>
-                               <div style={{ color: '#60a5fa', fontWeight: 700 }}>+{Math.round(row.restock_sugerido)} uds</div>
+                               <div style={{ color: 'var(--muted)', fontSize: 11, marginBottom: 2 }}>Sugerido Comprar</div>
+                                <div style={{ color: 'var(--info)', fontWeight: 700 }}>+{Math.round(row.restock_sugerido)} uds</div>
                             </div>
                              <div>
-                               <div style={{ color: '#64748b', fontSize: 11, marginBottom: 2 }}>Ventas (4 sem)</div>
-                               <div style={{ color: '#cbd5e1', fontWeight: 600 }}>{row.sales_sum} uds</div>
+                               <div style={{ color: 'var(--muted)', fontSize: 11, marginBottom: 2 }}>Ventas (4 sem)</div>
+                               <div style={{ color: 'var(--text-secondary)', fontWeight: 600 }}>{row.sales_sum} uds</div>
                             </div>
                             <div>
-                               <div style={{ color: '#64748b', fontSize: 11, marginBottom: 2 }}>Inversión</div>
-                               <div style={{ color: '#10b981', fontWeight: 600 }}>{formatCurrency(row.presupuesto)}</div>
+                               <div style={{ color: 'var(--muted)', fontSize: 11, marginBottom: 2 }}>Inversión</div>
+                                <div style={{ color: 'var(--success)', fontWeight: 600 }}>{formatCurrency(row.presupuesto)}</div>
                             </div>
                           </>
                         ) : (
                           <>
                             <div>
-                               <div style={{ color: '#64748b', fontSize: 11, marginBottom: 2 }}>Ventas (4 sem)</div>
-                               <div style={{ color: '#e2e8f0', fontWeight: 600 }}>{row.sales_sum} uds</div>
+                               <div style={{ color: 'var(--muted)', fontSize: 11, marginBottom: 2 }}>Ventas (4 sem)</div>
+                               <div style={{ color: 'var(--text)', fontWeight: 600 }}>{row.sales_sum} uds</div>
                             </div>
                              <div>
-                               <div style={{ color: '#64748b', fontSize: 11, marginBottom: 2 }}>Stock Actual</div>
-                               <div style={{ color: '#cbd5e1', fontWeight: 600 }}>{row.stock_total} uds</div>
+                               <div style={{ color: 'var(--muted)', fontSize: 11, marginBottom: 2 }}>Stock Actual</div>
+                               <div style={{ color: 'var(--text-secondary)', fontWeight: 600 }}>{row.stock_total} uds</div>
                             </div>
                              <div>
-                               <div style={{ color: '#64748b', fontSize: 11, marginBottom: 2 }}>P. Unitario</div>
-                               <div style={{ color: '#cbd5e1', fontWeight: 600 }}>{formatCurrency(row.price)}</div>
+                               <div style={{ color: 'var(--muted)', fontSize: 11, marginBottom: 2 }}>P. Unitario</div>
+                               <div style={{ color: 'var(--text-secondary)', fontWeight: 600 }}>{formatCurrency(row.price)}</div>
                             </div>
                           </>
                         )}
@@ -1201,8 +1191,8 @@ export default function ComprasRestockPage() {
       ) : (
         <Card
           style={{
-            border: '1px dashed rgba(148,163,184,0.2)',
-            background: 'rgba(15,23,42,0.4)',
+            border: '1px dashed var(--border)',
+            background: 'var(--card-surface-gradient)',
           }}
         >
           <div style={{ padding: '80px 24px', textAlign: 'center' }}>
@@ -1211,17 +1201,17 @@ export default function ComprasRestockPage() {
                 width: 80,
                 height: 80,
                 borderRadius: 999,
-                background: 'rgba(59,130,246,0.1)',
+                background: 'var(--info-surface)',
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'center',
                 margin: '0 auto 20px',
               }}
             >
-              <Database size={36} color="#60a5fa" />
+              <Database size={36} color="var(--info)" />
             </div>
-            <h3 style={{ margin: 0, color: '#f8fafc', fontSize: 24, fontWeight: 700 }}>Analiza tu inventario</h3>
-            <p style={{ margin: '12px auto 0 auto', maxWidth: 500, color: '#94a3b8', fontSize: 15, lineHeight: 1.6 }}>
+            <h3 style={{ margin: 0, color: 'var(--text)', fontSize: 24, fontWeight: 700 }}>Analiza tu inventario</h3>
+            <p style={{ margin: '12px auto 0 auto', maxWidth: 500, color: 'var(--muted)', fontSize: 15, lineHeight: 1.6 }}>
               Presiona el botón de <strong>Actualizar Análisis</strong> para calcular las necesidades de compra basadas en tus ventas recientes y el stock actual.
             </p>
           </div>

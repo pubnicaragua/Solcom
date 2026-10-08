@@ -1,6 +1,8 @@
 'use client';
 
-import { BarChart3, TrendingUp, TrendingDown, Clock, MoveUpRight, MoveDownRight, Activity } from 'lucide-react';
+import { BarChart3, Activity, Clock, TrendingDown, TrendingUp } from 'lucide-react';
+import RouteKpiCard from '@/components/rutas/RouteKpiCard';
+import Select from '@/components/ui/Select';
 
 export default function InsightsPage() {
     return (
@@ -11,38 +13,11 @@ export default function InsightsPage() {
             </div>
 
             {/* Top Value Cards */}
-            <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-                <div className="bg-white p-5 rounded-xl border border-gray-100 shadow-sm relative overflow-hidden">
-                    <h3 className="text-sm font-medium text-gray-500 mb-1">On-Time Delivery (OTD)</h3>
-                    <div className="text-3xl font-bold text-gray-900 flex items-center gap-2">
-                        94.2% <MoveUpRight className="h-5 w-5 text-emerald-500" />
-                    </div>
-                    <p className="text-xs text-emerald-600 mt-2 font-medium">+2.1% vs mes pasado</p>
-                </div>
-
-                <div className="bg-white p-5 rounded-xl border border-gray-100 shadow-sm relative overflow-hidden">
-                    <h3 className="text-sm font-medium text-gray-500 mb-1">Entregas Fallidas</h3>
-                    <div className="text-3xl font-bold text-gray-900 flex items-center gap-2">
-                        2.8% <MoveDownRight className="h-5 w-5 text-emerald-500" />
-                    </div>
-                    <p className="text-xs text-emerald-600 mt-2 font-medium">-1.4% vs mes pasado</p>
-                </div>
-
-                <div className="bg-white p-5 rounded-xl border border-gray-100 shadow-sm relative overflow-hidden">
-                    <h3 className="text-sm font-medium text-gray-500 mb-1">Tiempo Prom. Servicio</h3>
-                    <div className="text-3xl font-bold text-gray-900 flex items-center gap-2">
-                        12m
-                    </div>
-                    <p className="text-xs text-orange-500 mt-2 font-medium">Ligeramente alto en Managua Norte</p>
-                </div>
-
-                <div className="bg-white p-5 rounded-xl border border-gray-100 shadow-sm relative overflow-hidden">
-                    <h3 className="text-sm font-medium text-gray-500 mb-1">Desviación de Ruta</h3>
-                    <div className="text-3xl font-bold text-gray-900 flex items-center gap-2">
-                        4.1%
-                    </div>
-                    <p className="text-xs text-gray-500 mt-2 font-medium">Extra KM recorridos (Promedio)</p>
-                </div>
+            <div className="routes-insights-kpis">
+                <RouteKpiCard icon={TrendingUp} label="On-Time Delivery (OTD)" value="94.2%" tone="success" footer="+2.1% vs mes pasado" footerTone="success" />
+                <RouteKpiCard icon={TrendingDown} label="Entregas Fallidas" value="2.8%" tone="info" footer="-1.4% vs mes pasado" footerTone="success" />
+                <RouteKpiCard icon={Clock} label="Tiempo Prom. Servicio" value="12m" tone="warning" footer="Ligeramente alto en Managua Norte" footerTone="warning" />
+                <RouteKpiCard icon={Activity} label="Desviación de Ruta" value="4.1%" tone="violet" footer="Extra KM recorridos (Promedio)" footerTone="neutral" />
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mt-6">
@@ -50,10 +25,15 @@ export default function InsightsPage() {
                 <div className="bg-white p-6 rounded-xl border border-gray-100 shadow-sm">
                     <div className="flex items-center justify-between mb-6">
                         <h3 className="font-semibold text-gray-900 flex items-center gap-2"><BarChart3 className="h-4 w-4 text-gray-400" /> Entregas por Día</h3>
-                        <select className="text-xs border-gray-200 rounded-lg p-1">
-                            <option>Últimos 7 días</option>
-                            <option>Últimos 30 días</option>
-                        </select>
+                        <Select
+                            aria-label="Periodo del gráfico"
+                            defaultValue="7"
+                            style={{ width: 165, fontSize: 12 }}
+                            options={[
+                                { value: '7', label: 'Últimos 7 días' },
+                                { value: '30', label: 'Últimos 30 días' },
+                            ]}
+                        />
                     </div>
 
                     <div className="h-64 flex items-end gap-2 justify-between">

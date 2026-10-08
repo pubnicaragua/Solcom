@@ -139,7 +139,7 @@ export default function AuditLogViewer({ roleIdentifier }: AuditLogViewerProps) 
 
   if (loading) {
     return (
-      <Card>
+      <Card className="roles-audit-state-card">
         <div style={{ padding: 30, display: 'flex', justifyContent: 'center', flexDirection: 'column', alignItems: 'center' }}>
           <Loader2 size={30} className="animate-spin" style={{ color: 'var(--brand-accent)', marginBottom: 12 }} />
           <p style={{ color: 'var(--muted)', fontSize: 14 }}>Cargando historial...</p>
@@ -150,7 +150,7 @@ export default function AuditLogViewer({ roleIdentifier }: AuditLogViewerProps) 
 
   if (error) {
     return (
-      <Card>
+      <Card className="roles-audit-state-card">
         <div style={{ padding: 20, textAlign: 'center', color: 'var(--danger)' }}>
           <AlertCircle size={30} style={{ margin: '0 auto 12px auto' }} />
           <p>{error}</p>
@@ -161,7 +161,7 @@ export default function AuditLogViewer({ roleIdentifier }: AuditLogViewerProps) 
 
   if (logs.length === 0) {
     return (
-      <Card>
+      <Card className="roles-audit-state-card">
         <div style={{ padding: 40, textAlign: 'center', color: 'var(--muted)' }}>
           <History size={40} style={{ margin: '0 auto 16px auto', opacity: 0.5 }} />
           <p>No hay eventos de auditoría registrados para mostrar.</p>
@@ -180,13 +180,13 @@ export default function AuditLogViewer({ roleIdentifier }: AuditLogViewerProps) 
   });
 
   return (
-    <div style={{ display: 'grid', gap: 16 }}>
+    <div className="roles-audit-view" style={{ display: 'grid', gap: 16 }}>
       {!roleIdentifier && (uniqueRoles.length > 0 || uniqueActions.length > 0) && (
-        <Card style={{ padding: 12, marginBottom: 4 }}>
+        <Card className="roles-audit-filters" style={{ padding: 12, marginBottom: 4 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
               <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--muted)' }}>Filtros:</span>
-              <select 
+              <select className="roles-audit-select"
                 value={filterRole}
                 onChange={(e) => setFilterRole(e.target.value)}
                 style={{
@@ -205,7 +205,7 @@ export default function AuditLogViewer({ roleIdentifier }: AuditLogViewerProps) 
                 ))}
               </select>
 
-              <select 
+              <select className="roles-audit-select"
                 value={filterAction}
                 onChange={(e) => setFilterAction(e.target.value)}
                 style={{
@@ -235,7 +235,7 @@ export default function AuditLogViewer({ roleIdentifier }: AuditLogViewerProps) 
       )}
 
       {visibleLogs.length === 0 ? (
-        <Card>
+        <Card className="roles-audit-state-card">
           <div style={{ padding: 40, textAlign: 'center', color: 'var(--muted)' }}>
             <History size={40} style={{ margin: '0 auto 16px auto', opacity: 0.5 }} />
             <p>No hay eventos de auditoría para este filtro.</p>
@@ -244,14 +244,14 @@ export default function AuditLogViewer({ roleIdentifier }: AuditLogViewerProps) 
       ) : (
         <div style={{ display: 'grid', gap: 12 }}>
           {visibleLogs.map((log) => (
-            <Card key={log.id} style={{ padding: 16 }}>
+            <Card key={log.id} className="roles-audit-log-card" style={{ padding: 16 }}>
            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 8 }}>
              <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
                <span style={{ 
                  display: 'inline-block', 
                  padding: '4px 8px', 
                  borderRadius: 4, 
-                 backgroundColor: `${ACTION_COLORS[log.action] || 'var(--muted)'}20`,
+                 backgroundColor: `color-mix(in srgb, ${ACTION_COLORS[log.action] || 'var(--muted)'} 12%, transparent)`,
                  color: ACTION_COLORS[log.action] || 'var(--foreground)',
                  fontSize: 12,
                  fontWeight: 600

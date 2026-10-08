@@ -57,17 +57,17 @@ export default function TransferList({ status, showReceiveAction }: TransferList
     }
 
     if (loading) {
-        return <div className="p-8 text-center text-gray-500"><Loader2 className="animate-spin mx-auto mb-2" /> Cargando transferencias...</div>;
+        return <div className="transfer-list-view transfer-list-state"><Loader2 className="animate-spin mx-auto mb-2" /> Cargando transferencias...</div>;
     }
 
     if (transfers.length === 0) {
-        return <div className="p-8 text-center text-gray-500 bg-gray-900/30 rounded border border-gray-800">No hay transferencias {status === 'in_transit' ? 'pendientes' : 'en el historial'}</div>;
+        return <div className="transfer-list-view transfer-list-state is-empty">No hay transferencias {status === 'in_transit' ? 'pendientes' : 'en el historial'}</div>;
     }
 
     return (
-        <div className="flex flex-col gap-4">
+        <div className="transfer-list-view">
             {transfers.map(transfer => (
-                <Card key={transfer.id} className="hover:border-gray-600 transition-colors">
+                <Card key={transfer.id} className="transfer-list-card hover:border-gray-600 transition-colors">
                     <div className="flex flex-col md:flex-row gap-4 justify-between items-start md:items-center">
 
                         <div className="flex-1">

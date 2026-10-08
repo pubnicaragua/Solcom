@@ -142,18 +142,18 @@ export default function CreateRoleModal({ isOpen, onClose, onSave }: CreateRoleM
   });
 
   return (
-    <div style={{
+    <div className="roles-editor-modal-backdrop" style={{
       position: 'fixed',
       top: 0, left: 0, right: 0, bottom: 0,
-      background: 'rgba(0,0,0,0.7)',
+      background: 'var(--overlay)',
       display: 'flex',
       alignItems: 'center',
       justifyContent: 'center',
       zIndex: 9999,
       padding: 20
     }}>
-      <Card style={{ width: '100%', maxWidth: 700, maxHeight: '90vh', overflowY: 'auto', padding: 0 }}>
-        <div style={{ padding: '20px 24px', borderBottom: '1px solid var(--border)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+      <Card className="roles-editor-modal" style={{ width: '100%', maxWidth: 700, maxHeight: '90vh', overflowY: 'auto', padding: 0 }}>
+        <div className="roles-editor-modal-header" style={{ padding: '20px 24px', borderBottom: '1px solid var(--border)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
           <h2 style={{ fontSize: 18, fontWeight: 600, margin: 0 }}>Nuevo Rol</h2>
           <button onClick={onClose} style={{ background: 'transparent', border: 'none', cursor: 'pointer', color: 'var(--muted)' }}>
             <X size={20} />
@@ -182,8 +182,8 @@ export default function CreateRoleModal({ isOpen, onClose, onSave }: CreateRoleM
           </h3>
 
           {Object.entries(groupedPermissions).map(([moduleKey, perms]) => (
-            <div key={moduleKey} style={{ marginBottom: 16, border: '1px solid var(--border)', borderRadius: 8, overflow: 'hidden' }}>
-              <div style={{ padding: '10px 16px', background: 'var(--panel)', fontWeight: 600, fontSize: 14, borderBottom: '1px solid var(--border)' }}>
+            <div key={moduleKey} className="roles-editor-module" style={{ marginBottom: 16, border: '1px solid var(--border)', borderRadius: 8, overflow: 'hidden' }}>
+              <div className="roles-editor-module-header" style={{ padding: '10px 16px', background: 'var(--panel)', fontWeight: 600, fontSize: 14, borderBottom: '1px solid var(--border)' }}>
                 {MODULE_DISPLAY_NAMES[moduleKey] || moduleKey}
               </div>
               <div style={{ padding: '8px 16px' }}>

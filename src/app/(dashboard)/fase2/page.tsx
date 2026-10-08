@@ -212,20 +212,25 @@ export default function Fase2Page() {
   }
 
   return (
-    <div style={{ display: 'grid', gap: 14, maxWidth: '100%' }}>
+    <div className="fase2-module-view" style={{ display: 'grid', gap: 14, maxWidth: '100%' }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 12 }}>
         <div>
-          <div className="h-title" style={{ fontSize: 'clamp(18px, 5vw, 24px)' }}>Fase 2 - Próximas Funcionalidades</div>
-          <div style={{ fontSize: 13, color: 'var(--muted)', marginTop: 4 }}>
-            Módulos en desarrollo para mejorar la gestión operativa
+          <div className="fase2-page-heading">
+            <div className="system-title-mark" aria-hidden="true"><Package size={21} /></div>
+            <div>
+              <div className="h-title" style={{ fontSize: 'clamp(18px, 5vw, 24px)' }}>Fase 2 - Próximas Funcionalidades</div>
+              <div style={{ fontSize: 13, color: 'var(--muted)', marginTop: 4 }}>
+                Módulos en desarrollo para mejorar la gestión operativa
+              </div>
+            </div>
           </div>
         </div>
       </div>
 
-      <Card>
-        <div style={{ padding: 20, background: 'linear-gradient(135deg, #1f3f8a 0%, #182848 100%)', borderRadius: 8 }}>
-          <h2 style={{ color: 'white', fontSize: 18, fontWeight: 700, margin: 0, marginBottom: 8 }}>Fase 2 - CRUD Operativo</h2>
-          <p style={{ color: 'rgba(255,255,255,0.9)', fontSize: 14, margin: 0 }}>
+      <Card className="fase2-intro-card">
+        <div className="fase2-intro-panel" style={{ padding: 20, background: 'linear-gradient(135deg, var(--info-surface) 0%, var(--panel-elevated) 100%)', border: '1px solid var(--border)', borderRadius: 8 }}>
+          <h2 style={{ color: 'var(--info)', fontSize: 18, fontWeight: 700, margin: 0, marginBottom: 8 }}>Fase 2 - CRUD Operativo</h2>
+          <p style={{ color: 'var(--text-secondary)', fontSize: 14, margin: 0 }}>
             Aquí ya puedes crear, actualizar y eliminar registros reales para ir construyendo el flujo completo.
           </p>
         </div>
@@ -237,8 +242,9 @@ export default function Fase2Page() {
           const isActive = activeModule === module.id;
           
           return (
-            <Card key={module.id}>
+            <Card key={module.id} className="fase2-module-card">
               <div
+                className="fase2-module-card-content"
                 onClick={() => setActiveModule(isActive ? '' : module.id as ModuleId)}
                 style={{
                   padding: 16,
@@ -253,7 +259,7 @@ export default function Fase2Page() {
                       width: 48,
                       height: 48,
                       borderRadius: 8,
-                      background: `${module.color}15`,
+                      background: `color-mix(in srgb, ${module.color} 8%, transparent)`,
                       display: 'flex',
                       alignItems: 'center',
                       justifyContent: 'center',
@@ -269,7 +275,7 @@ export default function Fase2Page() {
                     <p style={{ fontSize: 13, color: 'var(--muted)', margin: 0 }}>
                       {module.description}
                     </p>
-                    <p style={{ fontSize: 12, color: '#93c5fd', marginTop: 8 }}>
+                    <p style={{ fontSize: 12, color: 'var(--info)', marginTop: 8 }}>
                       Registros: {countByModule[module.id] || 0}
                     </p>
                   </div>
@@ -341,8 +347,8 @@ export default function Fase2Page() {
         })}
       </div>
 
-      <Card>
-        <div style={{ padding: 20 }}>
+      <Card className="fase2-form-card">
+        <div className="fase2-form-content" style={{ padding: 20 }}>
           <h3 style={{ fontSize: 16, fontWeight: 600, marginBottom: 12 }}>Crear nuevo registro</h3>
           <div style={{ display: 'grid', gap: 10 }}>
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(180px, 100%), 1fr))', gap: 10 }}>
@@ -402,8 +408,8 @@ export default function Fase2Page() {
         </div>
       </Card>
 
-      <Card>
-        <div style={{ padding: 20, display: 'grid', gap: 10 }}>
+      <Card className="fase2-records-card">
+        <div className="fase2-records-content" style={{ padding: 20, display: 'grid', gap: 10 }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', gap: 10, flexWrap: 'wrap' }}>
             <h3 style={{ fontSize: 16, fontWeight: 600, margin: 0 }}>Registros Fase 2</h3>
             <Input
@@ -421,12 +427,12 @@ export default function Fase2Page() {
           ) : (
             <div style={{ display: 'grid', gap: 8 }}>
               {filteredRecords.map((r) => (
-                <div key={r.id} style={{ border: '1px solid var(--border)', borderRadius: 8, padding: 12, background: 'var(--panel)' }}>
+                <div key={r.id} className="fase2-record-card" style={{ border: '1px solid var(--border)', borderRadius: 8, padding: 12, background: 'var(--panel)' }}>
                   <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8, flexWrap: 'wrap' }}>
                     <div>
                       <div style={{ fontWeight: 600 }}>{r.title}</div>
                       <div style={{ fontSize: 12, color: 'var(--muted)' }}>{r.description || 'Sin descripción'}</div>
-                      <div style={{ fontSize: 12, color: '#93c5fd', marginTop: 4 }}>
+                      <div style={{ fontSize: 12, color: 'var(--info)', marginTop: 4 }}>
                         {r.module} · {r.owner_email || 'sin responsable'} · {new Date(r.updated_at).toLocaleString('es-NI')}
                       </div>
                     </div>

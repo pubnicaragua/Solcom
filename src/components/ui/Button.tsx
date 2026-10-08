@@ -19,7 +19,7 @@ export default function Button({
     alignItems: 'center',
     justifyContent: 'center',
     gap: 8,
-    borderRadius: 6,
+    borderRadius: 9,
     fontWeight: 500,
     transition: 'all 0.2s',
     opacity: disabled ? 0.5 : 1,
@@ -34,16 +34,16 @@ export default function Button({
 
   const variantStyles: Record<string, React.CSSProperties> = {
     primary: {
-      background: 'var(--brand-primary)',
+      background: 'var(--brand-button-gradient)',
       color: '#fff',
     },
     secondary: {
-      background: 'var(--panel)',
+      background: 'var(--control-surface-gradient)',
       color: 'var(--text)',
       border: '1px solid var(--border)',
     },
     danger: {
-      background: 'var(--danger)',
+      background: 'var(--danger-button-gradient)',
       color: '#fff',
     },
     ghost: {
@@ -54,7 +54,7 @@ export default function Button({
 
   return (
     <button
-      className={className}
+      className={`ui-button ${className}`.trim()}
       disabled={disabled}
       style={{
         ...baseStyles,

@@ -212,6 +212,7 @@ export async function syncItemStock(
                 const { error: updateErr } = await supabase
                     .from('items')
                     .update({
+                        sku: metadata.sku,
                         name: metadata.name,
                         color: metadata.color,
                         state: metadata.state,
