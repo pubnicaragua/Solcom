@@ -8,14 +8,18 @@
  */
 
 const { createClient } = require('@supabase/supabase-js');
-require('dotenv').config({ path: '.env.local' });
+require('dotenv').config({ path: ['.env.local', '.env'], quiet: true });
 
 const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL;
 const SUPABASE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
 const CLIENT_ID = process.env.ZOHO_BOOKS_CLIENT_ID;
 const CLIENT_SECRET = process.env.ZOHO_BOOKS_CLIENT_SECRET;
 const REFRESH_TOKEN = process.env.ZOHO_BOOKS_REFRESH_TOKEN;
-const ORG_ID = (process.env.ZOHO_BOOKS_ORGANIZATION_ID || '').replace(/[^0-9]/g, '');
+const ORG_ID = String(process.env.ZOHO_BOOKS_ORGANIZATION_ID || '').trim();
+
+if (!/^\d+$/.test(ORG_ID)) {
+    throw new Error('ZOHO_BOOKS_ORGANIZATION_ID debe contener únicamente dígitos.');
+}
 
 const supabase = createClient(SUPABASE_URL, SUPABASE_KEY);
 

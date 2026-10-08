@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 import { syncItemStock } from '@/lib/zoho/sync-logic';
 import { getZohoAccessToken } from '@/lib/zoho/inventory-utils';
+import { getZohoOrganizationId } from '@/lib/zoho/config';
 
 export const dynamic = 'force-dynamic';
 export const maxDuration = 60;
@@ -33,7 +34,7 @@ export async function GET(request: NextRequest) {
         const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
         const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
         const supabase = createClient(supabaseUrl, supabaseKey);
-        const organizationId = process.env.ZOHO_BOOKS_ORGANIZATION_ID;
+        const organizationId = getZohoOrganizationId();
 
         if (!organizationId) {
             debugLog.push('[cron] ERROR: ZOHO_BOOKS_ORGANIZATION_ID is missing in environment variables');
@@ -156,13 +157,19 @@ export async function GET(request: NextRequest) {
 
             try {
                 const itemLog: string[] = [];
-                await syncItemStock(zohoItemId, supabase, warehouseMap, itemLog, authData);
-                syncedCount++;
+                const result = await syncItemStock(zohoItemId, supabase, warehouseMap, itemLog, authData);
                 for (const line of itemLog) {
                     if (line.includes('ERROR') || line.includes('WARN')) {
                         debugLog.push(line);
                     }
                 }
+                if (!result.success) {
+                    const message = `[cron] Failed: ${zohoItem.sku || zohoItemId}: ${result.error || 'Unknown'}`;
+                    errors.push(message);
+                    debugLog.push(message);
+                    continue;
+                }
+                syncedCount++;
             } catch (err) {
                 const msg = `[cron] Failed: ${zohoItem.sku || zohoItemId}: ${err instanceof Error ? err.message : 'Unknown'}`;
                 errors.push(msg);
@@ -174,7 +181,7 @@ export async function GET(request: NextRequest) {
         debugLog.push(`[cron] Done: synced=${syncedCount} skipped=${skippedCount} errors=${errors.length} in ${durationMs}ms`);
 
         return NextResponse.json({
-            success: true,
+            success: errors.length === 0,
             itemsSynced: syncedCount,
             itemsSkipped: skippedCount,
             totalChecked: zohoItems.length,
