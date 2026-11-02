@@ -17,6 +17,27 @@ function normalizeRole(value: unknown): AppRole {
   return 'operator';
 }
 
+const AUTH_REQUEST_TIMEOUT_MS = 3500;
+
+const timedFetch: typeof fetch = async (input, init) => {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), AUTH_REQUEST_TIMEOUT_MS);
+  const upstreamSignal = init?.signal;
+  const abortFromUpstream = () => controller.abort();
+
+  if (upstreamSignal) {
+    if (upstreamSignal.aborted) controller.abort();
+    else upstreamSignal.addEventListener('abort', abortFromUpstream, { once: true });
+  }
+
+  try {
+    return await fetch(input, { ...init, signal: controller.signal });
+  } finally {
+    clearTimeout(timer);
+    upstreamSignal?.removeEventListener('abort', abortFromUpstream);
+  }
+};
+
 export async function middleware(request: NextRequest) {
   const path = request.nextUrl.pathname;
   const publicRoutes = ['/login', '/signup', '/reset-password', '/login-clientes', '/alistamiento/escanear'];
@@ -57,6 +78,9 @@ export async function middleware(request: NextRequest) {
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
     {
+      global: {
+        fetch: timedFetch,
+      },
       cookies: {
         get(name: string) {
           return request.cookies.get(name)?.value;
@@ -100,10 +124,18 @@ export async function middleware(request: NextRequest) {
   );
 
 
-  const {
-    data: { user },
-    error: userError,
-  } = await supabase.auth.getUser();
+  let user: any = null;
+  let userError: any = null;
+  try {
+    const {
+      data: { user: authenticatedUser },
+      error,
+    } = await supabase.auth.getUser();
+    user = authenticatedUser;
+    userError = error;
+  } catch (error) {
+    userError = error;
+  }
 
   // If auth is temporarily down, keep public routes reachable and fail closed on protected ones.
   if (userError && !user) {
@@ -191,14 +223,21 @@ export async function middleware(request: NextRequest) {
     }
   }
 
-  // Verificar permisos por rol si el usuario está autenticado
+  // Keep role/module enforcement in the middleware, but resolve the profile
+  // and per-user overrides in parallel to avoid adding another round-trip.
   if (user) {
     try {
-      const { data: profile, error } = await supabase
-        .from('user_profiles')
-        .select('role')
-        .eq('id', user.id)
-        .single();
+      const [{ data: profile, error }, { data: overrideRows, error: overrideError }] = await Promise.all([
+        supabase
+          .from('user_profiles')
+          .select('role')
+          .eq('id', user.id)
+          .single(),
+        supabase
+          .from('user_module_permissions')
+          .select('module, can_access')
+          .eq('user_id', user.id),
+      ]);
 
       // Si el usuario no tiene perfil (como el cliente), permitir acceso solo a rutas de cliente
       if (error) {
@@ -209,25 +248,16 @@ export async function middleware(request: NextRequest) {
       }
 
       const userRole = normalizeRole(profile?.role || 'operator');
-      const path = request.nextUrl.pathname;
-
       const baseAccess = getDefaultModuleAccess(userRole);
-      let moduleAccess = baseAccess;
-
-      const { data: overrideRows, error: overrideError } = await supabase
-        .from('user_module_permissions')
-        .select('module, can_access')
-        .eq('user_id', user.id);
-
-      if (!overrideError) {
-        moduleAccess = mergeModuleOverrides(baseAccess, mapOverrides(overrideRows || []));
-      }
+      const moduleAccess = !overrideError
+        ? mergeModuleOverrides(baseAccess, mapOverrides(overrideRows || []))
+        : baseAccess;
 
       const hasAccess = canAccessPath(path, moduleAccess);
       if (!hasAccess && !isPublicRoute && !isClientRoute) {
         return NextResponse.redirect(new URL(getFallbackPath(moduleAccess), request.url));
       }
-    } catch (error) {
+    } catch (_error) {
       return response;
     }
   }
