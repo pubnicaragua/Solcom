@@ -592,7 +592,6 @@ export default function PivotInventoryTable({ filters, cartMode, cartReady, onAd
     const totalColumns = 5 + warehouseCodes.length; // Reducido de 6 a 5
     // All frozen columns widths (sticky)
     const frozenWidth = stickyColWidth + skuColWidth + marcaColWidth + colorColWidth + totalColWidth;
-    const extraColsWidth = skuColWidth + marcaColWidth + colorColWidth + totalColWidth;
 
     /* ─── Grand totals row ─── */
     const grandTotals: Record<string, number> = {};
@@ -759,8 +758,16 @@ export default function PivotInventoryTable({ filters, cartMode, cartReady, onAd
                                 borderCollapse: 'separate',
                                 borderSpacing: 0,
                                 tableLayout: 'fixed',
-                                width: stickyColWidth + extraColsWidth + warehouseCodes.length * cellWidth,
+                                width: frozenWidth + warehouseCodes.length * cellWidth,
                             }}>
+                                <colgroup>
+                                    <col style={{ width: stickyColWidth }} />
+                                    <col style={{ width: skuColWidth }} />
+                                    <col style={{ width: marcaColWidth }} />
+                                    <col style={{ width: colorColWidth }} />
+                                    <col style={{ width: totalColWidth }} />
+                                    {warehouseCodes.map(code => <col key={code} style={{ width: cellWidth }} />)}
+                                </colgroup>
                                 {/* ─── Header ─── */}
                                 <thead style={{
                                     position: 'sticky',
@@ -944,6 +951,9 @@ export default function PivotInventoryTable({ filters, cartMode, cartReady, onAd
                                         const isVariantRow = isItemRow && node.level === 3;
                                         const isGroup = !isItemRow;
                                         const style = LEVEL_COLORS[node.level] || LEVEL_COLORS[3];
+                                        // Theme variables can resolve to translucent colors. Paint the
+                                        // row tint over an opaque base so stock cannot show through.
+                                        const frozenCellBackground = `linear-gradient(${style.bg}, ${style.bg}), var(--card)`;
                                         const hasChildren = node.children.length > 0;
                                         const isCollapsed = isNodeCollapsed(node, path);
                                         const isZeroStock = node.grandTotal === 0;
@@ -1003,7 +1013,7 @@ export default function PivotInventoryTable({ filters, cartMode, cartReady, onAd
                                                     className="pivot-name-cell"
                                                     style={{
                                                         position: 'sticky', left: 0, zIndex: 2,
-                                                        background: style.bg === 'transparent' || style.bg.startsWith('rgba') ? 'var(--card)' : style.bg,
+                                                        background: frozenCellBackground,
                                                         padding: '7px 10px',
                                                         paddingLeft: 14 + nameIndent * 20,
                                                         fontWeight: style.fontWeight,
@@ -1079,7 +1089,7 @@ export default function PivotInventoryTable({ filters, cartMode, cartReady, onAd
                                                         textOverflow: 'ellipsis',
                                                         borderBottom: `1px solid ${node.level <= 1 ? 'var(--pivot-grid-border)' : 'var(--pivot-grid-soft-border)'}`,
                                                         borderRight: '1px solid var(--pivot-grid-soft-border)',
-                                                        background: style.bg === 'transparent' || style.bg.startsWith('rgba') ? 'var(--card)' : style.bg,
+                                                        background: frozenCellBackground,
                                                         minWidth: skuColWidth, maxWidth: skuColWidth,
                                                         cursor: skuVal ? 'pointer' : 'default',
                                                         transition: 'color 0.2s',
@@ -1100,8 +1110,9 @@ export default function PivotInventoryTable({ filters, cartMode, cartReady, onAd
                                                     color: 'var(--text)',
                                                     borderBottom: `1px solid ${node.level <= 1 ? 'var(--pivot-grid-border)' : 'var(--pivot-grid-soft-border)'}`,
                                                     borderRight: '1px solid var(--pivot-grid-soft-border)',
-                                                    background: style.bg === 'transparent' || style.bg.startsWith('rgba') ? 'var(--card)' : style.bg,
+                                                    background: frozenCellBackground,
                                                     minWidth: marcaColWidth, maxWidth: marcaColWidth,
+                                                    overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
                                                 }}>
                                                     {!isItemRow ? '' : (rowItem?.brand || '—')}
                                                 </td>
@@ -1113,8 +1124,9 @@ export default function PivotInventoryTable({ filters, cartMode, cartReady, onAd
                                                     color: 'var(--text)',
                                                     borderBottom: `1px solid ${node.level <= 1 ? 'var(--pivot-grid-border)' : 'var(--pivot-grid-soft-border)'}`,
                                                     borderRight: '1px solid var(--pivot-grid-soft-border)',
-                                                    background: style.bg === 'transparent' || style.bg.startsWith('rgba') ? 'var(--card)' : style.bg,
+                                                    background: frozenCellBackground,
                                                     minWidth: colorColWidth, maxWidth: colorColWidth,
+                                                    overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
                                                 }}>
                                                     {!isItemRow ? '' : (rowItem?.color || '—')}
                                                 </td>
@@ -1127,7 +1139,7 @@ export default function PivotInventoryTable({ filters, cartMode, cartReady, onAd
                                                     fontSize: node.level <= 1 ? 14 : 12,
                                                     fontWeight: 700,
                                                     color: node.grandTotal === 0 ? 'var(--muted)' : 'var(--pivot-total-accent)',
-                                                    background: style.bg === 'transparent' || style.bg.startsWith('rgba') ? 'var(--card)' : style.bg,
+                                                    background: frozenCellBackground,
                                                     borderLeft: '2px solid var(--pivot-grid-border)',
                                                     borderRight: '2px solid var(--pivot-grid-border)',
                                                     borderBottom: `1px solid ${node.level <= 1 ? 'var(--pivot-grid-border)' : 'var(--pivot-grid-soft-border)'}`,
