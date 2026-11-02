@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server';
+import { fetchPivotBalances } from '@/lib/inventory/pivot-balances';
 import { createRouteHandlerClient } from '@supabase/auth-helpers-nextjs';
 import { cookies } from 'next/headers';
 import {
@@ -325,7 +326,6 @@ export async function GET(request: Request) {
         let usingBalanceModel = false;
         let usedSnapshotGapFill = false;
 
-        const BAL_PAGE = 1000;
         const LOT_PAGE = 1000;
 
         // Aging is optional because the current pivot UI does not render this column.
@@ -370,37 +370,10 @@ export async function GET(request: Request) {
         }
 
         try {
-            for (let i = 0; i < itemIds.length; i += ITEM_CHUNK) {
-                const itemChunk = itemIds.slice(i, i + ITEM_CHUNK);
-                let page = 0;
-                let hasMore = true;
-
-                while (hasMore) {
-                    const from = page * BAL_PAGE;
-                    const to = from + BAL_PAGE - 1;
-                    const { data, error } = await (supabase.from as any)('inventory_balance')
-                        .select('item_id, warehouse_id, qty_on_hand')
-                        .in('item_id', itemChunk)
-                        .in('warehouse_id', allWhIds)
-                        .range(from, to);
-
-                    if (error) {
-                        throw error;
-                    }
-
-                    const rows = data || [];
-                    for (const row of rows) {
-                        latestSnap.set(`${row.item_id}__${row.warehouse_id}`, row.qty_on_hand ?? 0);
-                        itemsWithBreakdown.add(row.item_id);
-                    }
-
-                    if (rows.length < BAL_PAGE) {
-                        hasMore = false;
-                    } else {
-                        page += 1;
-                    }
-                    if (page > 50) break;
-                }
+            const balances = await fetchPivotBalances(supabase, itemIds, allWhIds);
+            for (const row of balances) {
+                latestSnap.set(`${row.item_id}__${row.warehouse_id}`, row.qty_on_hand ?? 0);
+                itemsWithBreakdown.add(row.item_id);
             }
             usingBalanceModel = true;
 

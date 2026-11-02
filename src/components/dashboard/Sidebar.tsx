@@ -179,7 +179,7 @@ export default function Sidebar() {
             }
 
             // Ocultar módulos protegidos mientras carga o si no tiene acceso
-            const requiresModuleAccess = !!item.module && item.module !== 'public' && item.module !== 'rutas';
+            const requiresModuleAccess = !!item.module && item.module !== 'public';
             if (requiresModuleAccess && (loading || !hasModuleAccess(item.module))) {
               // Si falla hasModuleAccess para "compras" (probablemente no exista en DB), y es admin, lo dejamos pasar.
               if (item.adminOnly && role === 'admin') {

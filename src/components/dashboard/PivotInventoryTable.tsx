@@ -5,6 +5,7 @@ import Card from '@/components/ui/Card';
 import { ChevronRight, ChevronDown, ChevronUp, Loader2, Eye, EyeOff, Package, RefreshCw, Search, Palette, ShoppingCart } from 'lucide-react';
 import { supabase } from '@/lib/supabase/client';
 import { useUserRole } from '@/hooks/useUserRole';
+import { createRefreshQueue } from '@/lib/inventory/refresh-queue';
 import WarehouseColorModal from '@/components/modals/WarehouseColorModal';
 
 
@@ -221,7 +222,8 @@ export default function PivotInventoryTable({ filters, cartMode, cartReady, onAd
     const abortRef = useRef<AbortController | null>(null);
     const hasLoadedOnceRef = useRef(false);
     const scrollContainerRef = useRef<HTMLDivElement | null>(null);
-    const realtimeRefreshTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+    const refreshQueueRef = useRef<ReturnType<typeof createRefreshQueue> | null>(null);
+    const cacheVersionRef = useRef(0);
     const pivotCacheRef = useRef<Map<string, { data: PivotData; ts: number }>>(new Map());
     const [isMobile, setIsMobile] = useState(false);
     const [colorModalOpen, setColorModalOpen] = useState(false);
@@ -247,6 +249,7 @@ export default function PivotInventoryTable({ filters, cartMode, cartReady, onAd
 
     const fetchPivotData = useCallback(async (options?: { force?: boolean }) => {
         const requestId = ++requestIdRef.current;
+        const cacheVersion = cacheVersionRef.current;
 
         abortRef.current?.abort();
         const controller = new AbortController();
@@ -299,6 +302,7 @@ export default function PivotInventoryTable({ filters, cartMode, cartReady, onAd
 
             if (res.ok) {
                 const result = await res.json();
+                if (requestId !== requestIdRef.current || controller.signal.aborted) return;
                 setData(result);
                 if (isBasePivotQuery) onDataLoaded?.(result);
                 hasLoadedOnceRef.current = true;
@@ -306,7 +310,9 @@ export default function PivotInventoryTable({ filters, cartMode, cartReady, onAd
                 // Tiny LRU cache by query string.
                 const existing = pivotCacheRef.current.get(queryKey);
                 if (existing) pivotCacheRef.current.delete(queryKey);
-                pivotCacheRef.current.set(queryKey, { data: result, ts: Date.now() });
+                if (cacheVersion === cacheVersionRef.current) {
+                    pivotCacheRef.current.set(queryKey, { data: result, ts: Date.now() });
+                }
                 while (pivotCacheRef.current.size > 10) {
                     const first = pivotCacheRef.current.keys().next();
                     if (first.done) break;
@@ -320,8 +326,10 @@ export default function PivotInventoryTable({ filters, cartMode, cartReady, onAd
                 console.error('Error fetching pivot data:', error);
             }
         } finally {
-            if (requestId === requestIdRef.current && !controller.signal.aborted) {
-                setLoading(false);
+            if (requestId === requestIdRef.current) {
+                abortRef.current = null;
+                if (!controller.signal.aborted) setLoading(false);
+                refreshQueueRef.current?.idle();
             }
         }
     }, [filters, hideZeroStock, onDataLoaded, parentWarehouseId]);
@@ -345,15 +353,26 @@ export default function PivotInventoryTable({ filters, cartMode, cartReady, onAd
         }
     }
 
+    const latestFetchRef = useRef(fetchPivotData);
+    latestFetchRef.current = fetchPivotData;
+
+    useEffect(() => {
+        const queue = createRefreshQueue({
+            isLoading: () => abortRef.current !== null && !abortRef.current.signal.aborted,
+            refresh: () => { void latestFetchRef.current({ force: true }); },
+        });
+        refreshQueueRef.current = queue;
+        return () => {
+            queue.dispose();
+            refreshQueueRef.current = null;
+        };
+    }, []);
+
     const scheduleRealtimeRefresh = useCallback(() => {
-        if (realtimeRefreshTimerRef.current) {
-            clearTimeout(realtimeRefreshTimerRef.current);
-        }
-        realtimeRefreshTimerRef.current = setTimeout(() => {
-            void fetchPivotData({ force: true });
-            realtimeRefreshTimerRef.current = null;
-        }, 220);
-    }, [fetchPivotData]);
+        cacheVersionRef.current += 1;
+        pivotCacheRef.current.clear();
+        refreshQueueRef.current?.request();
+    }, []);
 
     // Inject tooltip CSS once
     useEffect(() => { ensureTooltipCSS(); }, []);
@@ -386,10 +405,6 @@ export default function PivotInventoryTable({ filters, cartMode, cartReady, onAd
 
         return () => {
             supabase.removeChannel(channel);
-            if (realtimeRefreshTimerRef.current) {
-                clearTimeout(realtimeRefreshTimerRef.current);
-                realtimeRefreshTimerRef.current = null;
-            }
         };
     }, [scheduleRealtimeRefresh]);
 

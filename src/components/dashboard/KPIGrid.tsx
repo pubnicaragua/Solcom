@@ -17,9 +17,10 @@ interface KPIData {
 
 interface KPIGridProps {
   pivotData?: PivotData | null;
+  needsSummary?: boolean;
 }
 
-export default function KPIGrid({ pivotData }: KPIGridProps) {
+export default function KPIGrid({ pivotData, needsSummary = false }: KPIGridProps) {
   const [kpis, setKpis] = useState<KPIData>({
     totalSKUs: 0,
     totalProducts: 0,
@@ -35,11 +36,46 @@ export default function KPIGrid({ pivotData }: KPIGridProps) {
     }),
   });
   const [loading, setLoading] = useState(true);
+  const [summaryError, setSummaryError] = useState(false);
   const [mounted, setMounted] = useState(false);
 
   useEffect(() => {
     setMounted(true);
   }, []);
+
+  // A filtered request can supersede the initial base pivot request. Recover
+  // global KPIs independently only in that case; ordinary loads reuse pivotData.
+  useEffect(() => {
+    if (pivotData || !needsSummary) return;
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 20_000);
+    let canceled = false;
+    async function loadSummary() {
+      try {
+        const response = await fetch('/api/inventory/kpis/local', {
+          signal: controller.signal,
+          cache: 'no-store',
+        });
+        if (!response.ok) throw new Error('No se pudieron cargar los contadores');
+        const summary = await response.json();
+        if (!canceled) {
+          setKpis(summary);
+          setSummaryError(false);
+        }
+      } catch {
+        if (!canceled) setSummaryError(true);
+      } finally {
+        clearTimeout(timeout);
+        if (!canceled) setLoading(false);
+      }
+    }
+    void loadSummary();
+    return () => {
+      canceled = true;
+      clearTimeout(timeout);
+      controller.abort();
+    };
+  }, [pivotData, needsSummary]);
 
   useEffect(() => {
     if (!pivotData) return;
@@ -66,6 +102,7 @@ export default function KPIGrid({ pivotData }: KPIGridProps) {
         minute: '2-digit'
       }),
     });
+    setSummaryError(false);
     setLoading(false);
   }, [pivotData]);
 
@@ -73,14 +110,14 @@ export default function KPIGrid({ pivotData }: KPIGridProps) {
     {
       icon: Package,
       label: 'Total SKUs',
-      value: !mounted || loading ? '...' : kpis.totalSKUs.toLocaleString('es-NI'),
+      value: !mounted || loading ? '...' : summaryError ? '—' : kpis.totalSKUs.toLocaleString('es-NI'),
       color: 'var(--brand-primary)',
       tooltip: 'Códigos SKU únicos dentro de las bodegas permitidas para tu perfil.',
     },
     {
       icon: Package,
       label: 'Total Productos',
-      value: !mounted || loading ? '...' : kpis.totalProducts.toLocaleString('es-NI'),
+      value: !mounted || loading ? '...' : summaryError ? '—' : kpis.totalProducts.toLocaleString('es-NI'),
       color: 'var(--success)',
       tooltip: 'Productos incluidos en el inventario visible para tu alcance.',
     },
@@ -88,21 +125,21 @@ export default function KPIGrid({ pivotData }: KPIGridProps) {
     {
       icon: Warehouse,
       label: 'Bodegas Activas',
-      value: !mounted || loading ? '...' : kpis.activeWarehouses.toString(),
+      value: !mounted || loading ? '...' : summaryError ? '—' : kpis.activeWarehouses.toString(),
       color: 'var(--kpi-violet)',
       tooltip: 'Bodegas activas incluidas dentro del alcance asignado a tu perfil.',
     },
     {
       icon: Boxes,
       label: 'Total Stock',
-      value: !mounted || loading ? '...' : kpis.totalStock.toLocaleString('es-NI'),
+      value: !mounted || loading ? '...' : summaryError ? '—' : kpis.totalStock.toLocaleString('es-NI'),
       color: 'var(--warning)',
       tooltip: 'Unidades sumadas en las bodegas incluidas en tu alcance.',
     },
     {
       icon: Clock,
       label: 'Última Sincronización',
-      value: !mounted || loading ? '...' : kpis.lastSync,
+      value: !mounted || loading ? '...' : summaryError ? '—' : kpis.lastSync,
       color: 'var(--info)',
       tooltip: undefined,
     },

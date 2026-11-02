@@ -562,7 +562,7 @@ export default function InventoryPage() {
         </div>
       </div>
 
-      <KPIGrid pivotData={pivotData} />
+      <KPIGrid pivotData={pivotData} needsSummary={activeFiltersCount > 0 || !!parentWarehouseId} />
 
       {cartMode && (
         <Card>

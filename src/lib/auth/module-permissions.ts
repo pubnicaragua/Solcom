@@ -16,6 +16,7 @@ type SupabaseRouteClient = ReturnType<typeof createRouteHandlerClient>;
 
 export const MODULE_DEFINITIONS: ModuleDefinition[] = [
   { key: 'inventory', label: 'Inventario', paths: ['/inventory'] },
+  { key: 'rutas', label: 'Rutas', paths: ['/rutas'] },
   { key: 'ventas', label: 'Facturacion', paths: ['/ventas'] },
   { key: 'alistamiento', label: 'Alistamiento', paths: ['/alistamiento'] },
   { key: 'reports', label: 'Reportes', paths: ['/reports'] },
