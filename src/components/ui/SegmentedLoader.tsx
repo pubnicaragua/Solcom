@@ -1,9 +1,16 @@
 'use client';
 
-export default function SegmentedLoader({ complete = false }: { complete?: boolean }) {
+interface SegmentedLoaderProps {
+  complete?: boolean;
+  size?: number;
+  label?: string;
+  completeLabel?: string;
+}
+
+export default function SegmentedLoader({ complete = false, size = 76, label = 'Cargando inventario', completeLabel = 'Inventario listo' }: SegmentedLoaderProps) {
   return (
-    <div className={`segmented-loader${complete ? ' is-complete' : ''}`} role="status" aria-live="polite">
-      <svg className="loading-ring" viewBox="0 0 80 80" aria-hidden="true">
+    <div className={`segmented-loader${complete ? ' is-complete' : ''}${size <= 48 ? ' is-compact' : ''}`} role="status" aria-live="polite" aria-label={complete ? completeLabel : label || 'Cargando'}>
+      <svg className="loading-ring" style={{ width: size, height: size }} viewBox="0 0 80 80" aria-hidden="true">
         {Array.from({ length: 24 }, (_, index) => (
           <line
             key={index}
@@ -16,7 +23,7 @@ export default function SegmentedLoader({ complete = false }: { complete?: boole
         ))}
         {complete && <path className="loading-check" d="m29 40 7 7 15-15" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" />}
       </svg>
-      <span className="loading-label">{complete ? 'Inventario listo' : 'Cargando inventario'}</span>
+      {(complete || label) && <span className="loading-label">{complete ? completeLabel : label}</span>}
       <style jsx>{`
         .segmented-loader {
           display: flex;
@@ -27,7 +34,9 @@ export default function SegmentedLoader({ complete = false }: { complete?: boole
           color: var(--pivot-brand-accent, var(--brand-primary));
           transition: color 180ms ease;
         }
-        .loading-ring { width: 76px; height: 76px; overflow: visible; }
+        .loading-ring { overflow: visible; }
+        .is-compact { gap: 10px; }
+        .is-compact .loading-label { font-size: 12px; }
         .loading-segment { opacity: 0.14; animation: segment-build 2s ease-in-out infinite; }
         .loading-label { color: var(--muted); font-size: 14px; font-weight: 500; }
         .is-complete { color: var(--success); }

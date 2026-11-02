@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
+import SegmentedLoader from '@/components/ui/SegmentedLoader';
 import { usePathname } from 'next/navigation';
 import { Package, BarChart3, Settings, Users, HelpCircle, Bot, Menu, X, ClipboardList, Calendar, FolderOpen, ArrowLeftRight, FileText, ChevronLeft, ChevronRight, Rocket, ShoppingCart, PackageSearch, Map, CreditCard } from 'lucide-react';
 import { useUserRole } from '@/hooks/useUserRole';
@@ -164,7 +165,11 @@ export default function Sidebar() {
             overscrollBehavior: 'contain',
           }}
         >
-          {loading && <div role="status" style={{ padding: '12px 16px', color: 'var(--muted)', fontSize: 13 }}>Cargando menú…</div>}
+          {loading && (
+            <div style={{ padding: '20px 12px' }}>
+              <SegmentedLoader size={40} label={isCollapsed ? '' : 'Cargando menú'} />
+            </div>
+          )}
           {permissionsError && !loading && (
             <div role="alert" style={{ padding: '12px 16px', color: 'var(--muted)', fontSize: 13 }}>
               No se pudieron cargar los permisos.
