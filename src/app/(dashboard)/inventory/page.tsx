@@ -17,7 +17,7 @@ import UpdateStockModal from '@/components/modals/UpdateStockModal';
 import TransferModal from '@/components/modals/TransferModal';
 import ProductDetailsModal from '@/components/modals/ProductDetailsModal';
 import KPIGrid from '@/components/dashboard/KPIGrid';
-import type { PivotItem as BasePivotItem } from '@/components/dashboard/PivotInventoryTable';
+import type { PivotData, PivotItem as BasePivotItem } from '@/components/dashboard/PivotInventoryTable';
 import type { CartItem, CartType } from '@/components/dashboard/InventoryCart';
 import { useRoleAccess } from '@/hooks/useRoleAccess';
 import {
@@ -45,6 +45,7 @@ export default function InventoryPage() {
   });
   const [selectedItems, setSelectedItems] = useState<string[]>([]);
   const [searchTerm, setSearchTerm] = useState('');
+  const [pivotData, setPivotData] = useState<PivotData | null>(null);
 
   // Debounce search filter
   useEffect(() => {
@@ -561,7 +562,7 @@ export default function InventoryPage() {
         </div>
       </div>
 
-      <KPIGrid />
+      <KPIGrid pivotData={pivotData} />
 
       {cartMode && (
         <Card>
@@ -912,6 +913,7 @@ export default function InventoryPage() {
         filters={filters}
         cartMode={cartMode}
         onAddToCart={addToCart}
+        onDataLoaded={setPivotData}
         parentWarehouseId={cartMode && parentWarehouseId ? parentWarehouseId : undefined}
         cartReady={cartMode && !!parentWarehouseId}
       />

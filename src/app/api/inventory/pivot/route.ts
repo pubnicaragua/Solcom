@@ -44,6 +44,7 @@ export async function GET(request: Request) {
         const color = searchParams.get('color') || '';
         const stockLevel = searchParams.get('stockLevel') || '';
         const showZeroStock = searchParams.get('showZeroStock') !== 'false'; // default true
+        const includeAging = searchParams.get('includeAging') === 'true';
 
         const supabase = createRouteHandlerClient({ cookies });
         const auth = await getAuthenticatedProfile(supabase);
@@ -62,6 +63,7 @@ export async function GET(request: Request) {
                 warehouses: [],
                 items: [],
                 totalBeforeFilter: 0,
+                totalSkuCount: 0,
                 selectedWarehouse: null,
             });
         }
@@ -93,6 +95,7 @@ export async function GET(request: Request) {
                 warehouses: [],
                 items: [],
                 totalBeforeFilter: 0,
+                totalSkuCount: 0,
                 selectedWarehouse: null,
             });
         }
@@ -227,6 +230,7 @@ export async function GET(request: Request) {
                 warehouses: activeWarehouses.map(w => ({ code: w.code, name: w.name })),
                 items: [],
                 totalBeforeFilter: 0,
+                totalSkuCount: 0,
                 selectedWarehouse: selectedWarehouse ? { id: selectedWarehouse.id, code: selectedWarehouse.code } : null,
             });
         }
@@ -302,6 +306,7 @@ export async function GET(request: Request) {
                     warehouses: activeWarehouses.map((w: any) => ({ code: w.code, name: w.name })),
                     items: [],
                     totalBeforeFilter: 0,
+                    totalSkuCount: 0,
                     model: 'inventory_balance',
                     usedSnapshotGapFill: false,
                     selectedWarehouse: { id: selectedWarehouse.id, code: selectedWarehouse.code },
@@ -323,43 +328,45 @@ export async function GET(request: Request) {
         const BAL_PAGE = 1000;
         const LOT_PAGE = 1000;
 
-        // Optional: lot aging metric ("remanente en dias").
-        // Uses the oldest lot still in stock per item.
-        try {
-            for (let i = 0; i < itemIds.length; i += ITEM_CHUNK) {
-                const itemChunk = itemIds.slice(i, i + ITEM_CHUNK);
-                let page = 0;
-                let hasMore = true;
+        // Aging is optional because the current pivot UI does not render this column.
+        // Skipping it avoids one or more sequential queries on every initial load.
+        if (includeAging) {
+            try {
+                for (let i = 0; i < itemIds.length; i += ITEM_CHUNK) {
+                    const itemChunk = itemIds.slice(i, i + ITEM_CHUNK);
+                    let page = 0;
+                    let hasMore = true;
 
-                while (hasMore) {
-                    const from = page * LOT_PAGE;
-                    const to = from + LOT_PAGE - 1;
-                    const { data, error } = await (supabase.from as any)('v_inventory_lot_aging')
-                        .select('item_id, days_in_stock')
-                        .in('item_id', itemChunk)
-                        .range(from, to);
+                    while (hasMore) {
+                        const from = page * LOT_PAGE;
+                        const to = from + LOT_PAGE - 1;
+                        const { data, error } = await (supabase.from as any)('v_inventory_lot_aging')
+                            .select('item_id, days_in_stock')
+                            .in('item_id', itemChunk)
+                            .range(from, to);
 
-                    if (error) throw error;
+                        if (error) throw error;
 
-                    const rows = data || [];
-                    for (const row of rows) {
-                        const current = lotAgeByItem.get(row.item_id);
-                        if (current == null || (row.days_in_stock ?? 0) > current) {
-                            lotAgeByItem.set(row.item_id, row.days_in_stock ?? 0);
+                        const rows = data || [];
+                        for (const row of rows) {
+                            const current = lotAgeByItem.get(row.item_id);
+                            if (current == null || (row.days_in_stock ?? 0) > current) {
+                                lotAgeByItem.set(row.item_id, row.days_in_stock ?? 0);
+                            }
                         }
-                    }
 
-                    if (rows.length < LOT_PAGE) {
-                        hasMore = false;
-                    } else {
-                        page += 1;
+                        if (rows.length < LOT_PAGE) {
+                            hasMore = false;
+                        } else {
+                            page += 1;
+                        }
+                        if (page > 50) break;
                     }
-                    if (page > 50) break;
                 }
+            } catch (lotAgingError) {
+                // View may not exist yet before inventory-v2.sql is applied.
+                console.log('Pivot lot aging unavailable:', lotAgingError);
             }
-        } catch (lotAgingError) {
-            // View may not exist yet before inventory-v2.sql is applied.
-            console.log('Pivot lot aging unavailable:', lotAgingError);
         }
 
         try {
@@ -627,6 +634,7 @@ export async function GET(request: Request) {
                 warehouses: familyWarehouses.map((w) => ({ code: w.code, name: w.name })),
                 items: familyFinalItems,
                 totalBeforeFilter: familyItemsAfterStockLevel.length,
+                totalSkuCount: items.length,
                 model: usingBalanceModel ? 'inventory_balance' : 'stock_snapshots',
                 usedSnapshotGapFill,
                 selectedWarehouse: null,
@@ -639,6 +647,7 @@ export async function GET(request: Request) {
             warehouses: activeWarehouses.map((w: any) => ({ code: w.code, name: w.name })),
             items: finalItems,
             totalBeforeFilter: itemsAfterStockLevel.length,
+            totalSkuCount: items.length,
             model: usingBalanceModel ? 'inventory_balance' : 'stock_snapshots',
             usedSnapshotGapFill,
             selectedWarehouse: selectedWarehouse ? { id: selectedWarehouse.id, code: selectedWarehouse.code } : null,

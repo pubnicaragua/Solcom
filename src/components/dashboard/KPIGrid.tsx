@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 import type { CSSProperties } from 'react';
 import Card from '@/components/ui/Card';
 import { Package, Boxes, Warehouse, Clock, DollarSign } from 'lucide-react';
+import type { PivotData } from './PivotInventoryTable';
 
 interface KPIData {
   totalSKUs: number;
@@ -14,8 +15,11 @@ interface KPIData {
   lastSync: string;
 }
 
+interface KPIGridProps {
+  pivotData?: PivotData | null;
+}
 
-export default function KPIGrid() {
+export default function KPIGrid({ pivotData }: KPIGridProps) {
   const [kpis, setKpis] = useState<KPIData>({
     totalSKUs: 0,
     totalProducts: 0,
@@ -35,66 +39,35 @@ export default function KPIGrid() {
 
   useEffect(() => {
     setMounted(true);
-    fetchKPIs();
   }, []);
 
-  // Suscripción a cambios en tiempo real de Supabase para actualizar KPIs
   useEffect(() => {
-    const setupRealtime = async () => {
-      try {
-        const { createClientComponentClient } = await import('@supabase/auth-helpers-nextjs');
-        const supabase = createClientComponentClient();
+    if (!pivotData) return;
 
-        const channel = supabase
-          .channel('kpi-items-changes')
-          .on(
-            'postgres_changes',
-            { event: '*', schema: 'public', table: 'items' },
-            () => {
-              // Refrescar KPIs cuando hay cambios
-              fetchKPIs();
-            }
-          )
-          .subscribe();
+    const items = pivotData.items || [];
+    const skuSet = new Set(items.map((item) => String(item.sku || '').trim()).filter(Boolean));
+    const totalStock = items.reduce((sum, item) => sum + Number(item.total || 0), 0);
+    const totalValue = items.reduce(
+      (sum, item) => sum + Number(item.total || 0) * Number(item.price || 0),
+      0
+    );
 
-        return () => {
-          supabase.removeChannel(channel);
-        };
-      } catch (error) {
-        console.error('Error setting up realtime for KPIs:', error);
-      }
-    };
-
-    const cleanup = setupRealtime();
-    return () => {
-      cleanup.then((unsubscribe) => unsubscribe?.());
-    };
-  }, []);
-
-  async function fetchKPIs() {
-    try {
-      const res = await fetch('/api/inventory/kpis/local');
-      if (res.ok) {
-        const data = await res.json();
-        setKpis({
-          ...data,
-          lastSync: data.lastSync === 'Nunca'
-            ? new Date().toLocaleString('es-NI', {
-              day: '2-digit',
-              month: '2-digit',
-              year: 'numeric',
-              hour: '2-digit',
-              minute: '2-digit'
-            })
-            : data.lastSync
-        });
-      }
-    } catch (error) {
-      // Error silencioso en producción
-    } finally {
-      setLoading(false);
-    }
-  }
+    setKpis({
+      totalSKUs: pivotData.totalSkuCount ?? skuSet.size,
+      totalProducts: pivotData.totalBeforeFilter ?? items.length,
+      totalStock,
+      totalValue,
+      activeWarehouses: pivotData.warehouses.length,
+      lastSync: new Date().toLocaleString('es-NI', {
+        day: '2-digit',
+        month: '2-digit',
+        year: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit'
+      }),
+    });
+    setLoading(false);
+  }, [pivotData]);
 
   const kpiItems = [
     {

@@ -37,10 +37,11 @@ export interface PivotItem {
     hasSnapshots?: boolean;
 }
 
-interface PivotData {
+export interface PivotData {
     warehouses: WarehouseCol[];
     items: PivotItem[];
     totalBeforeFilter?: number;
+    totalSkuCount?: number;
 }
 
 interface PivotInventoryTableProps {
@@ -49,6 +50,7 @@ interface PivotInventoryTableProps {
     cartReady?: boolean;
     onAddToCart?: (item: PivotItem) => void;
     parentWarehouseId?: string | null;
+    onDataLoaded?: (data: PivotData) => void;
 }
 
 /* ───── hierarchy builder ───── */
@@ -205,7 +207,7 @@ function ensureTooltipCSS() {
 }
 
 /* ───── component ───── */
-export default function PivotInventoryTable({ filters, cartMode, cartReady, onAddToCart, parentWarehouseId }: PivotInventoryTableProps) {
+export default function PivotInventoryTable({ filters, cartMode, cartReady, onAddToCart, parentWarehouseId, onDataLoaded }: PivotInventoryTableProps) {
     const [data, setData] = useState<PivotData | null>(null);
     const [loading, setLoading] = useState(true);
     const [collapsedGroups, setCollapsedGroups] = useState<Set<string>>(new Set());
@@ -271,8 +273,13 @@ export default function PivotInventoryTable({ filters, cartMode, cartReady, onAd
             const now = Date.now();
             const cachedEntry = pivotCacheRef.current.get(queryKey);
 
+            const isBasePivotQuery = !parentWarehouseId && (!filters || Object.entries(filters).every(([key, value]) =>
+                key === 'sortBy' || value == null || value === ''
+            ));
+
             if (!options?.force && cachedEntry) {
                 setData(cachedEntry.data);
+                if (isBasePivotQuery) onDataLoaded?.(cachedEntry.data);
                 hasLoadedOnceRef.current = true;
                 setLoading(false);
 
@@ -293,6 +300,7 @@ export default function PivotInventoryTable({ filters, cartMode, cartReady, onAd
             if (res.ok) {
                 const result = await res.json();
                 setData(result);
+                if (isBasePivotQuery) onDataLoaded?.(result);
                 hasLoadedOnceRef.current = true;
 
                 // Tiny LRU cache by query string.
@@ -316,7 +324,7 @@ export default function PivotInventoryTable({ filters, cartMode, cartReady, onAd
                 setLoading(false);
             }
         }
-    }, [filters, hideZeroStock, parentWarehouseId]);
+    }, [filters, hideZeroStock, onDataLoaded, parentWarehouseId]);
 
     useEffect(() => {
         void fetchPivotData();
