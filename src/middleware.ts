@@ -38,6 +38,31 @@ const timedFetch: typeof fetch = async (input, init) => {
   }
 };
 
+type SupabaseServerClient = ReturnType<typeof createServerClient>;
+
+async function getModuleAccessForUser(
+  supabase: SupabaseServerClient,
+  userId: string,
+) {
+  const [{ data: profile }, { data: overrideRows, error: overrideError }] = await Promise.all([
+    supabase
+      .from('user_profiles')
+      .select('role')
+      .eq('id', userId)
+      .maybeSingle(),
+    supabase
+      .from('user_module_permissions')
+      .select('module, can_access')
+      .eq('user_id', userId),
+  ]);
+
+  const role = normalizeRole(profile?.role);
+  const baseAccess = getDefaultModuleAccess(role);
+  return !overrideError
+    ? mergeModuleOverrides(baseAccess, mapOverrides(overrideRows || []))
+    : baseAccess;
+}
+
 export async function middleware(request: NextRequest) {
   const path = request.nextUrl.pathname;
   const publicRoutes = ['/login', '/signup', '/reset-password', '/login-clientes', '/alistamiento/escanear'];
@@ -146,24 +171,7 @@ export async function middleware(request: NextRequest) {
 
   if (path === '/' && user) {
     try {
-      const { data: profile } = await supabase
-        .from('user_profiles')
-        .select('role')
-        .eq('id', user.id)
-        .maybeSingle();
-
-      const role = normalizeRole(profile?.role);
-      const baseAccess = getDefaultModuleAccess(role);
-      let moduleAccess = baseAccess;
-
-      const { data: overrideRows, error: overrideError } = await supabase
-        .from('user_module_permissions')
-        .select('module, can_access')
-        .eq('user_id', user.id);
-      if (!overrideError) {
-        moduleAccess = mergeModuleOverrides(baseAccess, mapOverrides(overrideRows || []));
-      }
-
+      const moduleAccess = await getModuleAccessForUser(supabase, user.id);
       return NextResponse.redirect(new URL(getFallbackPath(moduleAccess), request.url));
     } catch (_error) {
       return NextResponse.redirect(new URL('/inventory', request.url));
@@ -180,24 +188,7 @@ export async function middleware(request: NextRequest) {
 
   if (user && isPublicRoute && !path.startsWith('/login-clientes') && !isScannerRoute) {
     try {
-      const { data: profile } = await supabase
-        .from('user_profiles')
-        .select('role')
-        .eq('id', user.id)
-        .maybeSingle();
-
-      const role = normalizeRole(profile?.role);
-      const baseAccess = getDefaultModuleAccess(role);
-      let moduleAccess = baseAccess;
-
-      const { data: overrideRows, error: overrideError } = await supabase
-        .from('user_module_permissions')
-        .select('module, can_access')
-        .eq('user_id', user.id);
-      if (!overrideError) {
-        moduleAccess = mergeModuleOverrides(baseAccess, mapOverrides(overrideRows || []));
-      }
-
+      const moduleAccess = await getModuleAccessForUser(supabase, user.id);
       return NextResponse.redirect(new URL(getFallbackPath(moduleAccess), request.url));
     } catch (_error) {
       return NextResponse.redirect(new URL('/inventory', request.url));
