@@ -41,7 +41,7 @@ import { useSidebar } from '@/contexts/SidebarContext';
 export default function Sidebar() {
   const pathname = usePathname();
   const { isOpen, close, isCollapsed, toggleCollapse } = useSidebar();
-  const { loading, hasModuleAccess, role } = useUserRole();
+  const { loading, hasModuleAccess, role, error: permissionsError, retry: retryPermissions } = useUserRole();
   const { access: brandingAccess, loading: brandingLoading } = useRoleAccess('branding');
   const canViewBrandLogo = !brandingLoading && brandingAccess.can_view;
 
@@ -164,6 +164,13 @@ export default function Sidebar() {
             overscrollBehavior: 'contain',
           }}
         >
+          {loading && <div role="status" style={{ padding: '12px 16px', color: 'var(--muted)', fontSize: 13 }}>Cargando menú…</div>}
+          {permissionsError && !loading && (
+            <div role="alert" style={{ padding: '12px 16px', color: 'var(--muted)', fontSize: 13 }}>
+              No se pudieron cargar los permisos.
+              <button type="button" onClick={retryPermissions} style={{ display: 'block', marginTop: 8, background: 'transparent', border: '1px solid var(--border)', borderRadius: 6, padding: '6px 10px', color: 'var(--text)', cursor: 'pointer' }}>Reintentar</button>
+            </div>
+          )}
           {menuItems.map((item) => {
             const Icon = item.icon;
             const isBilling = item.href === '/ventas';

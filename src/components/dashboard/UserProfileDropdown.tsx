@@ -26,7 +26,9 @@ export default function UserProfileDropdown() {
 
   useEffect(() => {
     async function loadUser() {
-      const { data: { user: authUser } } = await supabase.auth.getUser();
+      // Display-only identity; protected routes validate authorization server-side.
+      const { data: { session } } = await supabase.auth.getSession();
+      const authUser = session?.user;
 
       if (authUser) {
         const { data: profile } = await supabase

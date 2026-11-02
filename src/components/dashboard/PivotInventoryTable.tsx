@@ -2,7 +2,8 @@
 
 import { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import Card from '@/components/ui/Card';
-import { ChevronRight, ChevronDown, ChevronUp, Loader2, Eye, EyeOff, Package, RefreshCw, Search, Palette, ShoppingCart } from 'lucide-react';
+import SegmentedLoader from '@/components/ui/SegmentedLoader';
+import { ChevronRight, ChevronDown, ChevronUp, Eye, EyeOff, Package, RefreshCw, Search, Palette, ShoppingCart } from 'lucide-react';
 import { supabase } from '@/lib/supabase/client';
 import { useUserRole } from '@/hooks/useUserRole';
 import { createRefreshQueue } from '@/lib/inventory/refresh-queue';
@@ -211,6 +212,8 @@ function ensureTooltipCSS() {
 export default function PivotInventoryTable({ filters, cartMode, cartReady, onAddToCart, parentWarehouseId, onDataLoaded }: PivotInventoryTableProps) {
     const [data, setData] = useState<PivotData | null>(null);
     const [loading, setLoading] = useState(true);
+    const [loadingComplete, setLoadingComplete] = useState(false);
+    const loadingCompletionTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
     const [collapsedGroups, setCollapsedGroups] = useState<Set<string>>(new Set());
     const [expandedProducts, setExpandedProducts] = useState<Set<string>>(new Set());
     const [copiedSku, setCopiedSku] = useState<string | null>(null);
@@ -305,6 +308,10 @@ export default function PivotInventoryTable({ filters, cartMode, cartReady, onAd
                 if (requestId !== requestIdRef.current || controller.signal.aborted) return;
                 setData(result);
                 if (isBasePivotQuery) onDataLoaded?.(result);
+                if (!hasLoadedOnceRef.current) {
+                    setLoadingComplete(true);
+                    loadingCompletionTimerRef.current = setTimeout(() => setLoadingComplete(false), 220);
+                }
                 hasLoadedOnceRef.current = true;
 
                 // Tiny LRU cache by query string.
@@ -411,6 +418,7 @@ export default function PivotInventoryTable({ filters, cartMode, cartReady, onAd
     useEffect(() => {
         return () => {
             abortRef.current?.abort();
+            if (loadingCompletionTimerRef.current) clearTimeout(loadingCompletionTimerRef.current);
         };
     }, []);
 
@@ -429,7 +437,7 @@ export default function PivotInventoryTable({ filters, cartMode, cartReady, onAd
 
         window.addEventListener('resize', updateViewport);
         return () => window.removeEventListener('resize', updateViewport);
-    }, [data]);
+    }, [data, loading, loadingComplete]);
 
     const warehouseCodes = useMemo(() => data?.warehouses.map(w => w.code) || [], [data]);
     const tree = useMemo(() => {
@@ -482,11 +490,12 @@ export default function PivotInventoryTable({ filters, cartMode, cartReady, onAd
         });
     }
 
-    if (loading) {
+    if (loading || loadingComplete) {
         return (
             <Card>
                 <div style={{
-                    padding: 60,
+                    padding: '44px 24px',
+                    minHeight: 220,
                     textAlign: 'center',
                     color: 'var(--muted)',
                     display: 'flex',
@@ -496,8 +505,7 @@ export default function PivotInventoryTable({ filters, cartMode, cartReady, onAd
                     background: 'linear-gradient(180deg, var(--pivot-toolbar-tint) 0%, transparent 100%)',
                     borderRadius: 12,
                 }}>
-                    <Loader2 size={22} style={{ animation: 'spin 1s linear infinite', color: 'var(--pivot-brand-accent)' }} />
-                    <span style={{ fontSize: 14, fontWeight: 500 }}>Cargando Tabla Pivot...</span>
+                    <SegmentedLoader complete={loadingComplete} />
                 </div>
             </Card>
         );
