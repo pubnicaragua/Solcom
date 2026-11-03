@@ -10,7 +10,6 @@ import { useRoleAccess } from '@/hooks/useRoleAccess';
 
 const menuItems = [
   { icon: Package, label: 'Inventario', href: '/inventory', module: 'inventory' },
-  { icon: CloudCog, label: 'Sincronización Zoho', href: '/zoho-sync', module: 'zoho-sync' },
   { icon: ShoppingCart, label: 'Compras', href: '/compras', module: 'compras', adminOnly: true },
   { icon: FileText, label: 'Facturación', href: '/ventas', module: 'ventas' },
   { icon: PackageSearch, label: 'Alistamiento', href: '/alistamiento', module: 'alistamiento' },
@@ -21,6 +20,7 @@ const menuItems = [
   { icon: Calendar, label: 'Reuniones', href: '/reuniones', module: 'reuniones' },
   { icon: Users, label: 'Roles', href: '/roles', module: 'roles' },
   { icon: Settings, label: 'Configuración', href: '/settings', module: 'settings' },
+  { icon: CloudCog, label: 'Sincronización Zoho', href: '/zoho-sync', module: 'zoho-sync', adminOnly: true },
   { icon: Bot, label: 'Agentes IA', href: '/ai-agents', module: 'ai-agents' },
   { icon: CreditCard, label: 'Solcom AI', href: '/solcom-ai', adminOnly: true },
   { icon: ClipboardList, label: 'Siguientes Pasos', href: '/next-steps', module: 'next-steps', hidden: true },

@@ -4,7 +4,8 @@ import { useState, type CSSProperties, type FormEvent } from 'react';
 import { useRouter } from 'next/navigation';
 import { supabase } from '@/lib/supabase/client';
 import AuthShell from '@/components/auth/AuthShell';
-import { AlertCircle, Eye, EyeOff, KeyRound, LogIn, Mail } from 'lucide-react';
+import { AlertCircle, Eye, EyeOff, KeyRound, Loader2, LogIn, Mail } from 'lucide-react';
+import { isClientPortalUser } from '@/lib/auth/client-portal';
 
 const GENERIC_AUTH_ERROR = 'Credenciales invalidas o acceso no autorizado.';
 
@@ -39,9 +40,15 @@ export default function LoginClientesPage() {
         throw authError;
       }
 
+      if (data.user && !isClientPortalUser(data.user.id)) {
+        await supabase.auth.signOut();
+        setError('Este acceso está reservado para usuarios del portal de cliente.');
+        setLoading(false);
+        return;
+      }
+
       if (data.user) {
-        await new Promise(resolve => setTimeout(resolve, 100));
-        router.push('/cliente/dashboard');
+        router.replace('/cliente/dashboard');
         return;
       }
     } catch (err: unknown) {
@@ -88,7 +95,7 @@ export default function LoginClientesPage() {
   };
 
   return (
-    <AuthShell title="Login de usuarios" subtitle="Portal de acceso">
+    <AuthShell title="Portal de clientes" subtitle="Consulta de inventario disponible" footerText="Acceso separado del ERP interno">
       {error && (
         <div
           style={{
@@ -106,6 +113,28 @@ export default function LoginClientesPage() {
         >
           <AlertCircle size={14} />
           <span>{error}</span>
+        </div>
+      )}
+
+      {loading && (
+        <div
+          role="status"
+          aria-live="polite"
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: 9,
+            padding: '10px 12px',
+            marginBottom: 14,
+            border: '1px solid color-mix(in srgb, var(--brand-primary) 35%, transparent)',
+            borderRadius: 10,
+            background: 'color-mix(in srgb, var(--brand-primary) 9%, transparent)',
+            color: 'var(--text)',
+            fontSize: 12,
+          }}
+        >
+          <Loader2 size={16} style={{ color: 'var(--brand-primary)', animation: 'login-spin 0.8s linear infinite' }} />
+          <span>Verificando acceso al portal de cliente…</span>
         </div>
       )}
 
@@ -183,7 +212,7 @@ export default function LoginClientesPage() {
 
         <button type="submit" disabled={loading || !email || !password} style={submitButtonStyle}>
           {loading ? (
-            'Ingresando...'
+            <><Loader2 size={17} style={{ animation: 'login-spin 0.8s linear infinite' }} /> Cargando inventario…</>
           ) : (
             <>
               <LogIn size={17} />
@@ -192,6 +221,9 @@ export default function LoginClientesPage() {
           )}
         </button>
       </form>
+      <style jsx global>{`
+        @keyframes login-spin { to { transform: rotate(360deg); } }
+      `}</style>
     </AuthShell>
   );
 }

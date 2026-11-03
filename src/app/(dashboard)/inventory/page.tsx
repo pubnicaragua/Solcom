@@ -453,6 +453,10 @@ export default function InventoryPage() {
           {(
 
             <button
+              type="button"
+              aria-pressed={cartMode}
+              title={cartMode ? `Flujo activo: ${selectedCartTypeLabel}` : 'Abrir el carrito para preparar una cotización, factura u orden de venta'}
+              data-tour="inventory-sales-mode"
               onClick={() => {
                 if (!cartMode) {
                   setCartMode(true);
@@ -487,7 +491,7 @@ export default function InventoryPage() {
               }}
             >
               <ShoppingCart size={17} />
-              <span className="btn-label">{cartMode ? `Modo ${selectedCartTypeLabel}` : 'Modo Ventas'}</span>
+              <span className="btn-label">{cartMode ? `Modo Ventas · ${selectedCartTypeLabel}` : 'Modo Ventas'}</span>
               {cartItems.length > 0 && (
                 <span
                   style={{
@@ -566,7 +570,7 @@ export default function InventoryPage() {
 
       {cartMode && (
         <Card data-tour="inventory-cart">
-          <div style={{ padding: 14, display: 'grid', gap: 12 }}>
+          <div style={{ padding: 14, display: 'grid', gap: 12 }} data-tour="inventory-cart-config">
             <div style={{ fontSize: 13, fontWeight: 800, color: 'var(--text)', display: 'flex', alignItems: 'center', gap: 8 }}>
               <ShoppingCart size={16} color="var(--success)" />
               Flujo de ventas desde inventario
@@ -578,6 +582,7 @@ export default function InventoryPage() {
                   1. Bodega empresarial (obligatorio)
                 </div>
                 <select
+                  data-tour="inventory-cart-warehouse"
                   value={parentWarehouseId}
                   onChange={(e) => handleParentWarehouseChange(e.target.value)}
                   style={{
@@ -649,7 +654,7 @@ export default function InventoryPage() {
                 <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--muted)', marginBottom: 6 }}>
                   2. Tipo de documento
                 </div>
-                <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }} data-tour="inventory-cart-document">
                   {cartTypeOptions.map((option) => {
                     const active = cartType === option.key;
                     const disabled = !parentWarehouseId;
@@ -909,14 +914,16 @@ export default function InventoryPage() {
         </Card>
       )}
 
-      <PivotInventoryTable
-        filters={filters}
-        cartMode={cartMode}
-        onAddToCart={addToCart}
-        onDataLoaded={setPivotData}
-        parentWarehouseId={cartMode && parentWarehouseId ? parentWarehouseId : undefined}
-        cartReady={cartMode && !!parentWarehouseId}
-      />
+      <div data-tour="inventory-products">
+        <PivotInventoryTable
+          filters={filters}
+          cartMode={cartMode}
+          onAddToCart={addToCart}
+          onDataLoaded={setPivotData}
+          parentWarehouseId={cartMode && parentWarehouseId ? parentWarehouseId : undefined}
+          cartReady={cartMode && !!parentWarehouseId}
+        />
+      </div>
 
       <Card>
         <div style={{ padding: 16, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>

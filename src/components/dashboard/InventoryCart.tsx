@@ -725,6 +725,7 @@ export default function InventoryCart({
 
             {/* Drawer */}
             <div
+                data-tour="inventory-cart-drawer"
                 style={{
                     position: 'fixed',
                     top: 0,
@@ -799,7 +800,7 @@ export default function InventoryCart({
                     borderBottom: '1px solid var(--pivot-grid-soft-border)',
                     display: 'flex',
                     gap: 6,
-                }}>
+                }} data-tour="inventory-cart-type-toggle">
                     {availableCartTypes.map((type) => {
                         const tc = CART_TYPE_CONFIG[type];
                         const isActive = cartType === type;
@@ -1005,7 +1006,7 @@ export default function InventoryCart({
                                                 <User size={11} />
                                                 Cliente *
                                             </label>
-                                            <div style={{ position: 'relative' }} ref={customerDropdownRef}>
+                                            <div style={{ position: 'relative' }} ref={customerDropdownRef} data-tour="inventory-cart-customer">
                                                 <div style={{ position: 'relative' }}>
                                                     <input
                                                         ref={customerInputRef}
@@ -1442,6 +1443,7 @@ export default function InventoryCart({
                         {/* Items List */}
                         {items.length === 0 ? (
                             <div
+                                data-tour="inventory-cart-items"
                                 style={{
                                     textAlign: 'center',
                                     padding: '48px 20px',
@@ -1457,7 +1459,7 @@ export default function InventoryCart({
                                 </div>
                             </div>
                         ) : (
-                            <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                            <div data-tour="inventory-cart-items" style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
                                 {items.map((item) => {
                                     const maxQty = getItemMaxQty(item);
                                     const atMaxQty = maxQty != null && item.quantity >= maxQty;
@@ -1671,6 +1673,7 @@ export default function InventoryCart({
                 {/* Footer */}
                 {!success && items.length > 0 && (
                     <div
+                        data-tour="inventory-cart-submit"
                         style={{
                             padding: '14px 16px',
                             borderTop: '1px solid var(--pivot-grid-border)',

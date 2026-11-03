@@ -1,5 +1,6 @@
 import { createServerClient, type CookieOptions } from '@supabase/ssr';
 import { NextRequest, NextResponse } from 'next/server';
+import { isClientPortalUser } from '@/lib/auth/client-portal';
 
 export const dynamic = 'force-dynamic';
 
@@ -65,6 +66,10 @@ export async function GET(request: NextRequest) {
         { error: 'No autorizado' },
         { status: 401 }
       );
+    }
+
+    if (!isClientPortalUser(user.id)) {
+      return NextResponse.json({ error: 'Este inventario solo está disponible para el portal de cliente.' }, { status: 403 });
     }
 
     // Obtener warehouses activos

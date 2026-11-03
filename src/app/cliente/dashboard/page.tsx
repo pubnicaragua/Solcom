@@ -8,6 +8,7 @@ import Button from '@/components/ui/Button';
 import Input from '@/components/ui/Input';
 import Badge from '@/components/ui/Badge';
 import { LogOut, Package, Warehouse, Search, RefreshCw } from 'lucide-react';
+import { isClientPortalUser } from '@/lib/auth/client-portal';
 
 export default function ClienteDashboardPage() {
   const [user, setUser] = useState<any>(null);
@@ -27,7 +28,7 @@ export default function ClienteDashboardPage() {
     try {
       const { data: { user: authUser }, error: authError } = await supabase.auth.getUser();
       
-      if (authError || !authUser) {
+      if (authError || !authUser || !isClientPortalUser(authUser.id)) {
         router.push('/login-clientes');
         return;
       }

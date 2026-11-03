@@ -844,7 +844,7 @@ export default function ComprasRestockPage() {
           >
             <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', flex: 1 }}>
               {/* Vistas selector */}
-              <div className="compras-view-switch">
+              <div className="compras-view-switch" data-tour="purchases-view-switch">
                 <button
                   onClick={() => {
                     setActiveView('compras');
@@ -888,6 +888,7 @@ export default function ComprasRestockPage() {
               </div>
 
               <div
+                data-tour="purchases-search"
                 style={{
                   display: 'flex',
                   alignItems: 'center',
@@ -958,6 +959,7 @@ export default function ComprasRestockPage() {
             </div>
             <div style={{ display: 'flex', gap: 10 }}>
               <button
+                data-tour="purchases-export"
                 className="compras-btn-excel"
                 onClick={handleExportExcel}
                 style={toolbarButtonStyleExcel}

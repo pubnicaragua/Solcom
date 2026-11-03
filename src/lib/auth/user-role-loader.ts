@@ -1,5 +1,5 @@
 import type { SupabaseClient, AuthChangeEvent, Session } from '@supabase/supabase-js';
-import { getDefaultModuleAccess, mapOverrides, mergeModuleOverrides } from './module-permissions';
+import { getDefaultModuleAccess, mapOverrides, mergeModuleOverrides, restrictAdminOnlyModules } from './module-permissions';
 
 export type UserRole = 'admin' | 'manager' | 'operator' | 'auditor';
 export interface RoleState {
@@ -38,7 +38,7 @@ function loadRole(client: RoleClient, userId: string): Promise<RoleState> {
       const code = String(permission.permission_code);
       if (/\.(read|view|write|use)$/.test(code)) base[code.split('.')[0]] = true;
     }
-    return { role, moduleAccess: mergeModuleOverrides(base, mapOverrides(overrides.data)), permissionCodes: (permissions.data || []).map(row => String(row.permission_code)), loading: false, error: null };
+    return { role, moduleAccess: restrictAdminOnlyModules(mergeModuleOverrides(base, mapOverrides(overrides.data)), role), permissionCodes: (permissions.data || []).map(row => String(row.permission_code)), loading: false, error: null };
   };
   const promise = Promise.race([
     query(),

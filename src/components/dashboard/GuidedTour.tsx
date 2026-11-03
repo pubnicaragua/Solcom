@@ -41,13 +41,18 @@ const TOUR_DEFINITIONS: TourDefinition[] = [
     matches: (pathname) => pathname === '/inventory' || pathname.startsWith('/inventory/'),
     eyebrow: 'Inventario',
     title: 'Controla existencias con claridad',
-    description: 'Recorre el inventario por bodega, filtra productos y prepara documentos de venta desde una sola vista.',
+    description: 'Aprende qué hace cada control y completa el flujo desde la existencia hasta la cotización, factura u orden de venta.',
     steps: [
-      { target: '[data-tour="inventory-header"]', title: 'Resumen del módulo', description: 'Aquí identificas el inventario completo, la última sincronización y las acciones disponibles para tu rol.', instruction: 'el encabezado “Inventario Completo”' },
-      { target: '[data-tour="inventory-actions"]', title: 'Acciones rápidas', description: 'Desde esta fila puedes activar ventas, exportar información o importar un archivo autorizado.', instruction: 'Modo Ventas, Excel, PDF o Importar', tip: 'El botón Modo Ventas abre el carrito y sus opciones de documento.' },
-      { target: '[data-tour="inventory-filters"]', title: 'Busca y filtra', description: 'Combina búsqueda por nombre o SKU con bodega, categoría y nivel de stock para reducir los resultados.', instruction: 'el campo “Buscar por nombre, SKU…” y los filtros' },
-      { target: '[data-tour="inventory-table"]', title: 'Explora el inventario pivot', description: 'Haz clic en la flecha de una marca o producto para abrir sus variantes y revisar las existencias por bodega.', instruction: 'la flecha junto a una marca o producto', tip: 'En móvil, toca la tarjeta del producto para desplegar sus bodegas y variantes.' },
-      { target: '[data-tour="inventory-cart"]', fallbackTargets: ['[data-tour="inventory-actions"]'], title: 'Prepara una venta', description: 'Activa Modo Ventas y luego selecciona la bodega, el tipo de documento y los productos que vas a agregar al carrito.', instruction: 'Modo Ventas; después la bodega y el documento', tip: 'Si el carrito todavía no está abierto, el botón Modo Ventas es el siguiente clic.' },
+      { target: '[data-tour="inventory-header"]', title: '1. Lee el resumen', description: 'Aquí ves el alcance del inventario, el total de productos, las bodegas activas, el stock y la última sincronización.', instruction: 'el encabezado y las tarjetas de resumen' },
+      { target: '[data-tour="inventory-sales-mode"]', title: '2. Abre el flujo de ventas', description: 'Haz clic en Modo Ventas para preparar un documento desde las existencias. No es el módulo Compras: es el carrito de venta que vive dentro de Inventario.', instruction: 'Modo Ventas', tip: 'Al abrirlo, el botón cambia a “Modo Ventas · Cotización” porque Cotización es el tipo inicial.' },
+      { target: '[data-tour="inventory-cart-warehouse"]', fallbackTargets: ['[data-tour="inventory-sales-mode"]'], title: '3. Define la bodega', description: 'Selecciona una bodega empresarial. El sistema carga su familia de almacenes hijos y usa esa agrupación para validar el stock disponible.', instruction: 'Seleccionar bodega empresarial…', tip: 'Sin bodega no se habilita la selección de documentos ni la adición de productos.' },
+      { target: '[data-tour="inventory-cart-document"]', fallbackTargets: ['[data-tour="inventory-cart-warehouse"]', '[data-tour="inventory-sales-mode"]'], title: '4. Elige el documento', description: 'Después de seleccionar la bodega puedes escoger Cotización, Factura u Orden de Venta. Cada opción cambia los datos que el sistema te pedirá.', instruction: 'Cotización, Factura u Orden de Venta', tip: 'Factura puede llevarte a Facturación para completar seriales y campos fiscales.' },
+      { target: '[data-tour="inventory-products"]', title: '5. Agrega productos', description: 'Busca por nombre o SKU, expande la marca o el producto y usa la acción de agregar. El carrito respeta el stock de la familia de bodegas elegida.', instruction: 'el producto y su acción Agregar', tip: 'Si no seleccionaste bodega, la tabla no permite agregar para evitar una venta fuera de alcance.' },
+      { target: '[data-tour="inventory-cart-customer"]', fallbackTargets: ['[data-tour="inventory-cart-drawer"]', '[data-tour="inventory-products"]'], title: '6. Completa el cliente', description: 'En el carrito busca y selecciona el cliente. Este dato es obligatorio para crear una cotización, factura u orden de venta.', instruction: 'Cliente *', tip: 'También puedes revisar cantidades, impuestos, garantía y otros datos del documento antes de guardar.' },
+      { target: '[data-tour="inventory-cart-type-toggle"]', fallbackTargets: ['[data-tour="inventory-cart-drawer"]', '[data-tour="inventory-sales-mode"]'], title: '7. Cambia el tipo sin perder productos', description: 'El selector del carrito te permite cambiar entre Cotización, Factura y Orden de Venta mientras conservas la selección actual.', instruction: 'las pestañas de tipo de documento', tip: 'Si el botón superior dice “Modo Cotización”, significa que el carrito está activo en ese tipo; puedes cambiarlo aquí.' },
+      { target: '[data-tour="inventory-cart-submit"]', fallbackTargets: ['[data-tour="inventory-cart-drawer"]', '[data-tour="inventory-sales-mode"]'], title: '8. Crea o continúa', description: 'Revisa el resumen y usa el botón final. Cotización y Orden de Venta se crean desde el carrito; Factura continúa en Facturación para completar la información final.', instruction: 'Crear Cotización, Crear Orden de Venta o Continuar a Factura' },
+      { target: '[data-tour="inventory-filters"]', title: '9. Filtra el inventario', description: 'Cuando no estés preparando una venta, combina nombre o SKU con bodega, categoría, nivel de stock y filtros avanzados para encontrar exactamente lo que buscas.', instruction: 'el buscador y los filtros', tip: 'Los filtros no modifican existencias; solo cambian la vista.' },
+      { target: '[data-tour="inventory-table"]', title: '10. Explora el detalle', description: 'Expande una marca o producto para revisar variantes y existencias por bodega. En móvil, toca la tarjeta para abrir el detalle.', instruction: 'la flecha junto a una marca o producto' },
     ],
   },
   {
@@ -136,11 +141,14 @@ const TOUR_DEFINITIONS: TourDefinition[] = [
     matches: (pathname) => pathname === '/compras' || pathname.startsWith('/compras/'),
     eyebrow: 'Abastecimiento',
     title: 'Compra con mejor contexto',
-    description: 'Usa cobertura, ventas recientes y stock actual para priorizar reposiciones.',
+    description: 'Lee la cobertura y las ventas recientes para decidir qué reponer primero, sin confundir este análisis con el carrito de ventas de Inventario.',
     steps: [
-      { target: '[data-tour="purchases-header"]', title: 'Análisis de compras', description: 'Define el período y actualiza el análisis con datos recientes.', instruction: 'las fechas y Actualizar Análisis' },
-      { target: '[data-tour="purchases-kpis"]', title: 'Prioriza rápidamente', description: 'Los indicadores resumen presupuesto, críticos, sanos y unidades sugeridas.', instruction: 'las tarjetas de indicadores' },
-      { target: '[data-tour="purchases-table"]', title: 'Revisa las recomendaciones', description: 'Busca un producto, cambia entre Compras y Más vendidos y revisa la sugerencia de inversión.', instruction: 'el buscador y la tabla de productos' },
+      { target: '[data-tour="purchases-header"]', title: '1. Define el período', description: 'Elige fecha inicial y final. Luego pulsa Actualizar Análisis para consultar ventas y existencias del período seleccionado.', instruction: 'Inicio, Final y Actualizar Análisis', tip: 'Este botón vuelve a consultar el análisis; no crea una orden de compra automáticamente.' },
+      { target: '[data-tour="purchases-kpis"]', fallbackTargets: ['[data-tour="purchases-header"]'], title: '2. Lee las prioridades', description: 'Presupuesto sugerido, ítems críticos, ítems sanos y sobre-stock te indican dónde concentrar la revisión.', instruction: 'las tarjetas de indicadores' },
+      { target: '[data-tour="purchases-view-switch"]', fallbackTargets: ['[data-tour="purchases-table"]', '[data-tour="purchases-header"]'], title: '3. Cambia la perspectiva', description: 'Compras muestra lo que requiere reposición. Más Vendidos cambia a los productos con mayor movimiento para comparar la demanda.', instruction: 'Compras o Más Vendidos' },
+      { target: '[data-tour="purchases-search"]', fallbackTargets: ['[data-tour="purchases-table"]', '[data-tour="purchases-header"]'], title: '4. Encuentra un producto', description: 'Busca por nombre o SKU y combina marca, categoría y Mostrar solo requeridos para reducir la tabla.', instruction: 'Buscar producto o SKU… y los filtros' },
+      { target: '[data-tour="purchases-table"]', title: '5. Decide cuánto reponer', description: 'Revisa estado, ventas de las últimas cuatro semanas, stock actual, sugerido e inversión estimada antes de tomar la decisión.', instruction: 'la fila del producto y sus columnas', tip: 'Crítico indica riesgo de quiebre; sano indica cobertura adecuada; sobre-stock indica más semanas de inventario de las esperadas.' },
+      { target: '[data-tour="purchases-export"]', fallbackTargets: ['[data-tour="purchases-table"]'], title: '6. Comparte el resultado', description: 'Exporta el análisis a Excel para trabajar con el equipo. Compartir con IA abre una consulta basada en los datos cargados.', instruction: 'Exportar Excel o Compartir con IA' },
     ],
   },
   {
@@ -223,7 +231,7 @@ export default function GuidedTour() {
       });
 
     if (target) {
-      target.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'nearest' });
+      target.scrollIntoView({ behavior: 'auto', block: 'nearest', inline: 'nearest' });
       const rect = target.getBoundingClientRect();
       setTargetRect({
         top: rect.top,

@@ -37,10 +37,12 @@ export const MODULE_KEYS = MODULE_DEFINITIONS.map((module) => module.key);
 
 const ROLE_BASE_MODULES: Record<AppRole, string[]> = {
   admin: MODULE_KEYS,
-  manager: ['inventory', 'zoho-sync', 'ventas', 'reports', 'ai-agents', 'transfers', 'how-it-works', 'cliente', 'entregables'],
-  operator: ['inventory', 'zoho-sync', 'ventas', 'how-it-works', 'cliente', 'entregables'],
-  auditor: ['reports', 'zoho-sync', 'how-it-works', 'cliente', 'entregables'],
+  manager: ['inventory', 'ventas', 'reports', 'ai-agents', 'transfers', 'how-it-works'],
+  operator: ['inventory', 'ventas', 'how-it-works'],
+  auditor: ['reports', 'how-it-works'],
 };
+
+const ADMIN_ONLY_MODULES = new Set(['zoho-sync']);
 
 const MATCHABLE_MODULES = MODULE_DEFINITIONS
   .flatMap((module) => module.paths.map((path) => ({ module: module.key, path })))
@@ -69,6 +71,16 @@ export function mergeModuleOverrides(
   overrides: Record<string, boolean>
 ): Record<string, boolean> {
   return { ...baseAccess, ...overrides };
+}
+
+export function restrictAdminOnlyModules(
+  access: Record<string, boolean>,
+  role: AppRole,
+): Record<string, boolean> {
+  if (role === 'admin') return access;
+  const restricted = { ...access };
+  for (const module of ADMIN_ONLY_MODULES) restricted[module] = false;
+  return restricted;
 }
 
 export function mapOverrides(rows: UserModuleOverrideRow[] | null | undefined): Record<string, boolean> {
@@ -199,7 +211,7 @@ export async function getEffectiveModuleAccess(
   }
 
   const overrides = await getUserModuleOverrides(supabase, userId);
-  return mergeModuleOverrides(base, overrides);
+  return restrictAdminOnlyModules(mergeModuleOverrides(base, overrides), role);
 }
 
 export function hasModuleAccess(

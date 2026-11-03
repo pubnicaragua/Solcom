@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import { createBrowserClient } from '@supabase/ssr';
 import AuthShell from '@/components/auth/AuthShell';
 import { AlertCircle, CheckCircle2, Eye, EyeOff, KeyRound, Loader2, LogIn, Mail } from 'lucide-react';
+import { isClientPortalUser } from '@/lib/auth/client-portal';
 
 const GENERIC_AUTH_ERROR = 'Credenciales invalidas o acceso no autorizado.';
 
@@ -58,7 +59,7 @@ export default function LoginPage() {
     setAuthStage('validating');
 
     try {
-      const { error: authError } = await supabase.auth.signInWithPassword({
+      const { data, error: authError } = await supabase.auth.signInWithPassword({
         email: normalizedEmail,
         password,
       });
@@ -71,7 +72,7 @@ export default function LoginPage() {
       }
 
       setAuthStage('redirecting');
-      router.replace('/inventory');
+      router.replace(isClientPortalUser(data.user?.id) ? '/cliente/dashboard' : '/inventory');
     } catch (error: unknown) {
       setError(resolveLoginError(error));
       setAuthStage('idle');

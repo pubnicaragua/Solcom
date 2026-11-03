@@ -268,6 +268,9 @@ export async function GET() {
     const authClient = createRouteHandlerClient({ cookies });
     const auth = await getAuthenticatedProfile(authClient);
     if (!auth.ok) return jsonNoStore({ error: auth.error }, auth.status);
+    if (auth.role !== 'admin') {
+      return jsonNoStore({ error: 'Solo administradores pueden consultar la sincronización de Zoho.' }, 403);
+    }
 
     const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
     const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;

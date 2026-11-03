@@ -6,8 +6,10 @@ import {
   getFallbackPath,
   mapOverrides,
   mergeModuleOverrides,
+  restrictAdminOnlyModules,
 } from '@/lib/auth/module-permissions';
 import type { AppRole } from '@/lib/auth/warehouse-permissions';
+import { isClientPortalUser } from '@/lib/auth/client-portal';
 
 function normalizeRole(value: unknown): AppRole {
   const role = String(value ?? '').trim().toLowerCase();
@@ -58,9 +60,10 @@ async function getModuleAccessForUser(
 
   const role = normalizeRole(profile?.role);
   const baseAccess = getDefaultModuleAccess(role);
-  return !overrideError
+  const moduleAccess = !overrideError
     ? mergeModuleOverrides(baseAccess, mapOverrides(overrideRows || []))
     : baseAccess;
+  return restrictAdminOnlyModules(moduleAccess, role);
 }
 
 export async function middleware(request: NextRequest) {
@@ -169,6 +172,11 @@ export async function middleware(request: NextRequest) {
     return NextResponse.redirect(new URL('/login', request.url));
   }
 
+  if (user && isClientPortalUser(user.id)) {
+    if (isClientRoute) return response;
+    return NextResponse.redirect(new URL('/cliente/dashboard', request.url));
+  }
+
   if (path === '/' && user) {
     try {
       const moduleAccess = await getModuleAccessForUser(supabase, user.id);
@@ -205,15 +213,6 @@ export async function middleware(request: NextRequest) {
     return response;
   }
 
-  // Permitir acceso directo al usuario cliente específico
-  const CLIENT_USER_ID = '8abe3739-ba0d-4b5b-9e67-a1d9b5e6c588';
-  if (user && user.id === CLIENT_USER_ID) {
-    // Usuario cliente tiene acceso completo a /cliente
-    if (isClientRoute) {
-      return response;
-    }
-  }
-
   // Keep role/module enforcement in the middleware, but resolve the profile
   // and per-user overrides in parallel to avoid adding another round-trip.
   if (user) {
@@ -240,9 +239,9 @@ export async function middleware(request: NextRequest) {
 
       const userRole = normalizeRole(profile?.role || 'operator');
       const baseAccess = getDefaultModuleAccess(userRole);
-      const moduleAccess = !overrideError
+      const moduleAccess = restrictAdminOnlyModules(!overrideError
         ? mergeModuleOverrides(baseAccess, mapOverrides(overrideRows || []))
-        : baseAccess;
+        : baseAccess, userRole);
 
       const hasAccess = canAccessPath(path, moduleAccess);
       if (!hasAccess && !isPublicRoute && !isClientRoute) {
