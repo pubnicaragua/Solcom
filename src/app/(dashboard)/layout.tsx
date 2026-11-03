@@ -32,9 +32,10 @@ function DashboardContent({ children }: { children: React.ReactNode }) {
       <style jsx global>{`
         .dashboard-layout {
           display: grid;
-          grid-template-columns: ${isCollapsed ? '80px' : '260px'} 1fr;
+          grid-template-columns: ${isCollapsed ? '80px' : '260px'} minmax(0, 1fr);
           height: 100vh;
           min-height: 100dvh;
+          min-width: 0;
           transition: grid-template-columns 0.3s ease;
         }
 
@@ -43,11 +44,15 @@ function DashboardContent({ children }: { children: React.ReactNode }) {
           flex-direction: column;
           overflow: hidden;
           min-height: 0;
+          min-width: 0;
+          width: 100%;
         }
 
         .dashboard-main {
           flex: 1;
           min-height: 0;
+          min-width: 0;
+          width: 100%;
           overflow-y: auto;
           overflow-x: hidden;
           -webkit-overflow-scrolling: touch;

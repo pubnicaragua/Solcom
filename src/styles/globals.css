@@ -873,6 +873,25 @@ a {
   text-transform: none;
 }
 
+/* Keep wide inventory data inside its own scroll surface. A grid/flex child
+   must be allowed to shrink or the pivot table can widen the entire page. */
+.inv-page,
+.inv-page > *,
+.inventory-products-shell,
+.kpi-grid {
+  min-width: 0;
+  max-width: 100%;
+}
+
+.inventory-products-shell {
+  width: 100%;
+  overflow: hidden;
+}
+
+.kpi-grid > * {
+  min-width: 0;
+}
+
 .inventory-mobile-group,
 .inventory-mobile-product-card {
   border-color: color-mix(in srgb, var(--info) 15%, var(--border)) !important;

@@ -150,7 +150,7 @@ export default function KPIGrid({ pivotData, needsSummary = false }: KPIGridProp
 
 
   return (
-    <div className="kpi-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))', gap: 14 }}>
+    <div className="kpi-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))', gap: 14, minWidth: 0, width: '100%', maxWidth: '100%' }}>
       {kpiItems.map((item, index) => {
         const Icon = item.icon;
         return (

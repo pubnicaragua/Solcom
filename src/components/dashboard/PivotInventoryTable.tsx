@@ -744,7 +744,7 @@ export default function PivotInventoryTable({ filters, cartMode, cartReady, onAd
                     </div>
                 ) : (
                     /* ─── Desktop Table View ─── */
-                    <div style={{ position: 'relative', overflow: 'hidden', width: '100%' }}>
+                    <div style={{ position: 'relative', overflow: 'hidden', width: '100%', minWidth: 0, maxWidth: '100%' }}>
                         <div
                             ref={scrollContainerRef}
                             onScroll={(e) => {
@@ -753,7 +753,7 @@ export default function PivotInventoryTable({ filters, cartMode, cartReady, onAd
                                     setScrollTop(nextTop);
                                 }
                             }}
-                            style={{ overflowX: 'auto', overflowY: 'auto', maxHeight: '75vh', width: '100%' }}
+                            style={{ overflowX: 'auto', overflowY: 'auto', maxHeight: '75vh', width: '100%', minWidth: 0, maxWidth: '100%' }}
                         >
                             <table className="inventory-pivot-table" style={{
                                 borderCollapse: 'separate',

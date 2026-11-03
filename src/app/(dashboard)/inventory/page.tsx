@@ -435,7 +435,7 @@ export default function InventoryPage() {
   ];
 
   return (
-    <div className="inv-page" style={{ display: 'grid', gap: 14 }} data-tour="module-header">
+    <div className="inv-page" style={{ display: 'grid', gap: 14, minWidth: 0, width: '100%', maxWidth: '100%' }} data-tour="module-header">
       <div className="inv-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 12 }} data-tour="inventory-header">
         <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
           <div className="inventory-title-mark" aria-hidden="true">
@@ -914,7 +914,7 @@ export default function InventoryPage() {
         </Card>
       )}
 
-      <div data-tour="inventory-products">
+      <div className="inventory-products-shell" data-tour="inventory-products">
         <PivotInventoryTable
           filters={filters}
           cartMode={cartMode}

@@ -41,10 +41,6 @@ export default function LoginPage() {
   const passwordIsValid = password.length >= 6;
 
   useEffect(() => {
-    router.prefetch('/inventory');
-  }, [router]);
-
-  useEffect(() => {
     if (!loading || resetMode) {
       setAuthSlow(false);
       return undefined;
