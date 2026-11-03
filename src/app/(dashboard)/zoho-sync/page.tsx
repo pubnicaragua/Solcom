@@ -14,7 +14,7 @@ import {
   XCircle,
 } from 'lucide-react';
 
-type Health = 'healthy' | 'pending' | 'attention';
+type Health = 'healthy' | 'pending' | 'historical' | 'attention';
 
 type MonitorActivity = {
   id: string;
@@ -49,10 +49,18 @@ type FailureBreakdown = {
   lastAt: string | null;
 };
 
+type MonitorCheck = {
+  key: string;
+  label: string;
+  status: 'ok' | 'warning';
+  detail: string;
+};
+
 type MonitorData = {
   generatedAt: string;
   health: Health;
   healthLabel: string;
+  checks: MonitorCheck[];
   summary: {
     queue: { pending: number; processing: number; completed: number; failed: number; recentFailed: number; total: number };
     lastSuccessAt: string | null;
@@ -113,6 +121,7 @@ const emptyData: MonitorData = {
   generatedAt: '',
   health: 'pending',
   healthLabel: 'Cargando estado',
+  checks: [],
   summary: {
     queue: { pending: 0, processing: 0, completed: 0, failed: 0, recentFailed: 0, total: 0 },
     lastSuccessAt: null,
@@ -203,6 +212,23 @@ export default function ZohoSyncPage() {
         </button>
       </section>
 
+      {data.checks.length > 0 && (
+        <section className="zoho-monitor-refresh-result" aria-live="polite">
+          <div className="zoho-monitor-refresh-result-heading">
+            <div><strong>Resultado de la última consulta</strong><span>Lectura completada · no se modificaron datos</span></div>
+            <CheckCircle2 size={17} />
+          </div>
+          <div className="zoho-monitor-check-list">
+            {data.checks.map((check) => (
+              <div className={`zoho-monitor-check is-${check.status}`} key={check.key}>
+                {check.status === 'ok' ? <CheckCircle2 size={14} /> : <AlertTriangle size={14} />}
+                <div><strong>{check.label}</strong><span>{check.detail}</span></div>
+              </div>
+            ))}
+          </div>
+        </section>
+      )}
+
       <section className="zoho-monitor-cards" data-tour="zoho-sync-summary">
         <article className="zoho-monitor-card is-accent">
           <div className="zoho-monitor-card-icon"><CheckCircle2 size={18} /></div>
@@ -214,7 +240,7 @@ export default function ZohoSyncPage() {
         </article>
         <article className="zoho-monitor-card is-danger">
           <div className="zoho-monitor-card-icon"><AlertTriangle size={18} /></div>
-          <div><span>Fallos acumulados</span><strong>{queue.failed.toLocaleString('es-NI')}</strong><small>{queue.recentFailed.toLocaleString('es-NI')} en las últimas 24 h</small></div>
+          <div><span>Historial de fallos</span><strong>{queue.failed.toLocaleString('es-NI')}</strong><small>{queue.recentFailed.toLocaleString('es-NI')} recientes · ninguno activo</small></div>
         </article>
         <article className="zoho-monitor-card is-violet">
           <div className="zoho-monitor-card-icon"><Webhook size={18} /></div>
@@ -231,12 +257,12 @@ export default function ZohoSyncPage() {
           <div className="zoho-monitor-milestone-list">
             <div><span className="zoho-monitor-milestone-icon is-success"><CheckCircle2 size={16} /></span><div><strong>Última sincronización exitosa</strong><span>{formatDate(data.summary.lastSuccessAt)}</span></div></div>
             <div><span className="zoho-monitor-milestone-icon is-blue"><Webhook size={16} /></span><div><strong>Último webhook recibido</strong><span>{formatDate(data.summary.lastWebhookAt)}</span></div></div>
-            <div><span className={`zoho-monitor-milestone-icon ${data.summary.lastFailureAt ? 'is-danger' : 'is-success'}`}>{data.summary.lastFailureAt ? <AlertTriangle size={16} /> : <ShieldCheck size={16} />}</span><div><strong>{data.summary.lastFailureAt ? 'Último error detectado' : 'Sin errores registrados'}</strong><span>{data.summary.lastFailureAt ? formatDate(data.summary.lastFailureAt) : 'La cola no reporta fallos recientes.'}</span></div></div>
+            <div><span className={`zoho-monitor-milestone-icon ${data.summary.lastFailureAt ? 'is-danger' : 'is-success'}`}>{data.summary.lastFailureAt ? <AlertTriangle size={16} /> : <ShieldCheck size={16} />}</span><div><strong>{data.summary.lastFailureAt ? 'Último fallo registrado' : 'Sin errores registrados'}</strong><span>{data.summary.lastFailureAt ? formatDate(data.summary.lastFailureAt) : 'La cola no reporta fallos recientes.'}</span></div></div>
           </div>
-          {data.summary.lastFailureMessage && <div className="zoho-monitor-last-error"><strong>Detalle del último error</strong><span>{data.summary.lastFailureMessage}</span></div>}
+          {data.summary.lastFailureMessage && <div className="zoho-monitor-last-error"><strong>Detalle del último fallo registrado</strong><span>{data.summary.lastFailureMessage}</span></div>}
           {data.failureBreakdown.length > 0 && (
             <div className="zoho-monitor-breakdown">
-              <div className="zoho-monitor-breakdown-heading"><strong>¿De dónde vienen los fallos?</strong><span>Clasificación del historial terminal</span></div>
+              <div className="zoho-monitor-breakdown-heading"><strong>¿De dónde vienen los fallos?</strong><span>Historial terminal · no son pendientes activos</span></div>
               {data.failureBreakdown.map((item) => (
                 <div className="zoho-monitor-breakdown-row" key={item.label}>
                   <div><strong>{item.label}</strong><span>{item.detail}</span></div>
@@ -308,9 +334,11 @@ export default function ZohoSyncPage() {
         .zoho-monitor-health { display: flex; align-items: center; gap: 12px; min-width: 245px; align-self: center; padding: 15px 16px; border: 1px solid rgba(53,211,153,.25); border-radius: 14px; background: rgba(53,211,153,.08); }
         .zoho-monitor-health.is-pending { border-color: rgba(72, 146, 255, .3); background: rgba(72,146,255,.1); }
         .zoho-monitor-health.is-attention { border-color: rgba(251,113,133,.35); background: rgba(251,113,133,.1); }
+        .zoho-monitor-health.is-historical { border-color: rgba(251,191,36,.3); background: rgba(251,191,36,.08); }
         .zoho-monitor-health-icon { display: grid; place-items: center; width: 44px; height: 44px; border-radius: 12px; color: #4ade80; background: rgba(74,222,128,.13); }
         .zoho-monitor-health.is-pending .zoho-monitor-health-icon { color: #7fb4ff; background: rgba(127,180,255,.13); }
         .zoho-monitor-health.is-attention .zoho-monitor-health-icon { color: #fb7185; background: rgba(251,113,133,.13); }
+        .zoho-monitor-health.is-historical .zoho-monitor-health-icon { color: #fbbf24; background: rgba(251,191,36,.13); }
         .zoho-monitor-health span, .zoho-monitor-health strong { display: block; }
         .zoho-monitor-health span { color: var(--muted); font-size: 11px; }
         .zoho-monitor-health strong { margin-top: 3px; font-size: 15px; }
@@ -323,6 +351,17 @@ export default function ZohoSyncPage() {
         .zoho-monitor-actions span { margin-top: 3px; color: var(--muted); font-size: 12px; }
         .zoho-monitor-actions button { display: inline-flex; align-items: center; gap: 7px; border: 1px solid color-mix(in srgb, var(--brand-primary) 45%, var(--border)); border-radius: 8px; padding: 9px 12px; color: var(--text); background: var(--brand-surface); cursor: pointer; font-size: 12px; font-weight: 800; white-space: nowrap; }
         .zoho-monitor-actions button:disabled { opacity: .55; cursor: wait; }
+        .zoho-monitor-refresh-result { margin-top: 10px; padding: 13px 14px; border: 1px solid rgba(74,222,128,.22); border-radius: 12px; background: rgba(74,222,128,.06); }
+        .zoho-monitor-refresh-result-heading { display: flex; justify-content: space-between; align-items: center; gap: 12px; color: #4ade80; }
+        .zoho-monitor-refresh-result-heading strong, .zoho-monitor-refresh-result-heading span { display: block; }
+        .zoho-monitor-refresh-result-heading strong { color: var(--text); font-size: 12px; }
+        .zoho-monitor-refresh-result-heading span { margin-top: 3px; color: var(--muted); font-size: 11px; }
+        .zoho-monitor-check-list { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; margin-top: 11px; }
+        .zoho-monitor-check { display: flex; gap: 7px; padding: 9px; border: 1px solid var(--border); border-radius: 9px; color: #4ade80; background: color-mix(in srgb, var(--card) 70%, transparent); }
+        .zoho-monitor-check.is-warning { color: #fbbf24; }
+        .zoho-monitor-check strong, .zoho-monitor-check span { display: block; }
+        .zoho-monitor-check strong { color: var(--text); font-size: 11px; }
+        .zoho-monitor-check span { margin-top: 3px; color: var(--muted); font-size: 10px; line-height: 1.35; }
         .zoho-monitor-cards { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; margin-top: 14px; }
         .zoho-monitor-card { display: flex; gap: 11px; align-items: flex-start; min-height: 106px; padding: 15px; border: 1px solid var(--border); border-radius: 14px; background: var(--card); }
         .zoho-monitor-card-icon { display: grid; place-items: center; width: 35px; height: 35px; border-radius: 10px; color: #4ade80; background: rgba(74,222,128,.12); }
@@ -398,7 +437,8 @@ export default function ZohoSyncPage() {
         .is-spinning { animation: zoho-monitor-spin .8s linear infinite; }
         @keyframes zoho-monitor-spin { to { transform: rotate(360deg); } }
         @media (max-width: 980px) { .zoho-monitor-hero, .zoho-monitor-grid { grid-template-columns: 1fr; flex-direction: column; } .zoho-monitor-health { align-self: stretch; } .zoho-monitor-cards { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
-        @media (max-width: 600px) { .zoho-monitor-hero { padding: 20px 16px; } .zoho-monitor-cards { grid-template-columns: 1fr; } .zoho-monitor-actions { align-items: flex-start; flex-direction: column; } .zoho-monitor-actions button { width: 100%; justify-content: center; } .zoho-monitor-panel-heading { padding: 15px 14px 10px; } .zoho-monitor-notification-list, .zoho-monitor-milestone-list { padding-left: 14px; padding-right: 14px; } .zoho-monitor-last-error { margin-left: 14px; margin-right: 14px; } }
+        @media (max-width: 800px) { .zoho-monitor-check-list { grid-template-columns: 1fr; } }
+        @media (max-width: 600px) { .zoho-monitor-hero { padding: 20px 16px; } .zoho-monitor-cards { grid-template-columns: 1fr; } .zoho-monitor-actions { align-items: flex-start; flex-direction: column; } .zoho-monitor-actions button { width: 100%; justify-content: center; } .zoho-monitor-panel-heading { padding: 15px 14px 10px; } .zoho-monitor-notification-list, .zoho-monitor-milestone-list { padding-left: 14px; padding-right: 14px; } .zoho-monitor-last-error, .zoho-monitor-breakdown { margin-left: 14px; margin-right: 14px; } }
         @media (prefers-reduced-motion: reduce) { .is-spinning { animation: none; } }
       `}</style>
     </div>

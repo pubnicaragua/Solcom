@@ -1,9 +1,10 @@
 'use client';
 
-import { useState, type CSSProperties, type FormEvent } from 'react';
+import { useEffect, useMemo, useState, type CSSProperties, type FormEvent } from 'react';
+import { useRouter } from 'next/navigation';
 import { createBrowserClient } from '@supabase/ssr';
 import AuthShell from '@/components/auth/AuthShell';
-import { AlertCircle, CheckCircle2, Eye, EyeOff, KeyRound, LogIn, Mail } from 'lucide-react';
+import { AlertCircle, CheckCircle2, Eye, EyeOff, KeyRound, Loader2, LogIn, Mail } from 'lucide-react';
 
 const GENERIC_AUTH_ERROR = 'Credenciales invalidas o acceso no autorizado.';
 
@@ -16,10 +17,12 @@ function resolveLoginError(error: unknown): string {
 }
 
 export default function LoginPage() {
-  const supabase = createBrowserClient(
+  const router = useRouter();
+  const supabase = useMemo(() => createBrowserClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-  );
+  ), []);
+  const [authStage, setAuthStage] = useState<'idle' | 'validating' | 'redirecting'>('idle');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
@@ -35,6 +38,10 @@ export default function LoginPage() {
   const emailIsValid = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(normalizedEmail);
   const passwordIsValid = password.length >= 6;
 
+  useEffect(() => {
+    router.prefetch('/inventory');
+  }, [router]);
+
   async function handleLogin(e: FormEvent) {
     e.preventDefault();
     setEmailTouched(true);
@@ -48,6 +55,7 @@ export default function LoginPage() {
     setLoading(true);
     setError('');
     setValidationNotice('');
+    setAuthStage('validating');
 
     try {
       const { error: authError } = await supabase.auth.signInWithPassword({
@@ -57,13 +65,16 @@ export default function LoginPage() {
 
       if (authError) {
         setError(GENERIC_AUTH_ERROR);
+        setAuthStage('idle');
         setLoading(false);
         return;
       }
 
-      window.location.replace('/inventory');
+      setAuthStage('redirecting');
+      router.replace('/inventory');
     } catch (error: unknown) {
       setError(resolveLoginError(error));
+      setAuthStage('idle');
     } finally {
       setLoading(false);
     }
@@ -173,6 +184,13 @@ export default function LoginPage() {
         </div>
       )}
 
+      {!resetMode && authStage !== 'idle' && (
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '11px 12px', marginBottom: 14, border: '1px solid color-mix(in srgb, var(--brand-primary) 35%, transparent)', borderRadius: 10, background: 'color-mix(in srgb, var(--brand-primary) 9%, transparent)', color: 'var(--text)' }} role="status" aria-live="polite">
+          <Loader2 size={17} style={{ color: 'var(--brand-primary)', animation: 'login-spin 0.8s linear infinite', flex: '0 0 auto' }} />
+          <div><strong style={{ display: 'block', fontSize: 12 }}>{authStage === 'validating' ? 'Validando acceso seguro' : 'Preparando tu espacio de trabajo'}</strong><span style={{ display: 'block', marginTop: 3, color: 'var(--muted)', fontSize: 11 }}>{authStage === 'validating' ? 'Comprobando credenciales con el servicio de autenticación…' : 'Cargando Inventario y tus permisos…'}</span></div>
+        </div>
+      )}
+
       {resetMode ? (
         <form onSubmit={handleResetPassword} style={{ display: 'grid', gap: 16 }}>
           <div>
@@ -208,7 +226,7 @@ export default function LoginPage() {
             {emailTouched && (
               <div id="login-email-feedback" style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 7, color: emailIsValid ? 'var(--success)' : 'var(--danger)', fontSize: 11, fontWeight: 600 }}>
                 {emailIsValid ? <CheckCircle2 size={13} /> : <AlertCircle size={13} />}
-                {emailIsValid ? 'Correo listo para validar.' : 'Escribe un correo válido.'}
+                {emailIsValid ? 'Formato de correo válido.' : 'Escribe un correo válido.'}
               </div>
             )}
           </div>
@@ -331,7 +349,7 @@ export default function LoginPage() {
             {passwordTouched && (
               <div id="login-password-feedback" style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 7, color: passwordIsValid ? 'var(--success)' : 'var(--danger)', fontSize: 11, fontWeight: 600 }}>
                 {passwordIsValid ? <CheckCircle2 size={13} /> : <AlertCircle size={13} />}
-                {passwordIsValid ? 'Contraseña lista.' : 'Usa al menos 6 caracteres.'}
+                {passwordIsValid ? 'Formato de contraseña válido.' : 'Usa al menos 6 caracteres.'}
               </div>
             )}
           </div>
@@ -365,7 +383,7 @@ export default function LoginPage() {
 
           <button type="submit" disabled={loading} style={submitButtonStyle}>
             {loading ? (
-              'Ingresando...'
+              <><Loader2 size={17} style={{ animation: 'login-spin 0.8s linear infinite' }} />{authStage === 'redirecting' ? 'Abriendo el ERP…' : 'Validando acceso…'}</>
             ) : (
               <>
                 <LogIn size={17} />
@@ -375,6 +393,9 @@ export default function LoginPage() {
           </button>
         </form>
       )}
+      <style jsx global>{`
+        @keyframes login-spin { to { transform: rotate(360deg); } }
+      `}</style>
     </AuthShell>
   );
 }

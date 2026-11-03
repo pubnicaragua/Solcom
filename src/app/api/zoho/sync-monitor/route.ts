@@ -368,20 +368,46 @@ export async function GET() {
     const processing = Number(queueCounts.processing || 0);
     const failed = Number(queueCounts.failed || 0);
     const recentFailed = Number(queueCounts.recentFailed || 0);
-    const health = failed > 0 ? 'attention' : pending > 0 || processing > 0 ? 'pending' : 'healthy';
+    const health = pending > 0 || processing > 0 ? 'pending' : failed > 0 ? 'historical' : 'healthy';
     const healthLabel = health === 'healthy'
       ? 'Sincronización al día'
       : health === 'pending'
         ? 'Cambios en proceso'
-        : recentFailed > 0
-          ? 'Requiere atención'
-          : 'Hay fallos históricos';
+        : 'Operativa · historial';
+
+    const checks = [
+      {
+        key: 'queue',
+        label: 'Cola de inventario',
+        status: queueResult.available ? 'ok' : 'warning',
+        detail: queueResult.available
+          ? `${pending} pendientes · ${processing} procesando · ${Number(queueCounts.completed || 0)} completados · ${failed} fallos terminales`
+          : 'No se pudo consultar sync_queue.',
+      },
+      {
+        key: 'webhooks',
+        label: 'Webhooks de Zoho',
+        status: webhookResult.available ? 'ok' : 'warning',
+        detail: webhookResult.available
+          ? `${webhookResult.rows.length} eventos revisados · ${webhookResult.rows.filter((row: any) => /error|fail/i.test(String(row.status || ''))).length} con error`
+          : 'No existe o no está disponible webhook_logs.',
+      },
+      {
+        key: 'notifications',
+        label: 'Historial de notificaciones',
+        status: notificationResult.available ? 'ok' : 'warning',
+        detail: notificationResult.available
+          ? `${notificationResult.types.length} tipos catalogados · ${notificationResult.recentRows.length} eventos consultados`
+          : 'No se pudo consultar el catálogo de notificaciones.',
+      },
+    ];
 
     return jsonNoStore({
       generatedAt: new Date().toISOString(),
       role: auth.role,
       health,
       healthLabel,
+      checks,
       summary: {
         queue: {
           pending,
