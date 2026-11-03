@@ -964,6 +964,29 @@ a {
   font-size: 12px;
 }
 
+.inventory-mobile-warehouse-colors {
+  display: grid;
+  gap: 3px;
+  margin: 5px 0 0 10px;
+  padding-left: 10px;
+  border-left: 1px solid color-mix(in srgb, var(--pivot-brand-accent) 28%, transparent);
+}
+
+.inventory-mobile-warehouse-color-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  color: var(--pivot-sku-text);
+  font-size: 12px;
+  line-height: 1.35;
+}
+
+.inventory-mobile-warehouse-color-row strong {
+  color: var(--text);
+  font-weight: 700;
+}
+
 .inventory-mobile-product-trigger:focus-visible,
 .inventory-mobile-group-trigger:focus-visible {
   box-shadow: inset 0 0 0 2px var(--focus-ring);

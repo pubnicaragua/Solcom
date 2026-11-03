@@ -1430,6 +1430,30 @@ function MobileProductCard({ node, warehouseCodes, data, cartMode, cartReady, on
             .map((item) => String(item.color || '').trim())
             .filter(Boolean)
     ));
+    const warehouseBreakdown = warehouseCodes.map((code) => {
+        const colorsByWarehouse = new Map<string, number>();
+
+        node.children.forEach((variant) => {
+            const item = variant.items?.[0];
+            if (!item) return;
+
+            const quantity = Number(item.warehouseQty[code] || 0);
+            if (quantity <= 0) return;
+
+            const color = String(item.color || 'Sin color').trim() || 'Sin color';
+            colorsByWarehouse.set(color, (colorsByWarehouse.get(color) || 0) + quantity);
+        });
+
+        const colorRows = Array.from(colorsByWarehouse.entries())
+            .map(([color, quantity]) => ({ color, quantity }))
+            .sort((a, b) => a.color.localeCompare(b.color));
+
+        return {
+            code,
+            total: colorRows.reduce((sum, row) => sum + row.quantity, 0),
+            colorRows,
+        };
+    }).filter((warehouse) => warehouse.total > 0);
 
     return (
         <div className="inventory-mobile-product-card" style={{
@@ -1484,18 +1508,26 @@ function MobileProductCard({ node, warehouseCodes, data, cartMode, cartReady, on
                         <span>Distribución por bodega</span>
                         <strong>{total} unidades</strong>
                     </div>
-                    {warehouseCodes.map(code => {
-                        const qty = node.totals[code];
-                        if (!qty) return null;
+                    {warehouseBreakdown.map(({ code, total: warehouseTotal, colorRows }) => {
                         const whName = data.warehouses.find(w => w.code === code)?.name || code;
                         return (
-                            <div key={code} className="inventory-mobile-warehouse-row" style={{ display: 'flex', justifyContent: 'space-between', padding: '6px 0', borderBottom: '1px solid var(--pivot-grid-soft-border)' }}>
-                                <div style={{ fontSize: 13, color: 'var(--text)' }}>{whName}</div>
-                                <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--pivot-product-text)' }}>{qty}</div>
+                            <div key={code} className="inventory-mobile-warehouse-row" style={{ padding: '6px 0', borderBottom: '1px solid var(--pivot-grid-soft-border)' }}>
+                                <div style={{ display: 'flex', justifyContent: 'space-between', gap: 10 }}>
+                                    <div style={{ fontSize: 13, color: 'var(--text)', fontWeight: 700 }}>{whName}</div>
+                                    <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--pivot-product-text)' }}>{warehouseTotal}</div>
+                                </div>
+                                <div className="inventory-mobile-warehouse-colors">
+                                    {colorRows.map(({ color, quantity }) => (
+                                        <div key={`${code}-${color}`} className="inventory-mobile-warehouse-color-row">
+                                            <span>{color}</span>
+                                            <strong>{quantity}</strong>
+                                        </div>
+                                    ))}
+                                </div>
                             </div>
                         );
                     })}
-                    {warehouseCodes.every((code) => !(node.totals[code] > 0)) && (
+                    {warehouseBreakdown.length === 0 && (
                         <div className="inventory-mobile-distribution-empty">Sin existencias distribuidas por bodega.</div>
                     )}
                     {node.children.length > 0 && (
