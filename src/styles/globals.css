@@ -902,6 +902,49 @@ a {
   color: inherit;
 }
 
+.inventory-mobile-product-colors {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 5px;
+  margin: 2px 24px 5px 0;
+  color: var(--pivot-sku-text);
+  font-size: 11px;
+  line-height: 1.35;
+}
+
+.inventory-mobile-product-colors-label {
+  color: var(--muted);
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.inventory-mobile-distribution-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 4px;
+  color: var(--text);
+  font-size: 12px;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.inventory-mobile-distribution-heading strong {
+  color: var(--pivot-product-text);
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+.inventory-mobile-distribution-empty {
+  padding: 8px 0;
+  color: var(--muted);
+  font-size: 12px;
+}
+
 .inventory-mobile-product-trigger:focus-visible,
 .inventory-mobile-group-trigger:focus-visible {
   box-shadow: inset 0 0 0 2px var(--focus-ring);

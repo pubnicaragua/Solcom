@@ -1424,6 +1424,12 @@ function MobileProductCard({ node, warehouseCodes, data, cartMode, cartReady, on
     const [expanded, setExpanded] = useState(false);
     // Node level 2 is Product. Included all variants totals.
     const total = node.grandTotal;
+    const colors = Array.from(new Set(
+        node.children
+            .flatMap((variant) => variant.items || [])
+            .map((item) => String(item.color || '').trim())
+            .filter(Boolean)
+    ));
 
     return (
         <div className="inventory-mobile-product-card" style={{
@@ -1445,6 +1451,13 @@ function MobileProductCard({ node, warehouseCodes, data, cartMode, cartReady, on
                         <div style={{ fontSize: 14, fontWeight: 600, color: 'var(--pivot-product-text)', marginBottom: 4 }}>
                             {node.label}
                         </div>
+                        {colors.length > 0 && (
+                            <div className="inventory-mobile-product-colors" aria-label={`Color${colors.length > 1 ? 'es' : ''}: ${colors.join(', ')}`}>
+                                <Palette size={12} aria-hidden="true" />
+                                <span className="inventory-mobile-product-colors-label">{colors.length > 1 ? 'Colores' : 'Color'}</span>
+                                <span>{colors.join(' · ')}</span>
+                            </div>
+                        )}
                         {/* Only show first variant SKU if available or generic info */}
                         <div style={{ fontSize: 12, color: 'var(--pivot-sku-text)' }}>
                             {node.children.length} variantes
@@ -1467,6 +1480,10 @@ function MobileProductCard({ node, warehouseCodes, data, cartMode, cartReady, on
             {expanded && (
                 <div style={{ background: 'var(--panel-2)', padding: 12, borderTop: '1px solid var(--border)' }}>
                     {/* Breakdown by warehouse */}
+                    <div className="inventory-mobile-distribution-heading">
+                        <span>Distribución por bodega</span>
+                        <strong>{total} unidades</strong>
+                    </div>
                     {warehouseCodes.map(code => {
                         const qty = node.totals[code];
                         if (!qty) return null;
@@ -1478,6 +1495,9 @@ function MobileProductCard({ node, warehouseCodes, data, cartMode, cartReady, on
                             </div>
                         );
                     })}
+                    {warehouseCodes.every((code) => !(node.totals[code] > 0)) && (
+                        <div className="inventory-mobile-distribution-empty">Sin existencias distribuidas por bodega.</div>
+                    )}
                     {node.children.length > 0 && (
                         <div style={{ marginTop: 12 }}>
                             <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--muted)', marginBottom: 6, textTransform: 'uppercase' }}>Variantes</div>

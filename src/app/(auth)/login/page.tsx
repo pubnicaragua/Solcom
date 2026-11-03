@@ -27,6 +27,7 @@ export default function LoginPage() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
+  const [authSlow, setAuthSlow] = useState(false);
   const [error, setError] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [resetMode, setResetMode] = useState(false);
@@ -43,6 +44,15 @@ export default function LoginPage() {
     router.prefetch('/inventory');
   }, [router]);
 
+  useEffect(() => {
+    if (!loading || resetMode) {
+      setAuthSlow(false);
+      return undefined;
+    }
+    const timer = window.setTimeout(() => setAuthSlow(true), 2500);
+    return () => window.clearTimeout(timer);
+  }, [loading, resetMode]);
+
   async function handleLogin(e: FormEvent) {
     e.preventDefault();
     setEmailTouched(true);
@@ -58,6 +68,7 @@ export default function LoginPage() {
     setValidationNotice('');
     setAuthStage('validating');
 
+    let redirecting = false;
     try {
       const { data, error: authError } = await supabase.auth.signInWithPassword({
         email: normalizedEmail,
@@ -72,12 +83,13 @@ export default function LoginPage() {
       }
 
       setAuthStage('redirecting');
+      redirecting = true;
       router.replace(isClientPortalUser(data.user?.id) ? '/cliente/dashboard' : '/inventory');
     } catch (error: unknown) {
       setError(resolveLoginError(error));
       setAuthStage('idle');
     } finally {
-      setLoading(false);
+      if (!redirecting) setLoading(false);
     }
   }
 
@@ -188,7 +200,7 @@ export default function LoginPage() {
       {!resetMode && authStage !== 'idle' && (
         <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '11px 12px', marginBottom: 14, border: '1px solid color-mix(in srgb, var(--brand-primary) 35%, transparent)', borderRadius: 10, background: 'color-mix(in srgb, var(--brand-primary) 9%, transparent)', color: 'var(--text)' }} role="status" aria-live="polite">
           <Loader2 size={17} style={{ color: 'var(--brand-primary)', animation: 'login-spin 0.8s linear infinite', flex: '0 0 auto' }} />
-          <div><strong style={{ display: 'block', fontSize: 12 }}>{authStage === 'validating' ? 'Validando acceso seguro' : 'Preparando tu espacio de trabajo'}</strong><span style={{ display: 'block', marginTop: 3, color: 'var(--muted)', fontSize: 11 }}>{authStage === 'validating' ? 'Comprobando credenciales con el servicio de autenticación…' : 'Cargando Inventario y tus permisos…'}</span></div>
+          <div><strong style={{ display: 'block', fontSize: 12 }}>{authStage === 'validating' ? (authSlow ? 'La autenticación está tardando más de lo normal' : 'Validando acceso seguro') : (authSlow ? 'El ERP está tardando en preparar tu sesión' : 'Preparando tu espacio de trabajo')}</strong><span style={{ display: 'block', marginTop: 3, color: 'var(--muted)', fontSize: 11 }}>{authStage === 'validating' ? (authSlow ? 'El servicio sigue respondiendo; no cierres esta ventana.' : 'Comprobando credenciales con el servicio de autenticación…') : (authSlow ? 'Estamos esperando la validación de permisos y la carga inicial de Inventario…' : 'Cargando Inventario y tus permisos…')}</span></div>
         </div>
       )}
 

@@ -158,11 +158,21 @@ export default function NotificationsProvider({ children }: { children: React.Re
     return enableNotificationSound();
   }, [enableNotificationSound]);
 
-  const refreshNotifications = useCallback(async () => {
-    const { data: userData, error: userError } = await supabase.auth.getUser();
-    const user = userData.user;
+  const refreshNotifications = useCallback(async (knownUserId?: string) => {
+    let userId = String(knownUserId || '').trim();
+    if (!userId) {
+      const { data: userData, error: userError } = await supabase.auth.getUser();
+      if (userError || !userData.user) {
+        userIdRef.current = null;
+        setNotifications([]);
+        setStatus('signed_out');
+        setLastError(null);
+        return;
+      }
+      userId = userData.user.id;
+    }
 
-    if (userError || !user) {
+    if (!userId) {
       userIdRef.current = null;
       setNotifications([]);
       setStatus('signed_out');
@@ -170,12 +180,12 @@ export default function NotificationsProvider({ children }: { children: React.Re
       return;
     }
 
-    userIdRef.current = user.id;
+    userIdRef.current = userId;
 
     const { data, error } = await supabase
       .from('notifications')
       .select('id, user_id, title, message, type, link, is_read, created_at')
-      .eq('user_id', user.id)
+      .eq('user_id', userId)
       .order('created_at', { ascending: false })
       .limit(50);
 
@@ -236,7 +246,7 @@ export default function NotificationsProvider({ children }: { children: React.Re
 
     const initialize = async () => {
       userIdRef.current = authUserId;
-      await refreshNotifications();
+      await refreshNotifications(authUserId);
       if (disposed || !userIdRef.current) return;
 
       const userId = userIdRef.current;
@@ -283,7 +293,7 @@ export default function NotificationsProvider({ children }: { children: React.Re
       // El polling evita que el panel quede desactualizado si Realtime se reinicia
       // o si el proyecto aún no tiene la tabla publicada en supabase_realtime.
       pollTimer = setInterval(() => {
-        void refreshNotifications();
+        void refreshNotifications(authUserId);
       }, 60000);
     };
 
