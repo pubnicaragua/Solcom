@@ -1422,6 +1422,7 @@ function MobileGroupNode({ node, level, warehouseCodes, data, cartMode, cartRead
 
 function MobileProductCard({ node, warehouseCodes, data, cartMode, cartReady, onAddToCart }: { node: TreeNode; warehouseCodes: string[]; data: PivotData; cartMode?: boolean; cartReady?: boolean; onAddToCart?: (item: PivotItem) => void; }) {
     const [expanded, setExpanded] = useState(false);
+    const [breakdownMode, setBreakdownMode] = useState<'color' | 'warehouse'>('color');
     // Node level 2 is Product. Included all variants totals.
     const total = node.grandTotal;
     const colors = Array.from(new Set(
@@ -1454,6 +1455,35 @@ function MobileProductCard({ node, warehouseCodes, data, cartMode, cartReady, on
             colorRows,
         };
     }).filter((warehouse) => warehouse.total > 0);
+    const colorTotals = new Map<string, { total: number; warehouseTotals: Map<string, number> }>();
+
+    node.children.forEach((variant) => {
+        const item = variant.items?.[0];
+        if (!item) return;
+
+        const color = String(item.color || 'Sin color').trim() || 'Sin color';
+        const existing = colorTotals.get(color) || { total: 0, warehouseTotals: new Map<string, number>() };
+
+        warehouseCodes.forEach((code) => {
+            const quantity = Number(item.warehouseQty[code] || 0);
+            if (quantity <= 0) return;
+            existing.total += quantity;
+            existing.warehouseTotals.set(code, (existing.warehouseTotals.get(code) || 0) + quantity);
+        });
+
+        colorTotals.set(color, existing);
+    });
+
+    const colorBreakdown = Array.from(colorTotals.entries())
+        .map(([color, details]) => ({
+            color,
+            total: details.total,
+            warehouseRows: Array.from(details.warehouseTotals.entries())
+                .map(([code, quantity]) => ({ code, quantity }))
+                .sort((a, b) => a.code.localeCompare(b.code)),
+        }))
+        .filter((color) => color.total > 0)
+        .sort((a, b) => a.color.localeCompare(b.color));
 
     return (
         <div className="inventory-mobile-product-card" style={{
@@ -1503,31 +1533,74 @@ function MobileProductCard({ node, warehouseCodes, data, cartMode, cartReady, on
 
             {expanded && (
                 <div style={{ background: 'var(--panel-2)', padding: 12, borderTop: '1px solid var(--border)' }}>
-                    {/* Breakdown by warehouse */}
+                    {/* Compact selector: both reading directions are useful on mobile. */}
                     <div className="inventory-mobile-distribution-heading">
-                        <span>Distribución por bodega</span>
+                        <span>{breakdownMode === 'color' ? 'Existencias por color' : 'Distribución por bodega'}</span>
                         <strong>{total} unidades</strong>
                     </div>
-                    {warehouseBreakdown.map(({ code, total: warehouseTotal, colorRows }) => {
-                        const whName = data.warehouses.find(w => w.code === code)?.name || code;
-                        return (
-                            <div key={code} className="inventory-mobile-warehouse-row" style={{ padding: '6px 0', borderBottom: '1px solid var(--pivot-grid-soft-border)' }}>
+                    <div className="inventory-mobile-breakdown-switch" role="tablist" aria-label="Forma de ver existencias">
+                        <button
+                            type="button"
+                            role="tab"
+                            aria-selected={breakdownMode === 'color'}
+                            className={breakdownMode === 'color' ? 'is-active' : ''}
+                            onClick={(event) => { event.stopPropagation(); setBreakdownMode('color'); }}
+                        >
+                            Color → bodega
+                        </button>
+                        <button
+                            type="button"
+                            role="tab"
+                            aria-selected={breakdownMode === 'warehouse'}
+                            className={breakdownMode === 'warehouse' ? 'is-active' : ''}
+                            onClick={(event) => { event.stopPropagation(); setBreakdownMode('warehouse'); }}
+                        >
+                            Bodega → color
+                        </button>
+                    </div>
+
+                    {breakdownMode === 'color' ? (
+                        colorBreakdown.map(({ color, total: colorTotal, warehouseRows }) => (
+                            <div key={color} className="inventory-mobile-warehouse-row" style={{ padding: '6px 0', borderBottom: '1px solid var(--pivot-grid-soft-border)' }}>
                                 <div style={{ display: 'flex', justifyContent: 'space-between', gap: 10 }}>
-                                    <div style={{ fontSize: 13, color: 'var(--text)', fontWeight: 700 }}>{whName}</div>
-                                    <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--pivot-product-text)' }}>{warehouseTotal}</div>
+                                    <div style={{ fontSize: 13, color: 'var(--text)', fontWeight: 700 }}>{color}</div>
+                                    <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--pivot-product-text)' }}>{colorTotal}</div>
                                 </div>
-                                <div className="inventory-mobile-warehouse-colors">
-                                    {colorRows.map(({ color, quantity }) => (
-                                        <div key={`${code}-${color}`} className="inventory-mobile-warehouse-color-row">
-                                            <span>{color}</span>
-                                            <strong>{quantity}</strong>
-                                        </div>
-                                    ))}
+                                <div className="inventory-mobile-color-warehouses">
+                                    {warehouseRows.map(({ code, quantity }) => {
+                                        const whName = data.warehouses.find(w => w.code === code)?.name || code;
+                                        return (
+                                            <div key={`${color}-${code}`} className="inventory-mobile-warehouse-color-row">
+                                                <span>{whName}</span>
+                                                <strong>{quantity}</strong>
+                                            </div>
+                                        );
+                                    })}
                                 </div>
                             </div>
-                        );
-                    })}
-                    {warehouseBreakdown.length === 0 && (
+                        ))
+                    ) : (
+                        warehouseBreakdown.map(({ code, total: warehouseTotal, colorRows }) => {
+                            const whName = data.warehouses.find(w => w.code === code)?.name || code;
+                            return (
+                                <div key={code} className="inventory-mobile-warehouse-row" style={{ padding: '6px 0', borderBottom: '1px solid var(--pivot-grid-soft-border)' }}>
+                                    <div style={{ display: 'flex', justifyContent: 'space-between', gap: 10 }}>
+                                        <div style={{ fontSize: 13, color: 'var(--text)', fontWeight: 700 }}>{whName}</div>
+                                        <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--pivot-product-text)' }}>{warehouseTotal}</div>
+                                    </div>
+                                    <div className="inventory-mobile-warehouse-colors">
+                                        {colorRows.map(({ color, quantity }) => (
+                                            <div key={`${code}-${color}`} className="inventory-mobile-warehouse-color-row">
+                                                <span>{color}</span>
+                                                <strong>{quantity}</strong>
+                                            </div>
+                                        ))}
+                                    </div>
+                                </div>
+                            );
+                        })
+                    )}
+                    {(breakdownMode === 'color' ? colorBreakdown.length : warehouseBreakdown.length) === 0 && (
                         <div className="inventory-mobile-distribution-empty">Sin existencias distribuidas por bodega.</div>
                     )}
                     {node.children.length > 0 && (

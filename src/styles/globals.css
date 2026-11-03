@@ -964,12 +964,51 @@ a {
   font-size: 12px;
 }
 
+.inventory-mobile-breakdown-switch {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 4px;
+  margin: 8px 0 5px;
+  padding: 3px;
+  border: 1px solid var(--pivot-grid-soft-border);
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--surface-hover) 72%, transparent);
+}
+
+.inventory-mobile-breakdown-switch button {
+  min-width: 0;
+  padding: 6px 5px;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--muted);
+  font: inherit;
+  font-size: 10px;
+  font-weight: 700;
+  line-height: 1.25;
+  cursor: pointer;
+}
+
+.inventory-mobile-breakdown-switch button.is-active {
+  border-color: color-mix(in srgb, var(--brand-primary) 48%, var(--border));
+  background: color-mix(in srgb, var(--brand-primary) 16%, var(--panel));
+  color: var(--text);
+}
+
 .inventory-mobile-warehouse-colors {
   display: grid;
   gap: 3px;
   margin: 5px 0 0 10px;
   padding-left: 10px;
   border-left: 1px solid color-mix(in srgb, var(--pivot-brand-accent) 28%, transparent);
+}
+
+.inventory-mobile-color-warehouses {
+  display: grid;
+  gap: 3px;
+  margin: 5px 0 0 10px;
+  padding-left: 10px;
+  border-left: 1px solid color-mix(in srgb, var(--brand-primary) 28%, transparent);
 }
 
 .inventory-mobile-warehouse-color-row {
