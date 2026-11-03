@@ -28,6 +28,14 @@ type NotificationTypeSummary = {
   isEmitted: boolean;
 };
 
+type FailureBreakdown = {
+  label: string;
+  count: number;
+  detail: string;
+  example: string;
+  lastAt: string | null;
+};
+
 function jsonNoStore(payload: unknown, status = 200) {
   return NextResponse.json(payload, {
     status,
@@ -66,31 +74,97 @@ function errorText(error: any): string {
   return String(error?.message || error || '').trim();
 }
 
+function classifySyncError(error: unknown): { label: string; detail: string } {
+  const message = String(error || '').toLowerCase();
+  if (message.includes('not in zoho') || message.includes('zoho_not_found') || message.includes('404')) {
+    return {
+      label: 'Zoho Inventory',
+      detail: 'El artículo no existe en Zoho o el ID recibido quedó obsoleto.',
+    };
+  }
+  if (message.includes('zoho') || message.includes('oauth') || message.includes('token')) {
+    return {
+      label: 'API de Zoho',
+      detail: 'La llamada a Zoho falló o no pudo autenticarse.',
+    };
+  }
+  if (message.includes('local item') || message.includes('inventory_balance') || message.includes('supabase') || message.includes('database')) {
+    return {
+      label: 'Base local',
+      detail: 'El ERP no pudo leer o guardar el estado local.',
+    };
+  }
+  if (message.includes('warehouse') || message.includes('location') || message.includes('mapped')) {
+    return {
+      label: 'Mapeo de bodegas',
+      detail: 'Zoho devolvió una ubicación que no está relacionada con una bodega local.',
+    };
+  }
+  return {
+    label: 'Worker de sincronización',
+    detail: 'El worker no pudo completar el trabajo; revisar el mensaje técnico.',
+  };
+}
+
 async function readQueue(database: any) {
+  const fullFields = 'id, zoho_item_id, status, attempts, error, created_at, updated_at, next_attempt_at, locked_at, locked_by';
+  const fallbackFields = 'id, zoho_item_id, status, attempts, error, created_at, updated_at';
   const full = await database
     .from('sync_queue')
-    .select('id, zoho_item_id, status, attempts, error, created_at, updated_at, next_attempt_at, locked_at, locked_by')
+    .select(fullFields)
     .order('updated_at', { ascending: false })
     .limit(160);
 
-  if (!full.error) return { rows: full.data || [], available: true, error: null };
+  if (!full.error) {
+    const failed = await database
+      .from('sync_queue')
+      .select(fullFields)
+      .eq('status', 'failed')
+      .order('updated_at', { ascending: false })
+      .limit(120);
+    const diagnostics = await database
+      .from('sync_queue')
+      .select('error, updated_at')
+      .eq('status', 'failed')
+      .order('updated_at', { ascending: false })
+      .limit(5000);
+    return { rows: full.data || [], errorRows: failed.error ? [] : (failed.data || []), diagnosticRows: diagnostics.error ? [] : (diagnostics.data || []), available: true, error: null };
+  }
 
   const fallback = await database
     .from('sync_queue')
-    .select('id, zoho_item_id, status, attempts, error, created_at, updated_at')
+    .select(fallbackFields)
     .order('updated_at', { ascending: false })
     .limit(160);
 
-  if (!fallback.error) return { rows: fallback.data || [], available: true, error: null };
-  return { rows: [], available: !isMissingRelation(fallback.error), error: errorText(fallback.error) };
+  if (!fallback.error) {
+    const failed = await database
+      .from('sync_queue')
+      .select(fallbackFields)
+      .eq('status', 'failed')
+      .order('updated_at', { ascending: false })
+      .limit(120);
+    const diagnostics = await database
+      .from('sync_queue')
+      .select('error, updated_at')
+      .eq('status', 'failed')
+      .order('updated_at', { ascending: false })
+      .limit(5000);
+    return { rows: fallback.data || [], errorRows: failed.error ? [] : (failed.data || []), diagnosticRows: diagnostics.error ? [] : (diagnostics.data || []), available: true, error: null };
+  }
+  return { rows: [], errorRows: [], diagnosticRows: [], available: !isMissingRelation(fallback.error), error: errorText(fallback.error) };
 }
 
 async function readQueueCounts(database: any, queueRows: any[]) {
   const statuses = ['pending', 'processing', 'completed', 'failed'] as const;
-  const results = await Promise.all(statuses.map(async (status) => {
-    const result = await database.from('sync_queue').select('id', { count: 'exact', head: true }).eq('status', status);
-    return [status, result.error ? null : Number(result.count || 0)] as const;
-  }));
+  const recentSince = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
+  const [results, recentFailedResult] = await Promise.all([
+    Promise.all(statuses.map(async (status) => {
+      const result = await database.from('sync_queue').select('id', { count: 'exact', head: true }).eq('status', status);
+      return [status, result.error ? null : Number(result.count || 0)] as const;
+    })),
+    database.from('sync_queue').select('id', { count: 'exact', head: true }).eq('status', 'failed').gte('updated_at', recentSince),
+  ]);
 
   const counts = Object.fromEntries(results) as Record<string, number | null>;
   const hasExactCounts = results.some(([, value]) => value !== null);
@@ -98,14 +172,16 @@ async function readQueueCounts(database: any, queueRows: any[]) {
     for (const status of statuses) {
       if (counts[status] === null) counts[status] = queueRows.filter((row) => row.status === status).length;
     }
-    return counts;
+    return { ...counts, recentFailed: recentFailedResult.error ? 0 : Number(recentFailedResult.count || 0) };
   }
 
-  return queueRows.reduce((acc: Record<string, number>, row: any) => {
+  const fallbackCounts = queueRows.reduce((acc: Record<string, number>, row: any) => {
     const status = String(row.status || 'unknown');
     acc[status] = (acc[status] || 0) + 1;
     return acc;
   }, { pending: 0, processing: 0, completed: 0, failed: 0 });
+  fallbackCounts.recentFailed = queueRows.filter((row) => row.status === 'failed' && new Date(String(row.updated_at || '')).getTime() >= Date.now() - 24 * 60 * 60 * 1000).length;
+  return fallbackCounts;
 }
 
 async function readWebhookLogs(database: any) {
@@ -205,8 +281,26 @@ export async function GET() {
       readNotificationCatalog(database),
     ]);
 
-    const queueCounts = await readQueueCounts(database, queueResult.rows);
-    const queueItems = Array.from(new Set(queueResult.rows.map((row: any) => String(row.zoho_item_id || '').trim()).filter(Boolean))).slice(0, 100);
+    const queueRows = Array.from(new Map(
+      [...queueResult.rows, ...(queueResult.errorRows || [])].map((row: any) => [String(row.id), row])
+    ).values());
+    const failureBreakdownMap = new Map<string, FailureBreakdown>();
+    for (const row of queueResult.diagnosticRows || []) {
+      const diagnostic = classifySyncError(row.error);
+      const current = failureBreakdownMap.get(diagnostic.label) || {
+        label: diagnostic.label,
+        count: 0,
+        detail: diagnostic.detail,
+        example: String(row.error || 'Sin detalle'),
+        lastAt: safeDate(row.updated_at),
+      };
+      current.count += 1;
+      if (!current.lastAt) current.lastAt = safeDate(row.updated_at);
+      failureBreakdownMap.set(diagnostic.label, current);
+    }
+    const failureBreakdown = Array.from(failureBreakdownMap.values()).sort((a, b) => b.count - a.count);
+    const queueCounts = await readQueueCounts(database, queueRows);
+    const queueItems = Array.from(new Set(queueRows.map((row: any) => String(row.zoho_item_id || '').trim()).filter(Boolean))).slice(0, 100);
     const itemMap = new Map<string, { name: string | null; sku: string | null }>();
 
     if (queueItems.length > 0) {
@@ -218,11 +312,12 @@ export async function GET() {
       }
     }
 
-    const queueActivity = queueResult.rows.map((row: any) => {
+    const queueActivity = queueRows.map((row: any) => {
       const itemId = String(row.zoho_item_id || '');
       const item = itemMap.get(itemId);
       const status = String(row.status || 'unknown');
       const isError = status === 'failed';
+      const diagnostic = isError ? classifySyncError(row.error) : null;
       return {
         id: `queue-${row.id}`,
         source: 'queue',
@@ -231,6 +326,8 @@ export async function GET() {
         tone: isError ? 'error' : status === 'completed' ? 'success' : 'pending',
         title: isError ? 'Sincronización con error' : status === 'completed' ? 'Producto sincronizado' : 'Trabajo en cola',
         message: row.error || `${item?.name || 'Producto Zoho'}${item?.sku ? ` · SKU ${item.sku}` : ''} · ID Zoho ${itemId}`,
+        diagnosis: diagnostic?.label || null,
+        diagnosisDetail: diagnostic?.detail || null,
         reference: item?.sku || itemId,
         occurredAt: safeDate(row.updated_at || row.created_at),
         attempts: Number(row.attempts || 0),
@@ -270,19 +367,28 @@ export async function GET() {
     const pending = Number(queueCounts.pending || 0);
     const processing = Number(queueCounts.processing || 0);
     const failed = Number(queueCounts.failed || 0);
+    const recentFailed = Number(queueCounts.recentFailed || 0);
     const health = failed > 0 ? 'attention' : pending > 0 || processing > 0 ? 'pending' : 'healthy';
+    const healthLabel = health === 'healthy'
+      ? 'Sincronización al día'
+      : health === 'pending'
+        ? 'Cambios en proceso'
+        : recentFailed > 0
+          ? 'Requiere atención'
+          : 'Hay fallos históricos';
 
     return jsonNoStore({
       generatedAt: new Date().toISOString(),
       role: auth.role,
       health,
-      healthLabel: health === 'healthy' ? 'Sincronización al día' : health === 'pending' ? 'Cambios en proceso' : 'Requiere atención',
+      healthLabel,
       summary: {
         queue: {
           pending,
           processing,
           completed: Number(queueCounts.completed || 0),
           failed,
+          recentFailed,
           total: pending + processing + Number(queueCounts.completed || 0) + failed,
         },
         lastSuccessAt,
@@ -293,6 +399,7 @@ export async function GET() {
         webhookErrorCount: webhookResult.rows.filter((row: any) => /error|fail/i.test(String(row.status || ''))).length,
         notificationCount: notificationResult.recentRows.length,
       },
+      failureBreakdown,
       sources: {
         queue: queueResult.available,
         webhookLogs: webhookResult.available,

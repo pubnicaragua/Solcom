@@ -24,6 +24,8 @@ type MonitorActivity = {
   tone: 'success' | 'pending' | 'error';
   title: string;
   message: string;
+  diagnosis: string | null;
+  diagnosisDetail: string | null;
   reference: string;
   occurredAt: string | null;
   attempts: number | null;
@@ -39,12 +41,20 @@ type NotificationType = {
   isEmitted: boolean;
 };
 
+type FailureBreakdown = {
+  label: string;
+  count: number;
+  detail: string;
+  example: string;
+  lastAt: string | null;
+};
+
 type MonitorData = {
   generatedAt: string;
   health: Health;
   healthLabel: string;
   summary: {
-    queue: { pending: number; processing: number; completed: number; failed: number; total: number };
+    queue: { pending: number; processing: number; completed: number; failed: number; recentFailed: number; total: number };
     lastSuccessAt: string | null;
     lastFailureAt: string | null;
     lastFailureMessage: string;
@@ -54,6 +64,7 @@ type MonitorData = {
     notificationCount: number;
   };
   sources: { queue: boolean; webhookLogs: boolean; notificationCatalog: boolean };
+  failureBreakdown: FailureBreakdown[];
   notificationTypes: NotificationType[];
   activity: MonitorActivity[];
 };
@@ -103,7 +114,7 @@ const emptyData: MonitorData = {
   health: 'pending',
   healthLabel: 'Cargando estado',
   summary: {
-    queue: { pending: 0, processing: 0, completed: 0, failed: 0, total: 0 },
+    queue: { pending: 0, processing: 0, completed: 0, failed: 0, recentFailed: 0, total: 0 },
     lastSuccessAt: null,
     lastFailureAt: null,
     lastFailureMessage: '',
@@ -113,6 +124,7 @@ const emptyData: MonitorData = {
     notificationCount: 0,
   },
   sources: { queue: false, webhookLogs: false, notificationCatalog: false },
+  failureBreakdown: [],
   notificationTypes: [],
   activity: [],
 };
@@ -183,11 +195,11 @@ export default function ZohoSyncPage() {
       <section className="zoho-monitor-actions" data-tour="zoho-sync-actions">
         <div>
           <strong>Centro de sincronización</strong>
-          <span>La información proviene de la cola de inventario, los webhooks recibidos y el historial real de notificaciones.</span>
+          <span>Actualizar estado solo consulta la cola, webhooks y notificaciones; no dispara una sincronización nueva.</span>
         </div>
-        <button type="button" onClick={() => void fetchMonitor()} disabled={loading}>
+        <button type="button" onClick={() => void fetchMonitor()} disabled={loading} title="Consultar nuevamente el estado actual">
           <RefreshCw size={15} className={loading ? 'is-spinning' : ''} />
-          Actualizar ahora
+          Actualizar estado
         </button>
       </section>
 
@@ -202,7 +214,7 @@ export default function ZohoSyncPage() {
         </article>
         <article className="zoho-monitor-card is-danger">
           <div className="zoho-monitor-card-icon"><AlertTriangle size={18} /></div>
-          <div><span>Errores pendientes</span><strong>{queue.failed.toLocaleString('es-NI')}</strong><small>requieren revisión</small></div>
+          <div><span>Fallos acumulados</span><strong>{queue.failed.toLocaleString('es-NI')}</strong><small>{queue.recentFailed.toLocaleString('es-NI')} en las últimas 24 h</small></div>
         </article>
         <article className="zoho-monitor-card is-violet">
           <div className="zoho-monitor-card-icon"><Webhook size={18} /></div>
@@ -222,6 +234,17 @@ export default function ZohoSyncPage() {
             <div><span className={`zoho-monitor-milestone-icon ${data.summary.lastFailureAt ? 'is-danger' : 'is-success'}`}>{data.summary.lastFailureAt ? <AlertTriangle size={16} /> : <ShieldCheck size={16} />}</span><div><strong>{data.summary.lastFailureAt ? 'Último error detectado' : 'Sin errores registrados'}</strong><span>{data.summary.lastFailureAt ? formatDate(data.summary.lastFailureAt) : 'La cola no reporta fallos recientes.'}</span></div></div>
           </div>
           {data.summary.lastFailureMessage && <div className="zoho-monitor-last-error"><strong>Detalle del último error</strong><span>{data.summary.lastFailureMessage}</span></div>}
+          {data.failureBreakdown.length > 0 && (
+            <div className="zoho-monitor-breakdown">
+              <div className="zoho-monitor-breakdown-heading"><strong>¿De dónde vienen los fallos?</strong><span>Clasificación del historial terminal</span></div>
+              {data.failureBreakdown.map((item) => (
+                <div className="zoho-monitor-breakdown-row" key={item.label}>
+                  <div><strong>{item.label}</strong><span>{item.detail}</span></div>
+                  <b>{item.count.toLocaleString('es-NI')}</b>
+                </div>
+              ))}
+            </div>
+          )}
         </article>
 
         <article className="zoho-monitor-panel" data-tour="zoho-sync-notifications">
@@ -255,7 +278,7 @@ export default function ZohoSyncPage() {
               <tbody>{visibleActivity.map((event) => (
                 <tr key={event.id}>
                   <td><span className={`zoho-monitor-status is-${event.tone}`}>{statusIcon(event.tone)} {statusLabel(event.status)}</span></td>
-                  <td><strong>{event.title}</strong><span className="zoho-monitor-table-message">{event.message}</span></td>
+                  <td><strong>{event.title}</strong><span className="zoho-monitor-table-message">{event.message}</span>{event.diagnosis && <span className="zoho-monitor-table-diagnosis">Origen detectado: {event.diagnosis}{event.diagnosisDetail ? ` · ${event.diagnosisDetail}` : ''}</span>}</td>
                   <td><code>{event.reference || '—'}</code></td>
                   <td><span className="zoho-monitor-origin">{event.source === 'webhook' ? <Webhook size={14} /> : <RefreshCw size={14} />} {event.source === 'webhook' ? 'Webhook' : 'Cola'}</span></td>
                   <td><time dateTime={event.occurredAt || undefined}>{relativeDate(event.occurredAt)}<small>{formatDate(event.occurredAt)}</small></time></td>
@@ -329,6 +352,15 @@ export default function ZohoSyncPage() {
         .zoho-monitor-last-error strong, .zoho-monitor-last-error span { display: block; }
         .zoho-monitor-last-error strong { color: #fda4af; font-size: 11px; }
         .zoho-monitor-last-error span { margin-top: 4px; color: #fecdd3; font-size: 12px; line-height: 1.4; }
+        .zoho-monitor-breakdown { margin: 0 18px 18px; padding-top: 13px; border-top: 1px solid var(--border); }
+        .zoho-monitor-breakdown-heading { display: flex; justify-content: space-between; gap: 10px; align-items: baseline; margin-bottom: 7px; }
+        .zoho-monitor-breakdown-heading strong { font-size: 12px; }
+        .zoho-monitor-breakdown-heading span { color: var(--muted); font-size: 10px; }
+        .zoho-monitor-breakdown-row { display: flex; justify-content: space-between; gap: 12px; padding: 8px 0; border-top: 1px solid var(--border); }
+        .zoho-monitor-breakdown-row strong, .zoho-monitor-breakdown-row span { display: block; }
+        .zoho-monitor-breakdown-row strong { font-size: 11px; }
+        .zoho-monitor-breakdown-row span { margin-top: 3px; color: var(--muted); font-size: 10px; line-height: 1.3; }
+        .zoho-monitor-breakdown-row b { color: #fda4af; font-size: 14px; }
         .zoho-monitor-panel-intro { margin: 0; padding: 0 18px 10px; color: var(--muted); font-size: 12px; line-height: 1.45; }
         .zoho-monitor-notification-list { max-height: 302px; overflow-y: auto; padding: 0 18px 10px; }
         .zoho-monitor-notification-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 10px 0; border-top: 1px solid var(--border); }
@@ -346,6 +378,7 @@ export default function ZohoSyncPage() {
         .zoho-monitor-table td { padding: 12px 18px; border-top: 1px solid var(--border); vertical-align: middle; }
         .zoho-monitor-table td strong, .zoho-monitor-table td time, .zoho-monitor-table td small { display: block; }
         .zoho-monitor-table-message { display: block; max-width: 340px; margin-top: 4px; overflow: hidden; color: var(--muted); text-overflow: ellipsis; white-space: nowrap; }
+        .zoho-monitor-table-diagnosis { display: block; max-width: 420px; margin-top: 5px; color: #fda4af; font-size: 10px; line-height: 1.35; }
         .zoho-monitor-table code { color: #b9d0ff; font-size: 11px; }
         .zoho-monitor-status { border-radius: 999px; padding: 5px 8px; font-size: 11px; font-weight: 800; white-space: nowrap; }
         .zoho-monitor-status.is-success { color: #86efac; background: rgba(74,222,128,.11); }

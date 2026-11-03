@@ -435,7 +435,7 @@ export async function syncItemStock(
                 }
             }
         } else if (!supabaseItemId) {
-            const message = `Item ${zohoItemId} not in Zoho and not in DB`;
+            const message = `[ZOHO_NOT_FOUND] Zoho Inventory respondió 404 para el artículo ${zohoItemId}; Supabase tampoco tiene un item con ese zoho_item_id. Causa probable: webhook o trabajo de cola antiguo, o producto eliminado en Zoho.`;
             debugLog.push(`[syncItemStock] ERROR: ${message}`);
             return failedSyncResult(message, 0, false);
         }

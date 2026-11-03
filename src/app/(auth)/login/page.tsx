@@ -27,15 +27,31 @@ export default function LoginPage() {
   const [showPassword, setShowPassword] = useState(false);
   const [resetMode, setResetMode] = useState(false);
   const [resetSuccess, setResetSuccess] = useState(false);
+  const [emailTouched, setEmailTouched] = useState(false);
+  const [passwordTouched, setPasswordTouched] = useState(false);
+  const [validationNotice, setValidationNotice] = useState('');
+
+  const normalizedEmail = email.trim();
+  const emailIsValid = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(normalizedEmail);
+  const passwordIsValid = password.length >= 6;
 
   async function handleLogin(e: FormEvent) {
     e.preventDefault();
+    setEmailTouched(true);
+    setPasswordTouched(true);
+
+    if (!emailIsValid || !passwordIsValid) {
+      setValidationNotice('Completa un correo válido y una contraseña de al menos 6 caracteres.');
+      return;
+    }
+
     setLoading(true);
     setError('');
+    setValidationNotice('');
 
     try {
       const { error: authError } = await supabase.auth.signInWithPassword({
-        email,
+        email: normalizedEmail,
         password,
       });
 
@@ -179,9 +195,22 @@ export default function LoginPage() {
                 placeholder="usuario@correo.com"
                 required
                 autoComplete="email"
-                style={fieldInputStyle}
+                aria-invalid={emailTouched && !emailIsValid}
+                aria-describedby="login-email-feedback"
+                onBlur={() => setEmailTouched(true)}
+                style={{
+                  ...fieldInputStyle,
+                  borderColor: emailTouched ? (emailIsValid ? 'color-mix(in srgb, var(--success) 55%, var(--border))' : 'color-mix(in srgb, var(--danger) 65%, var(--border))') : 'var(--border)',
+                  boxShadow: emailTouched && emailIsValid ? '0 0 0 3px color-mix(in srgb, var(--success) 12%, transparent)' : 'none',
+                }}
               />
             </div>
+            {emailTouched && (
+              <div id="login-email-feedback" style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 7, color: emailIsValid ? 'var(--success)' : 'var(--danger)', fontSize: 11, fontWeight: 600 }}>
+                {emailIsValid ? <CheckCircle2 size={13} /> : <AlertCircle size={13} />}
+                {emailIsValid ? 'Correo listo para validar.' : 'Escribe un correo válido.'}
+              </div>
+            )}
           </div>
 
           <button type="submit" disabled={loading} style={submitButtonStyle}>
@@ -231,9 +260,22 @@ export default function LoginPage() {
                 placeholder="usuario@correo.com"
                 required
                 autoComplete="email"
-                style={fieldInputStyle}
+                aria-invalid={emailTouched && !emailIsValid}
+                aria-describedby="login-email-feedback"
+                onBlur={() => setEmailTouched(true)}
+                style={{
+                  ...fieldInputStyle,
+                  borderColor: emailTouched ? (emailIsValid ? 'color-mix(in srgb, var(--success) 55%, var(--border))' : 'color-mix(in srgb, var(--danger) 65%, var(--border))') : 'var(--border)',
+                  boxShadow: emailTouched && emailIsValid ? '0 0 0 3px color-mix(in srgb, var(--success) 12%, transparent)' : 'none',
+                }}
               />
             </div>
+            {emailTouched && (
+              <div id="login-email-feedback" style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 7, color: emailIsValid ? 'var(--success)' : 'var(--danger)', fontSize: 11, fontWeight: 600 }}>
+                {emailIsValid ? <CheckCircle2 size={13} /> : <AlertCircle size={13} />}
+                {emailIsValid ? 'Correo listo para validar.' : 'Escribe un correo válido.'}
+              </div>
+            )}
           </div>
 
           <div>
@@ -256,7 +298,15 @@ export default function LoginPage() {
                 placeholder="••••••••"
                 required
                 autoComplete="current-password"
-                style={{ ...fieldInputStyle, paddingRight: 44 }}
+                aria-invalid={passwordTouched && !passwordIsValid}
+                aria-describedby="login-password-feedback"
+                onBlur={() => setPasswordTouched(true)}
+                style={{
+                  ...fieldInputStyle,
+                  paddingRight: 44,
+                  borderColor: passwordTouched ? (passwordIsValid ? 'color-mix(in srgb, var(--success) 55%, var(--border))' : 'color-mix(in srgb, var(--danger) 65%, var(--border))') : 'var(--border)',
+                  boxShadow: passwordTouched && passwordIsValid ? '0 0 0 3px color-mix(in srgb, var(--success) 12%, transparent)' : 'none',
+                }}
               />
               <button
                 type="button"
@@ -278,6 +328,12 @@ export default function LoginPage() {
                 {showPassword ? <EyeOff size={17} /> : <Eye size={17} />}
               </button>
             </div>
+            {passwordTouched && (
+              <div id="login-password-feedback" style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 7, color: passwordIsValid ? 'var(--success)' : 'var(--danger)', fontSize: 11, fontWeight: 600 }}>
+                {passwordIsValid ? <CheckCircle2 size={13} /> : <AlertCircle size={13} />}
+                {passwordIsValid ? 'Contraseña lista.' : 'Usa al menos 6 caracteres.'}
+              </div>
+            )}
           </div>
 
           <button
@@ -299,6 +355,13 @@ export default function LoginPage() {
           >
             ¿Olvidaste tu contrasena?
           </button>
+
+          {validationNotice && (
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '10px 12px', borderRadius: 10, border: '1px solid color-mix(in srgb, var(--warning) 35%, transparent)', color: 'var(--warning)', background: 'color-mix(in srgb, var(--warning) 9%, transparent)', fontSize: 12, lineHeight: 1.4 }} role="alert">
+              <AlertCircle size={15} />
+              <span>{validationNotice}</span>
+            </div>
+          )}
 
           <button type="submit" disabled={loading} style={submitButtonStyle}>
             {loading ? (
