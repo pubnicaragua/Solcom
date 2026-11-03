@@ -10,18 +10,18 @@ import { useRoleAccess } from '@/hooks/useRoleAccess';
 
 const menuItems = [
   { icon: Package, label: 'Inventario', href: '/inventory', module: 'inventory' },
+  { icon: ShoppingCart, label: 'Compras', href: '/compras', module: 'compras', adminOnly: true },
   { icon: FileText, label: 'Facturación', href: '/ventas', module: 'ventas' },
   { icon: PackageSearch, label: 'Alistamiento', href: '/alistamiento', module: 'alistamiento' },
   { icon: Map, label: 'Rutas', href: '/rutas', module: 'rutas' },
   { icon: BarChart3, label: 'Reportes', href: '/reports', module: 'reports' },
-  { icon: Bot, label: 'Agentes IA', href: '/ai-agents', module: 'ai-agents' },
-  { icon: CreditCard, label: 'Solcom AI', href: '/solcom-ai', adminOnly: true },
-  { icon: ShoppingCart, label: 'Compras', href: '/compras', module: 'compras', adminOnly: true },
   { icon: ArrowLeftRight, label: 'Transferencias', href: '/transfers', module: 'transfers' },
   { icon: Rocket, label: 'Fase 2', href: '/fase2', module: 'fase2' },
   { icon: Calendar, label: 'Reuniones', href: '/reuniones', module: 'reuniones' },
   { icon: Users, label: 'Roles', href: '/roles', module: 'roles' },
   { icon: Settings, label: 'Configuración', href: '/settings', module: 'settings' },
+  { icon: Bot, label: 'Agentes IA', href: '/ai-agents', module: 'ai-agents' },
+  { icon: CreditCard, label: 'Solcom AI', href: '/solcom-ai', adminOnly: true },
   { icon: ClipboardList, label: 'Siguientes Pasos', href: '/next-steps', module: 'next-steps', hidden: true },
   { icon: HelpCircle, label: 'Cómo Funciona', href: '/how-it-works', module: 'public', hidden: true },
 ];

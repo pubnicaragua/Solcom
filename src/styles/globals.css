@@ -873,6 +873,99 @@ a {
   text-transform: none;
 }
 
+.inventory-mobile-group,
+.inventory-mobile-product-card {
+  border-color: color-mix(in srgb, var(--info) 15%, var(--border)) !important;
+  box-shadow: 0 5px 14px color-mix(in srgb, var(--shadow) 70%, transparent);
+}
+
+.inventory-mobile-group-trigger,
+.inventory-mobile-product-trigger {
+  border-radius: 0;
+  transition: background-color 160ms ease, color 160ms ease;
+}
+
+.inventory-mobile-group-trigger:hover,
+.inventory-mobile-group-trigger:focus-visible,
+.inventory-mobile-product-trigger:hover,
+.inventory-mobile-product-trigger:focus-visible {
+  background: var(--surface-hover) !important;
+  outline: none;
+}
+
+.inventory-mobile-product-trigger {
+  position: relative;
+  display: block;
+  width: 100%;
+  border: 0;
+  text-align: left;
+  color: inherit;
+}
+
+.inventory-mobile-product-trigger:focus-visible,
+.inventory-mobile-group-trigger:focus-visible {
+  box-shadow: inset 0 0 0 2px var(--focus-ring);
+}
+
+.inventory-mobile-product-chevron {
+  position: absolute;
+  right: 12px;
+  bottom: 12px;
+  color: var(--muted);
+  transition: transform 160ms ease, color 160ms ease;
+}
+
+.inventory-mobile-product-trigger[aria-expanded='true'] .inventory-mobile-product-chevron {
+  color: var(--brand-primary);
+  transform: rotate(180deg);
+}
+
+.inventory-mobile-warehouse-row:last-child,
+.inventory-mobile-variant:last-child {
+  border-bottom: 0 !important;
+}
+
+@media (max-width: 640px) {
+  .inv-page {
+    gap: 10px !important;
+  }
+
+  .inv-header,
+  .inv-actions {
+    width: 100%;
+  }
+
+  .inv-actions {
+    display: grid !important;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .inv-actions > button {
+    justify-content: center;
+    min-height: 38px;
+  }
+
+  .inv-actions > button:first-child {
+    grid-column: 1 / -1;
+  }
+
+  .inv-filters-grid {
+    grid-template-columns: minmax(0, 1fr) !important;
+  }
+
+  .inv-search-wrapper {
+    grid-column: auto !important;
+  }
+
+  .inv-filter-card {
+    padding: 12px !important;
+  }
+
+  .pivot-toolbar {
+    padding: 11px 12px !important;
+  }
+}
+
 @media (max-width: 640px) {
   .inventory-title-mark,
   .system-title-mark {

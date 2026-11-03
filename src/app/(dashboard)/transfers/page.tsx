@@ -10,8 +10,8 @@ export default function TransfersPage() {
     const [activeTab, setActiveTab] = useState<'new' | 'receiving' | 'history'>('new');
 
     return (
-        <div className="transfers-module-view">
-            <div className="transfers-page-heading">
+        <div className="transfers-module-view" data-tour="transfers-header">
+            <div className="transfers-page-heading" data-tour="module-header">
                 <div className="system-title-mark" aria-hidden="true">
                     <ArrowLeftRight size={21} />
                 </div>
@@ -21,7 +21,7 @@ export default function TransfersPage() {
                 </div>
             </div>
 
-            <div className="transfers-tabs">
+            <div className="transfers-tabs" data-tour="transfers-actions">
                 <button
                     onClick={() => setActiveTab('new')}
                     className={`transfers-tab ${activeTab === 'new' ? 'is-active' : ''}`}
@@ -47,7 +47,7 @@ export default function TransfersPage() {
                 </button>
             </div>
 
-            <div className="transfers-tab-panel animate-fade-in">
+            <div className="transfers-tab-panel animate-fade-in" data-tour="transfers-list">
                 {activeTab === 'new' && (
                     <TransferForm onSuccess={() => setActiveTab('receiving')} />
                 )}

@@ -605,7 +605,7 @@ export default function PivotInventoryTable({ filters, cartMode, cartReady, onAd
 
     return (
         <>
-            <Card padding={0} style={{ overflow: 'hidden', maxWidth: '100%' }}>
+            <Card padding={0} style={{ overflow: 'hidden', maxWidth: '100%' }} data-tour="inventory-table">
                 {/* ─── Toolbar ─── */}
                 <div className="pivot-toolbar" style={{
                     padding: '12px 16px',
@@ -1360,7 +1360,7 @@ function MobileGroupNode({ node, level, warehouseCodes, data, cartMode, cartRead
     const isBrand = level === 1;
 
     return (
-        <div style={{
+        <div className="inventory-mobile-group" style={{
             background: level === 0 ? 'var(--card-bg)' : 'var(--surface-hover)',
             borderRadius: 8,
             overflow: 'hidden',
@@ -1369,6 +1369,8 @@ function MobileGroupNode({ node, level, warehouseCodes, data, cartMode, cartRead
         }}>
             <button
                 onClick={() => setExpanded(!expanded)}
+                aria-expanded={expanded}
+                className="inventory-mobile-group-trigger"
                 style={{
                     width: '100%',
                     padding: '12px 16px',
@@ -1424,15 +1426,18 @@ function MobileProductCard({ node, warehouseCodes, data, cartMode, cartReady, on
     const total = node.grandTotal;
 
     return (
-        <div style={{
+        <div className="inventory-mobile-product-card" style={{
             background: 'var(--card-bg)',
             border: '1px solid var(--border)',
             borderRadius: 8,
             marginBottom: 8,
             overflow: 'hidden'
         }}>
-            <div
+            <button
+                type="button"
                 onClick={() => setExpanded(!expanded)}
+                aria-expanded={expanded}
+                className="inventory-mobile-product-trigger"
                 style={{ padding: 12, cursor: 'pointer' }}
             >
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 12 }}>
@@ -1455,8 +1460,9 @@ function MobileProductCard({ node, warehouseCodes, data, cartMode, cartReady, on
                         </div>
                         <div style={{ fontSize: 11, color: 'var(--muted)' }}>Total</div>
                     </div>
+                    <ChevronDown size={16} className="inventory-mobile-product-chevron" aria-hidden="true" />
                 </div>
-            </div>
+            </button>
 
             {expanded && (
                 <div style={{ background: 'var(--panel-2)', padding: 12, borderTop: '1px solid var(--border)' }}>
@@ -1466,7 +1472,7 @@ function MobileProductCard({ node, warehouseCodes, data, cartMode, cartReady, on
                         if (!qty) return null;
                         const whName = data.warehouses.find(w => w.code === code)?.name || code;
                         return (
-                            <div key={code} style={{ display: 'flex', justifyContent: 'space-between', padding: '6px 0', borderBottom: '1px solid var(--pivot-grid-soft-border)' }}>
+                            <div key={code} className="inventory-mobile-warehouse-row" style={{ display: 'flex', justifyContent: 'space-between', padding: '6px 0', borderBottom: '1px solid var(--pivot-grid-soft-border)' }}>
                                 <div style={{ fontSize: 13, color: 'var(--text)' }}>{whName}</div>
                                 <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--pivot-product-text)' }}>{qty}</div>
                             </div>
@@ -1478,7 +1484,7 @@ function MobileProductCard({ node, warehouseCodes, data, cartMode, cartReady, on
                             {node.children.map(variant => {
                                 const rowItem = variant.items?.[0];
                                 return (
-                                    <div key={variant.label} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '6px 0', fontSize: 13, borderBottom: '1px solid var(--surface-hover)' }}>
+                                    <div key={variant.label} className="inventory-mobile-variant" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '6px 0', fontSize: 13, borderBottom: '1px solid var(--surface-hover)' }}>
                                         <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
                                             <span style={{ color: 'var(--text-secondary)', fontWeight: 500 }}>{variant.label}</span>
                                             {rowItem?.color && (
@@ -1490,6 +1496,8 @@ function MobileProductCard({ node, warehouseCodes, data, cartMode, cartReady, on
                                             {cartMode && cartReady && onAddToCart && rowItem && (
                                                 <button
                                                     onClick={(e) => { e.stopPropagation(); onAddToCart(rowItem); }}
+                                                    aria-label={`Agregar ${rowItem.name} al carrito`}
+                                                    title="Agregar al carrito"
                                                     style={{
                                                         background: 'rgba(16,185,129,0.2)',
                                                         border: '1px solid rgba(16,185,129,0.4)',

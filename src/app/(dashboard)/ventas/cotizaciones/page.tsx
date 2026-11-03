@@ -241,8 +241,8 @@ export default function CotizacionesPage() {
   ];
 
   return (
-    <div className="sales-design-page" style={{ color: 'var(--text)' }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '24px', flexWrap: 'wrap', gap: '12px' }}>
+    <div className="sales-design-page" style={{ color: 'var(--text)' }} data-tour="module-header">
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '24px', flexWrap: 'wrap', gap: '12px' }} data-tour="quote-header">
         <div>
           <div style={{ marginBottom: 8 }}>
             <Link href="/ventas" style={{ display: 'inline-flex', alignItems: 'center', gap: 6, color: 'var(--muted)', textDecoration: 'none', fontSize: 13, fontWeight: 600 }}>
@@ -259,6 +259,7 @@ export default function CotizacionesPage() {
         </div>
 
         <button
+          data-tour="quote-actions"
           onClick={() => {
             setEditQuote(null);
             setShowForm(true);
@@ -350,7 +351,7 @@ export default function CotizacionesPage() {
         background: 'var(--card)', padding: '14px 16px', borderRadius: 12,
         marginBottom: 16, border: '1px solid var(--border)',
         display: 'flex', gap: 10, alignItems: 'flex-end', flexWrap: 'wrap',
-      }}>
+      }} data-tour="quote-filters">
         <div style={{ flex: '1 1 260px' }}>
           <label style={{ display: 'block', fontSize: 12, fontWeight: 700, color: 'var(--muted)', marginBottom: 6 }}>Buscar</label>
           <div style={{ position: 'relative' }}>
@@ -424,7 +425,7 @@ export default function CotizacionesPage() {
         </div>
       )}
 
-      <div className="sales-design-table-card" style={{ background: 'var(--card)', borderRadius: 12, border: '1px solid var(--border)', overflow: 'hidden' }}>
+      <div className="sales-design-table-card" style={{ background: 'var(--card)', borderRadius: 12, border: '1px solid var(--border)', overflow: 'hidden' }} data-tour="quote-list">
         <div className="sales-design-table-head" style={{
           display: 'grid',
           gridTemplateColumns: '110px 1.2fr 150px 120px 140px 220px',

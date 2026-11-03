@@ -212,8 +212,8 @@ export default function Fase2Page() {
   }
 
   return (
-    <div className="fase2-module-view" style={{ display: 'grid', gap: 14, maxWidth: '100%' }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 12 }}>
+    <div className="fase2-module-view" style={{ display: 'grid', gap: 14, maxWidth: '100%' }} data-tour="module-header">
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 12 }} data-tour="phase-header">
         <div>
           <div className="fase2-page-heading">
             <div className="system-title-mark" aria-hidden="true"><Package size={21} /></div>
@@ -236,7 +236,7 @@ export default function Fase2Page() {
         </div>
       </Card>
 
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(280px, 100%), 1fr))', gap: 12 }}>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(280px, 100%), 1fr))', gap: 12 }} data-tour="phase-modules">
         {modules.map((module) => {
           const Icon = module.icon;
           const isActive = activeModule === module.id;
@@ -347,7 +347,7 @@ export default function Fase2Page() {
         })}
       </div>
 
-      <Card className="fase2-form-card">
+      <Card className="fase2-form-card" data-tour="phase-form">
         <div className="fase2-form-content" style={{ padding: 20 }}>
           <h3 style={{ fontSize: 16, fontWeight: 600, marginBottom: 12 }}>Crear nuevo registro</h3>
           <div style={{ display: 'grid', gap: 10 }}>
@@ -408,7 +408,7 @@ export default function Fase2Page() {
         </div>
       </Card>
 
-      <Card className="fase2-records-card">
+      <Card className="fase2-records-card" data-tour="phase-records">
         <div className="fase2-records-content" style={{ padding: 20, display: 'grid', gap: 10 }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', gap: 10, flexWrap: 'wrap' }}>
             <h3 style={{ fontSize: 16, fontWeight: 600, margin: 0 }}>Registros Fase 2</h3>

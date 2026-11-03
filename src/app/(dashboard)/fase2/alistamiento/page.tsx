@@ -654,10 +654,10 @@ export default function PickingBoardPage() {
   }
 
   return (
-    <div className="fase2-module-view alistamiento-design-page" style={{ display: 'grid', gap: 16 }}>
+    <div className="fase2-module-view alistamiento-design-page" style={{ display: 'grid', gap: 16 }} data-tour="module-header">
 
       {/* ── Header ── */}
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12, flexWrap: 'wrap' }} data-tour="picking-header">
         <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
           <div className="inventory-title-mark">
             <PackageSearch size={21} />
@@ -693,14 +693,14 @@ export default function PickingBoardPage() {
       {demoMode && (
         <Card style={{ borderColor: 'color-mix(in srgb, var(--info) 40%, var(--border))', background: 'var(--info-surface)' }}>
           <div style={{ fontSize: 13, color: 'var(--info)', display: 'flex', alignItems: 'center', gap: 8 }}>
-            <span style={{ fontSize: 16 }}>👁</span>
+            <ScanLine size={16} aria-hidden="true" />
             Vista demo activa: estás viendo datos estáticos de ejemplo para presentar la UI de alistamiento.
           </div>
         </Card>
       )}
 
       {/* ── Filters Toolbar ── */}
-      <div className="filters-toolbar">
+      <div className="filters-toolbar" data-tour="picking-filters">
         <div className="filters-toolbar-label">
           <Filter size={13} />
           <span>Filtros</span>
@@ -805,7 +805,7 @@ export default function PickingBoardPage() {
       <div className="board-layout">
 
         {/* Kanban Board */}
-        <div className="board-wrap">
+        <div className="board-wrap" data-tour="picking-list">
           {loading ? (
             <div className="board-loading">
               <RefreshCw size={26} className="spin" style={{ opacity: 0.3 }} />

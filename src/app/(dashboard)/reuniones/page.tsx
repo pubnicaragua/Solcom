@@ -6,10 +6,10 @@ import Badge from '@/components/ui/Badge';
 
 export default function ReunionesPage() {
   return (
-    <div className="reuniones-module-view" style={{ color: 'var(--text)' }}>
+    <div className="reuniones-module-view" style={{ color: 'var(--text)' }} data-tour="module-header">
       <div style={{ maxWidth: 1200, width: '100%', margin: '0 auto', paddingBottom: 24 }}>
         {/* Header */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: 14, marginBottom: 24 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 14, marginBottom: 24 }} data-tour="meetings-header">
           <div className="system-title-mark" aria-hidden="true"><Calendar size={22} /></div>
           <div>
             <h1 className="h-title" style={{ marginBottom: 4 }}>Reuniones del Proyecto</h1>
@@ -20,7 +20,7 @@ export default function ReunionesPage() {
         </div>
 
         {/* Reunión del 21 de Febrero */}
-        <Card className="reuniones-page-card" style={{ marginBottom: 24, background: 'var(--card-surface-gradient)', borderRadius: 12, overflow: 'hidden' }}>
+        <Card className="reuniones-page-card" style={{ marginBottom: 24, background: 'var(--card-surface-gradient)', borderRadius: 12, overflow: 'hidden' }} data-tour="meeting-card">
           {/* Header de la Reunión */}
           <div className="reuniones-card-hero" style={{ background: 'var(--brand-button-gradient)', padding: 28, color: 'white' }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 16 }}>
@@ -43,15 +43,15 @@ export default function ReunionesPage() {
             </div>
             <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
               <Badge style={{ background: 'var(--success-surface)', color: 'var(--success)', border: '1px solid color-mix(in srgb, var(--success) 30%, var(--border))', padding: '6px 12px' }}>
-                ✅ Completada
+                Completada
               </Badge>
               <Badge style={{ background: 'var(--info-surface)', color: 'var(--info)', border: '1px solid color-mix(in srgb, var(--info) 30%, var(--border))', padding: '6px 12px' }}>
-                🎯 Mejoras Identificadas
+                Mejoras identificadas
               </Badge>
             </div>
           </div>
 
-          <div className="reuniones-card-content" style={{ padding: 32 }}>
+          <div className="reuniones-card-content" style={{ padding: 32 }} data-tour="meeting-notes">
             {/* Participantes */}
             <div style={{ marginBottom: 32 }}>
               <h3 style={{ fontSize: 20, fontWeight: 600, marginBottom: 16, display: 'flex', alignItems: 'center', gap: 8 }}>
@@ -59,15 +59,15 @@ export default function ReunionesPage() {
                 Participantes
               </h3>
               <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
-                <Badge variant="neutral">👤 Luis Solis (Solis Comercial)</Badge>
-                <Badge variant="neutral">👤 Equipo de Desarrollo</Badge>
+                <Badge variant="neutral">Luis Solis (Solis Comercial)</Badge>
+                <Badge variant="neutral">Equipo de Desarrollo</Badge>
               </div>
             </div>
 
             {/* Resumen Ejecutivo */}
             <div style={{ marginBottom: 32, padding: 24, background: 'var(--warning-surface)', borderRadius: 12, borderLeft: '4px solid var(--warning)' }}>
               <h3 style={{ fontSize: 20, fontWeight: 600, marginBottom: 16, color: 'var(--warning)' }}>
-                📋 Resumen Ejecutivo
+                Resumen Ejecutivo
               </h3>
               <p style={{ fontSize: 16, lineHeight: 1.6, color: 'var(--text-secondary)', marginBottom: 12 }}>
                 Se revisó el <strong>módulo de inventario</strong> y <strong>reportes</strong> para identificar mejoras de UX y funcionalidades pendientes.
@@ -158,14 +158,14 @@ export default function ReunionesPage() {
               {/* Para Equipo de Desarrollo */}
               <Card style={{ marginBottom: 16, padding: 20, background: 'var(--info-surface)', border: '1px solid color-mix(in srgb, var(--info) 32%, var(--border))' }}>
                 <h4 style={{ fontSize: 18, fontWeight: 600, marginBottom: 12, color: 'var(--info)', display: 'flex', alignItems: 'center', gap: 8 }}>
-                  🔧 Para Equipo: Mejoras en Inventario y Reportes
+                  Para Equipo: Mejoras en Inventario y Reportes
                 </h4>
                 <p style={{ fontSize: 14, color: 'var(--text-secondary)', marginBottom: 16 }}>
                   Implementar las mejoras identificadas en la reunión para optimizar la experiencia del usuario.
                 </p>
                 <div style={{ background: 'var(--panel)', padding: 16, borderRadius: 8, marginBottom: 12 }}>
                   <h5 style={{ fontSize: 14, fontWeight: 600, marginBottom: 8, color: 'var(--text)' }}>
-                    📝 Tareas Específicas:
+                    Tareas Específicas:
                   </h5>
                   <ol style={{ fontSize: 14, lineHeight: 1.8, color: 'var(--text-secondary)', paddingLeft: 20, margin: 0 }}>
                     <li><strong>Módulo de Inventario:</strong> Corregir filtro de existencias para funcionar de forma viceversa</li>
@@ -176,7 +176,7 @@ export default function ReunionesPage() {
                   </ol>
                 </div>
                 <div style={{ padding: 12, background: 'var(--info-surface)', borderRadius: 6, fontSize: 13, color: 'var(--info)' }}>
-                  <strong>💡 Prioridad:</strong> Alta - Estas mejoras impactan directamente el uso diario del sistema.
+                  <strong>Prioridad:</strong> Alta - Estas mejoras impactan directamente el uso diario del sistema.
                 </div>
               </Card>
             </div>
@@ -184,7 +184,7 @@ export default function ReunionesPage() {
             {/* Próximos Pasos */}
             <div style={{ padding: 24, background: 'var(--warning-surface)', borderRadius: 12, borderLeft: '4px solid var(--warning)' }}>
               <h3 style={{ fontSize: 20, fontWeight: 600, marginBottom: 16, color: 'var(--warning)' }}>
-                🚀 Próximos Pasos
+                Próximos Pasos
               </h3>
               <ol style={{ fontSize: 16, lineHeight: 1.8, color: 'var(--text-secondary)', paddingLeft: 20, margin: 0 }}>
                 <li>Implementar corrección del filtro de existencias (función viceversa)</li>
@@ -222,10 +222,10 @@ export default function ReunionesPage() {
             </div>
             <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
               <Badge style={{ background: 'var(--success-surface)', color: 'var(--success)', border: '1px solid color-mix(in srgb, var(--success) 30%, var(--border))', padding: '6px 12px' }}>
-                ✅ Completada
+                Completada
               </Badge>
               <Badge style={{ background: 'var(--success-surface)', color: 'var(--success)', border: '1px solid color-mix(in srgb, var(--success) 30%, var(--border))', padding: '6px 12px' }}>
-                🎯 MVP Aprobado
+                MVP aprobado
               </Badge>
             </div>
           </div>
@@ -238,16 +238,16 @@ export default function ReunionesPage() {
                 Participantes
               </h3>
               <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
-                <Badge variant="neutral">👤 Luis (Solis Comercial)</Badge>
-                <Badge variant="neutral">👤 Bayardo (Solis Comercial)</Badge>
-                <Badge variant="neutral">👤 Equipo de Desarrollo</Badge>
+                <Badge variant="neutral">Luis (Solis Comercial)</Badge>
+                <Badge variant="neutral">Bayardo (Solis Comercial)</Badge>
+                <Badge variant="neutral">Equipo de Desarrollo</Badge>
               </div>
             </div>
 
             {/* Resumen Ejecutivo */}
             <div style={{ marginBottom: 32, padding: 24, background: 'var(--info-surface)', borderRadius: 12, borderLeft: '4px solid var(--info)' }}>
               <h3 style={{ fontSize: 20, fontWeight: 600, marginBottom: 16, color: 'var(--info)' }}>
-                📋 Resumen Ejecutivo
+                Resumen Ejecutivo
               </h3>
               <p style={{ fontSize: 16, lineHeight: 1.6, color: 'var(--text-secondary)', marginBottom: 12 }}>
                 Se presentó y validó el <strong>MVP (Producto Mínimo Viable)</strong> del sistema ERP para Solis Comercial.
@@ -338,7 +338,7 @@ export default function ReunionesPage() {
               {/* Para Luis - OpenAI */}
               <Card style={{ marginBottom: 16, padding: 20, background: 'var(--warning-surface)', border: '1px solid var(--warning)' }}>
                 <h4 style={{ fontSize: 18, fontWeight: 600, marginBottom: 12, color: 'var(--warning)', display: 'flex', alignItems: 'center', gap: 8 }}>
-                  🤖 Para Luis: Habilitar Modelo GPT-4.5+ en OpenAI
+                  Para Luis: Habilitar Modelo GPT-4.5+ en OpenAI
                 </h4>
                 <p style={{ fontSize: 14, color: 'var(--text-secondary)', marginBottom: 16 }}>
                   El modelo actual (GPT-4.0) no soporta interpretación de imágenes, audio ni acciones automatizadas.
@@ -346,7 +346,7 @@ export default function ReunionesPage() {
                 </p>
                 <div style={{ background: 'var(--panel)', padding: 16, borderRadius: 8, marginBottom: 12 }}>
                   <h5 style={{ fontSize: 14, fontWeight: 600, marginBottom: 8, color: 'var(--text)' }}>
-                    📝 Pasos para Habilitar Modelo 4.5+:
+                    Pasos para Habilitar Modelo 4.5+:
                   </h5>
                   <ol style={{ fontSize: 14, lineHeight: 1.8, color: 'var(--text-secondary)', paddingLeft: 20, margin: 0 }}>
                     <li>Ir a <a href="https://platform.openai.com/" target="_blank" rel="noopener" style={{ color: 'var(--info)', textDecoration: 'underline' }}>platform.openai.com</a></li>
@@ -365,7 +365,7 @@ export default function ReunionesPage() {
                   </ol>
                 </div>
                 <div style={{ padding: 12, background: 'var(--warning-surface)', borderRadius: 6, fontSize: 13, color: 'var(--text-secondary)' }}>
-                  <strong>💡 Nota:</strong> El costo de GPT-4.5 es aproximadamente 2x el de GPT-4.0. Con el consumo actual
+                  <strong>Nota:</strong> El costo de GPT-4.5 es aproximadamente 2x el de GPT-4.0. Con el consumo actual
                   (~$3.65/mes), se estima un costo de ~$7-8/mes. Validar presupuesto antes de activar.
                 </div>
               </Card>
@@ -373,14 +373,14 @@ export default function ReunionesPage() {
               {/* Para Equipo - SalesIQ API */}
               <Card style={{ padding: 20, background: 'var(--info-surface)', border: '1px solid var(--info)' }}>
                 <h4 style={{ fontSize: 18, fontWeight: 600, marginBottom: 12, color: 'var(--info)', display: 'flex', alignItems: 'center', gap: 8 }}>
-                  🔌 Para Equipo: Solicitar API REST de SalesIQ
+                  Para Equipo: Solicitar API REST de SalesIQ
                 </h4>
                 <p style={{ fontSize: 14, color: 'var(--text-secondary)', marginBottom: 16 }}>
                   Se requiere acceso a la API REST de SalesIQ para conectar el agente de IA con datos de inventario en tiempo real.
                 </p>
                 <div style={{ background: 'var(--panel)', padding: 16, borderRadius: 8, marginBottom: 12 }}>
                   <h5 style={{ fontSize: 14, fontWeight: 600, marginBottom: 8, color: 'var(--text)' }}>
-                    📧 Mensaje para Enviar a Soporte de SalesIQ:
+                    Mensaje para Enviar a Soporte de SalesIQ:
                   </h5>
                   <div style={{ background: 'var(--panel-2)', padding: 16, borderRadius: 6, fontSize: 13, fontFamily: 'monospace', lineHeight: 1.6, color: 'var(--text-secondary)', border: '1px solid var(--border)' }}>
                     <p style={{ margin: 0, marginBottom: 12 }}><strong>Asunto:</strong> Solicitud de Acceso a API REST - Integración con Sistema de Inventario</p>
@@ -456,7 +456,7 @@ export default function ReunionesPage() {
             {/* Próximos Pasos */}
             <div style={{ padding: 24, background: 'var(--info-surface)', borderRadius: 12, borderLeft: '4px solid var(--info)' }}>
               <h3 style={{ fontSize: 20, fontWeight: 600, marginBottom: 16, color: 'var(--info)' }}>
-                🚀 Próximos Pasos
+                Próximos Pasos
               </h3>
               <ol style={{ fontSize: 16, lineHeight: 1.8, color: 'var(--text-secondary)', paddingLeft: 20, margin: 0 }}>
                 <li>Solis Comercial compartirá credenciales de Zoho Creator (Client ID, Secret, Refresh Token)</li>

@@ -32,7 +32,7 @@ export default function RutasLayout({ children }: { children: React.ReactNode })
                 alignItems: 'center',
                 justifyContent: 'space-between',
                 height: 60,
-            }}>
+            }} data-tour="routes-header">
                 <div style={{ display: 'flex', alignItems: 'center', gap: 32, height: '100%' }}>
                     <h1 style={{
                         fontSize: 18,
@@ -49,7 +49,7 @@ export default function RutasLayout({ children }: { children: React.ReactNode })
                         Rutas
                     </h1>
 
-                    <nav style={{ display: 'flex', height: '100%', gap: 8 }}>
+                    <nav style={{ display: 'flex', height: '100%', gap: 8 }} data-tour="routes-tabs">
                         {tabs.map(tab => {
                             const active = pathname.includes(tab.id);
                             return (
@@ -91,7 +91,7 @@ export default function RutasLayout({ children }: { children: React.ReactNode })
             </div>
 
             {/* Content Area */}
-            <div className="routes-module-content" style={{ flex: 1, padding: 24, overflowY: 'auto' }}>
+            <div className="routes-module-content" style={{ flex: 1, padding: 24, overflowY: 'auto' }} data-tour="routes-content">
                 {children}
             </div>
         </div>

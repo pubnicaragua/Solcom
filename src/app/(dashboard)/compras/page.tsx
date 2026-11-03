@@ -647,7 +647,7 @@ export default function ComprasRestockPage() {
   };
 
   return (
-    <div className="compras-module-view" style={shellStyle}>
+    <div className="compras-module-view" style={shellStyle} data-tour="module-header">
       <style>{`
 
 
@@ -699,7 +699,7 @@ export default function ComprasRestockPage() {
 
 
       {/* HEADER SECTION */}
-      <div className="compras-page-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: 16 }}>
+      <div className="compras-page-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: 16 }} data-tour="purchases-header">
         <div>
           <h1 className="inventory-title compras-page-title">
             <div className="system-title-mark">
@@ -788,7 +788,7 @@ export default function ComprasRestockPage() {
 
       {/* DASHBOARD KPIs */}
       {results && (
-        <div className="compras-kpi-grid">
+        <div className="compras-kpi-grid" data-tour="purchases-kpis">
           <Card className="compras-kpi-card tone-info" style={{ padding: 20 }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 12 }}>
               <div className="compras-kpi-icon"><Wallet size={20} /></div>
@@ -829,7 +829,7 @@ export default function ComprasRestockPage() {
 
       {/* TABLE SECTION */}
       {results ? (
-        <Card className="compras-results-card" style={{ border: '1px solid var(--border)', overflow: 'hidden' }}>
+        <Card className="compras-results-card" style={{ border: '1px solid var(--border)', overflow: 'hidden' }} data-tour="purchases-table">
           {/* Toolbar */}
           <div
             style={{

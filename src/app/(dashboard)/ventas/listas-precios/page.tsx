@@ -200,8 +200,8 @@ export default function PriceProfilesPage() {
     };
 
     return (
-        <div className="sales-design-page price-profiles-page" style={{ display: 'grid', gap: 14 }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 10 }}>
+        <div className="sales-design-page price-profiles-page" style={{ display: 'grid', gap: 14 }} data-tour="module-header">
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 10 }} data-tour="price-header">
                 <div>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
                         <span className="inventory-title-mark"><FileSpreadsheet size={20} /></span>
@@ -245,7 +245,7 @@ export default function PriceProfilesPage() {
             ) : null}
 
             <div style={{ display: 'grid', gap: 14, gridTemplateColumns: '340px 1fr' }}>
-                <div className="sales-design-panel" style={{ border: '1px solid var(--border)', borderRadius: 12, background: 'var(--card)', padding: 14, display: 'grid', gap: 10 }}>
+                <div className="sales-design-panel" style={{ border: '1px solid var(--border)', borderRadius: 12, background: 'var(--card)', padding: 14, display: 'grid', gap: 10 }} data-tour="price-form">
                     <div style={{ fontSize: 14, fontWeight: 700, color: 'var(--text)' }}>Crear / Editar lista</div>
                     <label style={{ fontSize: 12, color: 'var(--muted)' }}>
                         Código
@@ -332,7 +332,7 @@ export default function PriceProfilesPage() {
                     </div>
                 </div>
 
-                <div className="sales-design-panel" style={{ border: '1px solid var(--border)', borderRadius: 12, background: 'var(--card)', padding: 14, display: 'grid', gap: 10 }}>
+                <div className="sales-design-panel" style={{ border: '1px solid var(--border)', borderRadius: 12, background: 'var(--card)', padding: 14, display: 'grid', gap: 10 }} data-tour="price-import">
                     <div style={{ fontSize: 14, fontWeight: 700, color: 'var(--text)' }}>Importar archivo Excel</div>
                     <div style={{ fontSize: 12, color: 'var(--muted)' }}>
                         Soporta dos formatos:
@@ -397,7 +397,7 @@ export default function PriceProfilesPage() {
                 </div>
             </div>
 
-            <div className="sales-design-table-card" style={{ border: '1px solid var(--border)', borderRadius: 12, background: 'var(--card)', overflow: 'hidden' }}>
+            <div className="sales-design-table-card" style={{ border: '1px solid var(--border)', borderRadius: 12, background: 'var(--card)', overflow: 'hidden' }} data-tour="price-list">
                 <div className="sales-design-table-head" style={{ display: 'grid', gridTemplateColumns: '1.2fr 1fr 1fr 0.8fr 1fr 0.8fr', gap: 8, padding: '12px 14px', borderBottom: '1px solid var(--border)', fontSize: 12, color: 'var(--muted)', fontWeight: 700 }}>
                     <span>Lista</span>
                     <span>Código</span>

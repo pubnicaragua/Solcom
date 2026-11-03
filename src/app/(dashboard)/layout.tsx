@@ -3,6 +3,7 @@
 import '@/styles/globals.css';
 import Sidebar from '@/components/dashboard/Sidebar';
 import Topbar from '@/components/dashboard/Topbar';
+import GuidedTour from '@/components/dashboard/GuidedTour';
 
 import { SidebarProvider, useSidebar } from '@/contexts/SidebarContext';
 
@@ -26,6 +27,7 @@ function DashboardContent({ children }: { children: React.ReactNode }) {
           {children}
         </main>
       </div>
+      <GuidedTour />
 
       <style jsx global>{`
         .dashboard-layout {

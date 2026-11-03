@@ -435,8 +435,8 @@ export default function InventoryPage() {
   ];
 
   return (
-    <div className="inv-page" style={{ display: 'grid', gap: 14 }}>
-      <div className="inv-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 12 }}>
+    <div className="inv-page" style={{ display: 'grid', gap: 14 }} data-tour="module-header">
+      <div className="inv-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 12 }} data-tour="inventory-header">
         <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
           <div className="inventory-title-mark" aria-hidden="true">
             <Package size={22} strokeWidth={1.9} />
@@ -448,7 +448,7 @@ export default function InventoryPage() {
             </div>
           </div>
         </div>
-        <div className="inv-actions" style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+        <div className="inv-actions" style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }} data-tour="inventory-actions">
           {/* Cart toggle button (now visible on mobile too) */}
           {(
 
@@ -565,7 +565,7 @@ export default function InventoryPage() {
       <KPIGrid pivotData={pivotData} needsSummary={activeFiltersCount > 0 || !!parentWarehouseId} />
 
       {cartMode && (
-        <Card>
+        <Card data-tour="inventory-cart">
           <div style={{ padding: 14, display: 'grid', gap: 12 }}>
             <div style={{ fontSize: 13, fontWeight: 800, color: 'var(--text)', display: 'flex', alignItems: 'center', gap: 8 }}>
               <ShoppingCart size={16} color="var(--success)" />
@@ -710,7 +710,7 @@ export default function InventoryPage() {
       )}
 
       {/* Filtros Principales */}
-      <Card>
+      <Card data-tour="inventory-filters">
         <div className="inv-filter-card" style={{ padding: 16 }}>
           <div className="inv-filter-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16, flexWrap: 'wrap', gap: 8 }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>

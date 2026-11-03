@@ -604,9 +604,9 @@ function FacturacionPageContent() {
   );
 
   return (
-    <div className="sales-design-page" style={{ color: 'var(--text)' }}>
+    <div className="sales-design-page" style={{ color: 'var(--text)' }} data-tour="module-header">
       {/* Header */}
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '28px', flexWrap: 'wrap', gap: '16px' }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '28px', flexWrap: 'wrap', gap: '16px' }} data-tour="sales-header">
         <div>
           <h1 className="h-title" style={{ fontWeight: 700, marginBottom: '4px', display: 'flex', alignItems: 'center', gap: '10px' }}>
           <span className="inventory-title-mark"><FileText size={21} /></span>
@@ -686,6 +686,7 @@ function FacturacionPageContent() {
           border: '1px solid var(--border)',
           background: 'var(--card)',
         }}
+        data-tour="sales-tabs"
       >
         {[
           { key: 'facturas' as const, label: 'Facturas', icon: FileText },
@@ -1066,7 +1067,7 @@ function FacturacionPageContent() {
             background: 'var(--card)', padding: '16px 20px', borderRadius: '12px',
             marginBottom: '20px', border: '1px solid var(--border)',
             display: 'flex', gap: '12px', alignItems: 'flex-end', flexWrap: 'wrap',
-          }}>
+          }} data-tour="sales-filter">
             <div style={{ flex: '1 1 250px' }}>
               <label style={{ display: 'block', fontSize: '12px', fontWeight: 600, color: 'var(--muted)', marginBottom: '6px' }}>
                 Buscar
@@ -1131,7 +1132,7 @@ function FacturacionPageContent() {
           <div className="sales-design-panel" style={{
             background: 'var(--card)', borderRadius: '12px', border: '1px solid var(--border)',
             overflow: 'hidden',
-          }}>
+          }} data-tour="sales-list">
             {/* Table header */}
             <div style={{
               display: 'grid',

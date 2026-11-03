@@ -11,10 +11,6 @@ import PieChart from '@/components/charts/PieChart';
 import ReportPlaceholder from '@/components/reports/ReportPlaceholder';
 import { Download, Package, TrendingUp, TrendingDown, Calendar, Warehouse, AlertTriangle, DollarSign, FileText, Filter, Loader } from 'lucide-react';
 import styles from './reports.module.css';
-import jsPDF from 'jspdf';
-import autoTable from 'jspdf-autotable';
-import ExcelJS from 'exceljs';
-import { saveAs } from 'file-saver';
 
 export const dynamic = 'force-dynamic';
 
@@ -338,6 +334,10 @@ export default function ReportsPage() {
   async function exportToPDF() {
     setExporting('pdf');
     try {
+      const [{ default: JsPDF }, { default: autoTable }] = await Promise.all([
+        import('jspdf'),
+        import('jspdf-autotable'),
+      ]);
       const whParams = new URLSearchParams();
       if (globalFilters.category) whParams.set('category', globalFilters.category);
       if (globalFilters.marca) whParams.set('marca', globalFilters.marca);
@@ -357,7 +357,7 @@ export default function ReportsPage() {
       const exportTopItems = freshData?.topInventoryItems || [];
       const exportTopItemsByCost = freshData?.topInventoryItemsByCost || [];
 
-      const doc = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' });
+      const doc = new JsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' });
       const pageWidth = 297;
       const pageHeight = 210;
       const marginLeft = 14;
@@ -886,6 +886,10 @@ export default function ReportsPage() {
   async function exportToExcel() {
     setExporting('excel');
     try {
+      const [{ default: ExcelJS }, { saveAs }] = await Promise.all([
+        import('exceljs'),
+        import('file-saver'),
+      ]);
       const whParams = new URLSearchParams();
       if (globalFilters.category) whParams.set('category', globalFilters.category);
       if (globalFilters.marca) whParams.set('marca', globalFilters.marca);
@@ -915,29 +919,29 @@ export default function ReportsPage() {
       const sheet = workbook.addWorksheet('Reporte de Inventario');
 
       // Styles
-      const headerStyle: Partial<ExcelJS.Style> = {
+      const headerStyle: any = {
         font: { bold: true, color: { argb: 'FFFFFFFF' } },
         fill: { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFDC2626' } },
         alignment: { horizontal: 'center', vertical: 'middle' },
         border: { top: { style: 'thin' }, left: { style: 'thin' }, bottom: { style: 'thin' }, right: { style: 'thin' } }
       };
 
-      const titleStyle: Partial<ExcelJS.Style> = {
+      const titleStyle: any = {
         font: { bold: true, size: 16, color: { argb: 'FFDC2626' } },
         alignment: { horizontal: 'left', vertical: 'middle' }
       };
 
-      const footerStyle: Partial<ExcelJS.Style> = {
+      const footerStyle: any = {
         font: { bold: true },
         fill: { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFF1F5F9' } },
         border: { top: { style: 'thin' }, bottom: { style: 'double' } }
       };
 
       // Table Header Styles by type
-      const blueHeader: Partial<ExcelJS.Style> = { ...headerStyle, fill: { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF0EA5E9' } } };
-      const purpleHeader: Partial<ExcelJS.Style> = { ...headerStyle, fill: { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF8B5CF6' } } };
-      const orangeHeader: Partial<ExcelJS.Style> = { ...headerStyle, fill: { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFF59E0B' } } };
-      const navyHeader: Partial<ExcelJS.Style> = { ...headerStyle, fill: { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF1E3A8A' } } };
+      const blueHeader: any = { ...headerStyle, fill: { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF0EA5E9' } } };
+      const purpleHeader: any = { ...headerStyle, fill: { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF8B5CF6' } } };
+      const orangeHeader: any = { ...headerStyle, fill: { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFF59E0B' } } };
+      const navyHeader: any = { ...headerStyle, fill: { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF1E3A8A' } } };
 
       // Logo and Title
       sheet.mergeCells('A1:F3');
@@ -1241,8 +1245,8 @@ export default function ReportsPage() {
   const hasFilters = Object.values(globalFilters).some(v => v !== '');
 
   return (
-    <div className={styles.root}>
-      <div className={styles.pageHeader}>
+    <div className={styles.root} data-tour="module-header">
+      <div className={styles.pageHeader} data-tour="reports-header">
         <div className={styles.pageTitleGroup}>
           <span className={styles.titleMark}><FileText size={21} /></span>
           <h1 className={styles.pageTitle}>Reportes de Inventario</h1>
@@ -1259,7 +1263,7 @@ export default function ReportsPage() {
         </div>
       </div>
 
-      <Card className={styles.periodCard}>
+      <Card className={styles.periodCard} data-tour="reports-filters">
         <div className={styles.periodControl}>
           <Calendar size={18} color="var(--muted)" />
           <Select
@@ -1299,7 +1303,7 @@ export default function ReportsPage() {
         </Card>
       )}
 
-      <div className={styles.kpiGrid}>
+      <div className={styles.kpiGrid} data-tour="reports-kpis">
         <Card className={styles.kpiCard} data-tone="warning">
           <div style={{ padding: 16 }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 12 }}>
@@ -2238,7 +2242,7 @@ export default function ReportsPage() {
         </div>
       </div>
 
-      <div className={styles.chartsGrid}>
+      <div className={styles.chartsGrid} data-tour="reports-charts">
         <ChartCard title="Inventario por Categorías en Unidades">
           {loading ? (
             <div style={{ height: 300, background: 'var(--panel)', borderRadius: 4, animation: 'pulse 1.5s infinite' }} />
