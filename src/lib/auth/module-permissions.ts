@@ -16,6 +16,7 @@ type SupabaseRouteClient = ReturnType<typeof createRouteHandlerClient>;
 
 export const MODULE_DEFINITIONS: ModuleDefinition[] = [
   { key: 'inventory', label: 'Inventario', paths: ['/inventory'] },
+  { key: 'zoho-sync', label: 'Sincronización Zoho', paths: ['/zoho-sync'] },
   { key: 'rutas', label: 'Rutas', paths: ['/rutas'] },
   { key: 'ventas', label: 'Facturacion', paths: ['/ventas'] },
   { key: 'alistamiento', label: 'Alistamiento', paths: ['/alistamiento'] },
@@ -36,9 +37,9 @@ export const MODULE_KEYS = MODULE_DEFINITIONS.map((module) => module.key);
 
 const ROLE_BASE_MODULES: Record<AppRole, string[]> = {
   admin: MODULE_KEYS,
-  manager: ['inventory', 'ventas', 'reports', 'ai-agents', 'transfers', 'how-it-works', 'cliente', 'entregables'],
-  operator: ['inventory', 'ventas', 'how-it-works', 'cliente', 'entregables'],
-  auditor: ['reports', 'how-it-works', 'cliente', 'entregables'],
+  manager: ['inventory', 'zoho-sync', 'ventas', 'reports', 'ai-agents', 'transfers', 'how-it-works', 'cliente', 'entregables'],
+  operator: ['inventory', 'zoho-sync', 'ventas', 'how-it-works', 'cliente', 'entregables'],
+  auditor: ['reports', 'zoho-sync', 'how-it-works', 'cliente', 'entregables'],
 };
 
 const MATCHABLE_MODULES = MODULE_DEFINITIONS

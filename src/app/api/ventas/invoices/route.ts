@@ -45,6 +45,7 @@ import {
     upsertPickOrderFromSalesOrder,
     isMissingPickingInfraError,
 } from '@/lib/ventas/picking';
+import { notifyRoles } from '@/lib/notifications/server';
 
 export const dynamic = 'force-dynamic';
 
@@ -1877,6 +1878,14 @@ export async function POST(req: NextRequest) {
             ...syncState,
             external_request_id: invoiceResponse.external_request_id,
         };
+
+        await notifyRoles({
+            roles: ['admin', 'manager'],
+            type: 'new_sale',
+            title: 'Nueva factura registrada',
+            message: `Se registró la factura ${responseInvoice.invoice_number || responseInvoice.number || invoice.id}.`,
+            link: '/ventas',
+        });
 
         return succeedWith(responseBody, responseStatus, responseInvoice.id || invoice.id);
     } catch (error: any) {

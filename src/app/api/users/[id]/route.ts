@@ -4,6 +4,7 @@ import { cookies } from 'next/headers';
 import { NextResponse } from 'next/server';
 import { requireAdminProfile } from '@/lib/auth/warehouse-permissions';
 import { getEffectiveModuleAccess, hasModuleAccess } from '@/lib/auth/module-permissions';
+import { notifyRoles } from '@/lib/notifications/server';
 
 export async function PATCH(
   request: Request,
@@ -69,6 +70,14 @@ export async function PATCH(
           details: `Usuario ${updates.full_name || userNameForAudit} vinculado al rol`,
           previous_state: { user_id: params.id, role: previousRole },
           new_state: { user_id: params.id, role: role }
+        });
+
+        await notifyRoles({
+          roles: ['admin'],
+          type: 'role_change',
+          title: 'Cambio de permisos',
+          message: `${userNameForAudit} ahora tiene el rol ${role}.`,
+          link: '/roles',
         });
       }
     }

@@ -4,12 +4,13 @@ import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import SegmentedLoader from '@/components/ui/SegmentedLoader';
 import { usePathname } from 'next/navigation';
-import { Package, BarChart3, Settings, Users, HelpCircle, Bot, Menu, X, ClipboardList, Calendar, FolderOpen, ArrowLeftRight, FileText, ChevronLeft, ChevronRight, Rocket, ShoppingCart, PackageSearch, Map, CreditCard } from 'lucide-react';
+import { Package, BarChart3, Settings, Users, HelpCircle, Bot, Menu, X, ClipboardList, Calendar, FolderOpen, ArrowLeftRight, FileText, ChevronLeft, ChevronRight, Rocket, ShoppingCart, PackageSearch, Map, CreditCard, CloudCog } from 'lucide-react';
 import { useUserRole } from '@/hooks/useUserRole';
 import { useRoleAccess } from '@/hooks/useRoleAccess';
 
 const menuItems = [
   { icon: Package, label: 'Inventario', href: '/inventory', module: 'inventory' },
+  { icon: CloudCog, label: 'Sincronización Zoho', href: '/zoho-sync', module: 'zoho-sync' },
   { icon: ShoppingCart, label: 'Compras', href: '/compras', module: 'compras', adminOnly: true },
   { icon: FileText, label: 'Facturación', href: '/ventas', module: 'ventas' },
   { icon: PackageSearch, label: 'Alistamiento', href: '/alistamiento', module: 'alistamiento' },
@@ -226,7 +227,7 @@ export default function Sidebar() {
                     borderRadius: 8,
                     position: 'relative',
                     overflow: 'hidden',
-                    fontSize: 14,
+                    fontSize: 15,
                     fontWeight: 500,
                     color: isActive ? '#FFFFFF' : 'var(--sidebar-muted)',
                     background: isActive
@@ -286,7 +287,7 @@ export default function Sidebar() {
                           href={sub.href}
                           style={{
                             position: 'relative',
-                            fontSize: 13,
+                            fontSize: 14,
                             borderRadius: 6,
                             padding: '6px 10px',
                             textDecoration: 'none',
@@ -342,7 +343,7 @@ export default function Sidebar() {
                           href={sub.href}
                           style={{
                             position: 'relative',
-                            fontSize: 13,
+                            fontSize: 14,
                             borderRadius: 6,
                             padding: '6px 10px',
                             textDecoration: 'none',

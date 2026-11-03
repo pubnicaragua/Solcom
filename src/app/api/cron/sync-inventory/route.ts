@@ -3,6 +3,7 @@ import { createClient } from '@supabase/supabase-js';
 import { syncItemStock } from '@/lib/zoho/sync-logic';
 import { getZohoAccessToken } from '@/lib/zoho/inventory-utils';
 import { getZohoOrganizationId } from '@/lib/zoho/config';
+import { notifyRoles } from '@/lib/notifications/server';
 
 export const dynamic = 'force-dynamic';
 export const maxDuration = 60;
@@ -179,6 +180,16 @@ export async function GET(request: NextRequest) {
 
         const durationMs = Date.now() - startTime;
         debugLog.push(`[cron] Done: synced=${syncedCount} skipped=${skippedCount} errors=${errors.length} in ${durationMs}ms`);
+
+        if (errors.length > 0) {
+            await notifyRoles({
+                roles: ['admin'],
+                type: 'sync_error',
+                title: 'Error de sincronización',
+                message: `${errors.length} item(s) no se pudieron sincronizar. ${errors.slice(0, 2).join(' | ')}`.slice(0, 500),
+                link: '/inventory',
+            });
+        }
 
         return NextResponse.json({
             success: errors.length === 0,

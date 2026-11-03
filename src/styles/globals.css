@@ -258,7 +258,7 @@ select:disabled {
 
 .theme-select-label {
   color: var(--text-secondary);
-  font-size: 12px;
+  font-size: 13px;
   font-weight: 600;
 }
 
@@ -277,7 +277,7 @@ select:disabled {
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.035), 0 2px 6px var(--shadow);
   color: var(--text);
   font: inherit;
-  font-size: 13px;
+  font-size: 14px;
   font-weight: 500;
   line-height: 1.4;
   text-align: left;
@@ -347,7 +347,7 @@ select:disabled {
   border: 1px solid transparent;
   border-radius: 7px;
   color: var(--text-secondary);
-  font-size: 12px;
+  font-size: 13px;
   font-weight: 500;
   line-height: 1.35;
   cursor: pointer;
@@ -2343,6 +2343,8 @@ a {
 
 .notifications-trigger:focus-visible,
 .notifications-mark-all:focus-visible,
+.notifications-refresh:focus-visible,
+.notifications-status-message button:focus-visible,
 .notification-item:focus-visible {
   outline: 2px solid var(--focus-ring);
   outline-offset: 2px;
@@ -2405,6 +2407,19 @@ a {
   gap: 9px;
 }
 
+.notifications-panel-heading-copy {
+  min-width: 0;
+  display: grid;
+  gap: 3px;
+}
+
+.notifications-panel-title-row {
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
 .notifications-panel-icon,
 .notifications-empty-icon {
   width: 32px;
@@ -2421,9 +2436,47 @@ a {
 .notifications-panel-heading h3 {
   margin: 0;
   color: var(--table-header-text);
-  font-size: 14px;
+  font-size: 15px;
   font-weight: 700;
   white-space: nowrap;
+}
+
+.notifications-panel-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  color: var(--muted);
+  font-size: 11px;
+  line-height: 1.2;
+  white-space: nowrap;
+}
+
+.notifications-panel-status > span {
+  width: 6px;
+  height: 6px;
+  flex: 0 0 6px;
+  border-radius: 50%;
+  background: var(--muted);
+}
+
+.notifications-panel-status.is-connected > span {
+  background: var(--success);
+  box-shadow: 0 0 0 3px var(--success-surface);
+}
+
+.notifications-panel-status.is-polling > span,
+.notifications-panel-status.is-loading > span {
+  background: var(--warning);
+  box-shadow: 0 0 0 3px var(--warning-surface);
+}
+
+.notifications-panel-status.is-error > span {
+  background: var(--danger);
+  box-shadow: 0 0 0 3px var(--danger-surface);
+}
+
+.notifications-panel-status time {
+  color: var(--muted);
 }
 
 .notifications-new-count {
@@ -2449,11 +2502,92 @@ a {
   background: transparent;
   color: var(--brand-primary);
   font: inherit;
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 600;
   white-space: nowrap;
   cursor: pointer;
   transition: background 140ms ease, border-color 140ms ease;
+}
+
+.notifications-panel-header-actions {
+  display: inline-flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 6px;
+}
+
+.notifications-sound {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  min-height: 32px;
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  padding: 6px 8px;
+  background: var(--surface-hover);
+  color: var(--muted);
+  cursor: pointer;
+  font-size: 11px;
+  font-weight: 700;
+  transition: all 0.18s ease;
+}
+
+.notifications-sound:hover,
+.notifications-sound:focus-visible,
+.notifications-sound.is-ready {
+  border-color: color-mix(in srgb, var(--success) 50%, var(--border));
+  color: var(--success);
+  background: color-mix(in srgb, var(--success) 10%, var(--surface-hover));
+  outline: none;
+}
+
+.notifications-refresh {
+  width: 32px;
+  height: 32px;
+  display: inline-grid;
+  place-items: center;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface-hover);
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: color 140ms ease, border-color 140ms ease, background 140ms ease, transform 140ms ease;
+}
+
+.notifications-refresh:hover,
+.notifications-refresh:focus-visible {
+  border-color: color-mix(in srgb, var(--brand-primary) 42%, var(--border));
+  background: var(--brand-surface);
+  color: var(--text);
+  outline: none;
+  transform: rotate(-12deg);
+}
+
+.notifications-refresh:active {
+  transform: rotate(0deg) scale(0.96);
+}
+
+.notifications-status-message {
+  padding: 9px 14px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  border-bottom: 1px solid var(--table-grid-border);
+  background: var(--danger-surface);
+  color: var(--text-secondary);
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+.notifications-status-message button {
+  flex: 0 0 auto;
+  border: 0;
+  background: transparent;
+  color: var(--brand-primary);
+  font: inherit;
+  font-weight: 700;
+  cursor: pointer;
 }
 
 .notifications-mark-all:hover {
@@ -2541,7 +2675,7 @@ a {
 .notification-title-row h4 {
   margin: 0;
   color: var(--text);
-  font-size: 13px;
+  font-size: 14px;
   font-weight: 700;
   line-height: 1.4;
 }
@@ -2564,7 +2698,7 @@ a {
 .notification-message {
   margin: 0 0 9px;
   color: var(--text-secondary);
-  font-size: 12px;
+  font-size: 13px;
   line-height: 1.5;
   overflow-wrap: anywhere;
 }
@@ -2574,7 +2708,7 @@ a {
   align-items: center;
   gap: 5px;
   color: var(--muted);
-  font-size: 10px;
+  font-size: 11px;
   font-weight: 500;
 }
 
@@ -2599,13 +2733,13 @@ a {
 
 .notifications-empty strong {
   color: var(--text);
-  font-size: 14px;
+  font-size: 15px;
 }
 
 .notifications-empty p {
   margin: 0;
   color: var(--muted);
-  font-size: 12px;
+  font-size: 13px;
 }
 
 @keyframes notifications-panel-in {
@@ -2631,6 +2765,18 @@ a {
 
   .notifications-mark-all {
     align-self: flex-end;
+  }
+
+  .notifications-panel-header-actions {
+    width: 100%;
+  }
+
+  .notifications-sound {
+    margin-right: auto;
+  }
+
+  .notifications-refresh {
+    margin-right: auto;
   }
 
   .notifications-list {

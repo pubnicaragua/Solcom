@@ -26,6 +26,33 @@ function getSystemStatus() {
     };
 }
 
+async function saveWebhookLog(
+    supabase: any,
+    request: NextRequest,
+    payload: unknown,
+    status: string,
+    errorMessage?: string | null
+) {
+    if (!supabase) return;
+
+    const headers: Record<string, string> = {};
+    for (const name of ['content-type', 'user-agent', 'x-forwarded-for', 'x-vercel-id']) {
+        const value = request.headers.get(name);
+        if (value) headers[name] = value;
+    }
+
+    const { error } = await supabase.from('webhook_logs').insert({
+        method: request.method,
+        url: request.url,
+        headers,
+        payload,
+        status,
+        error_message: errorMessage || null,
+    });
+
+    if (error) console.warn('[zoho/webhook] No se pudo guardar webhook_logs:', error.message);
+}
+
 // =============================================
 // Helper: Collect Item IDs from ANY Payload Structure
 // =============================================
@@ -259,6 +286,8 @@ async function fallbackItemIdsFromZohoDocuments(
 export async function POST(request: NextRequest) {
     const debugLog: string[] = [];
     const systemStatus = getSystemStatus();
+    let supabase: any = null;
+    let payload: any = {};
 
     try {
         const { searchParams } = new URL(request.url);
@@ -270,7 +299,6 @@ export async function POST(request: NextRequest) {
         }
 
         const contentType = request.headers.get('content-type') || '';
-        let payload: any = {};
 
         if (contentType.includes('application/json')) {
             payload = await request.json();
@@ -286,12 +314,14 @@ export async function POST(request: NextRequest) {
         debugLog.push(`Payload received. Keys: ${payloadKeys.join(', ')}`);
 
         // Use Service Role Client
-        const supabase = createClient(supabaseUrl, supabaseServiceKey);
+        supabase = createClient(supabaseUrl, supabaseServiceKey);
 
         // 1. Cargar bodegas (needed for sync logic)
         const { data: warehouses } = await supabase.from('warehouses').select('id, zoho_warehouse_id, active').not('zoho_warehouse_id', 'is', null);
-        const warehousesData = warehouses || [];
-        const warehouseMap = new Map(warehousesData.map((w: any) => [String(w.zoho_warehouse_id), { id: w.id, active: w.active }]));
+        const warehousesData: any[] = warehouses || [];
+        const warehouseMap = new Map<string, { id: string; active: boolean }>(
+            warehousesData.map((w: any) => [String(w.zoho_warehouse_id), { id: w.id, active: Boolean(w.active) }])
+        );
 
         // 2. Identify Event Type
         // We look for specific top-level keys that Zoho sends
@@ -369,7 +399,9 @@ export async function POST(request: NextRequest) {
             if (zohoIds.length > 0) {
                 // Obtener IDs locales
                 const { data: localItems } = await supabase.from('items').select('id, zoho_item_id').in('zoho_item_id', zohoIds);
-                const localItemMap = new Map(localItems?.map((i: any) => [i.zoho_item_id, i.id]) || []);
+                const localItemMap = new Map<string, string>(
+                    (localItems || []).map((i: any) => [String(i.zoho_item_id), String(i.id)])
+                );
                 const defaultWh = Array.from(warehouseMap.values()).find(w => w.active)?.id;
 
                 const salesEvents = [];
@@ -378,7 +410,7 @@ export async function POST(request: NextRequest) {
                 
                 for (const line of invoiceNode.line_items) {
                     const zId = normalizeItemId(line.item_id || line.product_id);
-                    const localId = localItemMap.get(zId);
+                    const localId = zId ? localItemMap.get(zId) : null;
                     if (localId) {
                         const qty = Number(line.quantity || 1);
                         const userWh = warehouseMap.get(String(line.warehouse_id))?.id || defaultWh;
@@ -434,17 +466,27 @@ export async function POST(request: NextRequest) {
             }
         }
 
-        return NextResponse.json({
+        const responsePayload = {
             success: queueErrors.length === 0,
             requestedCount: dedupedItemIds.length,
             queuedCount,
             coalescedCount,
             errorCount: queueErrors.length,
             debug: debugLog
-        }, { status: queueErrors.length > 0 ? 503 : 200 });
+        };
+        await saveWebhookLog(
+            supabase,
+            request,
+            payload,
+            queueErrors.length > 0 ? 'error' : queuedCount > 0 ? 'queued' : 'received',
+            queueErrors.length > 0 ? queueErrors.join(' | ') : null
+        );
+        return NextResponse.json(responsePayload, { status: queueErrors.length > 0 ? 503 : 200 });
 
     } catch (error) {
-        debugLog.push(`FATAL: ${error instanceof Error ? error.message : 'Unknown'}`);
+        const message = error instanceof Error ? error.message : 'Unknown';
+        debugLog.push(`FATAL: ${message}`);
+        await saveWebhookLog(supabase, request, payload, 'error', message);
         return NextResponse.json({ error: 'Webhook processing failed', debug: debugLog }, { status: 500 });
     }
 }

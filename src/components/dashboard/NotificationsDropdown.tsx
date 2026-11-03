@@ -1,23 +1,28 @@
 'use client';
 
 import { useState, useRef, useEffect } from 'react';
-import { Bell, Check, X, Clock, AlertCircle, Package } from 'lucide-react';
-import { useNotifications } from '@/components/providers/NotificationsProvider';
-
-interface Notification {
-  id: string;
-  type: string;
-  title: string;
-  message: string;
-  created_at: string;
-  is_read: boolean;
-}
+import { Bell, Check, X, Clock, AlertCircle, Package, RefreshCw, Volume2, VolumeX } from 'lucide-react';
+import { useNotifications, type Notification } from '@/components/providers/NotificationsProvider';
 
 export default function NotificationsDropdown() {
   const [isOpen, setIsOpen] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
 
-  const { notifications, unreadCount, markAsRead, markAllAsRead } = useNotifications();
+  const {
+    notifications,
+    unreadCount,
+    status,
+    lastSyncedAt,
+    lastError,
+    soundEnabled,
+    soundReady,
+    enableNotificationSound,
+    unlockNotificationSound,
+    toggleNotificationSound,
+    refreshNotifications,
+    markAsRead,
+    markAllAsRead,
+  } = useNotifications();
 
   useEffect(() => {
     function handleClickOutside(event: MouseEvent) {
@@ -49,7 +54,9 @@ export default function NotificationsDropdown() {
   }
 
   function getTimeAgo(dateString: string) {
-    const seconds = Math.floor((new Date().getTime() - new Date(dateString).getTime()) / 1000);
+    const timestamp = new Date(dateString).getTime();
+    if (!Number.isFinite(timestamp)) return 'Fecha no disponible';
+    const seconds = Math.max(0, Math.floor((new Date().getTime() - timestamp) / 1000));
 
     if (seconds < 60) return 'Hace un momento';
     if (seconds < 3600) return `Hace ${Math.floor(seconds / 60)} min`;
@@ -57,10 +64,28 @@ export default function NotificationsDropdown() {
     return `Hace ${Math.floor(seconds / 86400)} días`;
   }
 
+  function getStatusLabel() {
+    if (status === 'connected') return 'En tiempo real';
+    if (status === 'polling') return 'Actualización periódica';
+    if (status === 'error') return 'Revisar conexión';
+    if (status === 'signed_out') return 'Sesión no disponible';
+    return 'Conectando…';
+  }
+
+  async function handleNotificationClick(notification: Notification) {
+    await markAsRead(notification.id);
+    if (notification.link) window.location.assign(notification.link);
+  }
+
+  function handleTriggerClick() {
+    if (soundEnabled) void unlockNotificationSound();
+    setIsOpen((current) => !current);
+  }
+
   return (
     <div className="notifications-dropdown" ref={dropdownRef}>
       <button
-        onClick={() => setIsOpen(!isOpen)}
+        onClick={handleTriggerClick}
         className={`notifications-trigger${isOpen ? ' is-open' : ''}`}
         type="button"
         aria-label={unreadCount > 0 ? `Notificaciones, ${unreadCount} sin leer` : 'Notificaciones'}
@@ -84,42 +109,83 @@ export default function NotificationsDropdown() {
           <div className="notifications-panel-header">
             <div className="notifications-panel-heading">
               <span className="notifications-panel-icon"><Bell size={16} aria-hidden="true" /></span>
-              <h3>Notificaciones</h3>
+              <div className="notifications-panel-heading-copy">
+                <div className="notifications-panel-title-row">
+                  <h3>Notificaciones</h3>
+                  {unreadCount > 0 && (
+                    <span className="notifications-new-count">{unreadCount} nuevas</span>
+                  )}
+                </div>
+                <div className={`notifications-panel-status is-${status}`}>
+                  <span aria-hidden="true" />
+                  {getStatusLabel()}
+                  {lastSyncedAt && status !== 'signed_out' && (
+                    <time dateTime={lastSyncedAt}> · {getTimeAgo(lastSyncedAt)}</time>
+                  )}
+                </div>
+              </div>
+            </div>
+            <div className="notifications-panel-header-actions">
+              <button
+                onClick={() => void (soundEnabled ? toggleNotificationSound() : enableNotificationSound())}
+                className={`notifications-sound${soundReady ? ' is-ready' : ''}`}
+                type="button"
+                aria-label={soundEnabled ? 'Desactivar sonido de notificaciones' : 'Activar sonido de notificaciones'}
+                aria-pressed={soundEnabled}
+                title={soundEnabled ? (soundReady ? 'Sonido activo' : 'Activar y probar sonido') : 'Activar sonido'}
+              >
+                {soundEnabled ? <Volume2 size={15} aria-hidden="true" /> : <VolumeX size={15} aria-hidden="true" />}
+                <span>Sonido</span>
+              </button>
+              <button
+                onClick={() => void refreshNotifications()}
+                className="notifications-refresh"
+                type="button"
+                aria-label="Actualizar notificaciones"
+                title="Actualizar notificaciones"
+              >
+                <RefreshCw size={15} aria-hidden="true" />
+              </button>
               {unreadCount > 0 && (
-                <span className="notifications-new-count">{unreadCount} nuevas</span>
+                <button
+                  onClick={() => void markAllAsRead()}
+                  className="notifications-mark-all"
+                  type="button"
+                >
+                  <Check size={14} aria-hidden="true" />
+                  <span>Marcar todas como leídas</span>
+                </button>
               )}
             </div>
-            {unreadCount > 0 && (
-              <button
-                onClick={markAllAsRead}
-                className="notifications-mark-all"
-                type="button"
-              >
-                <Check size={14} aria-hidden="true" />
-                <span>Marcar todas como leídas</span>
-              </button>
-            )}
           </div>
+
+          {status === 'error' && (
+            <div className="notifications-status-message" role="alert">
+              <span>{lastError || 'No pudimos sincronizar las notificaciones.'}</span>
+              <button type="button" onClick={() => void refreshNotifications()}>Reintentar</button>
+            </div>
+          )}
 
           <div className="notifications-list">
             {notifications.length === 0 ? (
               <div className="notifications-empty">
                 <span className="notifications-empty-icon"><Bell size={22} aria-hidden="true" /></span>
-                <strong>Estás al día</strong>
-                <p>No tienes notificaciones pendientes.</p>
+                <strong>{status === 'error' ? 'No pudimos sincronizar' : 'Estás al día'}</strong>
+                <p>{status === 'error' ? 'Usa Actualizar para volver a consultar el historial.' : 'No tienes notificaciones pendientes.'}</p>
               </div>
             ) : (
-              notifications.map((notification: Notification) => (
+              notifications.map((notification) => (
                 <div
                   key={notification.id}
                   className={`notification-item${notification.is_read ? ' is-read' : ' is-unread'}`}
-                  onClick={() => markAsRead(notification.id)}
+                  onClick={() => void handleNotificationClick(notification)}
                   role="button"
                   tabIndex={0}
+                  aria-label={`${notification.title}. ${notification.is_read ? 'Leída' : 'Sin leer'}`}
                   onKeyDown={(event) => {
                     if (event.key === 'Enter' || event.key === ' ') {
                       event.preventDefault();
-                      markAsRead(notification.id);
+                      void handleNotificationClick(notification);
                     }
                   }}
                 >

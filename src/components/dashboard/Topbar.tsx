@@ -62,7 +62,7 @@ export default function Topbar() {
 
       <div className="topbar-content" style={{ flex: 1, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
         <div className="topbar-date">
-          <div style={{ fontSize: 12, color: 'var(--muted)' }}>
+          <div style={{ fontSize: 13, color: 'var(--muted)' }}>
             {new Date().toLocaleDateString('es-NI', {
               weekday: 'long',
               year: 'numeric',

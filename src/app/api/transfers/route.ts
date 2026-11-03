@@ -3,6 +3,7 @@ import { NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 import { createServerClient } from '@/lib/supabase/server';
 import { createZohoBooksClient } from '@/lib/zoho/books-client';
+import { notifyRoles } from '@/lib/notifications/server';
 
 export const dynamic = 'force-dynamic';
 
@@ -476,6 +477,14 @@ export async function POST(request: Request) {
                 zohoTransfer,
             }, { status: 500 });
         }
+
+        await notifyRoles({
+            roles: ['admin', 'manager'],
+            type: 'new_transfer',
+            title: 'Nueva transferencia creada',
+            message: `La transferencia ${zohoTransfer.transfer_order_number || zohoTransfer.transfer_order_id} está en proceso entre bodegas.`,
+            link: '/transfers',
+        });
 
         return NextResponse.json(inserted);
 
