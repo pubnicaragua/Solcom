@@ -44,6 +44,7 @@ export interface PivotData {
     items: PivotItem[];
     totalBeforeFilter?: number;
     totalSkuCount?: number;
+    lastSync?: string | null;
 }
 
 interface PivotInventoryTableProps {

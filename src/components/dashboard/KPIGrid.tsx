@@ -20,6 +20,21 @@ interface KPIGridProps {
   needsSummary?: boolean;
 }
 
+function formatSyncTimestamp(value: string | null | undefined): string {
+  if (!value) return 'No disponible';
+
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return 'No disponible';
+
+  return date.toLocaleString('es-NI', {
+    day: '2-digit',
+    month: '2-digit',
+    year: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+  });
+}
+
 export default function KPIGrid({ pivotData, needsSummary = false }: KPIGridProps) {
   const [kpis, setKpis] = useState<KPIData>({
     totalSKUs: 0,
@@ -27,13 +42,7 @@ export default function KPIGrid({ pivotData, needsSummary = false }: KPIGridProp
     totalStock: 0,
     totalValue: 0,
     activeWarehouses: 0,
-    lastSync: new Date().toLocaleString('es-NI', {
-      day: '2-digit',
-      month: '2-digit',
-      year: 'numeric',
-      hour: '2-digit',
-      minute: '2-digit'
-    }),
+    lastSync: 'No disponible',
   });
   const [loading, setLoading] = useState(true);
   const [summaryError, setSummaryError] = useState(false);
@@ -94,13 +103,7 @@ export default function KPIGrid({ pivotData, needsSummary = false }: KPIGridProp
       totalStock,
       totalValue,
       activeWarehouses: pivotData.warehouses.length,
-      lastSync: new Date().toLocaleString('es-NI', {
-        day: '2-digit',
-        month: '2-digit',
-        year: 'numeric',
-        hour: '2-digit',
-        minute: '2-digit'
-      }),
+      lastSync: formatSyncTimestamp(pivotData.lastSync),
     });
     setSummaryError(false);
     setLoading(false);

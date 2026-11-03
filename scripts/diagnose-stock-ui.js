@@ -3,11 +3,34 @@ require('dotenv').config({ path: '.env.local' });
 
 const supabase = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY);
 
+const PAGE_SIZE = 1000;
+
+async function fetchAllRows(buildQuery) {
+    const rows = [];
+    let from = 0;
+
+    while (true) {
+        const { data, error } = await buildQuery().range(from, from + PAGE_SIZE - 1);
+        if (error) throw error;
+
+        rows.push(...(data || []));
+        if (!data || data.length < PAGE_SIZE) break;
+        from += PAGE_SIZE;
+    }
+
+    return rows;
+}
+
 async function diagnose() {
     console.log('--- DIAGNOSTICANDO STOCK ACTUAL ---');
 
-    const { data: items } = await supabase.from('items').select('id, name, sku, stock_total').not('stock_total', 'is', null);
-    const { data: balances } = await supabase.from('inventory_balance').select('item_id, qty_on_hand, warehouses!inner(active, name)');
+    const items = await fetchAllRows(() => supabase
+        .from('items')
+        .select('id, name, sku, stock_total')
+        .not('stock_total', 'is', null));
+    const balances = await fetchAllRows(() => supabase
+        .from('inventory_balance')
+        .select('item_id, qty_on_hand, warehouses!inner(active, name)'));
 
     let wrongItems = [];
 

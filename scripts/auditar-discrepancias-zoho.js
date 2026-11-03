@@ -176,10 +176,25 @@ async function main() {
 
     const erpByZohoId = new Map();
     const erpBySku = new Map();
+    const erpByNormalizedSku = new Map();
     for (const e of erpItems) {
         if (e.zoho_item_id) erpByZohoId.set(String(e.zoho_item_id), e);
-        if (e.sku) erpBySku.set(e.sku, e);
+        if (e.sku) {
+            erpBySku.set(e.sku, e);
+            const normalizedSku = String(e.sku).trim().toUpperCase();
+            if (!erpByNormalizedSku.has(normalizedSku)) erpByNormalizedSku.set(normalizedSku, []);
+            erpByNormalizedSku.get(normalizedSku).push(e);
+        }
     }
+
+    const duplicateSkuGroups = [...erpByNormalizedSku.entries()]
+        .filter(([, rows]) => rows.length > 1)
+        .map(([sku, rows]) => ({
+            sku,
+            rows,
+            stockTotal: rows.reduce((sum, row) => sum + Number(row.stock_total || 0), 0),
+        }))
+        .sort((a, b) => b.stockTotal - a.stockTotal);
 
     // 5. Compare
     console.log('\n5️⃣  Comparando...\n');
@@ -234,6 +249,18 @@ async function main() {
     console.log(`   Stock diferente (Zoho vs ERP):    ${stockMismatches.length}`);
     console.log(`   En Zoho pero NO en ERP:           ${missingInErp.length}`);
     console.log(`   En ERP con stock pero NO en Zoho: ${missingInZoho.length}`);
+    console.log(`   SKUs duplicados dentro del ERP:   ${duplicateSkuGroups.length}`);
+
+    if (duplicateSkuGroups.length > 0) {
+        console.log(`\n🟣 SKUs DUPLICADOS EN ERP — mostrando hasta 20:\n`);
+        for (const group of duplicateSkuGroups.slice(0, 20)) {
+            console.log(`   [${group.sku}] ${group.rows.length} registros | stock combinado: ${group.stockTotal}`);
+            for (const row of group.rows) {
+                console.log(`      - ${row.name || 'Sin nombre'} | Zoho: ${row.zoho_item_id || 'sin ID'} | stock: ${row.stock_total || 0}`);
+            }
+        }
+        if (duplicateSkuGroups.length > 20) console.log(`   ... y ${duplicateSkuGroups.length - 20} SKUs duplicados más`);
+    }
 
     if (stockMismatches.length > 0) {
         console.log(`\n\n🔴 DISCREPANCIAS DE STOCK (Zoho vs ERP) — mostrando hasta 50:\n`);

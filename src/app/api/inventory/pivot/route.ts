@@ -9,12 +9,37 @@ import {
 } from '@/lib/auth/warehouse-permissions';
 import { getEffectiveModuleAccess, hasModuleAccess } from '@/lib/auth/module-permissions';
 
-function sanitizeSearchTerm(raw: string): string {
-    return raw
-        .trim()
-        .replace(/[,%()'"]/g, ' ')
-        .replace(/\s+/g, ' ')
+function normalizeSearchText(value: unknown): string {
+    return String(value ?? '')
+        .normalize('NFD')
+        .replace(/[\u0300-\u036f]/g, '')
+        .toLocaleLowerCase()
+        .replace(/[^\p{L}\p{N}]+/gu, ' ')
         .trim();
+}
+
+function getSearchTokens(raw: string): string[] {
+    return normalizeSearchText(raw)
+        .split(/\s+/)
+        .filter(Boolean);
+}
+
+function getItemSearchText(item: any): string {
+    return normalizeSearchText([
+        item?.name,
+        item?.sku,
+        item?.marca,
+        item?.category,
+        item?.color,
+        item?.state,
+    ].filter(Boolean).join(' '));
+}
+
+function maxTimestamp(current: string | null, candidate: unknown): string | null {
+    const value = String(candidate ?? '').trim();
+    if (!value || Number.isNaN(Date.parse(value))) return current;
+    if (!current || Date.parse(value) > Date.parse(current)) return value;
+    return current;
 }
 
 function normalizeItemState(value: unknown): 'NUEVO' | 'USADO' | null {
@@ -36,7 +61,10 @@ export const dynamic = 'force-dynamic';
 export async function GET(request: Request) {
     try {
         const { searchParams } = new URL(request.url);
-        const search = sanitizeSearchTerm(searchParams.get('search') || '');
+        const rawSearch = searchParams.get('search') || '';
+        const searchTokens = getSearchTokens(rawSearch);
+        const search = searchTokens.join(' ');
+        const searchAnchor = [...searchTokens].sort((a, b) => b.length - a.length)[0] || '';
         const warehouse = (searchParams.get('warehouse') || '').trim();
         const parentWarehouse = (searchParams.get('parent_warehouse') || '').trim();
         const state = searchParams.get('state') || '';
@@ -146,11 +174,14 @@ export async function GET(request: Request) {
             });
         }
 
-        // 2) Fetch items with filters (search precision-first)
-        const buildItemsQuery = (searchMode: 'prefix' | 'contains' | null) => {
+        // 2) Fetch items with filters.
+        // Search uses one safe anchor token in PostgREST and then requires every
+        // token in the normalized item text. This handles names such as
+        // "A17 (128GB_4GB RAM) DS" regardless of punctuation or spacing.
+        const buildItemsQuery = (searchMode: 'anchor' | null) => {
             let itemsQuery = supabase
                 .from('items')
-                .select('id, sku, name, color, state, category, marca, stock_total, price, zoho_item_id')
+                .select('id, sku, name, color, state, category, marca, stock_total, price, zoho_item_id, updated_at')
                 .is('zoho_removed_at', null);
 
             if (marca) itemsQuery = itemsQuery.eq('marca', marca);
@@ -158,12 +189,11 @@ export async function GET(request: Request) {
             if (state) itemsQuery = itemsQuery.eq('state', state);
             if (category) itemsQuery = itemsQuery.ilike('category', `%${category}%`);
 
-            if (search) {
-                if (searchMode === 'prefix') {
-                    itemsQuery = itemsQuery.or(`sku.eq.${search},sku.ilike.${search}%,name.ilike.${search}%`);
-                } else if (searchMode === 'contains') {
-                    itemsQuery = itemsQuery.or(`sku.ilike.%${search}%,name.ilike.%${search}%`);
-                }
+            if (search && searchMode === 'anchor' && searchAnchor) {
+                const pattern = `%${searchAnchor}%`;
+                itemsQuery = itemsQuery.or(
+                    `sku.ilike.${pattern},name.ilike.${pattern},marca.ilike.${pattern},category.ilike.${pattern},color.ilike.${pattern}`
+                );
             }
 
             return itemsQuery;
@@ -202,36 +232,36 @@ export async function GET(request: Request) {
 
         let allItems: any[] = [];
         if (search) {
-            allItems = await fetchAllItems(buildItemsQuery('prefix'));
-            if (allItems.length === 0) {
-                allItems = await fetchAllItems(buildItemsQuery('contains'));
-            }
+            const anchorCandidates = await fetchAllItems(buildItemsQuery('anchor'));
+            allItems = anchorCandidates.filter((item: any) => {
+                const searchableText = getItemSearchText(item);
+                return searchTokens.every((token) => searchableText.includes(token));
+            });
         } else {
             allItems = await fetchAllItems(buildItemsQuery(null));
         }
 
         console.log('Pivot API - active warehouses:', activeWarehouses.length, 'all warehouses:', allWarehouses.length, 'items:', allItems.length);
 
-        // Deduplicate items by SKU — keep the one with zoho_item_id (preferred)
-        const skuMap = new Map<string, any>();
-        for (const item of allItems) {
-            const existing = skuMap.get(item.sku);
-            if (!existing) {
-                skuMap.set(item.sku, item);
-            } else {
-                // Prefer the one with a zoho_item_id
-                if (!existing.zoho_item_id && item.zoho_item_id) {
-                    skuMap.set(item.sku, item);
-                }
-            }
-        }
-        let items = Array.from(skuMap.values());
+        const latestSyncAt = allItems.reduce(
+            (latest: string | null, item: any) => maxTimestamp(latest, item.updated_at),
+            null
+        );
+
+        // Do not discard duplicate SKUs. Zoho can contain two item records with
+        // the same SKU, and choosing one arbitrarily can hide valid stock.
+        // Zero-stock duplicates remain hidden by the normal showZeroStock filter.
+        let items = allItems;
+        const uniqueSkuCount = new Set(
+            items.map((item: any) => normalizeSearchText(item.sku) || item.id)
+        ).size;
         if (items.length === 0) {
             return NextResponse.json({
                 warehouses: activeWarehouses.map(w => ({ code: w.code, name: w.name })),
                 items: [],
                 totalBeforeFilter: 0,
-                totalSkuCount: 0,
+                totalSkuCount: uniqueSkuCount,
+                lastSync: latestSyncAt,
                 selectedWarehouse: selectedWarehouse ? { id: selectedWarehouse.id, code: selectedWarehouse.code } : null,
             });
         }
@@ -307,7 +337,8 @@ export async function GET(request: Request) {
                     warehouses: activeWarehouses.map((w: any) => ({ code: w.code, name: w.name })),
                     items: [],
                     totalBeforeFilter: 0,
-                    totalSkuCount: 0,
+                    totalSkuCount: uniqueSkuCount,
+                    lastSync: latestSyncAt,
                     model: 'inventory_balance',
                     usedSnapshotGapFill: false,
                     selectedWarehouse: { id: selectedWarehouse.id, code: selectedWarehouse.code },
@@ -607,7 +638,8 @@ export async function GET(request: Request) {
                 warehouses: familyWarehouses.map((w) => ({ code: w.code, name: w.name })),
                 items: familyFinalItems,
                 totalBeforeFilter: familyItemsAfterStockLevel.length,
-                totalSkuCount: items.length,
+                totalSkuCount: uniqueSkuCount,
+                lastSync: latestSyncAt,
                 model: usingBalanceModel ? 'inventory_balance' : 'stock_snapshots',
                 usedSnapshotGapFill,
                 selectedWarehouse: null,
@@ -620,7 +652,8 @@ export async function GET(request: Request) {
             warehouses: activeWarehouses.map((w: any) => ({ code: w.code, name: w.name })),
             items: finalItems,
             totalBeforeFilter: itemsAfterStockLevel.length,
-            totalSkuCount: items.length,
+            totalSkuCount: uniqueSkuCount,
+            lastSync: latestSyncAt,
             model: usingBalanceModel ? 'inventory_balance' : 'stock_snapshots',
             usedSnapshotGapFill,
             selectedWarehouse: selectedWarehouse ? { id: selectedWarehouse.id, code: selectedWarehouse.code } : null,

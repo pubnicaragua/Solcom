@@ -8,23 +8,37 @@ const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
 const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
 const supabase = createClient(supabaseUrl, supabaseKey);
 
+const PAGE_SIZE = 1000;
+
+async function fetchAllRows(buildQuery) {
+    const rows = [];
+    let from = 0;
+
+    while (true) {
+        const { data, error } = await buildQuery().range(from, from + PAGE_SIZE - 1);
+        if (error) throw error;
+
+        rows.push(...(data || []));
+        if (!data || data.length < PAGE_SIZE) break;
+        from += PAGE_SIZE;
+    }
+
+    return rows;
+}
+
 async function checkDiscrepancies() {
     console.log('--- Checking Stock Discrepancies ---');
 
     // 1. Fetch all items
-    const { data: items, error: itemsError } = await supabase
+    const items = await fetchAllRows(() => supabase
         .from('items')
         .select('id, sku, name, stock_total, zoho_item_id')
-        .is('zoho_removed_at', null);
-
-    if (itemsError) throw itemsError;
+        .is('zoho_removed_at', null));
 
     // 2. Fetch all inventory balances
-    const { data: balances, error: balanceError } = await supabase
+    const balances = await fetchAllRows(() => supabase
         .from('inventory_balance')
-        .select('item_id, qty_on_hand');
-
-    if (balanceError) throw balanceError;
+        .select('item_id, qty_on_hand'));
 
     // 3. Aggregate balances by item
     const calcStock = new Map();
