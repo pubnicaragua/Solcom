@@ -16,7 +16,7 @@ const MOCK_PERMISSIONS = [
   { code: 'inventory.edit',   name: 'Modificar Inventario', module: 'inventory', description: 'Editar productos y stock' },
   { code: 'inventory.delete', name: 'Eliminar Productos',  module: 'inventory', description: 'Eliminar productos del inventario' },
   { code: 'inventory.import', name: 'Importar Inventario', module: 'inventory', description: 'Importar datos de inventario' },
-  { code: 'inventory.export', name: 'Exportar Inventario', module: 'inventory', description: 'Exportar inventario a CSV/PDF' },
+  { code: 'inventory.export', name: 'Exportar Inventario', module: 'inventory', description: 'Descargar inventario en CSV, Excel y PDF' },
   { code: 'ventas.view',      name: 'Ver Ventas',          module: 'ventas',    description: 'Ver registro de ventas y cotizaciones' },
   { code: 'ventas.create',    name: 'Crear Ventas',        module: 'ventas',    description: 'Crear y modificar ventas' },
   { code: 'ventas.create_quote', name: 'Crear Cotización', module: 'ventas', description: 'Permite crear cotizaciones' },

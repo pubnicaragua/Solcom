@@ -5,11 +5,11 @@ import Card from '@/components/ui/Card';
 import Input from '@/components/ui/Input';
 import Select from '@/components/ui/Select';
 import Button from '@/components/ui/Button';
-import { Search, Filter, Download } from 'lucide-react';
+import { Search, Filter, Download, FileSpreadsheet } from 'lucide-react';
 
 interface FiltersProps {
   onFilterChange?: (filters: any) => void;
-  onExport?: () => void;
+  onExport?: (format?: 'csv' | 'excel') => void;
 }
 
 export default function InventoryFilters({ onFilterChange, onExport }: FiltersProps) {
@@ -164,9 +164,13 @@ export default function InventoryFilters({ onFilterChange, onExport }: FiltersPr
             >
               Limpiar filtros
             </Button>
-            <Button variant="secondary" size="sm" onClick={onExport}>
+            <Button variant="secondary" size="sm" onClick={() => onExport?.('excel')}>
+              <FileSpreadsheet size={16} />
+              Exportar Excel
+            </Button>
+            <Button variant="ghost" size="sm" onClick={() => onExport?.('csv')}>
               <Download size={16} />
-              Exportar CSV
+              CSV
             </Button>
           </div>
         </div>
