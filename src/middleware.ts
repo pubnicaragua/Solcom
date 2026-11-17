@@ -41,6 +41,18 @@ const timedFetch: typeof fetch = async (input, init) => {
 };
 
 type SupabaseServerClient = ReturnType<typeof createServerClient>;
+type AuthCookieMutation = { value: string; options: CookieOptions };
+
+function redirectPreservingAuthCookies(
+  destination: URL,
+  mutations: Map<string, AuthCookieMutation>,
+) {
+  const redirectResponse = NextResponse.redirect(destination);
+  for (const [name, mutation] of mutations) {
+    redirectResponse.cookies.set({ name, value: mutation.value, ...mutation.options });
+  }
+  return redirectResponse;
+}
 
 async function getModuleAccessForUser(
   supabase: SupabaseServerClient,
@@ -102,6 +114,11 @@ export async function middleware(request: NextRequest) {
     return response;
   }
 
+  // Supabase may rotate the access/refresh token while getUser() runs. Keep
+  // those Set-Cookie mutations when a protected/public route is redirected;
+  // otherwise the browser receives the redirect but loses the renewed session.
+  const authCookieMutations = new Map<string, AuthCookieMutation>();
+
   const supabase = createServerClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
@@ -114,6 +131,7 @@ export async function middleware(request: NextRequest) {
           return request.cookies.get(name)?.value;
         },
         set(name: string, value: string, options: CookieOptions) {
+          authCookieMutations.set(name, { value, options });
           request.cookies.set({
             name,
             value,
@@ -131,6 +149,7 @@ export async function middleware(request: NextRequest) {
           });
         },
         remove(name: string, options: CookieOptions) {
+          authCookieMutations.set(name, { value: '', options });
           request.cookies.set({
             name,
             value: '',
@@ -168,44 +187,52 @@ export async function middleware(request: NextRequest) {
   // If auth is temporarily down, keep public routes reachable and fail closed on protected ones.
   if (userError && !user) {
     if (isPublicRoute) return response;
-    if (isClientRoute) return NextResponse.redirect(new URL('/login-clientes', request.url));
-    return NextResponse.redirect(new URL('/login', request.url));
+    if (isClientRoute) {
+      return redirectPreservingAuthCookies(new URL('/login-clientes', request.url), authCookieMutations);
+    }
+    return redirectPreservingAuthCookies(new URL('/login', request.url), authCookieMutations);
   }
 
   if (user && isClientPortalUser(user.id)) {
     if (isClientRoute) return response;
-    return NextResponse.redirect(new URL('/cliente/dashboard', request.url));
+    return redirectPreservingAuthCookies(new URL('/cliente/dashboard', request.url), authCookieMutations);
   }
 
   if (path === '/' && user) {
     try {
       const moduleAccess = await getModuleAccessForUser(supabase, user.id);
-      return NextResponse.redirect(new URL(getFallbackPath(moduleAccess), request.url));
+      return redirectPreservingAuthCookies(
+        new URL(getFallbackPath(moduleAccess), request.url),
+        authCookieMutations,
+      );
     } catch (_error) {
-      return NextResponse.redirect(new URL('/inventory', request.url));
+      return redirectPreservingAuthCookies(new URL('/inventory', request.url), authCookieMutations);
     }
   }
 
   if (path === '/' && !user) {
-    return NextResponse.redirect(new URL('/login', request.url));
+    return redirectPreservingAuthCookies(new URL('/login', request.url), authCookieMutations);
   }
 
   if (!user && !isPublicRoute && !isClientRoute) {
-    return NextResponse.redirect(new URL('/login', request.url));
+    return redirectPreservingAuthCookies(new URL('/login', request.url), authCookieMutations);
   }
 
   if (user && isPublicRoute && !path.startsWith('/login-clientes') && !isScannerRoute) {
     try {
       const moduleAccess = await getModuleAccessForUser(supabase, user.id);
-      return NextResponse.redirect(new URL(getFallbackPath(moduleAccess), request.url));
+      return redirectPreservingAuthCookies(
+        new URL(getFallbackPath(moduleAccess), request.url),
+        authCookieMutations,
+      );
     } catch (_error) {
-      return NextResponse.redirect(new URL('/inventory', request.url));
+      return redirectPreservingAuthCookies(new URL('/inventory', request.url), authCookieMutations);
     }
   }
 
   // Permitir acceso a rutas de cliente si está autenticado
   if (isClientRoute && !user) {
-    return NextResponse.redirect(new URL('/login-clientes', request.url));
+    return redirectPreservingAuthCookies(new URL('/login-clientes', request.url), authCookieMutations);
   }
 
   // Si es ruta de cliente y está autenticado, permitir acceso sin verificar rol
@@ -234,7 +261,7 @@ export async function middleware(request: NextRequest) {
         if (isClientRoute) {
           return response;
         }
-        return NextResponse.redirect(new URL('/login-clientes', request.url));
+        return redirectPreservingAuthCookies(new URL('/login-clientes', request.url), authCookieMutations);
       }
 
       const userRole = normalizeRole(profile?.role || 'operator');
@@ -245,7 +272,10 @@ export async function middleware(request: NextRequest) {
 
       const hasAccess = canAccessPath(path, moduleAccess);
       if (!hasAccess && !isPublicRoute && !isClientRoute) {
-        return NextResponse.redirect(new URL(getFallbackPath(moduleAccess), request.url));
+        return redirectPreservingAuthCookies(
+          new URL(getFallbackPath(moduleAccess), request.url),
+          authCookieMutations,
+        );
       }
     } catch (_error) {
       return response;

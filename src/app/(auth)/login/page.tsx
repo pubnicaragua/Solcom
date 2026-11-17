@@ -1,11 +1,12 @@
 'use client';
 
-import { useEffect, useMemo, useState, type CSSProperties, type FormEvent } from 'react';
+import { useEffect, useState, type CSSProperties, type FormEvent } from 'react';
 import { useRouter } from 'next/navigation';
-import { createBrowserClient } from '@supabase/ssr';
+import type { Session } from '@supabase/supabase-js';
 import AuthShell from '@/components/auth/AuthShell';
 import { AlertCircle, CheckCircle2, Eye, EyeOff, KeyRound, Loader2, LogIn, Mail } from 'lucide-react';
 import { isClientPortalUser } from '@/lib/auth/client-portal';
+import { supabase } from '@/lib/supabase/client';
 
 const GENERIC_AUTH_ERROR = 'Credenciales invalidas o acceso no autorizado.';
 
@@ -19,10 +20,6 @@ function resolveLoginError(error: unknown): string {
 
 export default function LoginPage() {
   const router = useRouter();
-  const supabase = useMemo(() => createBrowserClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-  ), []);
   const [authStage, setAuthStage] = useState<'idle' | 'validating' | 'redirecting'>('idle');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -48,6 +45,38 @@ export default function LoginPage() {
     const timer = window.setTimeout(() => setAuthSlow(true), 2500);
     return () => window.clearTimeout(timer);
   }, [loading, resetMode]);
+
+  useEffect(() => {
+    if (resetMode) return undefined;
+
+    let active = true;
+    let redirected = false;
+
+    const redirectForExistingSession = (session: Pick<Session, 'user'> | null) => {
+      if (!active || redirected || !session?.user) return;
+      redirected = true;
+      setLoading(true);
+      setAuthStage('redirecting');
+      router.replace(isClientPortalUser(session.user.id) ? '/cliente/dashboard' : '/inventory');
+    };
+
+    // Recover a cookie-backed session when the user opens /login directly.
+    // getUser validates the token instead of trusting stale browser storage.
+    void supabase.auth.getUser().then(({ data, error }) => {
+      if (!error && data.user) {
+        redirectForExistingSession({ user: data.user });
+      }
+    });
+
+    const { data: authListener } = supabase.auth.onAuthStateChange((_event, session) => {
+      redirectForExistingSession(session);
+    });
+
+    return () => {
+      active = false;
+      authListener.subscription.unsubscribe();
+    };
+  }, [resetMode, router]);
 
   async function handleLogin(e: FormEvent) {
     e.preventDefault();
