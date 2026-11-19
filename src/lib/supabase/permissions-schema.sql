@@ -126,9 +126,10 @@ INSERT INTO role_permissions (role, permission_code) VALUES
   ('manager', 'alistamiento.write')
 ON CONFLICT (role, permission_code) DO NOTHING;
 
--- Operator (Vendedor): Solo lectura de inventario
+-- Operator (Vendedor): Lectura y exportación de inventario
 INSERT INTO role_permissions (role, permission_code) VALUES
   ('operator', 'inventory.read'),
+  ('operator', 'inventory.export'),
   ('operator', 'reports.read'),
   ('operator', 'ventas.read'),
   ('operator', 'ventas.write'),
