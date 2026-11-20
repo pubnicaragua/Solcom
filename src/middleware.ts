@@ -19,8 +19,32 @@ function normalizeRole(value: unknown): AppRole {
   return 'operator';
 }
 
-const AUTH_REQUEST_TIMEOUT_MS = 3500;
+// Keep the middleware bounded when Supabase Auth is degraded. The browser can
+// still render the login page and the API layer remains responsible for
+// authorizing protected data requests.
+const AUTH_REQUEST_TIMEOUT_MS = 1800;
 const MODULE_ACCESS_TIMEOUT_MS = 1800;
+
+function isTransientAuthError(error: unknown) {
+  const candidate = error as { status?: unknown; statusCode?: unknown; name?: unknown; message?: unknown } | null;
+  const status = Number(candidate?.status ?? candidate?.statusCode ?? 0);
+  const name = String(candidate?.name ?? '').toLowerCase();
+  const message = String(candidate?.message ?? error ?? '').toLowerCase();
+
+  if (status >= 500 || status === 0) return true;
+  if (status === 400 || status === 401 || status === 403) return false;
+
+  return (
+    name.includes('retryable') ||
+    message.includes('abort') ||
+    message.includes('timeout') ||
+    message.includes('timed out') ||
+    message.includes('upstream') ||
+    message.includes('network') ||
+    message.includes('fetch') ||
+    message.includes('gateway')
+  );
+}
 
 const timedFetch: typeof fetch = async (input, init) => {
   const controller = new AbortController();
@@ -136,6 +160,13 @@ export async function middleware(request: NextRequest) {
     return response;
   }
 
+  // Do not make /login wait for a remote Auth validation before it can render.
+  // The client checks the persisted session locally and the next protected
+  // request still goes through this middleware and the API authorization.
+  if (path === '/login' || path.startsWith('/login/') || path === '/login-clientes') {
+    return response;
+  }
+
   // Supabase may rotate the access/refresh token while getUser() runs. Keep
   // those Set-Cookie mutations when a protected/public route is redirected;
   // otherwise the browser receives the redirect but loses the renewed session.
@@ -206,8 +237,11 @@ export async function middleware(request: NextRequest) {
     userError = error;
   }
 
-  // If auth is temporarily down, keep public routes reachable and fail closed on protected ones.
+  // If Auth is temporarily down, keep the current route reachable. A transient
+  // 5xx/timeout must not look like an invalid password or force a valid user
+  // back to the login page. Protected API routes still enforce the user token.
   if (userError && !user) {
+    if (isTransientAuthError(userError)) return response;
     if (isPublicRoute) return response;
     if (isClientRoute) {
       return redirectPreservingAuthCookies(new URL('/login-clientes', request.url), authCookieMutations);

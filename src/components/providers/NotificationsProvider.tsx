@@ -266,17 +266,6 @@ export default function NotificationsProvider({ children }: { children: React.Re
             showToastAndPlaySound(newNotification);
           }
         )
-        .on(
-          'postgres_changes',
-          { event: 'UPDATE', schema: 'public', table: 'notifications', filter: `user_id=eq.${userId}` },
-          (payload) => {
-            const updatedNotification = payload.new as Notification;
-            setNotifications((current) => current.map((notification) => (
-              notification.id === updatedNotification.id ? updatedNotification : notification
-            )));
-            setLastSyncedAt(new Date().toISOString());
-          }
-        )
         .subscribe((subscriptionStatus) => {
           if (disposed) return;
           if (subscriptionStatus === 'SUBSCRIBED') {

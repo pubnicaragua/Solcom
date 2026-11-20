@@ -11,9 +11,22 @@ import { supabase } from '@/lib/supabase/client';
 const GENERIC_AUTH_ERROR = 'Credenciales invalidas o acceso no autorizado.';
 
 function resolveLoginError(error: unknown): string {
-  const message = String((error as any)?.message || error || '').toLowerCase();
-  if (message.includes('network') || message.includes('fetch') || message.includes('timeout')) {
-    return 'No se pudo conectar con el servicio. Intenta nuevamente.';
+  const candidate = error as { status?: unknown; message?: unknown } | null;
+  const status = Number(candidate?.status ?? 0);
+  const message = String(candidate?.message || error || '').toLowerCase();
+  if (
+    status >= 500 ||
+    message.includes('network') ||
+    message.includes('fetch') ||
+    message.includes('timeout') ||
+    message.includes('timed out') ||
+    message.includes('upstream') ||
+    message.includes('gateway')
+  ) {
+    return 'El servicio de autenticación está temporalmente lento. Espera unos segundos e inténtalo nuevamente.';
+  }
+  if (status === 429 || message.includes('rate limit') || message.includes('too many')) {
+    return 'Hay muchos intentos en curso. Espera un momento e inténtalo nuevamente.';
   }
   return GENERIC_AUTH_ERROR;
 }
@@ -60,11 +73,12 @@ export default function LoginPage() {
       router.replace(isClientPortalUser(session.user.id) ? '/cliente/dashboard' : '/inventory');
     };
 
-    // Recover a cookie-backed session when the user opens /login directly.
-    // getUser validates the token instead of trusting stale browser storage.
-    void supabase.auth.getUser().then(({ data, error }) => {
-      if (!error && data.user) {
-        redirectForExistingSession({ user: data.user });
+    // Recover a persisted session locally. Middleware and protected APIs still
+    // validate the token server-side; /login should not block on an extra Auth
+    // round trip before the form is usable.
+    void supabase.auth.getSession().then(({ data, error }) => {
+      if (!error && data.session?.user) {
+        redirectForExistingSession({ user: data.session.user });
       }
     });
 
@@ -101,7 +115,7 @@ export default function LoginPage() {
       });
 
       if (authError) {
-        setError(GENERIC_AUTH_ERROR);
+        setError(resolveLoginError(authError));
         setAuthStage('idle');
         setLoading(false);
         return;

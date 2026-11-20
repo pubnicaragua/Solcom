@@ -10,9 +10,22 @@ import { isClientPortalUser } from '@/lib/auth/client-portal';
 const GENERIC_AUTH_ERROR = 'Credenciales invalidas o acceso no autorizado.';
 
 function resolveClientLoginError(error: unknown): string {
-  const message = String((error as any)?.message || error || '').toLowerCase();
-  if (message.includes('network') || message.includes('fetch') || message.includes('timeout')) {
-    return 'No se pudo conectar con el servicio. Intenta nuevamente.';
+  const candidate = error as { status?: unknown; message?: unknown } | null;
+  const status = Number(candidate?.status ?? 0);
+  const message = String(candidate?.message || error || '').toLowerCase();
+  if (
+    status >= 500 ||
+    message.includes('network') ||
+    message.includes('fetch') ||
+    message.includes('timeout') ||
+    message.includes('timed out') ||
+    message.includes('upstream') ||
+    message.includes('gateway')
+  ) {
+    return 'El servicio de autenticación está temporalmente lento. Espera unos segundos e inténtalo nuevamente.';
+  }
+  if (status === 429 || message.includes('rate limit') || message.includes('too many')) {
+    return 'Hay muchos intentos en curso. Espera un momento e inténtalo nuevamente.';
   }
   return GENERIC_AUTH_ERROR;
 }

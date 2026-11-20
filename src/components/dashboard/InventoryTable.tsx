@@ -105,46 +105,6 @@ export default function InventoryTable({ filters, onSelectionChange, onTransfer,
     fetchInventory();
   }, [filters, page]);
 
-  // Suscripción a cambios en tiempo real de Supabase
-  useEffect(() => {
-    // Importar cliente de Supabase dinámicamente
-    const setupRealtime = async () => {
-      try {
-        const { createClientComponentClient } = await import('@supabase/auth-helpers-nextjs');
-        const supabase = createClientComponentClient();
-
-        const channel = supabase
-          .channel('items-changes')
-          .on(
-            'postgres_changes',
-            {
-              event: '*', // Escuchar INSERT, UPDATE, DELETE
-              schema: 'public',
-              table: 'items',
-            },
-            (payload) => {
-              console.log('Realtime update received:', payload);
-              // Refrescar la lista cuando hay cambios
-              fetchInventory();
-            }
-          )
-          .subscribe();
-
-        return () => {
-          supabase.removeChannel(channel);
-        };
-      } catch (error) {
-        console.error('Error setting up realtime:', error);
-      }
-    };
-
-    const cleanup = setupRealtime();
-
-    return () => {
-      cleanup.then((unsubscribe) => unsubscribe?.());
-    };
-  }, []);
-
   async function openWarehousePopover(row: InventoryItem) {
     setWarehousePopover({ itemId: row.item_id, itemName: row.item_name, warehouses: [], loading: true });
     try {

@@ -155,47 +155,9 @@ export default function MonitoreoPage() {
     return () => clearInterval(interval);
   }, [fetchData]);
 
-  // Suscripción en tiempo real a cambios de GPS
-  useEffect(() => {
-    const channel = supabase
-      .channel('gps_updates')
-      .on('postgres_changes', {
-        event: 'INSERT',
-        schema: 'public',
-        table: 'route_tracking_locations'
-      }, (payload) => {
-        console.log('GPS Update (route_tracking_locations):', payload);
-        const { route_id, lat, lng, recorded_at, driver_name } = payload.new;
-        if (!route_id || !lat || !lng) return;
-
-        setActiveRoutes(prev => prev.map(route => {
-          if (route.id === route_id) {
-            return {
-              ...route,
-              vehicles: route.vehicles ? {
-                ...route.vehicles,
-                current_lat: Number(lat),
-                current_lng: Number(lng),
-                last_location_update: recorded_at || new Date().toISOString()
-              } : {
-                plate_number: 'Unidad',
-                driver_name: driver_name || 'Motorizado',
-                driver_phone: '',
-                current_lat: Number(lat),
-                current_lng: Number(lng),
-                last_location_update: recorded_at || new Date().toISOString()
-              }
-            };
-          }
-          return route;
-        }));
-      })
-      .subscribe();
-
-    return () => {
-      supabase.removeChannel(channel);
-    };
-  }, []);
+  // GPS se actualiza junto con el snapshot de rutas cada 30 segundos arriba.
+  // Evitamos una suscripción por INSERT porque los dispositivos pueden generar
+  // muchos eventos y multiplicarlos por cada pestaña abierta del ERP.
 
   const markStopCompleted = async (stopId: string) => {
     try {
