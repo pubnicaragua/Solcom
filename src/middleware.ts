@@ -20,6 +20,7 @@ function normalizeRole(value: unknown): AppRole {
 }
 
 const AUTH_REQUEST_TIMEOUT_MS = 3500;
+const MODULE_ACCESS_TIMEOUT_MS = 1800;
 
 const timedFetch: typeof fetch = async (input, init) => {
   const controller = new AbortController();
@@ -57,17 +58,20 @@ function redirectPreservingAuthCookies(
 async function getModuleAccessForUser(
   supabase: SupabaseServerClient,
   userId: string,
+  signal: AbortSignal,
 ) {
   const [{ data: profile }, { data: overrideRows, error: overrideError }] = await Promise.all([
     supabase
       .from('user_profiles')
       .select('role')
       .eq('id', userId)
+      .abortSignal(signal)
       .maybeSingle(),
     supabase
       .from('user_module_permissions')
       .select('module, can_access')
-      .eq('user_id', userId),
+      .eq('user_id', userId)
+      .abortSignal(signal),
   ]);
 
   const role = normalizeRole(profile?.role);
@@ -76,6 +80,24 @@ async function getModuleAccessForUser(
     ? mergeModuleOverrides(baseAccess, mapOverrides(overrideRows || []))
     : baseAccess;
   return restrictAdminOnlyModules(moduleAccess, role);
+}
+
+async function getModuleAccessWithDeadline(
+  supabase: SupabaseServerClient,
+  userId: string,
+) {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), MODULE_ACCESS_TIMEOUT_MS);
+
+  try {
+    return await getModuleAccessForUser(supabase, userId, controller.signal);
+  } catch (_error) {
+    // Middleware must not hold the whole page hostage when Supabase's
+    // permission tables are slow. APIs still enforce authorization server-side.
+    return null;
+  } finally {
+    clearTimeout(timeout);
+  }
 }
 
 export async function middleware(request: NextRequest) {
@@ -199,15 +221,9 @@ export async function middleware(request: NextRequest) {
   }
 
   if (path === '/' && user) {
-    try {
-      const moduleAccess = await getModuleAccessForUser(supabase, user.id);
-      return redirectPreservingAuthCookies(
-        new URL(getFallbackPath(moduleAccess), request.url),
-        authCookieMutations,
-      );
-    } catch (_error) {
-      return redirectPreservingAuthCookies(new URL('/inventory', request.url), authCookieMutations);
-    }
+    // Keep the root redirect auth-only. Resolving the full module matrix here
+    // added two database round trips before the user could see the ERP.
+    return redirectPreservingAuthCookies(new URL('/inventory', request.url), authCookieMutations);
   }
 
   if (path === '/' && !user) {
@@ -219,15 +235,7 @@ export async function middleware(request: NextRequest) {
   }
 
   if (user && isPublicRoute && !path.startsWith('/login-clientes') && !isScannerRoute) {
-    try {
-      const moduleAccess = await getModuleAccessForUser(supabase, user.id);
-      return redirectPreservingAuthCookies(
-        new URL(getFallbackPath(moduleAccess), request.url),
-        authCookieMutations,
-      );
-    } catch (_error) {
-      return redirectPreservingAuthCookies(new URL('/inventory', request.url), authCookieMutations);
-    }
+    return redirectPreservingAuthCookies(new URL('/inventory', request.url), authCookieMutations);
   }
 
   // Permitir acceso a rutas de cliente si está autenticado
@@ -244,31 +252,8 @@ export async function middleware(request: NextRequest) {
   // and per-user overrides in parallel to avoid adding another round-trip.
   if (user) {
     try {
-      const [{ data: profile, error }, { data: overrideRows, error: overrideError }] = await Promise.all([
-        supabase
-          .from('user_profiles')
-          .select('role')
-          .eq('id', user.id)
-          .single(),
-        supabase
-          .from('user_module_permissions')
-          .select('module, can_access')
-          .eq('user_id', user.id),
-      ]);
-
-      // Si el usuario no tiene perfil (como el cliente), permitir acceso solo a rutas de cliente
-      if (error) {
-        if (isClientRoute) {
-          return response;
-        }
-        return redirectPreservingAuthCookies(new URL('/login-clientes', request.url), authCookieMutations);
-      }
-
-      const userRole = normalizeRole(profile?.role || 'operator');
-      const baseAccess = getDefaultModuleAccess(userRole);
-      const moduleAccess = restrictAdminOnlyModules(!overrideError
-        ? mergeModuleOverrides(baseAccess, mapOverrides(overrideRows || []))
-        : baseAccess, userRole);
+      const moduleAccess = await getModuleAccessWithDeadline(supabase, user.id);
+      if (!moduleAccess) return response;
 
       const hasAccess = canAccessPath(path, moduleAccess);
       if (!hasAccess && !isPublicRoute && !isClientRoute) {

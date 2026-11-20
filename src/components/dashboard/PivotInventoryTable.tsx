@@ -4,7 +4,6 @@ import { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import Card from '@/components/ui/Card';
 import SegmentedLoader from '@/components/ui/SegmentedLoader';
 import { ChevronRight, ChevronDown, ChevronUp, Eye, EyeOff, Package, RefreshCw, Search, Palette, ShoppingCart } from 'lucide-react';
-import { supabase } from '@/lib/supabase/client';
 import { useUserRole } from '@/hooks/useUserRole';
 import { createRefreshQueue } from '@/lib/inventory/refresh-queue';
 import WarehouseColorModal from '@/components/modals/WarehouseColorModal';
@@ -376,7 +375,7 @@ export default function PivotInventoryTable({ filters, cartMode, cartReady, onAd
         };
     }, []);
 
-    const scheduleRealtimeRefresh = useCallback(() => {
+    const scheduleInventoryRefresh = useCallback(() => {
         cacheVersionRef.current += 1;
         pivotCacheRef.current.clear();
         refreshQueueRef.current?.request();
@@ -386,35 +385,17 @@ export default function PivotInventoryTable({ filters, cartMode, cartReady, onAd
     useEffect(() => { ensureTooltipCSS(); }, []);
 
     useEffect(() => {
-        const channel = supabase
-            .channel('inventory-updates')
-            .on(
-                'postgres_changes',
-                { event: '*', schema: 'public', table: 'stock_snapshots' },
-                () => {
-                    scheduleRealtimeRefresh();
-                }
-            )
-            .on(
-                'postgres_changes',
-                { event: '*', schema: 'public', table: 'inventory_balance' },
-                () => {
-                    scheduleRealtimeRefresh();
-                }
-            )
-            .on(
-                'postgres_changes',
-                { event: '*', schema: 'public', table: 'items' },
-                () => {
-                    scheduleRealtimeRefresh();
-                }
-            )
-            .subscribe();
+        // Inventory syncs can update thousands of rows in one run. A global
+        // Realtime subscription to three tables multiplied those events by
+        // every open ERP session and exhausted the organization's quota.
+        // Polling keeps the view fresh without turning each sync row into a
+        // client message; manual filters still refresh immediately.
+        const interval = window.setInterval(() => {
+            scheduleInventoryRefresh();
+        }, 60000);
 
-        return () => {
-            supabase.removeChannel(channel);
-        };
-    }, [scheduleRealtimeRefresh]);
+        return () => window.clearInterval(interval);
+    }, [scheduleInventoryRefresh]);
 
     useEffect(() => {
         return () => {
