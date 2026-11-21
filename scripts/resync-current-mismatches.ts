@@ -85,21 +85,13 @@ async function main() {
   const erpByZohoId = new Map(
     erpItems.filter((item) => item.zoho_item_id).map((item) => [String(item.zoho_item_id), item]),
   );
-  const erpBySku = new Map(
-    erpItems.filter((item) => item.sku).map((item) => [String(item.sku).trim(), item]),
-  );
   const zohoIds = new Set(zohoItems.map((item) => String(item.item_id)));
-  const zohoSkus = new Set(
-    zohoItems
-      .map((item) => String(item.sku || '').trim())
-      .filter(Boolean),
-  );
 
   const targets: any[] = [];
   const sourceConflicts: any[] = [];
   for (const zohoItem of zohoItems) {
     const sku = String(zohoItem.sku || '').trim();
-    const erpItem = erpByZohoId.get(String(zohoItem.item_id)) || erpBySku.get(sku);
+    const erpItem = erpByZohoId.get(String(zohoItem.item_id));
     const zohoStock = Number(zohoItem.stock_on_hand || 0);
     const erpStock = erpItem ? Number(erpItem.stock_total || 0) : null;
     const erpCalculatedStock = erpItem ? Number(balanceTotals.get(erpItem.id) || 0) : null;
@@ -161,8 +153,9 @@ async function main() {
   // history remains available without showing stale inventory to users.
   const retiredTargets = erpItems.filter((item) => {
     if (item.zoho_removed_at || !item.zoho_item_id) return false;
-    return !zohoIds.has(String(item.zoho_item_id))
-      && !zohoSkus.has(String(item.sku || '').trim());
+    // Once an ERP row has a Zoho identity, that ID is authoritative. A
+    // matching SKU on another Zoho row must not hide a stale identity.
+    return !zohoIds.has(String(item.zoho_item_id));
   });
 
   targets.sort((a, b) => {

@@ -183,10 +183,11 @@ async function main() {
         if (z.sku) zohoBySku.set(String(z.sku).trim(), z);
     }
 
+    const activeErpItems = erpItems.filter(e => !e.zoho_removed_at);
     const erpByZohoId = new Map();
     const erpBySku = new Map();
     const erpByNormalizedSku = new Map();
-    for (const e of erpItems) {
+    for (const e of activeErpItems) {
         if (e.zoho_item_id) erpByZohoId.set(String(e.zoho_item_id), e);
         if (e.sku) {
             erpBySku.set(e.sku, e);
@@ -205,6 +206,19 @@ async function main() {
         }))
         .sort((a, b) => b.stockTotal - a.stockTotal);
 
+    function findErpItemForZoho(zohoItem) {
+        const zohoId = String(zohoItem.item_id);
+        const exact = erpByZohoId.get(zohoId);
+        if (exact) return exact;
+
+        // SKU fallback is only valid for a legacy local row that has no Zoho
+        // identity yet. Never let a different/stale Zoho ID hide a mismatch.
+        const sku = String(zohoItem.sku || '').trim().toUpperCase();
+        const unlinked = (erpByNormalizedSku.get(sku) || [])
+            .filter(row => !row.zoho_item_id && !row.zoho_removed_at);
+        return unlinked.length === 1 ? unlinked[0] : null;
+    }
+
     // 5. Compare
     console.log('\n5️⃣  Comparando...\n');
 
@@ -215,7 +229,7 @@ async function main() {
         const sku = String(z.sku || '').trim();
         const zohoStock = z.stock_on_hand || 0;
 
-        const erp = erpByZohoId.get(zohoId) || erpBySku.get(sku);
+        const erp = findErpItemForZoho(z);
         if (!erp) continue;
 
         const erpStock = erp.stock_total || 0;
@@ -266,18 +280,21 @@ async function main() {
     for (const z of zohoItems) {
         const zohoId = String(z.item_id);
         const sku = String(z.sku || '').trim();
-        const erp = erpByZohoId.get(zohoId) || erpBySku.get(sku);
+        const erp = findErpItemForZoho(z);
         if (!erp) {
             missingInErp.push({ sku, name: (z.name || '').substring(0, 45), zohoStock: z.stock_on_hand || 0 });
         }
     }
 
-    // C) Items en ERP con stock > 0 que NO existen en Zoho (y no marcados como removed)
+    // C) Cualquier item activo del ERP que NO existe en Zoho. Incluimos stock
+    // cero para no ocultar filas huérfanas que dejan de ser operativas.
     const missingInZoho = [];
-    for (const e of erpItems) {
+    for (const e of activeErpItems) {
         if (e.zoho_removed_at) continue;
-        const inZoho = (e.zoho_item_id && zohoByItemId.has(String(e.zoho_item_id))) || zohoBySku.has(e.sku);
-        if (!inZoho && (e.stock_total || 0) > 0) {
+        const inZoho = e.zoho_item_id
+            ? zohoByItemId.has(String(e.zoho_item_id))
+            : zohoBySku.has(String(e.sku || '').trim());
+        if (!inZoho) {
             missingInZoho.push({ sku: e.sku, name: (e.name || '').substring(0, 45), erpStock: e.stock_total || 0 });
         }
     }
@@ -289,12 +306,13 @@ async function main() {
 
     console.log(`📊 Resumen:`);
     console.log(`   Items en Zoho:                    ${zohoItems.length}`);
-    console.log(`   Items en ERP:                     ${erpItems.length}`);
+    console.log(`   Items en ERP (totales):           ${erpItems.length}`);
+    console.log(`   Items en ERP activos:             ${activeErpItems.length}`);
     console.log(`   Diferencia contra agregado de Zoho: ${stockMismatches.length}`);
     console.log(`   Discrepancia operativa por bodega:  ${operationalMismatches.length}`);
     console.log(`   Conflicto interno del dato de Zoho:  ${zohoSourceConflicts.length}`);
     console.log(`   En Zoho pero NO en ERP:           ${missingInErp.length}`);
-    console.log(`   En ERP con stock pero NO en Zoho: ${missingInZoho.length}`);
+    console.log(`   En ERP activo pero NO en Zoho:       ${missingInZoho.length}`);
     console.log(`   SKUs duplicados dentro del ERP:   ${duplicateSkuGroups.length}`);
 
     if (duplicateSkuGroups.length > 0) {
@@ -342,7 +360,7 @@ async function main() {
     }
 
     if (missingInZoho.length > 0) {
-        console.log(`\n\n🟠 EN ERP CON STOCK PERO NO EN ZOHO — mostrando hasta 20:\n`);
+        console.log(`\n\n🟠 EN ERP ACTIVO PERO NO EN ZOHO — mostrando hasta 20:\n`);
         for (const m of missingInZoho.slice(0, 20)) {
             console.log(`   [${m.sku}] ${m.name} (stock ERP: ${m.erpStock})`);
         }
