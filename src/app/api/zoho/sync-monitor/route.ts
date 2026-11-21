@@ -76,6 +76,12 @@ function errorText(error: any): string {
 
 function classifySyncError(error: unknown): { label: string; detail: string } {
   const message = String(error || '').toLowerCase();
+  if (message.includes('returned 0 locations') || message.includes('0 locations')) {
+    return {
+      label: 'Zoho sin ubicaciones',
+      detail: 'Zoho no devolvió ubicaciones para el artículo; puede ser un concepto contable/servicio o una configuración pendiente en Zoho.',
+    };
+  }
   if (message.includes('not in zoho') || message.includes('zoho_not_found') || message.includes('404')) {
     return {
       label: 'Zoho Inventory',
@@ -94,7 +100,7 @@ function classifySyncError(error: unknown): { label: string; detail: string } {
       detail: 'El ERP no pudo leer o guardar el estado local.',
     };
   }
-  if (message.includes('warehouse') || message.includes('location') || message.includes('mapped')) {
+  if (message.includes('warehouse') || message.includes('unmapped') || message.includes('mapeo') || message.includes('mapped')) {
     return {
       label: 'Mapeo de bodegas',
       detail: 'Zoho devolvió una ubicación que no está relacionada con una bodega local.',

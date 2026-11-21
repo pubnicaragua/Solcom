@@ -360,6 +360,9 @@ export async function syncItemStock(
                         marca: metadata.marca,
                         category: metadata.category,
                         price: metadata.price,
+                        // If Zoho restores an item with the same ID, make it
+                        // visible again after a previous soft removal.
+                        zoho_removed_at: null,
                         updated_at: metadata.updated_at,
                     })
                     .eq('id', supabaseItemId);
@@ -396,6 +399,7 @@ export async function syncItemStock(
                                 marca: metadata.marca,
                                 category: metadata.category,
                                 price: metadata.price,
+                                zoho_removed_at: null,
                                 updated_at: metadata.updated_at,
                             })
                             .eq('id', bySku[0].id);
@@ -446,14 +450,65 @@ export async function syncItemStock(
             return failedSyncResult(message, 0, false);
         }
 
-        // 4. Process locations → snapshots
         const mappedWarehouseIds = Array.from(
             new Set(Array.from(warehouseMap.values()).map((warehouse) => warehouse.id))
         );
 
+        // A 404 from Zoho means this is no longer a live Zoho product. Keep
+        // the local row for audit/history, but remove it from operational
+        // inventory and mark it as retired. This makes old webhook/queue jobs
+        // idempotent instead of preserving stale stock forever.
+        if (!zohoItem) {
+            if (mappedWarehouseIds.length === 0) {
+                const message = `No hay bodegas mapeadas para retirar el artículo ${zohoItemId}`;
+                debugLog.push(`[syncItemStock] ERROR: ${message}`);
+                return failedSyncResult(message, currentStockTotal, false);
+            }
+
+            const persistResult = await persistInventoryStockState({
+                supabase,
+                itemId: supabaseItemId,
+                stockTotal: 0,
+                snapshots: [],
+                mappedWarehouseIds,
+                source: 'zoho_removed',
+                debugLog,
+            });
+
+            if (!persistResult.success) {
+                debugLog.push(`[syncItemStock] ERROR retiring removed item: ${persistResult.error}`);
+                return failedSyncResult(
+                    persistResult.error || 'No se pudo retirar el artículo eliminado en Zoho',
+                    currentStockTotal
+                );
+            }
+
+            const removedAt = new Date().toISOString();
+            const removalResult = await supabase
+                .from('items')
+                .update({ zoho_removed_at: removedAt, updated_at: removedAt })
+                .eq('id', supabaseItemId);
+
+            if (removalResult.error) {
+                const message = `No se pudo marcar como retirado el artículo ${zohoItemId}: ${removalResult.error.message}`;
+                debugLog.push(`[syncItemStock] ERROR: ${message}`);
+                return failedSyncResult(message, 0);
+            }
+
+            debugLog.push(`[syncItemStock] Retirado de Zoho: stock local establecido en 0 para ${zohoItemId}`);
+            return {
+                success: true,
+                retryable: false,
+                snapshotsCreated: 0,
+                stockTotal: 0,
+            };
+        }
+
+        // 4. Process locations → snapshots
         let stockTotal = 0;
         let mappedCount = 0;
         let unmappedCount = 0;
+        let unmappedStock = 0;
         const snapshotMap = new Map<string, any>();
 
         for (const loc of locations) {
@@ -461,6 +516,7 @@ export async function syncItemStock(
             const qty = toQty(loc.location_stock_on_hand ?? loc.location_available_stock);
             if (!wh) {
                 unmappedCount += 1;
+                unmappedStock += qty;
                 continue;
             }
 
@@ -484,15 +540,51 @@ export async function syncItemStock(
         const snapshots = Array.from(snapshotMap.values());
 
         if (locations.length === 0) {
+            // Non-stock/service items can legitimately have no location rows.
+            // When Zoho also reports zero aggregate stock, publish zero and
+            // finish successfully instead of retrying the same job forever.
+            const zohoAggregateStock = toQty(zohoItem.stock_on_hand);
+            if (zohoAggregateStock === 0) {
+                const emptyLocationResult = await persistInventoryStockState({
+                    supabase,
+                    itemId: supabaseItemId,
+                    stockTotal: 0,
+                    snapshots: [],
+                    mappedWarehouseIds,
+                    source: 'sync',
+                    debugLog,
+                });
+
+                if (!emptyLocationResult.success) {
+                    debugLog.push(`[syncItemStock] ERROR persisting zero-stock item without locations: ${emptyLocationResult.error}`);
+                    return failedSyncResult(
+                        emptyLocationResult.error || 'No se pudo publicar el stock cero',
+                        currentStockTotal
+                    );
+                }
+
+                debugLog.push(`[syncItemStock] Zoho item ${zohoItemId} has no locations and zero stock; published zero.`);
+                return {
+                    success: true,
+                    retryable: false,
+                    snapshotsCreated: 0,
+                    stockTotal: 0,
+                };
+            }
+
             const message = `${zohoItemId} returned 0 locations; preserving current snapshots`;
             debugLog.push(`[syncItemStock] ERROR: ${message}`);
             return failedSyncResult(message, currentStockTotal);
         }
 
-        if (unmappedCount > 0) {
-            const message = `${zohoItemId} has ${unmappedCount} unmapped locations`;
+        if (unmappedStock !== 0) {
+            const message = `${zohoItemId} has ${unmappedCount} unmapped locations with ${unmappedStock} units`;
             debugLog.push(`[syncItemStock] ERROR: ${message}`);
             return failedSyncResult(message, currentStockTotal);
+        }
+
+        if (unmappedCount > 0) {
+            debugLog.push(`[syncItemStock] WARN: ${zohoItemId} has ${unmappedCount} unmapped zero-stock locations.`);
         }
 
         if (locations.length > 0 && mappedCount === 0) {

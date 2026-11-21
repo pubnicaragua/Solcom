@@ -3,6 +3,7 @@ import { createClient } from '@supabase/supabase-js';
 import { getZohoAccessToken } from '@/lib/zoho/inventory-utils';
 import { syncItemStock } from '@/lib/zoho/sync-logic';
 import { requireZohoOrganizationId } from '@/lib/zoho/config';
+import { notifyRoles } from '@/lib/notifications/server';
 import {
     claimInventorySyncJobs,
     finishInventorySyncJob,
@@ -17,6 +18,11 @@ export const maxDuration = 120;
 const DEFAULT_BATCH_SIZE = 30;
 const MAX_BATCH_SIZE = 50;
 const WORKER_TIME_BUDGET_MS = 100_000;
+
+type TerminalSyncFailure = {
+    job: InventorySyncQueueJob;
+    error: string;
+};
 
 function jsonResponse(data: any, status = 200) {
     return new Response(JSON.stringify({ ...data, timestamp: new Date().toISOString() }), {
@@ -65,6 +71,70 @@ async function finishClaimedJobsAfterFatalError(params: {
         retryable: true,
         error: params.error,
     })));
+}
+
+function failureCategory(error: string): 'mapping' | 'no_locations' | 'not_found' | 'other' {
+    const normalized = error.toLowerCase();
+    if (normalized.includes('returned 0 locations') || normalized.includes('0 locations')) {
+        return 'no_locations';
+    }
+    if (normalized.includes('unmapped') || normalized.includes('mapeo') || normalized.includes('mapped')) {
+        return 'mapping';
+    }
+    if (normalized.includes('zoho_not_found') || normalized.includes('not in zoho') || normalized.includes('404')) {
+        return 'not_found';
+    }
+    return 'other';
+}
+
+async function notifyTerminalSyncFailures(
+    supabase: any,
+    failures: TerminalSyncFailure[],
+) {
+    if (failures.length === 0) return;
+
+    const itemIds = Array.from(new Set(failures.map(({ job }) => String(job.zoho_item_id))));
+    const itemResult = await supabase
+        .from('items')
+        .select('zoho_item_id, sku, name')
+        .in('zoho_item_id', itemIds);
+    const itemMap = new Map(
+        (itemResult.data || []).map((item: any) => [
+            String(item.zoho_item_id),
+            `${item.name || 'Artículo'}${item.sku ? ` · SKU ${item.sku}` : ''}`,
+        ]),
+    );
+
+    const categories = failures.reduce<Record<string, number>>((counts, failure) => {
+        const category = failureCategory(failure.error);
+        counts[category] = (counts[category] || 0) + 1;
+        return counts;
+    }, {});
+    const preview = failures.slice(0, 3).map(({ job, error }) => {
+        const label = itemMap.get(String(job.zoho_item_id)) || `ID Zoho ${job.zoho_item_id}`;
+        return `${label}: ${error}`;
+    }).join(' | ');
+    const hasMapping = Boolean(categories.mapping);
+    const hasNoLocations = Boolean(categories.no_locations);
+    const title = hasMapping
+        ? 'Artículo con bodega no mapeada'
+        : hasNoLocations
+            ? 'Artículo sin ubicaciones en Zoho'
+            : 'Error de sincronización con Zoho';
+    const categorySummary = [
+        categories.mapping ? `${categories.mapping} con mapeo pendiente` : '',
+        categories.no_locations ? `${categories.no_locations} sin ubicaciones` : '',
+        categories.not_found ? `${categories.not_found} no encontrados en Zoho` : '',
+        categories.other ? `${categories.other} con otro error` : '',
+    ].filter(Boolean).join(', ');
+
+    await notifyRoles({
+        roles: ['admin'],
+        type: 'sync_error',
+        title,
+        message: `${categorySummary}. ${preview}`.slice(0, 900),
+        link: '/zoho-sync',
+    });
 }
 
 export async function GET(request: Request) {
@@ -207,6 +277,7 @@ export async function GET(request: Request) {
         let successCount = 0;
         let failCount = 0;
         let deferredCount = 0;
+        const terminalFailures: TerminalSyncFailure[] = [];
 
         for (let index = 0; index < claimedJobs.length; index += 1) {
             const job = claimedJobs[index];
@@ -250,10 +321,15 @@ export async function GET(request: Request) {
                     );
                 } else {
                     failCount += 1;
-                    debugLog.push(`FAIL ${job.zoho_item_id}: ${result.error || 'Unknown'}`);
+                    const errorMessage = result.error || 'Unknown';
+                    if (!result.retryable || Number(job.attempts || 0) + 1 >= 5) {
+                        terminalFailures.push({ job, error: errorMessage });
+                    }
+                    debugLog.push(`FAIL ${job.zoho_item_id}: ${errorMessage}`);
                 }
             } catch (error: any) {
                 failCount += 1;
+                const errorMessage = error?.message || error || 'Unknown';
                 await finishInventorySyncJob({
                     supabase,
                     job,
@@ -262,10 +338,14 @@ export async function GET(request: Request) {
                     retryable: true,
                     error,
                 });
-                debugLog.push(`FAIL ${job.zoho_item_id}: ${error?.message || error}`);
+                if (Number(job.attempts || 0) + 1 >= 5) {
+                    terminalFailures.push({ job, error: String(errorMessage) });
+                }
+                debugLog.push(`FAIL ${job.zoho_item_id}: ${errorMessage}`);
             }
         }
 
+        await notifyTerminalSyncFailures(supabase, terminalFailures);
         const afterCounts = await queueStatusCounts(supabase);
         return jsonResponse({
             ok: failCount === 0,

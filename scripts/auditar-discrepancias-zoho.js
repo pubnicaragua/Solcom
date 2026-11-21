@@ -104,6 +104,15 @@ async function fetchAllZohoItems(token, apiDomain) {
     return allItems;
 }
 
+async function fetchZohoLocationDetails(token, apiDomain, itemId) {
+    const url = `${apiDomain}/inventory/v1/items/${itemId}/locationdetails?organization_id=${ORG_ID}`;
+    const res = await fetch(url, { headers: { Authorization: `Zoho-oauthtoken ${token}` } });
+    if (res.status === 404) return [];
+    if (!res.ok) throw new Error(`Location details ${itemId}: ${res.status}`);
+    const data = await res.json();
+    return data.item_location_details?.locations || [];
+}
+
 // Fetch ALL items from Supabase (paginated beyond 1000 limit)
 async function fetchAllErpItems() {
     let all = [];
@@ -213,8 +222,43 @@ async function main() {
         const erpCalcStock = balanceTotals.get(erp.id) || 0;
 
         if (zohoStock !== erpStock || zohoStock !== erpCalcStock) {
-            stockMismatches.push({ sku, name: (z.name || '').substring(0, 45), zohoStock, erpStock, erpCalcStock });
+            stockMismatches.push({
+                sku,
+                name: (z.name || '').substring(0, 45),
+                zohoItemId: zohoId,
+                zohoStock,
+                erpStock,
+                erpCalcStock,
+            });
         }
+    }
+
+    // The ERP publishes warehouse-level Zoho locationdetails. Zoho's list
+    // aggregate can briefly differ from that breakdown, so report that as a
+    // Zoho source conflict instead of repeatedly overwriting the ERP with an
+    // impossible total that cannot be represented by its warehouses.
+    const operationalMismatches = [];
+    const zohoSourceConflicts = [];
+    for (const mismatch of stockMismatches) {
+        const locations = await fetchZohoLocationDetails(token, api, mismatch.zohoItemId);
+        const locationStock = locations.length > 0
+            ? locations.reduce((sum, location) => sum + Number(location.location_stock_on_hand ?? location.location_available_stock ?? 0), 0)
+            : null;
+
+        if (locationStock === null || locationStock !== mismatch.erpCalcStock) {
+            operationalMismatches.push({ ...mismatch, zohoLocationStock: locationStock, locationCount: locations.length });
+        } else if (locationStock !== mismatch.zohoStock) {
+            zohoSourceConflicts.push({
+                sku: mismatch.sku,
+                name: mismatch.name,
+                zohoItemId: mismatch.zohoItemId,
+                zohoAggregateStock: mismatch.zohoStock,
+                zohoLocationStock: locationStock,
+                locationCount: locations.length,
+            });
+        }
+
+        await sleep(200);
     }
 
     // B) Items en Zoho que NO existen en el ERP
@@ -246,7 +290,9 @@ async function main() {
     console.log(`📊 Resumen:`);
     console.log(`   Items en Zoho:                    ${zohoItems.length}`);
     console.log(`   Items en ERP:                     ${erpItems.length}`);
-    console.log(`   Stock diferente (Zoho vs ERP):    ${stockMismatches.length}`);
+    console.log(`   Diferencia contra agregado de Zoho: ${stockMismatches.length}`);
+    console.log(`   Discrepancia operativa por bodega:  ${operationalMismatches.length}`);
+    console.log(`   Conflicto interno del dato de Zoho:  ${zohoSourceConflicts.length}`);
     console.log(`   En Zoho pero NO en ERP:           ${missingInErp.length}`);
     console.log(`   En ERP con stock pero NO en Zoho: ${missingInZoho.length}`);
     console.log(`   SKUs duplicados dentro del ERP:   ${duplicateSkuGroups.length}`);
@@ -262,23 +308,30 @@ async function main() {
         if (duplicateSkuGroups.length > 20) console.log(`   ... y ${duplicateSkuGroups.length - 20} SKUs duplicados más`);
     }
 
-    if (stockMismatches.length > 0) {
-        console.log(`\n\n🔴 DISCREPANCIAS DE STOCK (Zoho vs ERP) — mostrando hasta 50:\n`);
+    if (operationalMismatches.length > 0) {
+        console.log(`\n\n🔴 DISCREPANCIAS OPERATIVAS (bodegas Zoho vs ERP) — mostrando hasta 50:\n`);
         console.log('SKU'.padEnd(35) + ' | ' + 'NOMBRE'.padEnd(45) + ' | ZOHO | ERP_TOTAL | ERP_CALC');
         console.log('-'.repeat(140));
-        for (const m of stockMismatches.slice(0, 50)) {
+        for (const m of operationalMismatches.slice(0, 50)) {
             console.log(
-                `${m.sku.padEnd(35)} | ${m.name.padEnd(45)} | ${String(m.zohoStock).padStart(5)} | ${String(m.erpStock).padStart(9)} | ${String(m.erpCalcStock).padStart(8)}`
+                `${m.sku.padEnd(35)} | ${m.name.padEnd(45)} | ${String(m.zohoLocationStock ?? m.zohoStock).padStart(5)} | ${String(m.erpStock).padStart(9)} | ${String(m.erpCalcStock).padStart(8)}`
             );
         }
-        if (stockMismatches.length > 50) console.log(`   ... y ${stockMismatches.length - 50} más`);
-        
-        // Guardar para que trigger-fix.js lo pueda leer
-        const fs = require('fs');
-        fs.writeFileSync('mismatches.json', JSON.stringify(stockMismatches.map(m => m.sku), null, 2));
-        fs.writeFileSync('mismatches_full.json', JSON.stringify(stockMismatches, null, 2));
-        console.log('\n💾 Se guardaron los ' + stockMismatches.length + ' SKUs en mismatches.json para su corrección.');
+        if (operationalMismatches.length > 50) console.log(`   ... y ${operationalMismatches.length - 50} más`);
     }
+
+    if (zohoSourceConflicts.length > 0) {
+        console.log(`\n🟠 CONFLICTOS INTERNOS EN ZOHO — el agregado no coincide con sus bodegas:\n`);
+        for (const conflict of zohoSourceConflicts.slice(0, 20)) {
+            console.log(`   [${conflict.sku}] agregado=${conflict.zohoAggregateStock}, bodegas=${conflict.zohoLocationStock}, ubicaciones=${conflict.locationCount}`);
+        }
+    }
+
+    // Guardar únicamente discrepancias operativas reales para el corrector.
+    const fs = require('fs');
+    fs.writeFileSync('mismatches.json', JSON.stringify(operationalMismatches.map(m => m.sku), null, 2));
+    fs.writeFileSync('mismatches_full.json', JSON.stringify(operationalMismatches, null, 2));
+    console.log('\n💾 Se guardaron ' + operationalMismatches.length + ' SKUs operativos en mismatches.json.');
 
     if (missingInErp.length > 0) {
         console.log(`\n\n🟡 EN ZOHO PERO NO EN ERP — mostrando hasta 20:\n`);
