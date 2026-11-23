@@ -1,8 +1,8 @@
 'use client';
 
-import React, { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
-import { createBrowserClient } from '@supabase/ssr';
+import React, { createContext, useCallback, useContext, useEffect, useRef, useState } from 'react';
 import { Bell, X } from 'lucide-react';
+import { supabase } from '@/lib/supabase/client';
 
 export type Notification = {
   id: string;
@@ -66,11 +66,6 @@ export default function NotificationsProvider({ children }: { children: React.Re
   const toastTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const audioContextRef = useRef<AudioContext | null>(null);
   const soundEnabledRef = useRef(true);
-
-  const supabase = useMemo(() => createBrowserClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-  ), []);
 
   useEffect(() => {
     const storedPreference = window.localStorage.getItem('solcom-notification-sound');

@@ -3,7 +3,7 @@
 import { useState, useRef, useEffect } from 'react';
 import { User, Settings, LogOut, Shield, HelpCircle } from 'lucide-react';
 import { useRouter } from 'next/navigation';
-import { createBrowserClient } from '@supabase/ssr';
+import { supabase } from '@/lib/supabase/client';
 
 interface UserProfile {
   name: string;
@@ -18,11 +18,6 @@ export default function UserProfileDropdown() {
   const dropdownRef = useRef<HTMLDivElement>(null);
   const triggerRef = useRef<HTMLButtonElement>(null);
   const router = useRouter();
-
-  const supabase = createBrowserClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-  );
 
   useEffect(() => {
     async function loadUser() {
