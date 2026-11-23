@@ -139,7 +139,10 @@ async function notifyTerminalSyncFailures(
 
 export async function GET(request: Request) {
     const { searchParams } = new URL(request.url);
-    const cronSecret = searchParams.get('cron_secret');
+    const querySecret = searchParams.get('cron_secret')?.trim() || '';
+    const authorization = request.headers.get('authorization') || '';
+    const headerSecret = authorization.match(/^Bearer\s+(.+)$/i)?.[1]?.trim() || '';
+    const cronSecret = querySecret || headerSecret;
     const expectedSecret = String(process.env.CRON_SECRET || '').trim();
 
     if (!expectedSecret) {

@@ -4,7 +4,8 @@
 
 1. Zoho envía eventos a `POST /api/webhooks/zoho`.
 2. El webhook coalesce cada `zoho_item_id` en `sync_queue`.
-3. Cron-job.org llama cada minuto a `GET /api/cron/process-queue?cron_secret=...`.
+3. Cron-job.org llama cada minuto a `GET /api/cron/process-queue` enviando `Authorization: Bearer <CRON_SECRET>`.
+   El formato legado `?cron_secret=...` también es compatible.
 4. El worker reclama trabajos con `FOR UPDATE SKIP LOCKED`, reutiliza un token Zoho por lote y actualiza Supabase.
 5. El total, los snapshots y los balances de cada producto se publican en una sola transacción PostgreSQL.
 6. Los fallos transitorios se reintentan con backoff; los definitivos quedan en `failed` con el error.
@@ -36,6 +37,19 @@ HTTP `200` con un cuerpo similar a:
 ```
 
 HTTP `401` significa que `cron_secret` no coincide. HTTP `500` indica configuración o fallo global. Un cuerpo con `failed > 0` requiere revisar `debug` y la columna `error` de `sync_queue`.
+
+## Verificación manual ERP vs Zoho
+
+Desde la raíz del repositorio:
+
+```bash
+# Solo consulta; no modifica datos
+npm run check:zoho-inventory
+
+# Aplica los valores de stock de Zoho al ERP y debe seguirse de una nueva verificación
+npm run fix:zoho-inventory
+npm run check:zoho-inventory
+```
 
 ## Alertas recomendadas
 

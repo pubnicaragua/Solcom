@@ -12,6 +12,8 @@
     "check:kpis": "node scripts/diagnose_kpis.js",
     "check:kpis:local": "node scripts/diagnose_kpis_local.js",
     "check:inventory-sync": "node scripts/check-queue.js",
+      "check:zoho-inventory": "tsx scripts/resync-current-mismatches.ts",
+      "fix:zoho-inventory": "tsx scripts/resync-current-mismatches.ts --apply",
     "test": "tsx --tsconfig tsconfig.test.json --test tests/**/*.test.*"
   },
   "dependencies": {
